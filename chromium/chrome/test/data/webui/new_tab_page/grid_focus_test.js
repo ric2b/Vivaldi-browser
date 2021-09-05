@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://new-tab-page/grid.js';
+import 'chrome://new-tab-page/new_tab_page.js';
 
 import {assertFocus, keydown} from 'chrome://test/new_tab_page/test_support.js';
 import {eventToPromise} from 'chrome://test/test_util.m.js';
@@ -158,7 +158,7 @@ suite('NewTabPageGridFocusTest', () => {
 
       // Assert.
       const focusedIndex =
-          (param.size % param.columns == 0 ? param.size : param.columns) - 1;
+          (param.size % param.columns === 0 ? param.size : param.columns) - 1;
       assertFocus(grid.children[focusedIndex]);
     });
 
@@ -184,7 +184,7 @@ suite('NewTabPageGridFocusTest', () => {
 
       // Assert.
       const focusedIndex =
-          (param.size % param.columns == 0 ? param.size : param.columns) - 1;
+          (param.size % param.columns === 0 ? param.size : param.columns) - 1;
       assertFocus(grid.children[focusedIndex]);
     });
 

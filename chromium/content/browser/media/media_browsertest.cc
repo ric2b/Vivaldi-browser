@@ -11,6 +11,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
@@ -35,11 +36,6 @@ void MediaBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
       switches::kAutoplayPolicy,
       switches::autoplay::kNoUserGestureRequiredPolicy);
   command_line->AppendSwitch(switches::kExposeInternalsForTesting);
-#if defined(OS_LINUX)
-  // Due to problems with PulseAudio failing to start, use a fake audio
-  // stream. crbug.com/1047655#c70
-  command_line->AppendSwitch(switches::kDisableAudioOutput);
-#endif
 
   std::vector<base::Feature> enabled_features = {
 #if defined(OS_ANDROID)
@@ -51,6 +47,12 @@ void MediaBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
     // Disable fallback after decode error to avoid unexpected test pass on
     // the fallback path.
     media::kFallbackAfterDecodeError,
+
+#if defined(OS_LINUX)
+    // Disable out of process audio on Linux due to process spawn
+    // failures. http://crbug.com/986021
+    features::kAudioServiceOutOfProcess,
+#endif
   };
 
   scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
@@ -339,10 +341,16 @@ IN_PROC_BROWSER_TEST_P(MediaTest, VideoErrorEmptySrcAttribute) {
 }
 
 IN_PROC_BROWSER_TEST_P(MediaTest, VideoErrorNoSupportedStreams) {
-  RunErrorMessageTest(
-      "video", "no_streams.webm",
-      "DEMUXER_ERROR_NO_SUPPORTED_STREAMS: FFmpegDemuxer: no supported streams",
-      GetParam());
+  // The test doesn't work from file: scheme without AllowFileAccessFromFiles.
+  // TODO(wolenetz): https://crbug.com/1071473: Investigate and reenable the
+  // test.
+  if (!GetParam())
+    return;
+
+  RunErrorMessageTest("video", "no_streams.webm",
+                      "DEMUXER_ERROR_NO_SUPPORTED_STREAMS: FFmpegDemuxer: no "
+                      "supported streams",
+                      GetParam());
 }
 
 // Covers tear-down when navigating away as opposed to browser exiting.

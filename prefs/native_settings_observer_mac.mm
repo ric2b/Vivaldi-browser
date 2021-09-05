@@ -2,15 +2,10 @@
 
 #include "prefs/native_settings_observer_mac.h"
 
-#import <Cocoa/Cocoa.h>
 #import <CoreFoundation/CoreFoundation.h>
 
-#include "base/mac/sdk_forward_declarations.h"
-#include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/cocoa/last_active_browser_cocoa.h"
 #include "components/prefs/pref_service.h"
+#include "prefs/native_settings_helper_mac.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
 
@@ -26,14 +21,9 @@ void AquaColorChanged(CFNotificationCenterRef center,
                       CFStringRef name,
                       const void* object,
                       CFDictionaryRef userInfo) {
-  NSUserDefaults* userDefaults = [NSUserDefaults standardUserDefaults];
-
-  NSNumber* appleAquaColorVariant =
-      [userDefaults objectForKey:@"AppleAquaColorVariant"];
-
   reinterpret_cast<NativeSettingsObserver*>(observer)->SetPref(
       vivaldiprefs::kSystemMacAquaColorVariant,
-      [appleAquaColorVariant intValue]);
+      getAquaColor());
 }
 
 void NoRedisplayChanged(CFNotificationCenterRef center,
@@ -41,17 +31,9 @@ void NoRedisplayChanged(CFNotificationCenterRef center,
                         CFStringRef name,
                         const void* object,
                         CFDictionaryRef userInfo) {
-  NSUserDefaults* userDefaults = [NSUserDefaults standardUserDefaults];
-
-  NSString* appleActionOnDoubleClick =
-      [userDefaults stringForKey:@"AppleActionOnDoubleClick"];
-  std::string val = "";
-  if (appleActionOnDoubleClick) {
-    val = [appleActionOnDoubleClick UTF8String];
-  }
-
   reinterpret_cast<NativeSettingsObserver*>(observer)
-      ->SetPref(vivaldiprefs::kSystemMacActionOnDoubleClick, val);
+      ->SetPref(vivaldiprefs::kSystemMacActionOnDoubleClick,
+        getActionOnDoubleClick());
 }
 
 void SwipeDirectionChanged(CFNotificationCenterRef center,
@@ -59,13 +41,9 @@ void SwipeDirectionChanged(CFNotificationCenterRef center,
                            CFStringRef name,
                            const void* object,
                            CFDictionaryRef userInfo) {
-  NSUserDefaults* userDefaults = [NSUserDefaults standardUserDefaults];
-
-  bool appleSwipeScrollDirection =
-      [[userDefaults objectForKey:@"com.apple.swipescrolldirection"] boolValue];
   reinterpret_cast<NativeSettingsObserver*>(observer)
       ->SetPref(vivaldiprefs::kSystemMacSwipeScrollDirection,
-                appleSwipeScrollDirection);
+        getSwipeDirection());
 }
 
 void SystemDarkModeChanged(CFNotificationCenterRef center,
@@ -73,15 +51,29 @@ void SystemDarkModeChanged(CFNotificationCenterRef center,
                            CFStringRef name,
                            const void* object,
                            CFDictionaryRef userInfo) {
-  vivaldiprefs::SystemDesktopThemeColorValues theme_color =
-      vivaldiprefs::SystemDesktopThemeColorValues::LIGHT;
-  NSString *osxMode =
-    [[NSUserDefaults standardUserDefaults] stringForKey:@"AppleInterfaceStyle"];
-  if (osxMode && [osxMode isEqual:@"Dark"]) {
-    theme_color = vivaldiprefs::SystemDesktopThemeColorValues::DARK;
-  }
   reinterpret_cast<NativeSettingsObserver*>(observer)->SetPref(
-      vivaldiprefs::kSystemDesktopThemeColor, static_cast<int>(theme_color));
+      vivaldiprefs::kSystemDesktopThemeColor, getSystemDarkMode());
+}
+
+void KeyboardUIModeChanged(CFNotificationCenterRef center,
+                           void* observer,
+                           CFStringRef name,
+                           const void* object,
+                           CFDictionaryRef userInfo) {
+  reinterpret_cast<NativeSettingsObserver*>(observer)->SetPref(
+      vivaldiprefs::kSystemMacKeyboardUiMode, getKeyboardUIMode());
+}
+
+void ColorPreferencesChanged(CFNotificationCenterRef center,
+                           void* observer,
+                           CFStringRef name,
+                           const void* object,
+                           CFDictionaryRef userInfo) {
+  reinterpret_cast<NativeSettingsObserver*>(observer)
+    ->SetPref(vivaldiprefs::kSystemAccentColor, getSystemAccentColor());
+
+  reinterpret_cast<NativeSettingsObserver*>(observer)
+    ->SetPref(vivaldiprefs::kSystemHighlightColor, getSystemHighlightColor());
 }
 
 NativeSettingsObserverMac::NativeSettingsObserverMac(Profile* profile)
@@ -100,6 +92,13 @@ NativeSettingsObserverMac::NativeSettingsObserverMac(Profile* profile)
   SystemDarkModeChanged(CFNotificationCenterGetDistributedCenter(), this,
     CFSTR("AppleInterfaceThemeChangedNotification"), nullptr, nullptr);
 
+  SystemDarkModeChanged(CFNotificationCenterGetDistributedCenter(), this,
+    CFSTR("KeyboardUIModeDidChangeNotification"), nullptr, nullptr);
+
+  if (@available(macOS 10.14, *)) {
+    SystemDarkModeChanged(CFNotificationCenterGetDistributedCenter(), this,
+      CFSTR("AppleColorPreferencesChangedNotification"), nullptr, nullptr);
+  }
   // NOTE(tomas@vivaldi.com): fix for VB-39486
   CFNotificationCenterRemoveEveryObserver(
       CFNotificationCenterGetDistributedCenter(), this);
@@ -121,6 +120,16 @@ NativeSettingsObserverMac::NativeSettingsObserverMac(Profile* profile)
       CFNotificationCenterGetDistributedCenter(), this, SystemDarkModeChanged,
       CFSTR("AppleInterfaceThemeChangedNotification"), NULL,
       CFNotificationSuspensionBehaviorDeliverImmediately);
+  CFNotificationCenterAddObserver(
+      CFNotificationCenterGetDistributedCenter(), this, KeyboardUIModeChanged,
+      CFSTR("KeyboardUIModeDidChangeNotification"), NULL,
+      CFNotificationSuspensionBehaviorDeliverImmediately);
+  if (@available(macOS 10.14, *)) {
+    CFNotificationCenterAddObserver(
+      CFNotificationCenterGetDistributedCenter(), this, ColorPreferencesChanged,
+      CFSTR("AppleColorPreferencesChangedNotification"), NULL,
+      CFNotificationSuspensionBehaviorDeliverImmediately);
+  }
 }
 
 NativeSettingsObserverMac::~NativeSettingsObserverMac() {

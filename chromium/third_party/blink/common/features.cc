@@ -49,11 +49,10 @@ const base::Feature kFreezePurgeMemoryAllPagesFrozen{
 const base::Feature kFreezeUserAgent{"FreezeUserAgent",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
-// When enabled, enter assumed-overlap mode in compositing overlap testing
-// anytime a fixed or sticky position element is encountered.
-const base::Feature kAssumeOverlapAfterFixedOrStickyPosition{
-    "AssumeOverlapAfterFixedOrStickyPosition",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+// When enabled, use the maximum possible bounds in compositing overlap testing
+// for fixed position elements.
+const base::Feature kMaxOverlapBoundsForFixed{
+    "MaxOverlapBoundsForFixed", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable Display Locking JavaScript APIs.
 const base::Feature kDisplayLocking{"DisplayLocking",
@@ -167,7 +166,7 @@ const base::Feature kRTCOfferExtmapAllowMixed{
 // Prevents workers from sending IsolateInBackgroundNotification to V8
 // and thus instructs V8 to favor performance over memory on workers.
 const base::Feature kV8OptimizeWorkersForPerformance{
-    "V8OptimizeWorkersForPerformance", base::FEATURE_DISABLED_BY_DEFAULT};
+    "V8OptimizeWorkersForPerformance", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables negotiation of experimental multiplex codec in SDP.
 const base::Feature kWebRtcMultiplexCodec{"WebRTC-MultiplexCodec",
@@ -257,7 +256,7 @@ const base::Feature kDecodeJpeg420ImagesToYUV{
 // Decodes lossy WebP images to YUV instead of RGBX and stores in this format
 // in the image decode cache. See crbug.com/900264 for details on the feature.
 const base::Feature kDecodeLossyWebPImagesToYUV{
-    "DecodeLossyWebPImagesToYUV", base::FEATURE_ENABLED_BY_DEFAULT};
+    "DecodeLossyWebPImagesToYUV", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables cache-aware WebFonts loading. See https://crbug.com/570205.
 // The feature is disabled on Android for WebView API issue discussed at
@@ -456,6 +455,10 @@ const base::Feature kLowLatencyCanvas2dSwapChain{
 const base::Feature kLowLatencyWebGLSwapChain{"LowLatencyWebGLSwapChain",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables Dawn-accelerated 2D canvas.
+const base::Feature kDawn2dCanvas{"Dawn2dCanvas",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables forcing additional rendering of subframes for the purpose of sticky
 // frame tracking.
 const base::Feature kForceExtraRenderingToTrackStickyFrame{
@@ -490,12 +493,99 @@ const base::Feature kFontPreloadingDelaysRendering{
 const base::FeatureParam<int> kFontPreloadingDelaysRenderingParam{
     &kFontPreloadingDelaysRendering, "delay-in-ms", 100};
 
+const base::Feature kFlexGaps{"FlexGaps", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kFlexNG{"FlexNG", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kKeepScriptResourceAlive{"KeepScriptResourceAlive",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
+// The AppCache feature is a kill-switch for the entire AppCache feature,
+// both backend and API.  If disabled, then it will turn off the backend and
+// api, regardless of the presence of valid origin trial tokens.
 const base::Feature kAppCache{"AppCache", base::FEATURE_ENABLED_BY_DEFAULT};
+// If AppCacheRequireOriginTrial is enabled, then the AppCache backend in the
+// browser will require origin trial tokens in order to load or store manifests
+// and their contents.
+const base::Feature kAppCacheRequireOriginTrial{
+    "AppCacheRequireOriginTrial", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables the AV1 Image File Format (AVIF).
+const base::Feature kAVIF{"AVIF", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Make all pending 'display: auto' web fonts enter the swap or failure period
+// immediately before reaching the LCP time limit (~2500ms), so that web fonts
+// do not become a source of bad LCP.
+const base::Feature kAlignFontDisplayAutoTimeoutWithLCPGoal{
+    "AlignFontDisplayAutoTimeoutWithLCPGoal",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// The amount of time allowed for 'display: auto' web fonts to load without
+// intervention, counted from navigation start.
+const base::FeatureParam<int>
+    kAlignFontDisplayAutoTimeoutWithLCPGoalTimeoutParam{
+        &kAlignFontDisplayAutoTimeoutWithLCPGoal, "lcp-limit-in-ms", 2000};
+
+const base::FeatureParam<AlignFontDisplayAutoTimeoutWithLCPGoalMode>::Option
+    align_font_display_auto_timeout_with_lcp_goal_modes[] = {
+        {AlignFontDisplayAutoTimeoutWithLCPGoalMode::kToFailurePeriod,
+         "failure"},
+        {AlignFontDisplayAutoTimeoutWithLCPGoalMode::kToSwapPeriod, "swap"}};
+const base::FeatureParam<AlignFontDisplayAutoTimeoutWithLCPGoalMode>
+    kAlignFontDisplayAutoTimeoutWithLCPGoalModeParam{
+        &kAlignFontDisplayAutoTimeoutWithLCPGoal, "intervention-mode",
+        AlignFontDisplayAutoTimeoutWithLCPGoalMode::kToFailurePeriod,
+        &align_font_display_auto_timeout_with_lcp_goal_modes};
+
+// Enable throttling of fetch() requests from service workers in the
+// installing state.
+const base::Feature kThrottleInstallingServiceWorker{
+    "ThrottleInstallingServiceWorker", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::FeatureParam<int> kInstallingServiceWorkerOutstandingThrottledLimit{
+    &kThrottleInstallingServiceWorker, "limit", 5};
+
+const base::Feature kResamplingScrollEvents{"ResamplingScrollEvents",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables the device-memory, resource-width, viewport-width and DPR client
+// hints to be sent to third-party origins if the first-party has opted in to
+// receiving client hints, regardless of Feature Policy.
+#if defined(OS_ANDROID)
+const base::Feature kAllowClientHintsToThirdParty{
+    "AllowClientHintsToThirdParty", base::FEATURE_ENABLED_BY_DEFAULT};
+#else
+const base::Feature kAllowClientHintsToThirdParty{
+    "AllowClientHintsToThirdParty", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
+const char kScrollPredictorNameLsq[] = "lsq";
+const char kScrollPredictorNameKalman[] = "kalman";
+const char kScrollPredictorNameLinearFirst[] = "linear_first";
+const char kScrollPredictorNameLinearSecond[] = "linear_second";
+const char kScrollPredictorNameLinearResampling[] = "linear_resampling";
+const char kScrollPredictorNameEmpty[] = "empty";
+
+const base::Feature kFilteringScrollPrediction{
+    "FilteringScrollPrediction", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const char kFilterNameEmpty[] = "empty_filter";
+const char kFilterNameOneEuro[] = "one_euro_filter";
+
+const base::Feature kKalmanHeuristics{"KalmanHeuristics",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kKalmanDirectionCutOff{"KalmanDirectionCutOff",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSkipTouchEventFilter{"SkipTouchEventFilter",
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
+const char kSkipTouchEventFilterTypeParamName[] = "type";
+const char kSkipTouchEventFilterTypeParamValueDiscrete[] = "discrete";
+const char kSkipTouchEventFilterTypeParamValueAll[] = "all";
+const char kSkipTouchEventFilterFilteringProcessParamName[] =
+    "skip_filtering_process";
+const char kSkipTouchEventFilterFilteringProcessParamValueBrowser[] = "browser";
+const char kSkipTouchEventFilterFilteringProcessParamValueBrowserAndRenderer[] =
+    "browser_and_renderer";
 
 }  // namespace features
 }  // namespace blink

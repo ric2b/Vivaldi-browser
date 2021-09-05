@@ -33,6 +33,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -45,6 +46,8 @@
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/http_request.h"
+#include "net/test/embedded_test_server/http_response.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
@@ -71,7 +74,7 @@ testing::AssertionResult CheckStyleInjection(Browser* browser,
           "        getPropertyValue('display') == 'none');",
           &css_injected)) {
     return testing::AssertionFailure()
-        << "Failed to execute script and extract bool for injection status.";
+           << "Failed to execute script and extract bool for injection status.";
   }
 
   if (css_injected != expected_injection) {
@@ -90,11 +93,12 @@ testing::AssertionResult CheckStyleInjection(Browser* browser,
           "    document.styleSheets.length == 0);",
           &css_doesnt_add_to_list)) {
     return testing::AssertionFailure()
-        << "Failed to execute script and extract bool for stylesheets length.";
+           << "Failed to execute script and extract bool for stylesheets "
+              "length.";
   }
   if (!css_doesnt_add_to_list) {
     return testing::AssertionFailure()
-        << "CSS injection added to number of stylesheets.";
+           << "CSS injection added to number of stylesheets.";
   }
 
   return testing::AssertionSuccess();
@@ -189,8 +193,8 @@ IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptExtensionIframe) {
 
 IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptExtensionProcess) {
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(
-      RunExtensionTest("content_scripts/extension_process")) << message_;
+  ASSERT_TRUE(RunExtensionTest("content_scripts/extension_process"))
+      << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptFragmentNavigation) {
@@ -213,8 +217,8 @@ IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptIsolatedWorlds) {
 IN_PROC_BROWSER_TEST_F(ContentScriptApiTest,
                        ContentScriptIgnoreHostPermissions) {
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(RunExtensionTest(
-      "content_scripts/dont_match_host_permissions")) << message_;
+  ASSERT_TRUE(RunExtensionTest("content_scripts/dont_match_host_permissions"))
+      << message_;
 }
 
 // crbug.com/39249 -- content scripts js should not run on view source.
@@ -242,28 +246,51 @@ IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptBlobFetch) {
   ASSERT_TRUE(RunExtensionTest("content_scripts/blob_fetch")) << message_;
 }
 
-class ContentScriptCssInjectionTest : public ExtensionApiTest {
- protected:
-  // TODO(rdevlin.cronin): Make a testing switch that looks like FeatureSwitch,
-  // but takes in an optional value so that we don't have to do this.
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionApiTest::SetUpCommandLine(command_line);
-    // We change the Webstore URL to be http://cws.com. We need to do this so
-    // we can check that css injection is not allowed on the webstore (which
-    // could lead to spoofing). Unfortunately, host_resolver seems to have
-    // problems with redirecting "chrome.google.com" to the test server, so we
-    // can't use the real Webstore's URL. If this changes, we could clean this
-    // up.
-    command_line->AppendSwitchASCII(
-        ::switches::kAppsGalleryURL,
-        base::StringPrintf("http://%s", kWebstoreDomain));
-  }
+// Test that content scripts set to run at different timings are loaded as
+// expected for a few different types of pages.
+IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, RunAtTimingsAllFire) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
 
-  void SetUpOnMainThread() override {
-    ExtensionApiTest::SetUpOnMainThread();
-    host_resolver()->AddRule("*", "127.0.0.1");
+  ASSERT_TRUE(
+      LoadExtension(test_data_dir_.AppendASCII("content_scripts/load_timing")));
+
+  std::string test_paths[] = {"/extensions/test_file.html",
+                              "/extensions/test_xml.xml",
+                              "/extensions/test_xsl.xml"};
+
+  for (const auto& path : test_paths) {
+    ExtensionTestMessageListener listener_start("document-start-success",
+                                                false);
+    ExtensionTestMessageListener listener_end("document-end-success", false);
+    listener_end.set_failure_message("document-end-failure");
+    ExtensionTestMessageListener listener_idle("document-idle-success", false);
+    listener_idle.set_failure_message("document-idle-failure");
+
+    // Load the URL and make sure each script set for the different timings have
+    // fired.
+    const GURL url = embedded_test_server()->GetURL(path);
+    ui_test_utils::NavigateToURL(browser(), url);
+
+    // Note: These checks don't ensure the correct ordering of injection, but
+    // that is verified in the JS files themselves.
+    EXPECT_TRUE(listener_start.WaitUntilSatisfied());
+    EXPECT_TRUE(listener_end.WaitUntilSatisfied());
+    EXPECT_TRUE(listener_idle.WaitUntilSatisfied());
+
+    // Load the page a second time to check for any issues with cached XSL
+    // resources. See: crbug.com/1041916. Note that test_xsl.xsl has
+    // mock-http-headers to make sure it is cached.
+    listener_start.Reset();
+    listener_end.Reset();
+    listener_idle.Reset();
+
+    ui_test_utils::NavigateToURL(browser(), url);
+
+    EXPECT_TRUE(listener_start.WaitUntilSatisfied());
+    EXPECT_TRUE(listener_end.WaitUntilSatisfied());
+    EXPECT_TRUE(listener_idle.WaitUntilSatisfied());
   }
-};
+}
 
 IN_PROC_BROWSER_TEST_F(ContentScriptApiTest,
                        ContentScriptDuplicateScriptInjection) {
@@ -301,12 +328,35 @@ IN_PROC_BROWSER_TEST_F(ContentScriptApiTest,
   ASSERT_TRUE(scripts_injected_twice);
 }
 
+class ContentScriptCssInjectionTest : public ExtensionApiTest {
+ protected:
+  // TODO(rdevlin.cronin): Make a testing switch that looks like FeatureSwitch,
+  // but takes in an optional value so that we don't have to do this.
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    ExtensionApiTest::SetUpCommandLine(command_line);
+    // We change the Webstore URL to be http://cws.com. We need to do this so
+    // we can check that css injection is not allowed on the webstore (which
+    // could lead to spoofing). Unfortunately, host_resolver seems to have
+    // problems with redirecting "chrome.google.com" to the test server, so we
+    // can't use the real Webstore's URL. If this changes, we could clean this
+    // up.
+    command_line->AppendSwitchASCII(
+        ::switches::kAppsGalleryURL,
+        base::StringPrintf("http://%s", kWebstoreDomain));
+  }
+
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
+    host_resolver()->AddRule("*", "127.0.0.1");
+  }
+};
+
 IN_PROC_BROWSER_TEST_F(ContentScriptCssInjectionTest,
                        ContentScriptInjectsStyles) {
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII("content_scripts")
-                                          .AppendASCII("css_injection")));
+                                .AppendASCII("css_injection")));
 
   // CSS injection should be allowed on an aribitrary web page.
   GURL url =
@@ -321,39 +371,10 @@ IN_PROC_BROWSER_TEST_F(ContentScriptCssInjectionTest,
   // We disallow all injection on the webstore.
   GURL::Replacements replacements;
   replacements.SetHostStr(kWebstoreDomain);
-  url = embedded_test_server()->GetURL("/extensions/test_file_with_body.html")
+  url = embedded_test_server()
+            ->GetURL("/extensions/test_file_with_body.html")
             .ReplaceComponents(replacements);
   EXPECT_TRUE(CheckStyleInjection(browser(), url, false));
-}
-
-// crbug.com/120762
-IN_PROC_BROWSER_TEST_F(
-    ExtensionApiTest,
-    DISABLED_ContentScriptStylesInjectedIntoExistingRenderers) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
-  content::WindowedNotificationObserver signal(
-      extensions::NOTIFICATION_USER_SCRIPTS_UPDATED,
-      content::Source<Profile>(browser()->profile()));
-
-  // Start with a renderer already open at a URL.
-  GURL url(embedded_test_server()->GetURL("/extensions/test_file.html"));
-  ui_test_utils::NavigateToURL(browser(), url);
-
-  LoadExtension(
-      test_data_dir_.AppendASCII("content_scripts/existing_renderers"));
-
-  signal.Wait();
-
-  // And check that its styles were affected by the styles that just got loaded.
-  bool styles_injected;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      "window.domAutomationController.send("
-      "    document.defaultView.getComputedStyle(document.body, null)."
-      "        getPropertyValue('background-color') == 'rgb(255, 0, 0)')",
-      &styles_injected));
-  ASSERT_TRUE(styles_injected);
 }
 
 IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptCSSLocalization) {
@@ -1311,6 +1332,40 @@ IN_PROC_BROWSER_TEST_F(NTPInterceptionTest, ContentScript) {
       "window.domAutomationController.send(document.title !== 'Fake NTP');",
       &script_injected_in_ntp));
   EXPECT_FALSE(script_injected_in_ntp);
+}
+
+IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, CoepFrameTest) {
+  using HttpRequest = net::test_server::HttpRequest;
+  using HttpResponse = net::test_server::HttpResponse;
+
+  // We have a separate server because COEP only works in secure contexts.
+  net::EmbeddedTestServer server(net::EmbeddedTestServer::TYPE_HTTPS);
+  server.RegisterRequestHandler(base::BindRepeating(
+      [](const HttpRequest& request) -> std::unique_ptr<HttpResponse> {
+        auto response = std::make_unique<net::test_server::BasicHttpResponse>();
+        response->set_content_type("text/html");
+        response->AddCustomHeader("cross-origin-embedder-policy",
+                                  "require-corp");
+        response->set_content("<!doctpye html><html></html>");
+        return response;
+      }));
+
+  const extensions::Extension* extension =
+      LoadExtension(test_data_dir_.AppendASCII("content_scripts/coep_frame"));
+  ASSERT_TRUE(extension);
+
+  auto handle = server.StartAndReturnHandle();
+  const GURL url = server.GetURL("/hello.html");
+
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  const auto kPassed = base::ASCIIToUTF16("PASSED");
+  const auto kFailed = base::ASCIIToUTF16("FAILED");
+  content::TitleWatcher watcher(
+      browser()->tab_strip_model()->GetActiveWebContents(), kPassed);
+  watcher.AlsoWaitForTitle(kFailed);
+
+  ASSERT_EQ(kPassed, watcher.WaitAndGetTitle());
 }
 
 }  // namespace extensions

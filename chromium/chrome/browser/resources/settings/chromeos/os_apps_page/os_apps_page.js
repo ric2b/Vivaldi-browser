@@ -46,12 +46,11 @@ Polymer({
      */
     showAndroidApps: Boolean,
 
-
     /**
-     * Show link to App Management.
+     * Show Plugin VM shared folders sub-page.
      * @type {boolean}
      */
-    showAppManagement: Boolean,
+    showPluginVm: Boolean,
 
     /** @private {!Map<string, string>} */
     focusConfig_: {

@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_MEDIA_MEDIA_FEEDS_UI_H_
 #define CHROME_BROWSER_UI_WEBUI_MEDIA_MEDIA_FEEDS_UI_H_
 
+#include "chrome/browser/media/feeds/media_feeds_fetcher.h"
+#include "chrome/browser/media/feeds/media_feeds_service.h"
 #include "chrome/browser/media/feeds/media_feeds_store.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
@@ -32,9 +34,19 @@ class MediaFeedsUI : public ui::MojoWebUIController,
   void GetMediaFeeds(GetMediaFeedsCallback callback) override;
   void GetItemsForMediaFeed(int64_t feed_id,
                             GetItemsForMediaFeedCallback callback) override;
+  void FetchMediaFeed(int64_t feed_id,
+                      FetchMediaFeedCallback callback) override;
+  void GetDebugInformation(GetDebugInformationCallback callback) override;
+  void SetSafeSearchEnabledPref(
+      bool value,
+      SetSafeSearchEnabledPrefCallback callback) override;
 
  private:
   media_history::MediaHistoryKeyedService* GetMediaHistoryService();
+
+  media_feeds::MediaFeedsService* GetMediaFeedsService();
+
+  Profile* GetProfile();
 
   mojo::ReceiverSet<media_feeds::mojom::MediaFeedsStore> receiver_;
 

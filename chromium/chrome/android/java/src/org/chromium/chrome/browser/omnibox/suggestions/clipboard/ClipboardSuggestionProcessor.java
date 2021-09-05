@@ -5,6 +5,8 @@
 package org.chromium.chrome.browser.omnibox.suggestions.clipboard;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 
 import androidx.annotation.DrawableRes;
 
@@ -25,7 +27,6 @@ import org.chromium.ui.modelutil.PropertyModel;
 public class ClipboardSuggestionProcessor extends BaseSuggestionViewProcessor {
     private final Context mContext;
     private final Supplier<LargeIconBridge> mIconBridgeSupplier;
-    private final int mDesiredFaviconWidthPx;
 
     /**
      * @param context An Android context.
@@ -37,8 +38,6 @@ public class ClipboardSuggestionProcessor extends BaseSuggestionViewProcessor {
         super(context, suggestionHost);
         mContext = context;
         mIconBridgeSupplier = iconBridgeSupplier;
-        mDesiredFaviconWidthPx = mContext.getResources().getDimensionPixelSize(
-                R.dimen.omnibox_suggestion_favicon_size);
     }
 
     @Override
@@ -54,13 +53,8 @@ public class ClipboardSuggestionProcessor extends BaseSuggestionViewProcessor {
     }
 
     @Override
-    public PropertyModel createModelForSuggestion(OmniboxSuggestion suggestion) {
+    public PropertyModel createModel() {
         return new PropertyModel(SuggestionViewProperties.ALL_KEYS);
-    }
-
-    @Override
-    protected boolean canRefine(OmniboxSuggestion suggestion) {
-        return false;
     }
 
     @Override
@@ -74,6 +68,31 @@ public class ClipboardSuggestionProcessor extends BaseSuggestionViewProcessor {
                 new SuggestionSpannable(suggestion.getDescription()));
         model.set(SuggestionViewProperties.TEXT_LINE_2_TEXT,
                 new SuggestionSpannable(suggestion.getDisplayText()));
+
+        // Show thumbnail for image suggestion if thumbnail available.
+        if (suggestion.getType() == OmniboxSuggestionType.CLIPBOARD_IMAGE) {
+            byte[] imageData = suggestion.getClipboardImageData();
+            if (imageData != null && imageData.length > 0) {
+                Bitmap bitmap = BitmapFactory.decodeByteArray(imageData, 0, imageData.length);
+                if (bitmap != null) {
+                    // TODO(crbug.com/1090919): This is short term solution, resize need to be
+                    // handled somewhere else.
+                    if (bitmap.getWidth() > 0 && bitmap.getHeight() > 0
+                            && (bitmap.getWidth() > getDesiredFaviconSize()
+                                    || bitmap.getHeight() > getDesiredFaviconSize())) {
+                        float max = Math.max(bitmap.getWidth(), bitmap.getHeight());
+                        float scale = (float) getDesiredFaviconSize() / max;
+                        float width = bitmap.getWidth();
+                        float height = bitmap.getHeight();
+                        bitmap = Bitmap.createScaledBitmap(bitmap, (int) Math.round(scale * width),
+                                (int) Math.round(scale * height), true);
+                    }
+                    setSuggestionDrawableState(model,
+                            SuggestionDrawableState.Builder.forBitmap(mContext, bitmap).build());
+                    return;
+                }
+            }
+        }
 
         @DrawableRes
         final int icon =

@@ -69,10 +69,6 @@ class UI_ANDROID_EXPORT WindowAndroid : public ViewAndroid {
   void OnVisibilityChanged(JNIEnv* env,
                            const base::android::JavaParamRef<jobject>& obj,
                            bool visible);
-  void OnFallbackCursorModeToggled(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      bool is_on);
   void OnActivityStopped(JNIEnv* env,
                          const base::android::JavaParamRef<jobject>& obj);
   void OnActivityStarted(JNIEnv* env,
@@ -80,10 +76,6 @@ class UI_ANDROID_EXPORT WindowAndroid : public ViewAndroid {
   void SetVSyncPaused(JNIEnv* env,
                       const base::android::JavaParamRef<jobject>& obj,
                       bool paused);
-  void OnCursorVisibilityChanged(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      bool visible);
   void OnUpdateRefreshRate(JNIEnv* env,
                            const base::android::JavaParamRef<jobject>& obj,
                            float refresh_rate);
@@ -109,6 +101,8 @@ class UI_ANDROID_EXPORT WindowAndroid : public ViewAndroid {
   // rather than the display itself.
   // See comment on WindowAndroid.getWindowIsWideColorGamut for details.
   display::Display GetDisplayWithWindowColorSpace();
+
+  void SetWideColorEnabled(bool enabled);
 
   void SetForce60HzRefreshRate();
 

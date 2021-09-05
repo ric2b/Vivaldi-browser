@@ -101,6 +101,11 @@ const base::Feature kCrossOriginOpenerPolicy {
 #endif
 };
 
+// Enables Cross-Origin Opener Policy (COOP) reporting.
+// https://gist.github.com/annevk/6f2dd8c79c77123f39797f6bdac43f3e
+const base::Feature kCrossOriginOpenerPolicyReporting{
+    "CrossOriginOpenerPolicyReporting", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables Cross-Origin Embedder Policy (COEP).
 // https://github.com/mikewest/corpp
 // Currently this feature is enabled for all platforms except WebView.
@@ -114,15 +119,6 @@ const base::Feature kCrossOriginEmbedderPolicy{
 // https://wicg.github.io/cors-rfc1918/#integration-fetch
 const base::Feature kBlockNonSecureExternalRequests{
     "BlockNonSecureExternalRequests", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// When kPrefetchMainResourceNetworkIsolationKey is enabled, cross-origin
-// prefetch requests for main-resources, as well as their preload response
-// headers, will use a special NetworkIsolationKey allowing them to be reusable
-// from a cross-origin context when the HTTP cache is partitioned by the
-// NetworkIsolationKey.
-const base::Feature kPrefetchMainResourceNetworkIsolationKey{
-    "PrefetchMainResourceNetworkIsolationKey",
-    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or defaults splittup up server (not proxy) entries in the
 // HttpAuthCache.
@@ -191,11 +187,48 @@ const base::Feature kCorbAllowlistAlsoAppliesToOorCors = {
 const char kCorbAllowlistAlsoAppliesToOorCorsParamName[] =
     "AllowlistForCorbAndCors";
 
+// The preflight parser should reject Access-Control-Allow-* headers which do
+// not conform to ABNF. But if the strict check is applied directly, some
+// existing sites might fail to load. The feature flag controls whether a strict
+// check will be used or not.
+const base::Feature kStrictAccessControlAllowListCheck = {
+    "StrictAccessControlAllowListCheck", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables preprocessing requests with the Trust Tokens API Fetch flags set,
 // and handling their responses, according to the protocol.
 // (See https://github.com/WICG/trust-token-api.)
 const base::Feature kTrustTokens{"TrustTokens",
                                  base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Determines which Trust Tokens operations require the TrustTokens origin trial
+// active in order to be used. This is runtime-configurable so that the Trust
+// Tokens operations of issuance, redemption, and signing are compatible with
+// both standard origin trials and third-party origin trials:
+//
+// - For standard origin trials, set kOnlyIssuanceRequiresOriginTrial. In Blink,
+// all of the interface will be enabled (so long as the base::Feature is!), and
+// issuance operations will check at runtime if the origin trial is enabled,
+// returning an error if it is not.
+// - For third-party origin trials, set kAllOperationsRequireOriginTrial. In
+// Blink, the interface will be enabled exactly when the origin trial is present
+// in the executing context (so long as the base::Feature is present).
+//
+// For testing, set kOriginTrialNotRequired. With this option, although all
+// operations will still only be available if the base::Feature is enabled, none
+// will additionally require that the origin trial be active.
+const base::FeatureParam<TrustTokenOriginTrialSpec>::Option
+    kTrustTokenOriginTrialParamOptions[] = {
+        {TrustTokenOriginTrialSpec::kOriginTrialNotRequired,
+         "origin-trial-not-required"},
+        {TrustTokenOriginTrialSpec::kAllOperationsRequireOriginTrial,
+         "all-operations-require-origin-trial"},
+        {TrustTokenOriginTrialSpec::kOnlyIssuanceRequiresOriginTrial,
+         "only-issuance-requires-origin-trial"}};
+const base::FeatureParam<TrustTokenOriginTrialSpec>
+    kTrustTokenOperationsRequiringOriginTrial{
+        &kTrustTokens, "TrustTokenOperationsRequiringOriginTrial",
+        TrustTokenOriginTrialSpec::kOriginTrialNotRequired,
+        &kTrustTokenOriginTrialParamOptions};
 
 bool ShouldEnableOutOfBlinkCorsForTesting() {
   return base::FeatureList::IsEnabled(features::kOutOfBlinkCors);

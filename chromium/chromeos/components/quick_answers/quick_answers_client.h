@@ -9,8 +9,8 @@
 #include <string>
 
 #include "ash/public/cpp/assistant/assistant_state.h"
-#include "ash/public/mojom/assistant_state_controller.mojom.h"
 #include "chromeos/components/quick_answers/result_loader.h"
+#include "chromeos/components/quick_answers/understanding/intent_generator.h"
 
 namespace network {
 namespace mojom {
@@ -38,7 +38,7 @@ class QuickAnswersDelegate {
       std::unique_ptr<QuickAnswer> quick_answer) {}
 
   // Invoked when the query is rewritten.
-  virtual void OnRequestPreprocessFinish(
+  virtual void OnRequestPreprocessFinished(
       const QuickAnswersRequest& processed_request) {}
 
   // Invoked when feature eligibility changed.
@@ -61,6 +61,11 @@ class QuickAnswersClient : public ash::AssistantStateObserver,
   using ResultLoaderFactoryCallback =
       base::RepeatingCallback<std::unique_ptr<ResultLoader>()>;
 
+  // Method that can be used in tests to change the intent generator returned by
+  // |CreateResultLoader| in tests.
+  using IntentGeneratorFactoryCallback =
+      base::RepeatingCallback<std::unique_ptr<IntentGenerator>()>;
+
   QuickAnswersClient(network::mojom::URLLoaderFactory* url_loader_factory,
                      ash::AssistantState* assistant_state,
                      QuickAnswersDelegate* delegate);
@@ -72,10 +77,11 @@ class QuickAnswersClient : public ash::AssistantStateObserver,
 
   // AssistantStateObserver:
   void OnAssistantFeatureAllowedChanged(
-      ash::mojom::AssistantAllowedState state) override;
+      chromeos::assistant::AssistantAllowedState state) override;
   void OnAssistantSettingsEnabled(bool enabled) override;
   void OnAssistantContextEnabled(bool enabled) override;
   void OnLocaleChanged(const std::string& locale) override;
+  void OnAssistantQuickAnswersEnabled(bool enabled) override;
   void OnAssistantStateDestroyed() override;
 
   // ResultLoaderDelegate:
@@ -95,9 +101,22 @@ class QuickAnswersClient : public ash::AssistantStateObserver,
   static void SetResultLoaderFactoryForTesting(
       ResultLoaderFactoryCallback* factory);
 
+  static void SetIntentGeneratorFactoryForTesting(
+      IntentGeneratorFactoryCallback* factory);
+
  private:
+  FRIEND_TEST_ALL_PREFIXES(QuickAnswersClientTest, SendRequest);
+  FRIEND_TEST_ALL_PREFIXES(QuickAnswersClientTest,
+                           NotSendRequestForUnknownIntent);
+  FRIEND_TEST_ALL_PREFIXES(QuickAnswersClientTest, PreprocessDefinitionIntent);
+  FRIEND_TEST_ALL_PREFIXES(QuickAnswersClientTest, PreprocessTranslationIntent);
+
   // Creates a |ResultLoader| instance.
   std::unique_ptr<ResultLoader> CreateResultLoader(IntentType intent_type);
+
+  // Creates an |IntentGenerator| instance.
+  std::unique_ptr<IntentGenerator> CreateIntentGenerator(
+      const QuickAnswersRequest& request);
 
   void NotifyEligibilityChanged();
   void IntentGeneratorCallback(const QuickAnswersRequest& quick_answers_request,
@@ -109,11 +128,13 @@ class QuickAnswersClient : public ash::AssistantStateObserver,
   ash::AssistantState* assistant_state_ = nullptr;
   QuickAnswersDelegate* delegate_ = nullptr;
   std::unique_ptr<ResultLoader> result_loader_;
+  std::unique_ptr<IntentGenerator> intent_generator_;
   bool assistant_enabled_ = false;
   bool assistant_context_enabled_ = false;
+  bool quick_answers_settings_enabled_ = false;
   bool locale_supported_ = false;
-  ash::mojom::AssistantAllowedState assistant_allowed_state_ =
-      ash::mojom::AssistantAllowedState::ALLOWED;
+  chromeos::assistant::AssistantAllowedState assistant_allowed_state_ =
+      chromeos::assistant::AssistantAllowedState::ALLOWED;
   bool is_eligible_ = false;
   // Time when the quick answer is received.
   base::TimeTicks quick_answer_received_time_;

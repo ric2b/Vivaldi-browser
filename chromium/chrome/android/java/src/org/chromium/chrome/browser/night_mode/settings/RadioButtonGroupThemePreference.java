@@ -26,6 +26,8 @@ import org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionLayou
 import java.util.ArrayList;
 import java.util.Collections;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * A radio button group Preference used for Themes. Currently, it has 3 options: System default,
  * Light, and Dark. When an additional flag, DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING, is active
@@ -100,6 +102,8 @@ public class RadioButtonGroupThemePreference
     private void positionCheckbox() {
         if (ChromeFeatureList.isEnabled(
                     ChromeFeatureList.DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING)) {
+            // Note(david@vivaldi.com): We never show the checkbox container.
+            if (ChromeApplication.isVivaldi()) return;
             if (mSetting == ThemeType.SYSTEM_DEFAULT || mSetting == ThemeType.DARK) {
                 mGroup.attachAccessoryView(mCheckboxContainer, mSettingRadioButton);
                 mCheckboxContainer.setVisibility(View.VISIBLE);

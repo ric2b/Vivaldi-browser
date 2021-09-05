@@ -43,6 +43,8 @@ NSString* kIncognitoCurrentKey = @"IncognitoActive";
 
 - (instancetype)init NS_UNAVAILABLE;
 
+@property(nonatomic, assign) NSString* sessionID;
+
 // Creates the main Browser used by the receiver, using the browser state
 // and tab model observer it was configured with. The main interface is then
 // created; until this method is called, the main and incognito interfaces will

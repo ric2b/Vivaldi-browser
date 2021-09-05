@@ -46,15 +46,21 @@ FontFallbackList::FontFallbackList(FontSelector* font_selector)
       family_index_(0),
       generation_(FontCache::GetFontCache()->Generation()),
       has_loading_fallback_(false),
+      has_custom_font_(false),
       can_shape_word_by_word_(false),
-      can_shape_word_by_word_computed_(false) {}
+      can_shape_word_by_word_computed_(false),
+      is_invalid_(false) {}
 
-void FontFallbackList::Invalidate() {
+void FontFallbackList::RevalidateDeprecated() {
+  DCHECK(RuntimeEnabledFeatures::CSSReducedFontLoadingInvalidationsEnabled());
+  DCHECK(!RuntimeEnabledFeatures::
+             CSSReducedFontLoadingLayoutInvalidationsEnabled());
   ReleaseFontData();
   font_list_.clear();
   cached_primary_simple_font_data_ = nullptr;
   family_index_ = 0;
   has_loading_fallback_ = false;
+  has_custom_font_ = false;
   can_shape_word_by_word_ = false;
   can_shape_word_by_word_computed_ = false;
   font_selector_version_ = font_selector_ ? font_selector_->Version() : 0;
@@ -157,14 +163,13 @@ const SimpleFontData* FontFallbackList::DeterminePrimarySimpleFontData(
 }
 
 scoped_refptr<FontData> FontFallbackList::GetFontData(
-    const FontDescription& font_description,
-    int& family_index) const {
+    const FontDescription& font_description) {
   const FontFamily* curr_family = &font_description.Family();
-  for (int i = 0; curr_family && i < family_index; i++)
+  for (int i = 0; curr_family && i < family_index_; i++)
     curr_family = curr_family->Next();
 
   for (; curr_family; curr_family = curr_family->Next()) {
-    family_index++;
+    family_index_++;
     if (curr_family->Family().length()) {
       scoped_refptr<FontData> result;
       if (font_selector_)
@@ -185,7 +190,7 @@ scoped_refptr<FontData> FontFallbackList::GetFontData(
         font_selector_->ReportFailedFontFamilyMatch(curr_family->Family());
     }
   }
-  family_index = kCAllFamiliesScanned;
+  family_index_ = kCAllFamiliesScanned;
 
   if (font_selector_) {
     // Try the user's preferred standard font.
@@ -234,11 +239,6 @@ FallbackListCompositeKey FontFallbackList::CompositeKey(
 const FontData* FontFallbackList::FontDataAt(
     const FontDescription& font_description,
     unsigned realized_font_index) {
-  if (RuntimeEnabledFeatures::CSSReducedFontLoadingInvalidationsEnabled()) {
-    if (!IsValid())
-      Invalidate();
-  }
-
   // This fallback font is already in our list.
   if (realized_font_index < font_list_.size())
     return font_list_[realized_font_index].get();
@@ -255,11 +255,13 @@ const FontData* FontFallbackList::FontDataAt(
   // the same spot in the list twice.  GetFontData will adjust our
   // |family_index_| as it scans for the right font to make.
   DCHECK_EQ(FontCache::GetFontCache()->Generation(), generation_);
-  scoped_refptr<FontData> result = GetFontData(font_description, family_index_);
+  scoped_refptr<FontData> result = GetFontData(font_description);
   if (result) {
     font_list_.push_back(result);
     if (result->IsLoadingFallback())
       has_loading_fallback_ = true;
+    if (result->IsCustomFont())
+      has_custom_font_ = true;
   }
   return result.get();
 }
@@ -280,11 +282,6 @@ bool FontFallbackList::ComputeCanShapeWordByWord(
 
 bool FontFallbackList::CanShapeWordByWord(
     const FontDescription& font_description) {
-  if (RuntimeEnabledFeatures::CSSReducedFontLoadingInvalidationsEnabled()) {
-    if (!IsValid())
-      Invalidate();
-  }
-
   if (!can_shape_word_by_word_computed_) {
     can_shape_word_by_word_ = ComputeCanShapeWordByWord(font_description);
     can_shape_word_by_word_computed_ = true;
@@ -293,6 +290,14 @@ bool FontFallbackList::CanShapeWordByWord(
 }
 
 bool FontFallbackList::IsValid() const {
+  if (RuntimeEnabledFeatures::
+          CSSReducedFontLoadingLayoutInvalidationsEnabled()) {
+    return !is_invalid_;
+  }
+
+  // The flag can be set only when the feature above is enabled.
+  DCHECK(!is_invalid_);
+
   if (!font_selector_)
     return font_selector_version_ == 0;
 

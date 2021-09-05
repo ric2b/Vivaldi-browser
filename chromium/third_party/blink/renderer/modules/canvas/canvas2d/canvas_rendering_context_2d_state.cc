@@ -120,12 +120,17 @@ CanvasRenderingContext2DState::CanvasRenderingContext2DState(
 
 CanvasRenderingContext2DState::~CanvasRenderingContext2DState() = default;
 
-void CanvasRenderingContext2DState::FontsNeedUpdate(
-    FontSelector* font_selector) {
+void CanvasRenderingContext2DState::FontsNeedUpdate(FontSelector* font_selector,
+                                                    FontInvalidationReason) {
   DCHECK_EQ(font_selector, font_.GetFontSelector());
   DCHECK(realized_font_);
 
-  font_ = Font(font_.GetFontDescription(), font_selector);
+  if (!RuntimeEnabledFeatures::CSSReducedFontLoadingInvalidationsEnabled()) {
+    // With the feature enabled, |font_| will revalidate its FontFallbackList on
+    // demand. We don't need to manually reset the Font object here.
+    font_ = Font(font_.GetFontDescription(), font_selector);
+  }
+
   // FIXME: We only really need to invalidate the resolved filter if the font
   // update above changed anything and the filter uses font-dependent units.
   resolved_filter_.reset();
@@ -254,18 +259,18 @@ void CanvasRenderingContext2DState::ClipPath(
 }
 
 void CanvasRenderingContext2DState::SetFont(
-    const FontDescription& font_description,
+    const FontDescription& passed_font_description,
     FontSelector* selector) {
+  FontDescription font_description = passed_font_description;
+  font_description.SetSubpixelAscentDescent(true);
   font_ = Font(font_description, selector);
   realized_font_ = true;
   if (selector)
     selector->RegisterForInvalidationCallbacks(this);
 }
 
-const Font& CanvasRenderingContext2DState::GetFont() {
+const Font& CanvasRenderingContext2DState::GetFont() const {
   DCHECK(realized_font_);
-  if (!font_.IsFallbackValid())
-    FontsNeedUpdate(font_.GetFontSelector());
   return font_;
 }
 

@@ -6,7 +6,7 @@ package org.chromium.chrome.browser.payments;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.chrome.browser.payments.PaymentApp.PaymentRequestUpdateEventCallback;
+import org.chromium.components.payments.PaymentApp.PaymentRequestUpdateEventListener;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
@@ -87,12 +87,20 @@ public interface PaymentAppFactoryParams {
     /**
      * @return The listener for payment method, shipping address, and shipping option change events.
      */
-    default PaymentRequestUpdateEventCallback getPaymentRequestUpdateEventCallback() {
+    default PaymentRequestUpdateEventListener getPaymentRequestUpdateEventListener() {
         return null;
     }
 
     /** @return The currency of the total amount. Should not be null. */
     default String getTotalAmountCurrency() {
         return null;
+    }
+
+    /**
+     * @return Whether the PaymentRequest is requesting delegation of either shipping or payer
+     *         contact.
+     */
+    default boolean requestShippingOrPayerContact() {
+        return false;
     }
 }

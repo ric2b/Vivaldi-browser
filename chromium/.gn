@@ -159,8 +159,7 @@ check_targets = [
   "//chrome/browser/permissions/*",
   "//chrome/browser/picture_in_picture/*",
   "//chrome/browser/plugins/*",
-
-  # "//chrome/browser/policy/*",  # 1 error on Windows
+  "//chrome/browser/policy/*",
   "//chrome/browser/predictors/*",
   "//chrome/browser/prefetch/*",
   "//chrome/browser/prefs/*",
@@ -341,7 +340,6 @@ check_targets = [
   "//third_party/ashmem/*",
   "//third_party/axe-core/*",
   "//third_party/bazel/*",
-  "//third_party/binutils/*",
   "//third_party/blanketjs/*",
 
   # "//third_party/blink/*",  # Errors: https://crbug.com/800764
@@ -420,7 +418,6 @@ check_targets = [
   "//third_party/javax_inject/*",
   "//third_party/jinja2/*",
   "//third_party/jsoncpp/*",
-  "//third_party/jsr-305/*",
   "//third_party/jstemplate/*",
   "//third_party/junit/*",
   "//third_party/khronos/*",
@@ -434,7 +431,6 @@ check_targets = [
   # "//third_party/libaom/*",  # https://crbug.com/899771
   "//third_party/libc++/*",
   "//third_party/libc++abi/*",
-  "//third_party/libcxx-pretty-printers/*",
   "//third_party/libdrm/*",
   "//third_party/libgav1/*",
   "//third_party/libjingle/*",

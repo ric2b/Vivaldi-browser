@@ -138,6 +138,7 @@ class CC_EXPORT ScrollbarController {
   void DidUnregisterScrollbar(ElementId element_id);
   ScrollbarLayerImplBase* ScrollbarLayer();
   void WillBeginImplFrame();
+  void ResetState();
 
  private:
   // "Autoscroll" here means the continuous scrolling that occurs when the
@@ -163,13 +164,19 @@ class CC_EXPORT ScrollbarController {
   };
 
   struct CC_EXPORT DragState {
-    // This is used to track the pointer location relative to the thumb origin
-    // when a drag has started.
-    gfx::Vector2dF anchor_relative_to_thumb_;
+    // This marks the point at which the drag initiated (relative to the widget)
+    gfx::PointF drag_origin;
 
     // This is needed for thumb snapping when the pointer moves too far away
     // from the track while scrolling.
     float scroll_position_at_start_;
+
+    // The |scroller_displacement| indicates the scroll offset compensation that
+    // needs to be applied when the scroller's length changes dynamically mid
+    // thumb drag. This is needed done to ensure that the scroller does not jump
+    // while a thumb drag is in progress.
+    float scroller_displacement;
+    float scroller_length_at_previous_move;
   };
 
   struct CC_EXPORT CapturedScrollbarMetadata {
@@ -223,7 +230,6 @@ class CC_EXPORT ScrollbarController {
   // the thumb reaching the pointer or the pointer leaving (or re-entering) the
   // bounds.
   void RecomputeAutoscrollStateIfNeeded();
-  void ResetState();
 
   // Shift (or "Option" in case of Mac) + click is expected to do a non-animated
   // jump to a certain offset.
@@ -233,15 +239,10 @@ class CC_EXPORT ScrollbarController {
   ui::ScrollGranularity Granularity(const ScrollbarPart scrollbar_part,
                                     bool shift_modifier);
 
-  // Calculates the scroll_offset based on position_in_widget and
-  // drag_anchor_relative_to_thumb_.
-  gfx::ScrollOffset GetScrollOffsetForDragPosition(
+  // Calculates the delta based on position_in_widget and drag_origin.
+  int GetScrollDeltaForDragPosition(
       const ScrollbarLayerImplBase* scrollbar,
       const gfx::PointF pointer_position_in_widget);
-
-  // Returns a Vector2dF for position_in_widget relative to the scrollbar thumb.
-  gfx::Vector2dF GetThumbRelativePoint(const ScrollbarLayerImplBase* scrollbar,
-                                       const gfx::PointF position_in_widget);
 
   // Returns the ratio of the scroller length to the scrollbar length. This is
   // needed to scale the scroll delta for thumb drag.

@@ -56,11 +56,8 @@
 
 <dom-module id="oobe-welcome-dialog">
   <template>
-    <link rel="stylesheet" href="oobe_fonts.css">
-    <link rel="stylesheet" href="oobe_dialog_host.css">
-    <link rel="stylesheet" href="oobe_flex_layout.css">
+    <style include="cr-shared-style oobe-dialog-host"></style>
     <link rel="stylesheet" href="oobe_welcome_dialog.css">
-    <style include="cr-shared-style"></style>
     <oobe-dialog has-buttons footer-shrinkable>
       <h1 slot="title" id="title">
         [[i18nDynamic(locale, 'welcomeScreenGreeting')]]
@@ -118,7 +115,7 @@
               src="../../../internal/resources/chromeos/animations/oobe-welcome/tablet_loop_2x.webm">
           </video>
         </if>
-        <div hidden="[[!debuggingLinkVisible]]">
+        <div id="enableDebuggingDiv" hidden="[[!debuggingLinkVisible]]">
           <a href="#" on-tap="onDebuggingLinkClicked_" id="enableDebuggingLink"
              class="oobe-local-link">
             [[i18nDynamic(locale, 'debuggingFeaturesLink')]]

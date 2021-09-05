@@ -15,7 +15,6 @@
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/navigator.h"
-#include "content/browser/frame_host/navigator_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
@@ -265,11 +264,12 @@ bool TestWebContents::CreateRenderViewForRenderManager(
     RenderViewHost* render_view_host,
     int opener_frame_routing_id,
     int proxy_routing_id,
+    const base::UnguessableToken& frame_token,
     const base::UnguessableToken& devtools_frame_token,
     const FrameReplicationState& replicated_frame_state) {
   // This will go to a TestRenderViewHost.
   static_cast<RenderViewHostImpl*>(render_view_host)
-      ->CreateRenderView(opener_frame_routing_id, proxy_routing_id,
+      ->CreateRenderView(opener_frame_routing_id, proxy_routing_id, frame_token,
                          devtools_frame_token, replicated_frame_state, false);
   return true;
 }
@@ -343,13 +343,14 @@ void TestWebContents::SetOpener(WebContents* opener) {
 }
 
 void TestWebContents::AddPendingContents(
-    std::unique_ptr<WebContentsImpl> contents) {
+    std::unique_ptr<WebContentsImpl> contents,
+    const GURL& target_url) {
   // This is normally only done in WebContentsImpl::CreateNewWindow.
   GlobalRoutingID key(
       contents->GetRenderViewHost()->GetProcess()->GetID(),
       contents->GetRenderViewHost()->GetWidget()->GetRoutingID());
   AddDestructionObserver(contents.get());
-  pending_contents_[key] = std::move(contents);
+  pending_contents_[key] = CreatedWindow(std::move(contents), target_url);
 }
 
 void TestWebContents::ExpectSetHistoryOffsetAndLength(int history_offset,

@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -26,15 +27,15 @@ namespace blink {
 using mojom::blink::PermissionService;
 using mojom::blink::PermissionStatus;
 
-WakeLock::WakeLock(Document& document)
-    : ExecutionContextLifecycleObserver(&document),
-      PageVisibilityObserver(document.GetPage()),
+WakeLock::WakeLock(LocalDOMWindow& window)
+    : ExecutionContextLifecycleObserver(&window),
+      PageVisibilityObserver(window.GetFrame()->GetPage()),
+      permission_service_(&window),
       managers_{
-          MakeGarbageCollected<WakeLockManager>(document.ToExecutionContext(),
-                                                WakeLockType::kScreen),
-          MakeGarbageCollected<WakeLockManager>(document.ToExecutionContext(),
+          MakeGarbageCollected<WakeLockManager>(&window, WakeLockType::kScreen),
+          MakeGarbageCollected<WakeLockManager>(&window,
                                                 WakeLockType::kSystem)} {
-  document.GetScheduler()->RegisterStickyFeature(
+  window.GetScheduler()->RegisterStickyFeature(
       SchedulingPolicy::Feature::kWakeLock,
       {SchedulingPolicy::RecordMetricsForBackForwardCache()});
 }
@@ -42,6 +43,7 @@ WakeLock::WakeLock(Document& document)
 WakeLock::WakeLock(DedicatedWorkerGlobalScope& worker_scope)
     : ExecutionContextLifecycleObserver(&worker_scope),
       PageVisibilityObserver(nullptr),
+      permission_service_(&worker_scope),
       managers_{MakeGarbageCollected<WakeLockManager>(&worker_scope,
                                                       WakeLockType::kScreen),
                 MakeGarbageCollected<WakeLockManager>(&worker_scope,
@@ -50,6 +52,15 @@ WakeLock::WakeLock(DedicatedWorkerGlobalScope& worker_scope)
 ScriptPromise WakeLock::request(ScriptState* script_state,
                                 const String& type,
                                 ExceptionState& exception_state) {
+  // 4.1. If the document's browsing context is null, reject promise with a
+  //      "NotAllowedError" DOMException and return promise.
+  if (!script_state->ContextIsValid()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotAllowedError,
+        "The document has no associated browsing context");
+    return ScriptPromise();
+  }
+
   // https://w3c.github.io/wake-lock/#the-request-method
   auto* context = ExecutionContext::From(script_state);
   DCHECK(context->IsDocument() || context->IsDedicatedWorkerGlobalScope());
@@ -102,24 +113,14 @@ ScriptPromise WakeLock::request(ScriptState* script_state,
           "Screen locks cannot be requested from workers");
       return ScriptPromise();
     }
-  } else if (context->IsDocument()) {
+  } else if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
     // 2. Let document be the responsible document of the current settings
     // object.
-    auto* document = Document::From(context);
 
     // 4. Otherwise, if the current global object is the Window object:
-    // 4.1. If the document's browsing context is null, reject promise with a
-    //      "NotAllowedError" DOMException and return promise.
-    if (!document) {
-      exception_state.ThrowDOMException(
-          DOMExceptionCode::kNotAllowedError,
-          "The document has no associated browsing context");
-      return ScriptPromise();
-    }
-
     // 4.2. If document is not fully active, reject promise with a
     //      "NotAllowedError" DOMException, and return promise.
-    if (!document->IsActive()) {
+    if (!window->document()->IsActive()) {
       exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
                                         "The document is not active");
       return ScriptPromise();
@@ -127,8 +128,7 @@ ScriptPromise WakeLock::request(ScriptState* script_state,
     // 4.3. If type is "screen" and the Document of the top-level browsing
     //      context is hidden, reject promise with a "NotAllowedError"
     //      DOMException, and return promise.
-    if (type == "screen" &&
-        !(document->GetPage() && document->GetPage()->IsPageVisible())) {
+    if (type == "screen" && !window->GetFrame()->GetPage()->IsPageVisible()) {
       exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
                                         "The requesting page is not visible");
       return ScriptPromise();
@@ -252,30 +252,29 @@ void WakeLock::ObtainPermission(
   //   |user_gesture| argument into account to actually implement a slightly
   //   altered version of "request permission to use", the behavior of which
   //   will match the definition of "obtain permission" in the Wake Lock spec.
-  DCHECK(type == WakeLockType::kScreen || type == WakeLockType::kSystem);
-  static_assert(
-      static_cast<mojom::blink::WakeLockType>(WakeLockType::kScreen) ==
-          mojom::blink::WakeLockType::kScreen,
-      "WakeLockType and mojom::blink::WakeLockType must have identical values");
-  static_assert(
-      static_cast<mojom::blink::WakeLockType>(WakeLockType::kSystem) ==
-          mojom::blink::WakeLockType::kSystem,
-      "WakeLockType and mojom::blink::WakeLockType must have identical values");
+  mojom::blink::PermissionName permission_name;
+  switch (type) {
+    case WakeLockType::kScreen:
+      permission_name = mojom::blink::PermissionName::SCREEN_WAKE_LOCK;
+      break;
+    case WakeLockType::kSystem:
+      permission_name = mojom::blink::PermissionName::SYSTEM_WAKE_LOCK;
+      break;
+  }
 
-  auto* local_frame = GetExecutionContext()->IsDocument()
-                          ? Document::From(GetExecutionContext())->GetFrame()
-                          : nullptr;
+  auto* window = DynamicTo<LocalDOMWindow>(GetExecutionContext());
+  auto* local_frame = window ? window->GetFrame() : nullptr;
   GetPermissionService()->RequestPermission(
-      CreateWakeLockPermissionDescriptor(
-          static_cast<mojom::blink::WakeLockType>(type)),
+      CreatePermissionDescriptor(permission_name),
       LocalFrame::HasTransientUserActivation(local_frame), std::move(callback));
 }
 
 PermissionService* WakeLock::GetPermissionService() {
-  if (!permission_service_) {
+  if (!permission_service_.is_bound()) {
     ConnectToPermissionService(
         GetExecutionContext(),
-        permission_service_.BindNewPipeAndPassReceiver());
+        permission_service_.BindNewPipeAndPassReceiver(
+            GetExecutionContext()->GetTaskRunner(TaskType::kMiscPlatformAPI)));
   }
   return permission_service_.get();
 }
@@ -283,6 +282,7 @@ PermissionService* WakeLock::GetPermissionService() {
 void WakeLock::Trace(Visitor* visitor) {
   for (const WakeLockManager* manager : managers_)
     visitor->Trace(manager);
+  visitor->Trace(permission_service_);
   PageVisibilityObserver::Trace(visitor);
   ExecutionContextLifecycleObserver::Trace(visitor);
   ScriptWrappable::Trace(visitor);

@@ -25,7 +25,7 @@ class BLINK_COMMON_EXPORT WebTouchEvent : public WebInputEvent {
 
   // Whether the event is blocking, non-blocking, all event
   // listeners were passive or was forced to be non-blocking.
-  DispatchType dispatch_type = kBlocking;
+  DispatchType dispatch_type = DispatchType::kBlocking;
 
   // For a single touch, this is true after the touch-point has moved beyond
   // the platform slop region. For a multitouch, this is true after any
@@ -50,6 +50,8 @@ class BLINK_COMMON_EXPORT WebTouchEvent : public WebInputEvent {
       : WebInputEvent(type, modifiers, time_stamp) {}
 
   std::unique_ptr<WebInputEvent> Clone() const override;
+  bool CanCoalesce(const WebInputEvent& event) const override;
+  void Coalesce(const WebInputEvent& event) override;
 
   // Sets any scaled values to be their computed values and sets |frame_scale_|
   // back to 1 and |frame_translate_| X and Y coordinates back to 0.
@@ -58,7 +60,7 @@ class BLINK_COMMON_EXPORT WebTouchEvent : public WebInputEvent {
   // Return a scaled WebTouchPoint in root frame coordinates.
   WebTouchPoint TouchPointInRootFrame(unsigned touch_point) const;
 
-  bool IsCancelable() const { return dispatch_type == kBlocking; }
+  bool IsCancelable() const { return dispatch_type == DispatchType::kBlocking; }
 };
 
 }  // namespace blink

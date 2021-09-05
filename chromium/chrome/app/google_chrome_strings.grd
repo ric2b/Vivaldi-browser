@@ -34,6 +34,7 @@ chromium_strings.grd. -->
       <output filename="google_chrome_strings_pa.pak" type="data_package" lang="pa" />
       <output filename="google_chrome_strings_si.pak" type="data_package" lang="si" />
       <output filename="google_chrome_strings_sq.pak" type="data_package" lang="sq" />
+      <output filename="google_chrome_strings_sr-Latn.pak" type="data_package" lang="sr-Latn" />
       <output filename="google_chrome_strings_ur.pak" type="data_package" lang="ur" />
       <output filename="google_chrome_strings_uz.pak" type="data_package" lang="uz" />
       <output filename="google_chrome_strings_zh-HK.pak" type="data_package" lang="zh-HK" />
@@ -290,15 +291,10 @@ chromium_strings.grd. -->
         <message name="IDS_ABOUT_SAFETY_INFORMATION" desc="The safety label in the About box.">
           Important use and safety information
         </message>
-        <message name="IDS_ABOUT_TERMS_OF_SERVICE" desc="The terms of service label in the About box.">
-          Google Chrome OS <ph name="TERMS_OF_SERVICE_LINK">&lt;a target="_blank" href="$1"&gt;</ph>Terms of Service<ph name="END_TERMS_OF_SERVICE_LINK">&lt;/a&gt;</ph>
-        </message>
       </if>
-      <if expr="not chromeos">
-        <message name="IDS_ABOUT_TERMS_OF_SERVICE" desc="The terms of service label in the About box.">
-          Google Chrome <ph name="TERMS_OF_SERVICE_LINK">&lt;a target="_blank" href="$1"&gt;</ph>Terms of Service<ph name="END_TERMS_OF_SERVICE_LINK">&lt;/a&gt;</ph>
-        </message>
-      </if>
+      <message name="IDS_ABOUT_TERMS_OF_SERVICE" desc="The terms of service label in the About box.">
+        Terms of Service
+      </message>
       <if expr="is_macosx">
         <message name="IDS_MAC_10_9_OBSOLETE_NOW" desc="A message displayed on an at-launch infobar and About (Help) page warning the user that the OS version they are using is no longer supported.">
           This computer will no longer receive Google Chrome updates because Mac OS X 10.9 is no longer supported.
@@ -355,7 +351,7 @@ Google Chrome cannot read and write to its data directory:
       </message>
       <if expr="chromeos">
         <message name="IDS_EULA_CHECKBOX_ENABLE_LOGGING" desc="The label of the checkbox to enable/disable crash and user metrics logging on EULA screen.">
-          Optional: Help make Chrome OS better by automatically sending diagnostic and usage data to Google.
+          Optional: Help improve Chrome OS features and performance by automatically sending diagnostic and usage data to Google.
         </message>
       </if>
       <message name="IDS_PROFILE_TOO_NEW_ERROR" desc="Error displayed on startup when the profile is from a newer version of the product and can not be read">
@@ -732,10 +728,10 @@ Google Chrome is unable to recover your settings.
           Chrome OS System
         </message>
         <message name="IDS_SYNC_NEEDS_KEYS_FOR_EVERYTHING_ERROR_BUBBLE_VIEW_MESSAGE" desc="Message in the sync error notification when the user needs to reauth to retrieve the sync encryption keys and resume sync.">
-          Chrome OS could not sync your data. Fix now.
+          Chrome OS could not sync your data.
         </message>
         <message name="IDS_SYNC_NEEDS_KEYS_FOR_PASSWORDS_ERROR_BUBBLE_VIEW_MESSAGE" desc="Message in the sync error notification when the user needs to reauth to retrieve the sync encryption keys, required to resume syncing of passwords specifically (other sync data works normally).">
-          Chrome OS could not sync your passwords. Fix now.
+          Chrome OS could not sync your passwords.
         </message>
         <message name="IDS_SYNC_PASSPHRASE_ERROR_BUBBLE_VIEW_MESSAGE" desc="Message in the sync error bubble view when the user needs to update their sync passphrase.">
           Chrome OS could not sync your data. Please update your Sync passphrase.
@@ -1030,6 +1026,9 @@ Google Chrome is unable to recover your settings.
 
       <!-- Runtime permission strings -->
       <if expr="is_android">
+        <message name="IDS_INFOBAR_MISSING_AR_CAMERA_PERMISSION_TEXT" desc="Text shown in an infobar when a website has requested access to augmented reality capabilities, but Chrome is missing the Android camera permission.">
+          Chrome needs permission to access your camera to create a 3D map of your surroundings
+        </message>
         <message name="IDS_INFOBAR_MISSING_CAMERA_PERMISSION_TEXT" desc="Text shown in an infobar when a website has requested access to the camera capabilities, but Chrome is missing the Android camera permission.">
           Chrome needs permission to access your camera for this site
         </message>
@@ -1141,6 +1140,16 @@ Google Chrome is unable to recover your settings.
       <if expr="not is_android">
         <message name="IDS_HATS_BUBBLE_TITLE" translateable="false" desc="The title of Happiness Tracking Survey's invitation banner, it invites users to take a survey">
           Take a quick survey
+        </message>
+      </if>
+
+      <!-- Chrome parent extension/app install blocking dialog. -->
+      <if expr="chromeos">
+        <message name="IDS_EXTENSION_INSTALL_BLOCKED_BY_PARENT_PROMPT_MESSAGE" desc="Text for the dialog indicating that a parent has blocked extensions and apps.">
+         Your parent has turned off "Permissions for sites, apps and extensions" for Chrome. Adding this <ph name="EXTENSION_TYPE_PARAMETER">$1<ex>extension</ex></ph> is not allowed.
+        </message>
+        <message name="IDS_EXTENSION_ENABLE_BLOCKED_BY_PARENT_PROMPT_MESSAGE" desc="Text for the dialog indicating that a parent has blocked extensions and apps.">
+         Your parent has turned off "Permissions for sites, apps and extensions" for Chrome. Enabling this <ph name="EXTENSION_TYPE_PARAMETER">$1<ex>extension</ex></ph> is not allowed.
         </message>
       </if>
     </messages>

@@ -6,6 +6,7 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
+#include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/origin_trials/trial_token.h"
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
@@ -238,10 +239,10 @@ void OriginTrialContext::ActivateNavigationFeaturesFromInitiator(
 void OriginTrialContext::InitializePendingFeatures() {
   if (!enabled_features_.size() && !navigation_activated_features_.size())
     return;
-  auto* document = Document::DynamicFrom(context_.Get());
-  if (!document)
+  auto* window = DynamicTo<LocalDOMWindow>(context_.Get());
+  if (!window)
     return;
-  LocalFrame* frame = document->GetFrame();
+  LocalFrame* frame = window->GetFrame();
   if (!frame)
     return;
   ScriptState* script_state = ToScriptStateForMainWorld(frame);
@@ -332,20 +333,33 @@ bool OriginTrialContext::CanEnableTrialFromName(const StringView& trial_name) {
       !base::FeatureList::IsEnabled(features::kPortals)) {
     return false;
   }
+  if (trial_name == "AppCache" &&
+      !base::FeatureList::IsEnabled(features::kAppCache)) {
+    return false;
+  }
+  if (trial_name == "TrustTokens" &&
+      !base::FeatureList::IsEnabled(network::features::kTrustTokens)) {
+    return false;
+  }
 
   return true;
 }
 
 bool OriginTrialContext::EnableTrialFromName(const String& trial_name,
                                              base::Time expiry_time) {
+  if (!CanEnableTrialFromName(trial_name)) {
+    DVLOG(1) << "EnableTrialFromName: cannot enable trial " << trial_name;
+    return false;
+  }
+
   bool did_enable_feature = false;
   for (OriginTrialFeature feature :
        origin_trials::FeaturesForTrial(trial_name)) {
-    if (!origin_trials::FeatureEnabledForOS(feature))
+    if (!origin_trials::FeatureEnabledForOS(feature)) {
+      DVLOG(1) << "EnableTrialFromName: feature " << static_cast<int>(feature)
+               << " is disabled on current OS.";
       continue;
-
-    if (!CanEnableTrialFromName(trial_name))
-      continue;
+    }
 
     did_enable_feature = true;
     enabled_features_.insert(feature);
@@ -379,28 +393,29 @@ bool OriginTrialContext::EnableTrialFromToken(const SecurityOrigin* origin,
 
   bool valid = false;
   StringUTF8Adaptor token_string(token);
-  std::string trial_name_str;
-  base::Time expiry_time;
-  OriginTrialTokenStatus token_result = trial_token_validator_->ValidateToken(
-      token_string.AsStringPiece(), origin->ToUrlOrigin(), base::Time::Now(),
-      &trial_name_str, &expiry_time);
-  if (token_result == OriginTrialTokenStatus::kSuccess) {
-    String trial_name =
-        String::FromUTF8(trial_name_str.data(), trial_name_str.size());
+  TrialTokenResult token_result = trial_token_validator_->ValidateToken(
+      token_string.AsStringPiece(), origin->ToUrlOrigin(), base::Time::Now());
+  DVLOG(1) << "EnableTrialFromToken: token_result = "
+           << static_cast<int>(token_result.status) << ", token = " << token;
+
+  if (token_result.status == OriginTrialTokenStatus::kSuccess) {
+    String trial_name = String::FromUTF8(token_result.feature_name.data(),
+                                         token_result.feature_name.size());
     if (origin_trials::IsTrialValid(trial_name)) {
       // Origin trials are only enabled for secure origins. The only exception
       // is for deprecation trials.
       if (is_secure ||
           origin_trials::IsTrialEnabledForInsecureContext(trial_name)) {
-        valid = EnableTrialFromName(trial_name, expiry_time);
+        valid = EnableTrialFromName(trial_name, token_result.expiry_time);
       } else {
         // Insecure origin and trial is restricted to secure origins.
-        token_result = OriginTrialTokenStatus::kInsecure;
+        DVLOG(1) << "EnableTrialFromToken: not secure";
+        token_result.status = OriginTrialTokenStatus::kInsecure;
       }
     }
   }
 
-  RecordTokenValidationResultHistogram(token_result);
+  RecordTokenValidationResultHistogram(token_result.status);
   return valid;
 }
 

@@ -7,39 +7,45 @@
 
 #include "chrome/browser/chromeos/printing/history/print_job_info.pb.h"
 #include "chromeos/components/print_management/mojom/printing_manager.mojom.h"
+#include "components/keyed_service/core/keyed_service.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 
-class Profile;
-
 namespace chromeos {
+class PrintJobHistoryService;
 namespace printing {
-namespace mojom = printing_manager::mojom;
 namespace print_management {
 
-class PrintingManager : public mojom::PrintingMetadataProvider {
+class PrintingManager
+    : public printing_manager::mojom::PrintingMetadataProvider,
+      public KeyedService {
  public:
-  explicit PrintingManager(Profile* profile);
+  explicit PrintingManager(PrintJobHistoryService* print_job_history_service);
   ~PrintingManager() override;
 
   PrintingManager(const PrintingManager&) = delete;
   PrintingManager& operator=(const PrintingManager&) = delete;
 
-  // mojom::PrintingMetadataProvider implementation
+  // printing_manager::mojom::PrintingMetadataProvider:
   void GetPrintJobs(GetPrintJobsCallback callback) override;
+  void DeleteAllPrintJobs(DeleteAllPrintJobsCallback callback) override;
 
   void BindInterface(
-      mojo::PendingReceiver<mojom::PrintingMetadataProvider> pending_receiver);
+      mojo::PendingReceiver<printing_manager::mojom::PrintingMetadataProvider>
+          pending_receiver);
 
  private:
-  void OnPrintJobsRetrieved(
-      GetPrintJobsCallback callback,
-      bool success,
-      std::unique_ptr<std::vector<chromeos::printing::proto::PrintJobInfo>>
-          print_job_info_protos);
+  // KeyedService:
+  void Shutdown() override;
 
-  mojo::Receiver<mojom::PrintingMetadataProvider> receiver_{this};
-  Profile* profile_;  // Not Owned.
+  void OnPrintJobsRetrieved(GetPrintJobsCallback callback,
+                            bool success,
+                            std::vector<chromeos::printing::proto::PrintJobInfo>
+                                print_job_info_protos);
+
+  mojo::Receiver<printing_manager::mojom::PrintingMetadataProvider> receiver_{
+      this};
+  chromeos::PrintJobHistoryService* print_job_history_service_;  // NOT OWNED.
 };
 
 }  // namespace print_management

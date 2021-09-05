@@ -11,13 +11,11 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/memory/weak_ptr.h"
-#include "base/optional.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "build/build_config.h"
+#include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/metrics/chrome_metrics_services_manager_client.h"
-#include "chrome/browser/metrics/testing/demographic_metrics_test_utils.h"
 #include "chrome/browser/metrics/testing/sync_metrics_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -26,13 +24,14 @@
 #include "components/metrics/delegating_provider.h"
 #include "components/metrics/demographic_metrics_provider.h"
 #include "components/metrics/metrics_switches.h"
+#include "components/metrics/test/demographic_metrics_test_utils.h"
 #include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/sync/driver/sync_user_settings.h"
+#include "content/public/test/browser_test.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
 #include "third_party/metrics_proto/user_demographics.pb.h"
-#include "third_party/zlib/google/compression_utils.h"
 
 namespace metrics {
 namespace {
@@ -60,6 +59,7 @@ class MetricsServiceUserDemographicsBrowserTest
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    SyncTest::SetUpCommandLine(command_line);
     // Enable the metrics service for testing (in recording-only mode).
     command_line->AppendSwitch(switches::kMetricsRecordingOnly);
   }
@@ -72,39 +72,15 @@ class MetricsServiceUserDemographicsBrowserTest
   }
 
   // Forces a log record to be generated. Returns a copy of the record on
-  // success; otherwise, returns std::nullopt.
-  base::Optional<ChromeUserMetricsExtension> GenerateLogRecord() {
-    // Make sure that the metrics service is instantiated.
-    MetricsService* const metrics_service =
+  // success; otherwise, returns nullptr.
+  std::unique_ptr<ChromeUserMetricsExtension> GenerateLogRecord() {
+    MetricsService* metrics_service =
         g_browser_process->GetMetricsServicesManager()->GetMetricsService();
-    if (metrics_service == nullptr) {
-      LOG(ERROR) << "Metrics service is not available";
-      return base::nullopt;
-    }
+    test::BuildAndStoreLog(metrics_service);
 
-    // Stage the current log in the log store.
-    if (!metrics_service->StageCurrentLogForTest()) {
-      LOG(ERROR) << "No staged log.";
-      return base::nullopt;
-    }
-
-    // Decompress the staged log.
-    MetricsLogStore* const log_store = metrics_service->LogStoreForTest();
-    std::string uncompressed_log;
-    if (!compression::GzipUncompress(log_store->staged_log(),
-                                     &uncompressed_log)) {
-      LOG(ERROR) << "Decompression failed.";
-      return base::nullopt;
-    }
-
-    // Deserialize and return the log.
-    ChromeUserMetricsExtension uma_proto;
-    if (!uma_proto.ParseFromString(uncompressed_log)) {
-      LOG(ERROR) << "Deserialization failed.";
-      return base::nullopt;
-    }
-
-    return uma_proto;
+    if (!test::HasUnsentLogs(metrics_service))
+      return nullptr;
+    return test::GetLastUmaLog(metrics_service);
   }
 
  private:
@@ -116,21 +92,18 @@ class MetricsServiceUserDemographicsBrowserTest
 };
 
 // TODO(crbug/1016118): Add the remaining test cases.
-#if defined(OS_ANDROID)
-#define MAYBE_AddSyncedUserBirthYearAndGenderToProtoData \
-  DISABLED_AddSyncedUserBirthYearAndGenderToProtoData
-#else
-#define MAYBE_AddSyncedUserBirthYearAndGenderToProtoData \
-  AddSyncedUserBirthYearAndGenderToProtoData
-#endif
+// Keep this test in sync with testUMADemographicsReportingWithFeatureEnabled
+// and testUMADemographicsReportingWithFeatureDisabled in
+// ios/chrome/browser/metrics/demographics_egtest.mm.
 IN_PROC_BROWSER_TEST_P(MetricsServiceUserDemographicsBrowserTest,
-                       MAYBE_AddSyncedUserBirthYearAndGenderToProtoData) {
+                       AddSyncedUserBirthYearAndGenderToProtoData) {
   test::DemographicsTestParams param = GetParam();
 
   base::HistogramTester histogram;
 
-  const int test_birth_year =
-      test::UpdateNetworkTimeAndGetMinimalEligibleBirthYear();
+  const base::Time now = base::Time::Now();
+  test::UpdateNetworkTime(now, g_browser_process->network_time_tracker());
+  const int test_birth_year = test::GetMaximumEligibleBirthYear(now);
   const UserDemographicsProto::Gender test_gender =
       UserDemographicsProto::GENDER_FEMALE;
 
@@ -139,6 +112,8 @@ IN_PROC_BROWSER_TEST_P(MetricsServiceUserDemographicsBrowserTest,
   test::AddUserBirthYearAndGenderToSyncServer(GetFakeServer()->AsWeakPtr(),
                                               test_birth_year, test_gender);
 
+  // TODO(crbug/1076461): Try to replace the below set-up code with functions
+  // from SyncTest.
   Profile* test_profile = ProfileManager::GetActiveUserProfile();
 
   // Enable sync for the test profile.
@@ -152,13 +127,14 @@ IN_PROC_BROWSER_TEST_P(MetricsServiceUserDemographicsBrowserTest,
   ASSERT_EQ(1, num_clients());
 
   // Generate a log record.
-  base::Optional<ChromeUserMetricsExtension> uma_proto = GenerateLogRecord();
-  ASSERT_TRUE(uma_proto.has_value());
+  std::unique_ptr<ChromeUserMetricsExtension> uma_proto = GenerateLogRecord();
+  ASSERT_TRUE(uma_proto);
 
   // Check log content and the histogram.
   if (param.expect_reported_demographics) {
-    EXPECT_EQ(test::GetNoisedBirthYear(test_birth_year, *test_profile),
-              uma_proto->user_demographics().birth_year());
+    EXPECT_EQ(
+        test::GetNoisedBirthYear(*test_profile->GetPrefs(), test_birth_year),
+        uma_proto->user_demographics().birth_year());
     EXPECT_EQ(test_gender, uma_proto->user_demographics().gender());
     histogram.ExpectUniqueSample("UMA.UserDemographics.Status",
                                  syncer::UserDemographicsStatus::kSuccess, 1);

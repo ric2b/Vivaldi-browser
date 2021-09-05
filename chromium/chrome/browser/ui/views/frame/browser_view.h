@@ -427,8 +427,14 @@ class BrowserView : public BrowserWindow,
           callback) override;
   std::string GetWorkspace() const override;
   bool IsVisibleOnAllWorkspaces() const override;
+  void HideDownloadShelf();
+  void UnhideDownloadShelf();
 
   void ShowEmojiPanel() override;
+
+  std::unique_ptr<content::EyeDropper> OpenEyeDropper(
+      content::RenderFrameHost* frame,
+      content::EyeDropperListener* listener) override;
 
   BookmarkBarView* GetBookmarkBarView() const;
   LocationBarView* GetLocationBarView() const;
@@ -498,7 +504,6 @@ class BrowserView : public BrowserWindow,
       const views::ViewHierarchyChangedDetails& details) override;
   void AddedToWidget() override;
   void PaintChildren(const views::PaintInfo& paint_info) override;
-  void ChildPreferredSizeChanged(View* child) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnThemeChanged() override;
   bool GetDropFormats(int* formats,
@@ -512,10 +517,8 @@ class BrowserView : public BrowserWindow,
 
   // ExclusiveAccessContext:
   Profile* GetProfile() override;
-  void UpdateUIForTabFullscreen(TabFullscreenState state) override;
+  void UpdateUIForTabFullscreen() override;
   content::WebContents* GetActiveWebContents() override;
-  void HideDownloadShelf() override;
-  void UnhideDownloadShelf() override;
   bool CanUserExitFullscreen() const override;
 
   // ExclusiveAccessBubbleViewsContext:

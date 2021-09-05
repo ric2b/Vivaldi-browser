@@ -9,6 +9,7 @@
 #include <set>
 
 #include "base/callback_forward.h"
+#include "base/containers/flat_set.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -36,6 +37,16 @@ namespace cors {
 class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoaderFactory final
     : public mojom::URLLoaderFactory {
  public:
+  // Set whether the factory allows CORS preflights. See IsValidRequest.
+  static void SetAllowExternalPreflightsForTesting(bool allow) {
+    allow_external_preflights_for_testing_ = allow;
+  }
+
+  // Check if members in |headers| are permitted by |allowed_exempt_headers|.
+  static bool IsValidCorsExemptHeaders(
+      const base::flat_set<std::string>& allowed_exempt_headers,
+      const net::HttpRequestHeaders& headers);
+
   // |origin_access_list| should always outlive this factory instance.
   // Used by network::NetworkContext.
   CorsURLLoaderFactory(
@@ -56,11 +67,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoaderFactory final
 
   int32_t process_id() const { return process_id_; }
 
-  // Set whether the factory allows CORS preflights. See IsSane.
-  static void SetAllowExternalPreflightsForTesting(bool allow) {
-    allow_external_preflights_for_testing_ = allow;
-  }
-
  private:
   class FactoryOverride;
 
@@ -77,14 +83,14 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoaderFactory final
 
   void DeleteIfNeeded();
 
-  bool IsSane(const NetworkContext* context,
-              const ResourceRequest& request,
-              uint32_t options);
+  bool IsValidRequest(const ResourceRequest& request, uint32_t options);
 
   InitiatorLockCompatibility VerifyRequestInitiatorLockWithPluginCheck(
       uint32_t process_id,
       const base::Optional<url::Origin>& request_initiator_site_lock,
       const base::Optional<url::Origin>& request_initiator);
+
+  bool GetAllowAnyCorsExemptHeaderForBrowser() const;
 
   mojo::ReceiverSet<mojom::URLLoaderFactory> receivers_;
 

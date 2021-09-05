@@ -356,17 +356,24 @@ sk_sp<SkImage> SkiaOutputSurfaceImpl::MakePromiseSkImageFromYUV(
   return image;
 }
 
-void SkiaOutputSurfaceImpl::ReleaseImageContexts(
+gpu::SyncToken SkiaOutputSurfaceImpl::ReleaseImageContexts(
     std::vector<std::unique_ptr<ImageContext>> image_contexts) {
   if (image_contexts.empty())
-    return;
+    return gpu::SyncToken();
+
+  gpu::SyncToken sync_token(
+      gpu::CommandBufferNamespace::VIZ_SKIA_OUTPUT_SURFACE,
+      impl_on_gpu_->command_buffer_id(), ++sync_fence_release_);
+  sync_token.SetVerifyFlush();
 
   // impl_on_gpu_ is released on the GPU thread by a posted task from
   // SkiaOutputSurfaceImpl::dtor. So it is safe to use base::Unretained.
-  auto callback = base::BindOnce(
-      &SkiaOutputSurfaceImplOnGpu::ReleaseImageContexts,
-      base::Unretained(impl_on_gpu_.get()), std::move(image_contexts));
-  gpu_task_scheduler_->ScheduleOrRetainGpuTask(std::move(callback), {});
+  auto callback =
+      base::BindOnce(&SkiaOutputSurfaceImplOnGpu::ReleaseImageContexts,
+                     base::Unretained(impl_on_gpu_.get()),
+                     std::move(image_contexts), sync_fence_release_);
+  gpu_task_scheduler_->ScheduleGpuTask(std::move(callback), {});
+  return sync_token;
 }
 
 std::unique_ptr<ExternalUseClient::ImageContext>
@@ -627,6 +634,12 @@ gpu::MemoryTracker* SkiaOutputSurfaceImpl::GetMemoryTracker() {
   return impl_on_gpu_->GetMemoryTracker();
 }
 
+void SkiaOutputSurfaceImpl::SetFrameRate(float frame_rate) {
+  auto task = base::BindOnce(&SkiaOutputSurfaceImplOnGpu::SetFrameRate,
+                             base::Unretained(impl_on_gpu_.get()), frame_rate);
+  ScheduleGpuTask(std::move(task), {});
+}
+
 void SkiaOutputSurfaceImpl::SetCapabilitiesForTesting(
     gfx::SurfaceOrigin output_surface_origin) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -785,6 +798,13 @@ void SkiaOutputSurfaceImpl::DidSwapBuffersComplete(
     const gfx::Size& pixel_size) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(client_);
+
+  // Reset |damage_of_buffers_|, if buffers are new created.
+  if (params.swap_response.result ==
+      gfx::SwapResult::SWAP_NAK_RECREATE_BUFFERS) {
+    for (auto& damage : damage_of_buffers_)
+      damage = gfx::Rect(size_);
+  }
 
   if (!params.texture_in_use_responses.empty())
     client_->DidReceiveTextureInUseResponses(params.texture_in_use_responses);

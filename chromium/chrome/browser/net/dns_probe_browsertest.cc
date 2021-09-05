@@ -15,8 +15,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/dns_probe_service_factory.h"
 #include "chrome/browser/net/dns_probe_test_util.h"
-#include "chrome/browser/net/dns_util.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
+#include "chrome/browser/net/secure_dns_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -33,6 +33,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/url_loader_interceptor.h"
@@ -198,9 +199,11 @@ class DelayedURLLoader : public network::mojom::URLLoader,
   void OnMojoDisconnect() { delete this; }
 
   // mojom::URLLoader implementation:
-  void FollowRedirect(const std::vector<std::string>& removed_headers,
-                      const net::HttpRequestHeaders& modified_headers,
-                      const base::Optional<GURL>& new_url) override {}
+  void FollowRedirect(
+      const std::vector<std::string>& removed_headers,
+      const net::HttpRequestHeaders& modified_headers,
+      const net::HttpRequestHeaders& modified_cors_exempt_headers,
+      const base::Optional<GURL>& new_url) override {}
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override {}
   void PauseReadingBodyFromNet() override {}
@@ -692,7 +695,7 @@ class DnsProbeCurrentSecureConfigFailingProbesTest
 
     PrefService* local_state = g_browser_process->local_state();
     local_state->SetString(prefs::kDnsOverHttpsMode,
-                           chrome_browser_net::kDnsOverHttpsModeSecure);
+                           SecureDnsConfig::kModeSecure);
     local_state->SetString(prefs::kDnsOverHttpsTemplates,
                            "https://bar.test/dns-query{?dns}");
 

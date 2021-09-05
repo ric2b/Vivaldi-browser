@@ -88,9 +88,6 @@ class APP_LIST_EXPORT SearchBoxView : public search_box::SearchBoxViewBase,
   // Returns background color for the given state.
   SkColor GetBackgroundColorForState(AppListState state) const;
 
-  // Updates the opacity of the searchbox.
-  void UpdateOpacity();
-
   // Shows Zero State suggestions.
   void ShowZeroStateSuggestions();
 
@@ -113,6 +110,10 @@ class APP_LIST_EXPORT SearchBoxView : public search_box::SearchBoxViewBase,
 
   void set_highlight_range_for_test(const gfx::Range& range) {
     highlight_range_ = range;
+  }
+
+  void set_search_box_has_query_for_test(bool value) {
+    search_box_has_query_ = value;
   }
 
  private:
@@ -156,12 +157,6 @@ class APP_LIST_EXPORT SearchBoxView : public search_box::SearchBoxViewBase,
   // Clear highlight range.
   void ResetHighlightRange();
 
-  // Key event handler used when SearchBoxSelection feature is disabled. This
-  // should be removed when the app_list_features::IsSearchBoxSelectionEnabled()
-  // flag is removed.
-  bool HandleKeyEventForDisabledSearchBoxSelection(
-      const ui::KeyEvent& key_event);
-
   base::string16 current_query_;
 
   // The range of highlighted text for autocomplete.
@@ -179,6 +174,9 @@ class APP_LIST_EXPORT SearchBoxView : public search_box::SearchBoxViewBase,
 
   // True if app list search autocomplete is enabled.
   const bool is_app_list_search_autocomplete_enabled_;
+
+  // True if search_box() has user typed query in it.
+  bool search_box_has_query_ = false;
 
   base::WeakPtrFactory<SearchBoxView> weak_ptr_factory_{this};
 

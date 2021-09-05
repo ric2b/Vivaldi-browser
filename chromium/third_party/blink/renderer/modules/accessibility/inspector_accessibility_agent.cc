@@ -117,8 +117,6 @@ void FillGlobalStates(AXObject& ax_object,
                        CreateRelatedNodeListValue(*hidden_root)));
   }
 
-  AddHasPopupProperty(ax_object.HasPopup(), properties);
-
   ax::mojom::InvalidState invalid_state = ax_object.GetInvalidState();
   switch (invalid_state) {
     case ax::mojom::InvalidState::kNone:
@@ -278,7 +276,7 @@ void FillWidgetProperties(AXObject& ax_object,
     // TODO(aboxhall): sort
   }
 
-  if (ax_object.IsRange()) {
+  if (ax_object.IsRangeValueSupported()) {
     float min_value;
     if (ax_object.MinValueForRange(&min_value)) {
       properties.emplace_back(
@@ -766,7 +764,7 @@ void InspectorAccessibilityAgent::FillCoreProperties(
         CreateValue(description, AXValueTypeEnum::ComputedString));
   }
   // Value.
-  if (ax_object.SupportsRangeValue()) {
+  if (ax_object.IsRangeValueSupported()) {
     float value;
     if (ax_object.ValueForRange(&value))
       node_object.setValue(CreateValue(value));

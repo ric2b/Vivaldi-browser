@@ -39,16 +39,22 @@ if (is_win || is_mac) {
       "crash_client.h",
       "crash_reporter.cc",
       "crash_reporter.h",
+      "external_constants.cc",
+      "external_constants.h",
+      "external_constants_impl.h",
       "patcher.cc",
       "patcher.h",
       "persisted_data.cc",
       "persisted_data.h",
+      "policy_manager.cc",
+      "policy_manager.h",
       "prefs.cc",
       "prefs.h",
       "registration_data.cc",
       "registration_data.h",
       "unzipper.cc",
       "unzipper.h",
+      "update_service.cc",
       "update_service.h",
       "util.cc",
       "util.h",
@@ -67,6 +73,19 @@ if (is_win || is_mac) {
       "//third_party/zlib/google:zip",
       "//url",
     ]
+
+    if (is_mac) {
+      sources += [ "external_constants_mac.mm" ]
+    }
+
+    if (is_win) {
+      sources += [
+        "external_constants_win.cc",
+        "win/group_policy_manager.cc",
+        "win/group_policy_manager.h",
+      ]
+      deps += [ "//chrome/updater/win:constants" ]
+    }
   }
 
   source_set("lib") {
@@ -81,6 +100,9 @@ if (is_win || is_mac) {
       "configurator.h",
       "installer.cc",
       "installer.h",
+      "lib_util.h",
+      "tag.cc",
+      "tag.h",
       "update_apps.h",
       "update_service_in_process.cc",
       "update_service_in_process.h",
@@ -91,6 +113,7 @@ if (is_win || is_mac) {
     if (is_mac) {
       sources += [
         "installer_mac.cc",
+        "lib_util_mac.mm",
         "mac/update_service_out_of_process.h",
         "mac/update_service_out_of_process.mm",
         "server/mac/server.h",
@@ -107,6 +130,11 @@ if (is_win || is_mac) {
     if (is_win) {
       sources += [
         "installer_win.cc",
+        "lib_util_win.cc",
+        "server/win/com_classes.cc",
+        "server/win/com_classes.h",
+        "server/win/com_classes_legacy.cc",
+        "server/win/com_classes_legacy.h",
         "server/win/server.cc",
         "server/win/server.h",
         "server/win/service_main.cc",
@@ -179,49 +207,74 @@ if (is_win || is_mac) {
     testonly = true
 
     sources = [
+      "external_constants_unittest.cc",
+      "external_constants_unittest.h",
+      "lib_util_unittest.cc",
       "persisted_data_unittest.cc",
+      "policy_manager_unittest.cc",
       "prefs_unittest.cc",
       "run_all_unittests.cc",
+      "tag_unittest.cc",
       "test/integration_tests.cc",
       "test/integration_tests.h",
+      "unittest_util.cc",
+      "unittest_util.h",
       "updater_unittest.cc",
     ]
 
     deps = [
       ":base",
+      ":lib",
       ":updater",
       ":version_header",
       "//base",
       "//base/test:test_support",
       "//chrome/common:constants",
+      "//chrome/updater/test/test_app",
+      "//chrome/updater/tools:unittest",
       "//components/prefs:test_support",
       "//components/update_client",
       "//testing/gtest",
+      "//url",
     ]
 
     if (is_win) {
-      sources += [ "test/integration_tests_win.cc" ]
+      sources += [
+        "external_constants_win_unittest.cc",
+        "test/integration_tests_win.cc",
+        "win/group_policy_manager_unittest.cc",
+      ]
 
-      deps += [ "//chrome/updater/win:updater_tests" ]
+      deps += [
+        "//chrome/updater/win:constants",
+        "//chrome/updater/win:updater_tests",
+      ]
 
-      data_deps = [ "//chrome/updater/win:updater" ]
+      data_deps = [
+        "//chrome/updater/win:updater",
+        "//chrome/updater/win/installer",
+      ]
     }
 
     if (is_mac) {
-      sources += [ "test/integration_tests_mac.mm" ]
+      sources += [
+        "external_constants_mac_unittest.mm",
+        "mac/update_service_out_of_process_test.mm",
+        "test/integration_tests_mac.mm",
+      ]
 
       deps += [
         "//chrome/common/mac:launchd",
+        "//chrome/updater/mac:enterprise_tests",
         "//chrome/updater/mac:updater_bundle",
         "//chrome/updater/mac:updater_setup_tests",
+        "//chrome/updater/mac:updater_tests",
         "//chrome/updater/mac:xpc_names",
+        "//chrome/updater/server/mac:protocol",
+        "//third_party/ocmock",
       ]
 
       data_deps = [ "//chrome/updater/mac:updater_bundle" ]
-    }
-
-    if (is_win || is_mac) {
-      deps += [ "//chrome/updater/tools:unittest" ]
     }
   }
 }

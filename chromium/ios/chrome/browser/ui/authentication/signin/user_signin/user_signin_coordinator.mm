@@ -33,7 +33,8 @@ namespace {
 const CGFloat kFadeOutAnimationDuration = 0.16f;
 }  // namespace
 
-@interface UserSigninCoordinator () <UnifiedConsentCoordinatorDelegate,
+@interface UserSigninCoordinator () <UIAdaptivePresentationControllerDelegate,
+                                     UnifiedConsentCoordinatorDelegate,
                                      UserSigninViewControllerDelegate,
                                      UserSigninMediatorDelegate>
 
@@ -101,21 +102,26 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
 - (void)start {
   [super start];
   self.viewController = [[UserSigninViewController alloc] init];
+  if (@available(iOS 13, *)) {
+    self.viewController.presentationController.delegate = self;
+  }
   self.viewController.delegate = self;
   self.viewController.useFirstRunSkipButton =
       self.signinIntent == UserSigninIntentFirstRun;
 
   self.mediator = [[UserSigninMediator alloc]
       initWithAuthenticationService:AuthenticationServiceFactory::
-                                        GetForBrowserState(self.browserState)
+                                        GetForBrowserState(
+                                            self.browser->GetBrowserState())
                     identityManager:IdentityManagerFactory::GetForBrowserState(
-                                        self.browserState)
+                                        self.browser->GetBrowserState())
                      consentAuditor:ConsentAuditorFactory::GetForBrowserState(
-                                        self.browserState)
+                                        self.browser->GetBrowserState())
               unifiedConsentService:UnifiedConsentServiceFactory::
-                                        GetForBrowserState(self.browserState)
+                                        GetForBrowserState(
+                                            self.browser->GetBrowserState())
                    syncSetupService:SyncSetupServiceFactory::GetForBrowserState(
-                                        self.browserState)];
+                                        self.browser->GetBrowserState())];
   self.mediator.delegate = self;
 
   self.unifiedConsentCoordinator = [[UnifiedConsentCoordinator alloc]
@@ -124,7 +130,9 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
   self.unifiedConsentCoordinator.delegate = self;
 
   // Set UnifiedConsentCoordinator properties.
-  self.unifiedConsentCoordinator.selectedIdentity = self.defaultIdentity;
+  if (self.defaultIdentity) {
+    self.unifiedConsentCoordinator.selectedIdentity = self.defaultIdentity;
+  }
   self.unifiedConsentCoordinator.autoOpenIdentityPicker =
       self.logger.promoAction == PromoAction::PROMO_ACTION_NOT_DEFAULT;
 
@@ -212,7 +220,7 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
 - (void)unifiedConsentCoordinatorNeedPrimaryButtonUpdate:
     (UnifiedConsentCoordinator*)coordinator {
   DCHECK_EQ(self.unifiedConsentCoordinator, coordinator);
-  [self userSigninMediatorNeedPrimaryButtonUpdate];
+  [self.viewController updatePrimaryButtonStyle];
 }
 
 #pragma mark - UserSigninViewControllerDelegate
@@ -232,9 +240,11 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
 
   __weak UserSigninCoordinator* weakSelf = self;
   self.addAccountSigninCoordinator.signinCompletion =
-      ^(SigninCoordinatorResult signinResult, ChromeIdentity* identity) {
+      ^(SigninCoordinatorResult signinResult,
+        SigninCompletionInfo* signinCompletionInfo) {
         if (signinResult == SigninCoordinatorResultSuccess) {
-          weakSelf.unifiedConsentCoordinator.selectedIdentity = identity;
+          weakSelf.unifiedConsentCoordinator.selectedIdentity =
+              signinCompletionInfo.identity;
           weakSelf.addedAccount = YES;
         }
         [weakSelf.addAccountSigninCoordinator stop];
@@ -248,10 +258,7 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
 }
 
 - (void)userSigninViewControllerDidTapOnSkipSignin {
-  [self.mediator cancelSignin];
-  // TODO(crbug.com/971989): Remove this metric after the architecture
-  // migration.
-  [self.logger logUndoSignin];
+  [self cancelSignin];
 }
 
 - (void)userSigninViewControllerDidTapOnSignin {
@@ -260,10 +267,6 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
 }
 
 #pragma mark - UserSigninMediatorDelegate
-
-- (void)userSigninMediatorDidTapResetSettingLink {
-  [self.unifiedConsentCoordinator resetSettingLinkTapped];
-}
 
 - (BOOL)userSigninMediatorGetSettingsLinkWasTapped {
   return self.unifiedConsentCoordinator.settingsLinkWasTapped;
@@ -306,18 +309,41 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
     }
     case UserSigninIntentSignin:
     case UserSigninIntentUpgrade: {
-      [self.viewController dismissViewControllerAnimated:YES
-                                              completion:completion];
+      if (self.viewController.presentingViewController) {
+        [self.viewController dismissViewControllerAnimated:YES
+                                                completion:completion];
+      } else {
+        // When the user swipes to dismiss the view controller. The sequence is:
+        //  * The user swipe the view controller
+        //  * The view controller is dismissed
+        //  * [self presentationControllerDidDismiss] is called
+        //  * The mediator is canceled
+        // And then this method is called by the mediator. Therefore the view
+        // controller already dismissed, and should not be dismissed again.
+        completion();
+      }
       break;
     }
   }
 }
 
-- (void)userSigninMediatorNeedPrimaryButtonUpdate {
+- (void)userSigninMediatorSigninFailed {
+  [self.unifiedConsentCoordinator resetSettingLinkTapped];
+  self.unifiedConsentCoordinator.uiDisabled = NO;
+  [self.viewController signinDidStop];
   [self.viewController updatePrimaryButtonStyle];
 }
 
 #pragma mark - Private
+
+// Cancels the sign-in flow if it is in progress, or dismiss the sign-in view
+// if the sign-in is not in progress.
+- (void)cancelSignin {
+  [self.mediator cancelSignin];
+  // TODO(crbug.com/971989): Remove this metric after the architecture
+  // migration.
+  [self.logger logUndoSignin];
+}
 
 // Notifies the observers that the user is attempting sign-in.
 - (void)notifyUserSigninAttempted {
@@ -342,8 +368,12 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
   self.unifiedConsentCoordinator = nil;
   self.mediator = nil;
   self.viewController = nil;
-  if (!settingsWasTapped) {
-    [self runCompletionCallbackWithSigninResult:signinResult identity:identity];
+  if (!settingsWasTapped || self.signinIntent == UserSigninIntentFirstRun) {
+    // For first run intent, the UserSigninCoordinator owner is reponsible to
+    // open the advanced settings sign-in.
+    [self runCompletionCallbackWithSigninResult:signinResult
+                                       identity:identity
+                     showAdvancedSettingsSignin:settingsWasTapped];
     return;
   }
   self.advancedSettingsSigninCoordinator = [SigninCoordinator
@@ -353,11 +383,11 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
   __weak UserSigninCoordinator* weakSelf = self;
   self.advancedSettingsSigninCoordinator.signinCompletion = ^(
       SigninCoordinatorResult advancedSigninResult,
-      ChromeIdentity* advancedSigninIdentity) {
+      SigninCompletionInfo* signinCompletionInfo) {
     [weakSelf
         advancedSettingsSigninCoordinatorFinishedWithResult:advancedSigninResult
-                                                   identity:
-                                                       advancedSigninIdentity];
+                                                   identity:signinCompletionInfo
+                                                                .identity];
   };
   [self.advancedSettingsSigninCoordinator start];
 }
@@ -366,6 +396,7 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
 // controller. First run requires an additional transitional fade animation when
 // presenting this view.
 - (void)presentUserSigninViewController {
+  self.viewController.modalPresentationStyle = UIModalPresentationFormSheet;
   switch (self.signinIntent) {
     case UserSigninIntentFirstRun: {
       // Displays the sign-in screen with transitions specific to first-run.
@@ -395,7 +426,8 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
             runCompletionCallbackWithSigninResult:
                 SigninCoordinatorResultInterrupted
                                          identity:self.unifiedConsentCoordinator
-                                                      .selectedIdentity];
+                                                      .selectedIdentity
+                       showAdvancedSettingsSignin:NO];
         return;
       }
 
@@ -406,7 +438,7 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
     }
     case UserSigninIntentSignin: {
       DCHECK(self.baseViewController);
-      self.viewController.modalPresentationStyle = UIModalPresentationFormSheet;
+
       [self.baseViewController presentViewController:self.viewController
                                             animated:YES
                                           completion:nil];
@@ -432,7 +464,8 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
     [weakSelf
         runCompletionCallbackWithSigninResult:SigninCoordinatorResultInterrupted
                                      identity:self.unifiedConsentCoordinator
-                                                  .selectedIdentity];
+                                                  .selectedIdentity
+                   showAdvancedSettingsSignin:NO];
     if (completion) {
       completion();
     }
@@ -481,7 +514,10 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
       presentingViewController:self.viewController];
   authenticationFlow.dispatcher = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), BrowsingDataCommands);
+  authenticationFlow.delegate = self.viewController;
 
+  self.unifiedConsentCoordinator.uiDisabled = YES;
+  [self.viewController signinWillStart];
   [self.mediator
       authenticateWithIdentity:self.unifiedConsentCoordinator.selectedIdentity
             authenticationFlow:authenticationFlow];
@@ -497,7 +533,36 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
   DCHECK(self.advancedSettingsSigninCoordinator);
   [self.advancedSettingsSigninCoordinator stop];
   self.advancedSettingsSigninCoordinator = nil;
-  [self runCompletionCallbackWithSigninResult:signinResult identity:identity];
+  [self runCompletionCallbackWithSigninResult:signinResult
+                                     identity:identity
+                   showAdvancedSettingsSignin:NO];
+}
+
+#pragma mark - UIAdaptivePresentationControllerDelegate
+
+- (void)presentationControllerDidDismiss:
+    (UIPresentationController*)presentationController {
+  // The view should be dismissible only if there is no sign-in in progress.
+  // See |presentationControllerShouldDismiss:|.
+  DCHECK(!self.mediator.isAuthenticationInProgress);
+  [self cancelSignin];
+}
+
+- (BOOL)presentationControllerShouldDismiss:
+    (UIPresentationController*)presentationController {
+  switch (self.signinIntent) {
+    case UserSigninIntentFirstRun: {
+      return NO;
+    }
+    case UserSigninIntentUpgrade:
+    case UserSigninIntentSignin: {
+      // Don't dismiss the view controller while the sign-in is in progress.
+      // To support this, the sign-in flow needs to be canceled after the view
+      // controller is dimissed, and the UI needs to be blocked until the
+      // sign-in flow is fully cancelled.
+      return !self.mediator.isAuthenticationInProgress;
+    }
+  }
 }
 
 @end

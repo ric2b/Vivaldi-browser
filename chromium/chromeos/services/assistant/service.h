@@ -9,6 +9,7 @@
 #include <string>
 
 #include "ash/public/cpp/ambient/ambient_mode_state.h"
+#include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/session/session_activation_observer.h"
 #include "ash/public/mojom/assistant_controller.mojom.h"
 #include "base/callback.h"
@@ -22,9 +23,8 @@
 #include "base/time/time.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/services/assistant/assistant_manager_service.h"
-#include "chromeos/services/assistant/assistant_state_proxy.h"
+#include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
-#include "chromeos/services/assistant/public/mojom/settings.mojom.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -33,7 +33,6 @@
 #include "mojo/public/cpp/bindings/remote.h"
 
 class GoogleServiceAuthError;
-class PrefService;
 
 namespace base {
 class OneShotTimer;
@@ -56,7 +55,6 @@ class IdentityManager;
 namespace chromeos {
 namespace assistant {
 
-class AssistantSettingsManager;
 class ServiceContext;
 class ScopedAshSessionObserver;
 
@@ -66,7 +64,7 @@ class ScopedAshSessionObserver;
 constexpr auto kUpdateAssistantManagerDelay = base::TimeDelta::FromSeconds(1);
 
 class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
-    : public mojom::AssistantService,
+    : public AssistantService,
       public chromeos::PowerManagerClient::Observer,
       public ash::SessionActivationObserver,
       public ash::AssistantStateObserver,
@@ -74,16 +72,11 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
       public AssistantManagerService::StateObserver,
       public ash::AmbientModeStateObserver {
  public:
-  Service(mojo::PendingReceiver<mojom::AssistantService> receiver,
-          std::unique_ptr<network::PendingSharedURLLoaderFactory>
+  Service(std::unique_ptr<network::PendingSharedURLLoaderFactory>
               pending_url_loader_factory,
-          signin::IdentityManager* identity_manager,
-          PrefService* profile_prefs);
+          signin::IdentityManager* identity_manager);
   ~Service() override;
 
-  // Allows tests to override the AssistantSettingsManager bound by the service.
-  static void OverrideSettingsManagerForTesting(
-      AssistantSettingsManager* manager);
   // Allows tests to override the S3 server URI used by the service.
   // The caller must ensure the memory passed in remains valid.
   // This override can be removed by passing in a nullptr.
@@ -97,20 +90,15 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
   void SetAssistantManagerServiceForTesting(
       std::unique_ptr<AssistantManagerService> assistant_manager_service);
 
-  AssistantStateProxy* GetAssistantStateProxyForTesting();
+  // AssistantService overrides:
+  void Init() override;
+  void BindAssistant(mojo::PendingReceiver<mojom::Assistant> receiver) override;
+  void Shutdown() override;
 
  private:
   friend class AssistantServiceTest;
 
   class Context;
-
-  // mojom::AssistantService overrides
-  void Init(mojo::PendingRemote<mojom::Client> client,
-            mojo::PendingRemote<mojom::DeviceActions> device_actions) override;
-  void BindAssistant(mojo::PendingReceiver<mojom::Assistant> receiver) override;
-  void BindSettingsManager(
-      mojo::PendingReceiver<mojom::AssistantSettingsManager> receiver) override;
-  void Shutdown() override;
 
   // chromeos::PowerManagerClient::Observer overrides:
   void PowerChanged(const power_manager::PowerSupplyProperties& prop) override;
@@ -169,11 +157,7 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
   // for the device.
   bool ShouldEnableHotword();
 
-  mojo::Receiver<mojom::AssistantService> receiver_;
   mojo::ReceiverSet<mojom::Assistant> assistant_receivers_;
-
-  mojo::Remote<mojom::Client> client_;
-  mojo::Remote<mojom::DeviceActions> device_actions_;
 
   signin::IdentityManager* const identity_manager_;
   std::unique_ptr<ScopedAshSessionObserver> scoped_ash_session_observer_;
@@ -202,15 +186,12 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
 
   base::Optional<std::string> access_token_;
 
-  mojo::Remote<mojom::AssistantController> assistant_controller_;
-
   mojo::Remote<ash::mojom::AssistantAlarmTimerController>
       assistant_alarm_timer_controller_;
   mojo::Remote<ash::mojom::AssistantNotificationController>
       assistant_notification_controller_;
   mojo::Remote<ash::mojom::AssistantScreenContextController>
       assistant_screen_context_controller_;
-  AssistantStateProxy assistant_state_;
 
   // |ServiceContext| object passed to child classes so they can access some of
   // our functionality without depending on us.
@@ -219,9 +200,6 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
   // non-null until |assistant_manager_service_| is created.
   std::unique_ptr<network::PendingSharedURLLoaderFactory>
       pending_url_loader_factory_;
-
-  // User profile preferences.
-  PrefService* const profile_prefs_;
 
   base::CancelableOnceClosure update_assistant_manager_callback_;
 

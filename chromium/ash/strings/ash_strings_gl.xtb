@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="gl">
 <translation id="1012876632442809908">Dispositivo USB-C (porto frontal)</translation>
+<translation id="1013598600051641573">A resolución do dispositivo <ph name="DISPLAY_NAME" /> cambiouse a <ph name="RESOLUTION" /> (<ph name="REFRESH_RATE" /> Hz). Para gardar os cambios, fai clic en Confirmar. A configuración anterior restaurarase en <ph name="TIMEOUT_SECONDS" />.</translation>
 <translation id="1013923882670373915">O dispositivo Bluetooth "<ph name="DEVICE_NAME" />" quere recibir permiso para sincronizarse. Introduce este código PIN nese dispositivo: <ph name="PINCODE" /></translation>
 <translation id="1032891413405719768">O lapis óptico ten pouca batería</translation>
 <translation id="1037492556044956303">Engadiuse <ph name="DEVICE_NAME" /></translation>
@@ -19,6 +20,8 @@
 <translation id="1195412055398077112">sobrevarrido</translation>
 <translation id="119944043368869598">Borrar todo</translation>
 <translation id="1199716647557067911">Seguro que queres desactivar a función Acceso con interruptores?</translation>
+<translation id="121097972571826261">Avanzar unha palabra</translation>
+<translation id="1229194443904279055">Deixar de seleccionar</translation>
 <translation id="1247372569136754018">Micrófono (interno)</translation>
 <translation id="1252999807265626933">Cargando a través de <ph name="POWER_SOURCE" /></translation>
 <translation id="1255033239764210633">Que tempo fai?</translation>
@@ -45,6 +48,7 @@
 <translation id="1455242230282523554">Mostrar a configuración do idioma</translation>
 <translation id="1460620680449458626">O volume está silenciado.</translation>
 <translation id="1467432559032391204">Esquerda</translation>
+<translation id="1479909375538722835">Menú flotante de accesibilidade</translation>
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1508507608940204251">Si</translation>
 <translation id="1516740043221086139">Está activado o modo Non molestar.</translation>
@@ -55,7 +59,6 @@
 <translation id="1550523713251050646">Fai clic para ver máis opcións</translation>
 <translation id="1570871743947603115">Activar/desactivar o Bluetooth. <ph name="STATE_TEXT" /></translation>
 <translation id="1589090746204042747">Acceder a toda a túa actividade nesta sesión</translation>
-<translation id="1608626060424371292">Eliminar este usuario</translation>
 <translation id="1632985212731562677">A función Acceso con interruptores pódese desactivar en Configuración &gt; Accesibilidade.</translation>
 <translation id="1654477262762802994">Iniciar unha consulta de voz</translation>
 <translation id="1658406695958299976">Aínda non se puido verificar o teu contrasinal. Nota: Se cambiaches o teu contrasinal recentemente, o contrasinal novo aplicarase en canto peches sesión. Utiliza aquí o contrasinal antigo.</translation>
@@ -110,6 +113,7 @@
 <translation id="2298170939937364391">Activouse a lupa de pantalla completa. Preme Ctrl+Buscar+M de novo para desactivala.</translation>
 <translation id="2302092602801625023">Esta conta está xestionada por Family Link</translation>
 <translation id="2303600792989757991">Alternar vista xeral da ventá</translation>
+<translation id="2322173485024759474">Retroceder unha letra</translation>
 <translation id="2339073806695260576">Toca o botón do lapis óptico no estante para crear unha nota, facer unha captura de pantalla, utilizar o punteiro láser ou aplicar a lupa.</translation>
 <translation id="2341729377289034582">Pantalla bloqueada en posición vertical</translation>
 <translation id="2352467521400612932">Configuración do lapis óptico</translation>
@@ -141,6 +145,7 @@
 <translation id="2700493154570097719">Definir teclado</translation>
 <translation id="2704781753052663061">Unirse a outras redes wifi</translation>
 <translation id="2705001408393684014">Activar/desactivar micrófono. <ph name="STATE_TEXT" /></translation>
+<translation id="2706462751667573066">Arriba</translation>
 <translation id="2718395828230677721">Luz nocturna</translation>
 <translation id="2727977024730340865">Conectado a un cargador de baixa potencia. É posible que a carga da batería non sexa fiable.</translation>
 <translation id="2792498699870441125">Alt+Search</translation>
@@ -174,6 +179,7 @@
 <translation id="3077734595579995578">maiús</translation>
 <translation id="3081696990447829002">Despregar menú</translation>
 <translation id="3087734570205094154">Parte inferior</translation>
+<translation id="309749186376891736">Mover cursor</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
 <translation id="3126069444801937830">Reinicia para actualizar</translation>
 <translation id="3139942575505304791">Escritorio 1</translation>
@@ -203,6 +209,7 @@
 <translation id="3400357268283240774">Configuración adicional</translation>
 <translation id="3413817803639110246">Aínda non hai contido</translation>
 <translation id="3428447136709161042">Desconectarse de <ph name="NETWORK_NAME" /></translation>
+<translation id="3430396595145920809">Pasa o dedo desde a dereita para volver</translation>
 <translation id="343571671045587506">Editar recordatorio</translation>
 <translation id="3445925074670675829">Dispositivo USB-C</translation>
 <translation id="3454224730401036106">A conexión cambiouse a unha rede máis segura</translation>
@@ -218,11 +225,13 @@
 <translation id="3595596368722241419">Batería completa</translation>
 <translation id="3604801046548457007">Creouse o escritorio <ph name="DESK_TITILE" /></translation>
 <translation id="3606978283550408104">A liña braille está conectada.</translation>
+<translation id="3616883743181209306">O menú moveuse á esquina superior dereita da pantalla.</translation>
 <translation id="3621202678540785336">Entrada</translation>
 <translation id="3621712662352432595">Configuración do audio</translation>
 <translation id="3626281679859535460">Brillo</translation>
 <translation id="3631369015426612114">Permitir notificacións das seguintes fontes:</translation>
 <translation id="3638400994746983214">Activar/desactivar a pantalla de privacidade. <ph name="STATE_TEXT" />.</translation>
+<translation id="366222428570480733"><ph name="USER_EMAIL_ADDRESS" /> Usuario xestionado</translation>
 <translation id="3705722231355495246">-</translation>
 <translation id="3712407551474845318">Capturar área</translation>
 <translation id="371370241367527062">Micrófono frontal</translation>
@@ -237,12 +246,14 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="383629559565718788">Mostrar a configuración do teclado</translation>
 <translation id="3846575436967432996">Non hai información de rede dispoñible</translation>
 <translation id="385051799172605136">Atrás</translation>
+<translation id="385300504083504382">Comezo</translation>
 <translation id="3891340733213178823">Preme Ctrl + Maiús + Q dúas veces para pechar sesión.</translation>
 <translation id="3893630138897523026">ChromeVox (comentarios orais)</translation>
 <translation id="3897533311200664389">Iniciar unha consulta de texto</translation>
 <translation id="3899995891769452915">Entrada de voz</translation>
 <translation id="3900355044994618856">A sesión finalizará dentro de <ph name="SESSION_TIME_REMAINING" /></translation>
 <translation id="3901991538546252627">Conectando con <ph name="NAME" /></translation>
+<translation id="3943857333388298514">Pegar</translation>
 <translation id="394485226368336402">Configuración do audio</translation>
 <translation id="3962859241508114581">Pista anterior</translation>
 <translation id="3965097803111112935">Non</translation>
@@ -327,6 +338,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="4961318399572185831">Enviar pantalla</translation>
 <translation id="5030687792513154421">Rematou o tempo</translation>
 <translation id="5035236842988137213">O <ph name="DEVICE_NAME" /> está conectado a un novo teléfono</translation>
+<translation id="5035389544768382859">Confirmar a configuración da pantalla</translation>
 <translation id="5083553833479578423">Desbloquea máis funcións do Asistente.</translation>
 <translation id="5136175204352732067">Conectouse un teclado diferente</translation>
 <translation id="5168181903108465623">Dispositivos de emisión dispoñibles</translation>
@@ -336,6 +348,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="5250225880026334010">Non</translation>
 <translation id="5260676007519551770">Escritorio 4</translation>
 <translation id="5283198616748585639">Engadir 1 min</translation>
+<translation id="528468243742722775">Final</translation>
 <translation id="5286194356314741248">Buscando</translation>
 <translation id="5302048478445481009">Idioma</translation>
 <translation id="5313326810920013265">Configuración de Bluetooth</translation>
@@ -343,6 +356,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="5379115545237091094">Demasiados intentos</translation>
 <translation id="5397578532367286026">O administrador pode revisar o uso e o historial deste usuario (<ph name="MANAGER_EMAIL" />) en chrome.com.</translation>
 <translation id="5400461572260843123">Configuración rápida, preme buscar + esquerda para acceder ao centro de notificacións.</translation>
+<translation id="5428899915242071344">Comezar selección</translation>
 <translation id="5430931332414098647">Conexión compartida instantánea</translation>
 <translation id="5431825016875453137">OpenVPN/L2TP</translation>
 <translation id="544691375626129091">Xa se engadiron todos os usuarios dispoñibles a esta sesión.</translation>
@@ -394,6 +408,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="6018164090099858612">Saíndo do modo de proxección</translation>
 <translation id="602001110135236999">Desprazarse á esquerda</translation>
 <translation id="6025324406281560198"><ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, intensidade do sinal do <ph name="SIGNAL_STRENGTH" />, xestionada polo teu administrador</translation>
+<translation id="6030495522958826102">O menú moveuse á esquina inferior esquerda da pantalla.</translation>
 <translation id="6040143037577758943">Pechar</translation>
 <translation id="6043212731627905357">Este monitor non funciona co dispositivo <ph name="DEVICE_TYPE" /> (o monitor non é compatible).</translation>
 <translation id="6043994281159824495">Pechar sesión agora</translation>
@@ -406,6 +421,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="615957422585914272">Mostrar teclado en pantalla</translation>
 <translation id="6164005077879661055">É posible que todos os ficheiros e datos locais asociados co usuario supervisado se eliminen permanentemente en canto se elimine este usuario supervisado. É posible que o administrador de <ph name="MANAGEMENT_URL" /> continúe vendo os sitios web visitados e as configuracións deste usuario supervisado.</translation>
 <translation id="6165508094623778733">Máis información</translation>
+<translation id="622484624075952240">Frecha abaixo</translation>
 <translation id="6236290670123303279">Xestionar configuración</translation>
 <translation id="6237231532760393653">1X</translation>
 <translation id="6254629735336163724">Pantalla bloqueada en posición horizontal</translation>
@@ -413,6 +429,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="6267036997247669271"><ph name="NAME" />: activando...</translation>
 <translation id="6283712521836204486">Está desactivado o modo Non molestar.</translation>
 <translation id="6284232397434400372">Cambiouse a resolución</translation>
+<translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> pode engadirse de novo máis adiante co permiso da súa nai ou do seu pai.</translation>
 <translation id="6297287540776456956">Utiliza o lapis óptico para seleccionar unha área</translation>
 <translation id="6310121235600822547">A rotación de <ph name="DISPLAY_NAME" /> cambiou a <ph name="ROTATION" /></translation>
 <translation id="6376931439017688372">O Bluetooth está activado</translation>
@@ -462,16 +479,20 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="6777216307882431711">Alimentando dispositivos USB-C conectados</translation>
 <translation id="6790428901817661496">Reproducir</translation>
 <translation id="6803622936009808957">Non se puideron replicar as pantallas porque non se atopou ningunha resolución compatible. No seu lugar accedeuse ao escritorio ampliado.</translation>
+<translation id="6818242057446442178">Retroceder unha palabra</translation>
 <translation id="6820676911989879663">Fai unha pausa!</translation>
 <translation id="6857811139397017780">Activar <ph name="NETWORKSERVICE" /></translation>
 <translation id="6878400149835617132">Desactivouse o atallo</translation>
+<translation id="6896758677409633944">Copiar</translation>
 <translation id="6910714959251846841">Esta actualización require executar a función Powerwash do dispositivo. Consulta máis información sobre a última actualización de <ph name="SYSTEM_APP_NAME" />.</translation>
 <translation id="6919251195245069855">Non se puido recoñecer a tarxeta intelixente. Téntao de novo.</translation>
+<translation id="6945221475159498467">Seleccionar</translation>
 <translation id="6972754398087986839">Introdución</translation>
 <translation id="6981982820502123353">Accesibilidade</translation>
 <translation id="698231206551913481">En canto se borre este usuario, eliminaranse permanentemente os ficheiros e os datos locais asociados con el.</translation>
 <translation id="7015766095477679451">Volve á seguinte hora: <ph name="COME_BACK_TIME" />.</translation>
 <translation id="7025533177575372252">Conecta o <ph name="DEVICE_NAME" /> co teu teléfono</translation>
+<translation id="7026338066939101231">Reducir</translation>
 <translation id="7029814467594812963">Pechar sesión</translation>
 <translation id="703425375924687388"><ph name="QUERY_NAME" />, Asistente de Google</translation>
 <translation id="7042322267639375032">Contraer área de estado</translation>
@@ -486,6 +507,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="7143207342074048698">Conectando</translation>
 <translation id="7165278925115064263">Alt+Maiús+K</translation>
 <translation id="7168224885072002358">Volvendo á resolución anterior dentro de <ph name="TIMEOUT_SECONDS" /></translation>
+<translation id="7188494361780961876">O menú moveuse á esquina superior esquerda da pantalla.</translation>
 <translation id="7246071203293827765"><ph name="UPDATE_TEXT" />. Tes que reiniciar este Chromebook para aplicar unha actualización. Esta acción pode tardar 1 minuto.</translation>
 <translation id="7256634071279256947">Micrófono traseiro</translation>
 <translation id="726276584504105859">Arrastra aquí a ventá para usar a vista dividida</translation>
@@ -505,6 +527,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="7526573455193969409">É posible que se controle a rede</translation>
 <translation id="7536035074519304529">Enderezo IP: <ph name="ADDRESS" /></translation>
 <translation id="7548434653388805669">É hora de deitarse</translation>
+<translation id="7561982940498449837">Pechar menú</translation>
 <translation id="7562368315689366235">Paleta de emojis</translation>
 <translation id="7564874036684306347">Ao mover as ventás a outro ordenador pódese provocar un comportamento inesperado. É posible que as notificacións, as ventás e os cadros de diálogo posteriores se dividan entre os ordenadores.</translation>
 <translation id="7568294522609223312">Desactivar clics automáticos</translation>
@@ -518,6 +541,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="7654687942625752712">Mantén premidas as dúas teclas de volume durante cinco segundos para desactivar os comentarios de voz.</translation>
 <translation id="7705524343798198388">VPN</translation>
 <translation id="7723389094756330927">{NUM_NOTIFICATIONS,plural, =1{1 notificación}other{# notificacións}}</translation>
+<translation id="7724603315864178912">Cortar</translation>
 <translation id="7749443890790263709">Alcanzouse o número máximo de escritorios.</translation>
 <translation id="776344839111254542">Fai clic para ver os detalles da actualización</translation>
 <translation id="7780159184141939021">Xirar a pantalla</translation>
@@ -543,8 +567,10 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="7984197416080286869">Realizáronse demasiados intentos de desbloqueo mediante a impresión dixital</translation>
 <translation id="7994370417837006925">Inicio de sesión múltiple</translation>
 <translation id="8000066093800657092">Sen rede</translation>
+<translation id="8004512796067398576">Aumentar</translation>
 <translation id="8029629653277878342">Como medida adicional de seguranza debes escribir o PIN ou o contrasinal</translation>
 <translation id="8030169304546394654">Desconectado</translation>
+<translation id="8042893070933512245">Abrir menú da configuración de accesibilidade</translation>
 <translation id="8048123526339889627">Configuración de Bluetooth</translation>
 <translation id="8054466585765276473">Calculando o tempo da batería.</translation>
 <translation id="8061464966246066292">Alto contraste</translation>
@@ -570,6 +596,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="8308637677604853869">Menú anterior</translation>
 <translation id="8341451174107936385"><ph name="UNLOCK_MORE_FEATURES" /> <ph name="GET_STARTED" /></translation>
 <translation id="8351131234907093545">Crear nota</translation>
+<translation id="8371779926711439835">Avanzar unha letra</translation>
 <translation id="8375916635258623388">Este <ph name="DEVICE_NAME" /> e o teu teléfono conectaranse automaticamente</translation>
 <translation id="8388750414311082622">O último escritorio non se pode quitar.</translation>
 <translation id="8392451568018454956">Menú de opcións para <ph name="USER_EMAIL_ADDRESS" /></translation>
@@ -589,6 +616,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="8513108775083588393">Xirar automaticamente</translation>
 <translation id="8517041960877371778">É posible que o teu <ph name="DEVICE_TYPE" /> non cargue mentres estea acendido.</translation>
 <translation id="8563862697512465947">Configuración de notificacións</translation>
+<translation id="857201607579416096">O menú moveuse á esquina inferior dereita da pantalla.</translation>
 <translation id="8627191004499078455">Dispositivo conectado a: <ph name="DEVICE_NAME" /></translation>
 <translation id="8631727435199967028">Configuración de accesibilidade</translation>
 <translation id="8637598503828012618"><ph name="CONNECTION_STATUS" />, intensidade do sinal do <ph name="SIGNAL_STRENGTH" />, xestionada polo teu administrador</translation>
@@ -611,6 +639,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="8814190375133053267">Wifi</translation>
 <translation id="8825863694328519386">Pasa o dedo desde a esquerda para volver</translation>
 <translation id="8828714802988429505">90°</translation>
+<translation id="8841375032071747811">Botón Atrás</translation>
 <translation id="8843682306134542540">Activar/desactivar o bloqueo de rotación. <ph name="STATE_TEXT" /></translation>
 <translation id="8850991929411075241">Busca+Esc</translation>
 <translation id="8870509716567206129">A aplicación non é compatible coa función de pantalla dividida.</translation>
@@ -618,6 +647,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="8877788021141246043">Definir un recordatorio</translation>
 <translation id="8878886163241303700">Ampliando a pantalla</translation>
 <translation id="890616557918890486">Cambiar fonte</translation>
+<translation id="8908312332415978740">O dispositivo <ph name="DISPLAY_NAME" /> non é compatible cunha resolución de <ph name="SPECIFIED_RESOLUTION" /> (<ph name="SPECIFIED_REFRESH_RATE" /> Hz). A resolución cambiouse a <ph name="FALLBACK_RESOLUTION" /> (<ph name="SPECIFIED_REFRESH_RATE" /> Hz). Para conservar este cambio, fai clic en Confirmar. A configuración anterior restaurarase en <ph name="TIMEOUT_SECONDS" />.</translation>
 <translation id="8909138438987180327">Nivel de batería: <ph name="PERCENTAGE" /> por cento.</translation>
 <translation id="8921554779039049422">H+</translation>
 <translation id="8921624153894383499">O Asistente de Google non fala este idioma.</translation>
@@ -652,6 +682,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="9211681782751733685">Tempo restante para que se cargue a batería por completo: <ph name="TIME_REMAINING" />.</translation>
 <translation id="9215934040295798075">Definir fondo de pantalla</translation>
 <translation id="921989828232331238">O teu pai ou nai bloqueou o dispositivo para todo o día</translation>
+<translation id="9220525904950070496">Quitar conta</translation>
 <translation id="923686485342484400">Preme Control, maiúsculas e Q dúas veces para pechar sesión.</translation>
 <translation id="938963181863597773">Que hai no meu calendario?</translation>
 <translation id="945522503751344254">Enviar comentarios</translation>

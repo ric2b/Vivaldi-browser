@@ -38,7 +38,15 @@ const base::Feature kFirstResponderSendAction{
     "FirstResponderSendAction", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kNewSigninArchitecture{"NewSigninArchitecture",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kQRCodeGeneration{"QRCodeGeneration",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if defined(__IPHONE_13_4)
+const base::Feature kPointerSupport{"PointerSupport",
+                                    base::FEATURE_ENABLED_BY_DEFAULT};
+#endif  // defined(__IPHONE_13_4)
+
+const base::Feature kEnableMyGoogle{"EnableMyGoogle",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};

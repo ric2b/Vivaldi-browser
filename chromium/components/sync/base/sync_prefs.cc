@@ -9,8 +9,9 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/files/file_path.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -276,9 +277,9 @@ void SyncPrefs::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kOsSyncPrefsMigrated, false);
   registry->RegisterBooleanPref(prefs::kOsSyncFeatureEnabled, false);
   registry->RegisterBooleanPref(prefs::kSyncAllOsTypes, true);
-  for (UserSelectableOsType type : UserSelectableOsTypeSet::All()) {
-    registry->RegisterBooleanPref(GetPrefNameForOsType(type), false);
-  }
+  registry->RegisterBooleanPref(prefs::kSyncOsApps, false);
+  registry->RegisterBooleanPref(prefs::kSyncOsPreferences, false);
+  // The pref for Wi-Fi configurations is registered in the loop above.
 #endif
 
   // The encryption bootstrap token represents a user-entered passphrase.
@@ -532,7 +533,7 @@ const char* SyncPrefs::GetPrefNameForOsType(UserSelectableOsType type) {
       return prefs::kSyncOsApps;
     case UserSelectableOsType::kOsPreferences:
       return prefs::kSyncOsPreferences;
-    case UserSelectableOsType::kWifiConfigurations:
+    case UserSelectableOsType::kOsWifiConfigurations:
       return prefs::kSyncWifiConfigurations;
   }
   NOTREACHED();
@@ -595,6 +596,8 @@ const char* SyncPrefs::GetPrefNameForType(UserSelectableType type) {
       return prefs::kSyncReadingList;
     case UserSelectableType::kTabs:
       return prefs::kSyncTabs;
+    case UserSelectableType::kWifiConfigurations:
+      return prefs::kSyncWifiConfigurations;
     case UserSelectableType::kNotes:
       return prefs::kSyncNotes;
   }

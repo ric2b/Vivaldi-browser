@@ -5,6 +5,7 @@
 #ifndef UI_COLOR_COLOR_ID_H_
 #define UI_COLOR_COLOR_ID_H_
 
+#include "base/logging.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
 
@@ -28,7 +29,7 @@
   E(kColorBubbleBackground, NativeTheme::kColorId_BubbleBackground) \
   E(kColorBubbleFooterBackground, \
     NativeTheme::kColorId_BubbleFooterBackground) \
-  E(kColorButtonBackground, NativeTheme::kColorId_DialogBackground) \
+  E(kColorButtonBackground, NativeTheme::kColorId_ButtonColor) \
   E(kColorButtonBorder, NativeTheme::kColorId_ButtonBorderColor) \
   E(kColorButtonDisabledForeground, NativeTheme::kColorId_ButtonDisabledColor) \
   E(kColorButtonForeground, NativeTheme::kColorId_ButtonEnabledColor) \
@@ -49,6 +50,7 @@
   E(kColorFocusableBorderFocused, NativeTheme::kColorId_FocusedBorderColor) \
   E(kColorFocusableBorderUnfocused, \
     NativeTheme::kColorId_UnfocusedBorderColor) \
+  E(kColorMenuIcon, NativeTheme::kColorId_MenuIconColor) \
   E(kColorIcon, NativeTheme::kColorId_DefaultIconColor) \
   E(kColorLabelDisabledForeground, NativeTheme::kColorId_LabelDisabledColor) \
   E(kColorLabelForeground, NativeTheme::kColorId_LabelEnabledColor) \
@@ -86,8 +88,6 @@
   E(kColorTabSelectedForeground, \
     NativeTheme::kColorId_TabTitleColorActive) \
   E(kColorTableBackground, NativeTheme::kColorId_TableBackground) \
-  E(kColorTableBackgroundAlternate, \
-    NativeTheme::kColorId_TableBackgroundAlternate) \
   E(kColorTableForeground, NativeTheme::kColorId_TableText) \
   E(kColorTableGroupingIndicator, \
     NativeTheme::kColorId_TableGroupingIndicatorColor) \
@@ -165,10 +165,20 @@
   E(kColorNativeWindowText, COLOR_WINDOWTEXT)
 #endif
 
+#if defined(OS_MACOSX)
+#define MACOSX_COLOR_IDS \
+  E(kColorTableBackgroundAlternate, \
+    NativeTheme::kColorId_TableBackgroundAlternate)
+#endif
+
 #if defined(OS_WIN)
 #define COLOR_IDS \
   CROSS_PLATFORM_COLOR_IDS \
   WIN_COLOR_IDS
+#elif defined(OS_MACOSX)
+#define COLOR_IDS \
+  CROSS_PLATFORM_COLOR_IDS \
+  MACOSX_COLOR_IDS
 #else
 #define COLOR_IDS CROSS_PLATFORM_COLOR_IDS
 #endif

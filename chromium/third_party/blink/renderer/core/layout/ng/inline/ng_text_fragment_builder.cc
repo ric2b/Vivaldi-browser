@@ -22,25 +22,25 @@ NGTextFragmentBuilder::NGTextFragmentBuilder(
       shape_result_(fragment.TextShapeResult()),
       text_type_(fragment.TextType()) {}
 
-void NGTextFragmentBuilder::SetItem(
-    NGPhysicalTextFragment::NGTextType text_type,
-    const NGInlineItemsData& items_data,
-    NGInlineItemResult* item_result,
-    LayoutUnit line_height) {
-  DCHECK_NE(text_type, NGPhysicalTextFragment::kGeneratedText)
-      << "Please use SetText() instead.";
+void NGTextFragmentBuilder::SetItem(const String& text_content,
+                                    NGInlineItemResult* item_result,
+                                    LayoutUnit line_height) {
   DCHECK(item_result);
-  DCHECK(item_result->item->Style());
+  const NGInlineItem* item = item_result->item;
+  DCHECK(item);
+  DCHECK_NE(item->TextType(), NGTextType::kLayoutGenerated)
+      << "Please use SetText() instead.";
+  DCHECK(item->Style());
 
-  text_type_ = text_type;
-  text_ = items_data.text_content;
+  text_type_ = item->TextType();
+  text_ = text_content;
   start_offset_ = item_result->start_offset;
   end_offset_ = item_result->end_offset;
-  resolved_direction_ = item_result->item->Direction();
-  SetStyle(item_result->item->Style(), item_result->item->StyleVariant());
+  resolved_direction_ = item->Direction();
+  SetStyle(item->Style(), item->StyleVariant());
   size_ = {item_result->inline_size, line_height};
   shape_result_ = std::move(item_result->shape_result);
-  layout_object_ = item_result->item->GetLayoutObject();
+  layout_object_ = item->GetLayoutObject();
 }
 
 void NGTextFragmentBuilder::SetText(
@@ -53,7 +53,7 @@ void NGTextFragmentBuilder::SetText(
   DCHECK(style);
   DCHECK(shape_result);
 
-  text_type_ = NGPhysicalTextFragment::kGeneratedText;
+  text_type_ = NGTextType::kLayoutGenerated;
   text_ = text;
   start_offset_ = shape_result->StartIndex();
   end_offset_ = shape_result->EndIndex();
@@ -64,21 +64,6 @@ void NGTextFragmentBuilder::SetText(
            NGLineHeightMetrics(*style).LineHeight()};
   shape_result_ = std::move(shape_result);
   layout_object_ = layout_object;
-}
-
-bool NGTextFragmentBuilder::IsGeneratedText() const {
-  if (UNLIKELY(style_variant_ == NGStyleVariant::kEllipsis ||
-               text_type_ == NGPhysicalTextFragment::kGeneratedText))
-    return true;
-
-  DCHECK(layout_object_);
-  if (const auto* layout_text_fragment =
-          ToLayoutTextFragmentOrNull(layout_object_)) {
-    return !layout_text_fragment->AssociatedTextNode();
-  }
-
-  const Node* node = layout_object_->GetNode();
-  return !node || node->IsPseudoElement();
 }
 
 scoped_refptr<const NGPhysicalTextFragment>

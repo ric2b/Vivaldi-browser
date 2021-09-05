@@ -45,6 +45,7 @@
 #include "third_party/blink/renderer/core/frame/user_activation.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/console_message_storage.h"
+#include "third_party/blink/renderer/core/inspector/inspector_issue_storage.h"
 #include "third_party/blink/renderer/core/inspector/worker_inspector_controller.h"
 #include "third_party/blink/renderer/core/inspector/worker_thread_debugger.h"
 #include "third_party/blink/renderer/core/loader/threadable_loader.h"
@@ -297,7 +298,9 @@ void WorkerGlobalScope::ImportScriptsInternal(const Vector<String>& urls,
         source_code.length(), handler ? handler->GetCodeCacheSize() : 0);
     ScriptController()->Evaluate(
         ScriptSourceCode(source_code, ScriptSourceLocationType::kUnknown,
-                         handler, response_url),
+                         handler,
+                         ScriptSourceCode::UsePostRedirectURL() ? response_url
+                                                                : complete_url),
         sanitize_script_errors, &error_event, GetV8CacheOptions());
     if (error_event) {
       ScriptController()->RethrowExceptionFromImportedScript(error_event,
@@ -346,6 +349,12 @@ void WorkerGlobalScope::AddConsoleMessageImpl(ConsoleMessage* console_message,
       this, console_message, discard_duplicates);
 }
 
+void WorkerGlobalScope::AddInspectorIssue(
+    mojom::blink::InspectorIssueInfoPtr info) {
+  GetThread()->GetInspectorIssueStorage()->AddInspectorIssue(this,
+                                                             std::move(info));
+}
+
 CoreProbeSink* WorkerGlobalScope::GetProbeSink() {
   if (IsClosing())
     return nullptr;
@@ -369,9 +378,6 @@ void WorkerGlobalScope::EvaluateClassicScript(
     std::unique_ptr<Vector<uint8_t>> cached_meta_data,
     const v8_inspector::V8StackTraceId& stack_id) {
   DCHECK(!IsContextPaused());
-  CHECK(!GetExecutionContext()->IsContextDestroyed())
-      << "https://crbug.com/930618: worker global scope was destroyed before "
-         "evaluating classic script";
 
   SingleCachedMetadataHandler* handler =
       CreateWorkerScriptCachedMetadataHandler(script_url,

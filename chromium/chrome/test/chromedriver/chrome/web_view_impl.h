@@ -5,7 +5,6 @@
 #ifndef CHROME_TEST_CHROMEDRIVER_CHROME_WEB_VIEW_IMPL_H_
 #define CHROME_TEST_CHROMEDRIVER_CHROME_WEB_VIEW_IMPL_H_
 
-#include <list>
 #include <memory>
 #include <string>
 
@@ -72,9 +71,11 @@ class WebViewImpl : public WebView {
   Status EvaluateScriptWithTimeout(const std::string& frame,
                                    const std::string& expression,
                                    const base::TimeDelta& timeout,
+                                   const bool awaitPromise,
                                    std::unique_ptr<base::Value>* result);
   Status EvaluateScript(const std::string& frame,
                         const std::string& expression,
+                        const bool awaitPromise,
                         std::unique_ptr<base::Value>* result) override;
   Status CallFunctionWithTimeout(const std::string& frame,
                                  const std::string& function,
@@ -104,17 +105,17 @@ class WebViewImpl : public WebView {
                             const std::string& function,
                             const base::ListValue& args,
                             std::string* out_frame) override;
-  Status DispatchMouseEvents(const std::list<MouseEvent>& events,
+  Status DispatchMouseEvents(const std::vector<MouseEvent>& events,
                              const std::string& frame,
                              bool async_dispatch_events = false) override;
   Status DispatchTouchEvent(const TouchEvent& event,
                             bool async_dispatch_events = false) override;
-  Status DispatchTouchEvents(const std::list<TouchEvent>& events,
+  Status DispatchTouchEvents(const std::vector<TouchEvent>& events,
                              bool async_dispatch_events = false) override;
   Status DispatchTouchEventWithMultiPoints(
-      const std::list<TouchEvent>& events,
+      const std::vector<TouchEvent>& events,
       bool async_dispatch_events = false) override;
-  Status DispatchKeyEvents(const std::list<KeyEvent>& events,
+  Status DispatchKeyEvents(const std::vector<KeyEvent>& events,
                            bool async_dispatch_events = false) override;
   Status GetCookies(std::unique_ptr<base::ListValue>* cookies,
                     const std::string& current_page_url) override;
@@ -189,8 +190,9 @@ class WebViewImpl : public WebView {
 
   Status InitProfileInternal();
   Status StopProfileInternal();
-  Status DispatchTouchEventsForMouseEvents(const std::list<MouseEvent>& events,
-                                           const std::string& frame);
+  Status DispatchTouchEventsForMouseEvents(
+      const std::vector<MouseEvent>& events,
+      const std::string& frame);
 
   std::string id_;
   bool w3c_compliant_;
@@ -246,17 +248,20 @@ Status EvaluateScript(DevToolsClient* client,
                       const std::string& expression,
                       EvaluateScriptReturnType return_type,
                       const base::TimeDelta& timeout,
+                      const bool awaitPromise,
                       std::unique_ptr<base::DictionaryValue>* result);
 Status EvaluateScriptAndGetObject(DevToolsClient* client,
                                   int context_id,
                                   const std::string& expression,
                                   const base::TimeDelta& timeout,
+                                  const bool awaitPromise,
                                   bool* got_object,
                                   std::string* object_id);
 Status EvaluateScriptAndGetValue(DevToolsClient* client,
                                  int context_id,
                                  const std::string& expression,
                                  const base::TimeDelta& timeout,
+                                 const bool awaitPromise,
                                  std::unique_ptr<base::Value>* result);
 Status ParseCallFunctionResult(const base::Value& temp_result,
                                std::unique_ptr<base::Value>* result);

@@ -85,6 +85,28 @@ TEST(CastMessageUtilTest, CreateStopRequest) {
   EXPECT_THAT(message.payload_utf8(), IsJson(expected_message));
 }
 
+TEST(CastMessageUtilTest, CreateCastMessageWithObject) {
+  constexpr char payload[] = R"({"foo": "bar"})";
+  const auto message = CreateCastMessage("theNamespace", ParseJson(payload),
+                                         "theSourceId", "theDestinationId");
+  ASSERT_TRUE(IsCastMessageValid(message));
+  EXPECT_EQ("theNamespace", message.namespace_());
+  EXPECT_EQ("theSourceId", message.source_id());
+  EXPECT_EQ("theDestinationId", message.destination_id());
+  EXPECT_THAT(message.payload_utf8(), IsJson(payload));
+}
+
+TEST(CastMessageUtilTest, CreateCastMessageWithString) {
+  constexpr char payload[] = "foo";
+  const auto message = CreateCastMessage("theNamespace", base::Value(payload),
+                                         "theSourceId", "theDestinationId");
+  ASSERT_TRUE(IsCastMessageValid(message));
+  EXPECT_EQ("theNamespace", message.namespace_());
+  EXPECT_EQ("theSourceId", message.source_id());
+  EXPECT_EQ("theDestinationId", message.destination_id());
+  EXPECT_EQ(message.payload_utf8(), payload);
+}
+
 TEST(CastMessageUtilTest, CreateVirtualConnectionClose) {
   std::string expected_message = R"(
     {

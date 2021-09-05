@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_row_cell.h"
 
+#include "base/check.h"
 #include "base/feature_list.h"
-#include "base/logging.h"
 #include "components/omnibox/common/omnibox_features.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/elements/extended_touch_target_button.h"
@@ -13,10 +13,12 @@
 #import "ios/chrome/browser/ui/omnibox/popup/autocomplete_suggestion.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_icon_view.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/dynamic_color_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -119,6 +121,13 @@ NSString* const kOmniboxPopupRowSwitchTabAccessibilityIdentifier =
     _separator.hidden = YES;
 
     self.backgroundColor = UIColor.clearColor;
+#if defined(__IPHONE_13_4)
+    if (@available(iOS 13.4, *)) {
+      if (base::FeatureList::IsEnabled(kPointerSupport)) {
+        [self addInteraction:[[ViewPointerInteraction alloc] init]];
+      }
+    }
+#endif  // defined(__IPHONE_13_4)
   }
   return self;
 }

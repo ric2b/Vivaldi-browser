@@ -13,6 +13,7 @@
     ],
     "services": [
       "fuchsia.accessibility.semantics.SemanticsManager",
+      "fuchsia.camera3.DeviceWatcher",
       "fuchsia.device.NameProvider",
       "fuchsia.fonts.Provider",
       "fuchsia.intl.PropertyProvider",
@@ -33,6 +34,8 @@
       "fuchsia.sysmem.Allocator",
       "fuchsia.ui.input.ImeService",
       "fuchsia.ui.input.ImeVisibilityService",
+      "fuchsia.ui.scenic.Scenic",
+      "fuchsia.vulkan.loader.Loader",
       "fuchsia.web.ContextProvider"
     ]
   }

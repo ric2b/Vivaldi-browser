@@ -109,12 +109,12 @@
 [submodule "third_party/libyuv"]
 	path = third_party/libyuv
 	url = ../../libyuv/libyuv.git
-[submodule "third_party/yasm/source/patched-yasm"]
-	path = third_party/yasm/source/patched-yasm
-	url = ../deps/yasm/patched-yasm.git
 [submodule "media/cdm/api"]
 	path = media/cdm/api
 	url = ../cdm.git
+[submodule "third_party/libavif/src"]
+	path = third_party/libavif/src
+	url = ../../external/github.com/AOMediaCodec/libavif.git
 [submodule "net/third_party/quiche/src"]
 	path = net/third_party/quiche/src
 	url = ../../quiche/quiche.git
@@ -199,6 +199,9 @@
 [submodule "third_party/xdg-utils"]
 	path = third_party/xdg-utils
 	url = ../deps/xdg-utils.git
+[submodule "third_party/vulkan_memory_allocator"]
+	path = third_party/vulkan_memory_allocator
+	url = ../../external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
 [submodule "chrome/test/data/xr/webvr_info"]
 	path = chrome/test/data/xr/webvr_info
 	url = ../../external/github.com/toji/webvr.info.git

@@ -269,7 +269,6 @@ jumbo_source_set("base") {
     "simple_watch_timer.h",
     "sinc_resampler.cc",
     "sinc_resampler.h",
-    "speech_recognition_client.h",
     "status.cc",
     "status.h",
     "status_codes.cc",
@@ -309,6 +308,8 @@ jumbo_source_set("base") {
     "video_decoder.h",
     "video_decoder_config.cc",
     "video_decoder_config.h",
+    "video_encoder.cc",
+    "video_encoder.h",
     "video_frame.cc",
     "video_frame.h",
     "video_frame_layout.cc",
@@ -376,10 +377,6 @@ jumbo_source_set("base") {
   }
 
   if (use_x11) {
-    configs += [
-      "//build/config/linux:x11",
-      "//build/config/linux:xext",
-    ]
     sources += [ "user_input_monitor_linux.cc" ]
     deps += [
       "//ui/events:events_base",
@@ -425,6 +422,10 @@ jumbo_source_set("base") {
     sources += [ "demuxer_memory_limit_default.cc" ]
   }
 
+  if (!is_android) {
+    sources += [ "speech_recognition_client.h" ]
+  }
+
   if (enable_media_drm_storage) {
     sources += [
       "media_drm_key_type.h",
@@ -441,6 +442,7 @@ source_set("video_facing") {
 if (is_android) {
   java_cpp_enum("java_enums") {
     sources = [
+      "container_names.h",
       "encryption_scheme.h",
       "video_codecs.h",
     ]

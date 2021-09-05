@@ -11,6 +11,7 @@ import android.content.pm.PackageManager;
 
 import org.chromium.android_webview.AwLocaleConfig;
 import org.chromium.android_webview.common.CommandLineUtil;
+import org.chromium.android_webview.common.metrics.AwNonembeddedUmaRecorder;
 import org.chromium.android_webview.devui.util.WebViewPackageHelper;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.PathUtils;
@@ -18,6 +19,8 @@ import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.metrics.UmaRecorderHolder;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.components.embedder_support.application.FontPreloadingWorkaround;
@@ -64,18 +67,9 @@ public class WebViewApkApplication extends Application {
         if (isWebViewProcess()) {
             PathUtils.setPrivateDataDirectorySuffix("webview", "WebView");
             CommandLineUtil.initCommandLine();
-
-            // Temporary code: old clients would toggle DeveloperModeContentProvider's state, and
-            // may have disabled it if the user had activated and disabled developer mode.
-            // PackageManager persists this state across package upgrades and reboots, so we need to
-            // explicitly reset the component state to safely handle these clients. Only do this if
-            // we're in a WebView process, because only WebView's Context can change this state.
-            // TODO(ntfschr): remove this in M83, when all clients are likely to have hit this code.
-            Context ctx = ContextUtils.getApplicationContext();
-            ComponentName developerModeContentProvider = new ComponentName(
-                    ctx, "org.chromium.android_webview.services.DeveloperModeContentProvider");
-            ctx.getPackageManager().setComponentEnabledSetting(developerModeContentProvider,
-                    PackageManager.COMPONENT_ENABLED_STATE_DEFAULT, PackageManager.DONT_KILL_APP);
+            // disable using a native recorder in this process because native lib isn't loaded.
+            UmaRecorderHolder.setAllowNativeUmaRecorder(false);
+            UmaRecorderHolder.setNonNativeDelegate(new AwNonembeddedUmaRecorder());
         }
     }
 
@@ -102,17 +96,22 @@ public class WebViewApkApplication extends Application {
             try {
                 ComponentName devToolsLauncherActivity = new ComponentName(
                         context, "org.chromium.android_webview.devui.MonochromeLauncherActivity");
-                if (WebViewPackageHelper.isCurrentSystemWebViewImplementation(context)) {
-                    // Enable the component to show the launcher icon.
-                    context.getPackageManager().setComponentEnabledSetting(devToolsLauncherActivity,
-                            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                            PackageManager.DONT_KILL_APP);
-                } else {
-                    // Disable the component to hide the launcher icon.
-                    context.getPackageManager().setComponentEnabledSetting(devToolsLauncherActivity,
-                            PackageManager.COMPONENT_ENABLED_STATE_DEFAULT,
-                            PackageManager.DONT_KILL_APP);
-                }
+                int oldIconState = context.getPackageManager().getComponentEnabledSetting(
+                        devToolsLauncherActivity);
+
+                // Enable the icon if this is the current WebView provider, otherwise set the icon
+                // back to default (disabled) state.
+                boolean shouldShowIcon =
+                        WebViewPackageHelper.isCurrentSystemWebViewImplementation(context);
+                int newIconState = shouldShowIcon ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                                                  : PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
+
+                if (oldIconState == newIconState) return;
+
+                context.getPackageManager().setComponentEnabledSetting(
+                        devToolsLauncherActivity, newIconState, PackageManager.DONT_KILL_APP);
+                RecordHistogram.recordBooleanHistogram(
+                        "Android.WebView.DevUi.MonochromeIconStateToggled", shouldShowIcon);
             } catch (IllegalArgumentException e) {
                 // If MonochromeLauncherActivity doesn't exist, Dynamically showing/hiding DevTools
                 // launcher icon is not enabled in this package; e.g when it is a stable channel.
@@ -129,6 +128,8 @@ public class WebViewApkApplication extends Application {
             if (LibraryLoader.getInstance().isInitialized()) {
                 return true;
             }
+            // Should not call LibraryLoader.initialize() since this will reset UmaRecorder
+            // delegate.
             LibraryLoader.getInstance().setLibraryProcessType(LibraryProcessType.PROCESS_WEBVIEW);
             LibraryLoader.getInstance().loadNow();
         } catch (Throwable unused) {

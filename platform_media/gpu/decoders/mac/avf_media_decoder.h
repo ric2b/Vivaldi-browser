@@ -30,17 +30,14 @@
 #include "ui/gfx/geometry/size.h"
 
 
-@class DataSourceLoader;
 @class PlayerNotificationObserver;
 @class PlayerObserver;
 
 namespace media {
-class DataBuffer;
-}  // namespace media
-
-namespace media {
 
 class AVFAudioTap;
+class DataBuffer;
+class DataRequestHandler;
 
 class AVFMediaDecoderClient {
  public:
@@ -74,9 +71,7 @@ class AVFMediaDecoder {
   explicit AVFMediaDecoder(AVFMediaDecoderClient* client);
   ~AVFMediaDecoder();
 
-  void Initialize(ipc_data_source::Reader data_source,
-                  ipc_data_source::Info source_info,
-                  ResultCB result_cb);
+  void Initialize(ipc_data_source::Info source_info, ResultCB result_cb);
   void Seek(const base::TimeDelta& time, const ResultCB& result_cb);
 
   void NotifyStreamCapacityDepleted();
@@ -159,7 +154,7 @@ class AVFMediaDecoder {
 
   AVFMediaDecoderClient* const client_;
 
-  base::scoped_nsobject<DataSourceLoader> data_source_loader_;
+  scoped_refptr<DataRequestHandler> data_request_handler_;
   base::scoped_nsobject<AVPlayer> player_;
   base::scoped_nsobject<PlayerObserver> status_observer_;
   base::scoped_nsobject<PlayerObserver> rate_observer_;

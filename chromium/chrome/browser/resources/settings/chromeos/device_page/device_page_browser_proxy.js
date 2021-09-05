@@ -86,6 +86,16 @@ cr.define('settings', function() {
    */
   let ExternalStorage;
 
+  /**
+   * @typedef {{
+   *   id: string,
+   *   name: string,
+   *   description: string,
+   *   diskUsageLabel: string,
+   * }}
+   */
+  let DlcMetadata;
+
   /** @interface */
   class DevicePageBrowserProxy {
     /** Initializes the mouse and touchpad handler. */
@@ -173,6 +183,26 @@ cr.define('settings', function() {
      * @param {function(Array<!settings.ExternalStorage>):void} callback
      */
     setExternalStoragesUpdatedCallback(callback) {}
+
+    /**
+     * Sets |id| of display to render identification highlight on. Invalid |id|
+     * turns identification highlight off. Handles any invalid input string as
+     * invalid id.
+     * @param {string} id Display id of selected display.
+     */
+    highlightDisplay(id) {}
+
+    /**
+     * @return {!Promise<!Array<!settings.DlcMetadata>>} A list of DLC metadata.
+     */
+    getDlcList() {}
+
+    /**
+     * Purges the DLC with the provided |dlcId| from the device.
+     * @param {string} dlcId The ID of the DLC to purge from the device.
+     * @return {!Promise<boolean>} Whether purging of DLC was successful.
+     */
+    purgeDlc(dlcId) {}
   }
 
   /**
@@ -263,6 +293,21 @@ cr.define('settings', function() {
     setExternalStoragesUpdatedCallback(callback) {
       cr.addWebUIListener('onExternalStoragesUpdated', callback);
     }
+
+    /** @override */
+    highlightDisplay(id) {
+      chrome.send('highlightDisplay', [id]);
+    }
+
+    /** @override */
+    getDlcList() {
+      return cr.sendWithPromise('getDlcList');
+    }
+
+    /** @override */
+    purgeDlc(dlcId) {
+      return cr.sendWithPromise('purgeDlc', dlcId);
+    }
   }
 
   cr.addSingletonGetter(DevicePageBrowserProxyImpl);
@@ -279,5 +324,6 @@ cr.define('settings', function() {
     NoteAppLockScreenSupport,
     PowerManagementSettings,
     PowerSource,
+    DlcMetadata,
   };
 });

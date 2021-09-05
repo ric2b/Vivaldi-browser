@@ -11,8 +11,9 @@
 #include <vssym32.h>
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/command_line.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -590,12 +591,14 @@ SkColor NativeThemeWin::GetSystemColor(ColorId color_id,
   if (color_scheme == ColorScheme::kDefault)
     color_scheme = GetDefaultSystemColorScheme();
 
-  return (color_scheme == ColorScheme::kPlatformHighContrast)
-             ? GetPlatformHighContrastColor(color_id)
-             : NativeTheme::GetSystemColor(color_id, color_scheme);
+  base::Optional<SkColor> color;
+  if (color_scheme == ColorScheme::kPlatformHighContrast)
+    color = GetPlatformHighContrastColor(color_id);
+  return color.value_or(NativeTheme::GetSystemColor(color_id, color_scheme));
 }
 
-SkColor NativeThemeWin::GetPlatformHighContrastColor(ColorId color_id) const {
+base::Optional<SkColor> NativeThemeWin::GetPlatformHighContrastColor(
+    ColorId color_id) const {
   switch (color_id) {
     // Window Background
     case kColorId_WindowBackground:
@@ -605,12 +608,13 @@ SkColor NativeThemeWin::GetPlatformHighContrastColor(ColorId color_id) const {
     case kColorId_TreeBackground:
     case kColorId_TableHeaderBackground:
     case kColorId_TableBackground:
+    case kColorId_TableBackgroundAlternate:
     case kColorId_TooltipBackground:
     case kColorId_ProminentButtonDisabledColor:
       return system_colors_[SystemThemeColor::kWindow];
 
     // Window Text
-    case kColorId_DefaultIconColor:
+    case kColorId_MenuIconColor:
     case kColorId_DialogForeground:
     case kColorId_LabelEnabledColor:
     case kColorId_LabelSecondaryColor:
@@ -625,6 +629,7 @@ SkColor NativeThemeWin::GetPlatformHighContrastColor(ColorId color_id) const {
     case kColorId_AlertSeverityLow:
     case kColorId_AlertSeverityMedium:
     case kColorId_AlertSeverityHigh:
+    case kColorId_DefaultIconColor:
       return system_colors_[SystemThemeColor::kWindowText];
 
     // Hyperlinks
@@ -642,11 +647,11 @@ SkColor NativeThemeWin::GetPlatformHighContrastColor(ColorId color_id) const {
       return system_colors_[SystemThemeColor::kGrayText];
 
     // Button Background
+    case kColorId_ButtonColor:
     case kColorId_MenuBackgroundColor:
     case kColorId_HighlightedMenuItemBackgroundColor:
     case kColorId_TextfieldDefaultBackground:
     case kColorId_TextfieldReadOnlyBackground:
-    case kColorId_ButtonPressedShade:
       return system_colors_[SystemThemeColor::kButtonFace];
 
     // Button Text Foreground
@@ -691,7 +696,7 @@ SkColor NativeThemeWin::GetPlatformHighContrastColor(ColorId color_id) const {
       return system_colors_[SystemThemeColor::kHighlightText];
 
     default:
-      return gfx::kPlaceholderColor;
+      return base::nullopt;
   }
 }
 

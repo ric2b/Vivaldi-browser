@@ -22,7 +22,7 @@
 #include "ui/aura/test/window_occlusion_tracker_test_api.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
-#include "ui/base/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/event_utils.h"
@@ -286,8 +286,8 @@ std::unique_ptr<Widget> CreateAndShowControlWidget(aura::Window* parent) {
   Widget::InitParams params(Widget::InitParams::TYPE_CONTROL);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.parent = parent;
-  params.native_widget = CreatePlatformNativeWidgetImpl(params, widget.get(),
-                                                        kStubCapture, nullptr);
+  params.native_widget =
+      CreatePlatformNativeWidgetImpl(widget.get(), kStubCapture, nullptr);
   widget->Init(std::move(params));
   widget->Show();
   return widget;

@@ -180,7 +180,10 @@ NotificationDisplayServiceImpl::NotificationDisplayServiceImpl(Profile* profile)
   }
 }
 
-NotificationDisplayServiceImpl::~NotificationDisplayServiceImpl() = default;
+NotificationDisplayServiceImpl::~NotificationDisplayServiceImpl() {
+  for (auto& obs : observers_)
+    obs.OnNotificationDisplayServiceDestroyed(this);
+}
 
 void NotificationDisplayServiceImpl::ProcessNotificationOperation(
     NotificationCommon::Operation operation,
@@ -211,6 +214,8 @@ void NotificationDisplayServiceImpl::ProcessNotificationOperation(
       DCHECK(by_user.has_value());
       handler->OnClose(profile_, origin, notification_id, by_user.value(),
                        std::move(completed_closure));
+      for (auto& observer : observers_)
+        observer.OnNotificationClosed(notification_id);
       break;
     case NotificationCommon::OPERATION_DISABLE_PERMISSION:
       handler->DisableNotifications(profile_, origin);
@@ -265,6 +270,9 @@ void NotificationDisplayServiceImpl::Display(
     return;
   }
 
+  for (auto& observer : observers_)
+    observer.OnNotificationDisplayed(notification, metadata.get());
+
 #if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
   NotificationPlatformBridge* bridge =
       NotificationPlatformBridge::CanHandleType(notification_type)
@@ -314,6 +322,14 @@ void NotificationDisplayServiceImpl::GetDisplayed(
   }
 
   bridge_->GetDisplayed(profile_, std::move(callback));
+}
+
+void NotificationDisplayServiceImpl::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void NotificationDisplayServiceImpl::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 // Callback to run once the profile has been loaded in order to perform a

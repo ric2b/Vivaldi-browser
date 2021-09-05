@@ -7,8 +7,7 @@
 
 #include "components/favicon_base/favicon_callback.h"
 #include "components/keyed_service/core/keyed_service.h"
-
-class GURL;
+#include "url/gurl.h"
 
 namespace favicon {
 
@@ -31,14 +30,11 @@ class HistoryUiFaviconRequestHandler : public KeyedService {
   // Requests favicon bitmap at |page_url| of size |desired_size_in_pixel|.
   // Tries to fetch the icon from local storage and falls back to the Google
   // favicon server if user settings allow to query it using history data.
-  // If a non-empty |icon_url_for_uma| (optional) is passed, it will be used to
-  // record UMA about the grouping of requests to the favicon server.
   virtual void GetRawFaviconForPageURL(
       const GURL& page_url,
       int desired_size_in_pixel,
       favicon_base::FaviconRawBitmapCallback callback,
-      HistoryUiFaviconRequestOrigin request_origin_for_uma,
-      const GURL& icon_url_for_uma) = 0;
+      HistoryUiFaviconRequestOrigin request_origin_for_uma) = 0;
 
   // Requests favicon image at |page_url|. The same fallback considerations for
   // GetRawFaviconForPageURL apply.
@@ -46,8 +42,7 @@ class HistoryUiFaviconRequestHandler : public KeyedService {
   virtual void GetFaviconImageForPageURL(
       const GURL& page_url,
       favicon_base::FaviconImageCallback callback,
-      HistoryUiFaviconRequestOrigin request_origin_for_uma,
-      const GURL& icon_url_for_uma) = 0;
+      HistoryUiFaviconRequestOrigin request_origin_for_uma) = 0;
 };
 
 }  // namespace favicon

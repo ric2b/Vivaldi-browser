@@ -32,7 +32,7 @@ import org.chromium.content_public.common.BrowserControlsState;
 /**
  * Custom {@link ChromeActivityTestRule} for tests using {@link WebappActivity}.
  */
-public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivity0> {
+public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivity> {
     public static final String WEBAPP_ID = "webapp_id";
     public static final String WEBAPP_NAME = "webapp name";
     public static final String WEBAPP_SHORT_NAME = "webapp short name";
@@ -73,7 +73,7 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
             + "AAAAAAAAAOA3AvAAAdln8YgAAAAASUVORK5CYII=";
 
     public WebappActivityTestRule() {
-        super(WebappActivity0.class);
+        super(WebappActivity.class);
     }
 
     /**
@@ -84,7 +84,7 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
      */
     public Intent createIntent() {
         Intent intent =
-                new Intent(InstrumentationRegistry.getTargetContext(), WebappActivity0.class);
+                new Intent(InstrumentationRegistry.getTargetContext(), WebappActivity.class);
         intent.setData(Uri.parse(WebappActivity.WEBAPP_SCHEME + "://" + WEBAPP_ID));
         intent.putExtra(ShortcutHelper.EXTRA_ID, WEBAPP_ID);
         intent.putExtra(ShortcutHelper.EXTRA_URL, "about:blank");
@@ -122,7 +122,8 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
                 callback.waitForCallback(0);
 
                 TestThreadUtils.runOnUiThreadBlocking(() -> {
-                    callback.getStorage().updateFromWebappInfo(WebappInfo.create(createIntent()));
+                    callback.getStorage().updateFromWebappIntentDataProvider(
+                            WebappIntentDataProviderFactory.create(createIntent()));
                 });
 
                 base.evaluate();
@@ -228,8 +229,7 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
                 // We also wait till the splash screen has finished initializing.
                 if (getActivity().getActivityTab() == null) return false;
 
-                View splashScreen =
-                        getActivity().getSplashControllerForTests().getSplashScreenForTests();
+                View splashScreen = getSplashController(getActivity()).getSplashScreenForTests();
                 if (splashScreen == null) return false;
 
                 return (!(splashScreen instanceof ViewGroup)
@@ -238,7 +238,7 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
         }, STARTUP_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-        View splashScreen = getActivity().getSplashControllerForTests().getSplashScreenForTests();
+        View splashScreen = getSplashController(getActivity()).getSplashScreenForTests();
         Assert.assertNotNull("No splash screen available.", splashScreen);
 
         // TODO(pkotwicz): Change return type in order to accommodate new-style WebAPKs.
@@ -257,12 +257,16 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return activity.getSplashControllerForTests().wasSplashScreenHiddenForTests();
+                return getSplashController(activity).wasSplashScreenHiddenForTests();
             }
         }, STARTUP_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
 
     public boolean isSplashScreenVisible() {
-        return getActivity().getSplashControllerForTests().getSplashScreenForTests() != null;
+        return getSplashController(getActivity()).getSplashScreenForTests() != null;
+    }
+
+    public static SplashController getSplashController(WebappActivity activity) {
+        return activity.getComponent().resolveSplashController();
     }
 }

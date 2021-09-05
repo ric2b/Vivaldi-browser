@@ -18,6 +18,8 @@ namespace features {
 // alongside the definition of their values in the .cc file.
 #if defined(OS_ANDROID)
 GPU_EXPORT extern const base::Feature kDisableSurfaceControlForWebview;
+
+GPU_EXPORT extern const base::Feature kUseGles2ForOopR;
 #endif  // defined(OS_ANDROID)
 
 GPU_EXPORT extern const base::Feature kDefaultEnableGpuRasterization;
@@ -42,9 +44,9 @@ GPU_EXPORT extern const base::Feature kGpuWatchdogV2NewTimeout;
 GPU_EXPORT extern const base::Feature kMetal;
 #endif
 
-GPU_EXPORT extern const base::Feature kSharedImageManager;
+GPU_EXPORT extern const base::Feature kOopRasterizationDDL;
 
-GPU_EXPORT extern const base::Feature kUseDCOverlaysForSoftwareProtectedVideo;
+GPU_EXPORT extern const base::Feature kSharedImageManager;
 
 GPU_EXPORT extern const base::Feature kVaapiJpegImageDecodeAcceleration;
 

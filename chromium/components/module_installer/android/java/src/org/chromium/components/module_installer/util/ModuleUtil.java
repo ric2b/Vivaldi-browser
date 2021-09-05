@@ -5,13 +5,11 @@
 package org.chromium.components.module_installer.util;
 
 import org.chromium.base.BundleUtils;
-import org.chromium.base.annotations.MainDex;
 import org.chromium.components.module_installer.logger.SplitAvailabilityLogger;
 
 /**
  * Utilitary class (proxy) exposing DFM functionality to the broader application.
  */
-@MainDex
 public class ModuleUtil {
     /**
      * Records the execution time (ms) taken by the module installer framework.
@@ -23,18 +21,6 @@ public class ModuleUtil {
         if (!BundleUtils.isBundle()) return;
 
         Timer.recordStartupTime();
-    }
-
-    /**
-     * Records the start time in order to later report the install duration via UMA.
-     */
-    public static void recordModuleAvailability() {
-        if (!BundleUtils.isBundle()) return;
-
-        try (Timer timer = new Timer()) {
-            initApplication();
-            SplitAvailabilityLogger.logModuleAvailability();
-        }
     }
 
     /**
@@ -56,6 +42,19 @@ public class ModuleUtil {
 
         try (Timer timer = new Timer()) {
             SplitCompatInitializer.initApplication();
+            ActivityObserverUtil.registerDefaultObserver();
+            SplitAvailabilityLogger.logModuleAvailability();
+        }
+    }
+
+    /**
+     * Notifies the ActiviyObserver when modules are installed.
+     */
+    public static void notifyModuleInstalled() {
+        if (!BundleUtils.isBundle()) return;
+
+        try (Timer timer = new Timer()) {
+            ActivityObserverUtil.notifyObservers();
         }
     }
 }

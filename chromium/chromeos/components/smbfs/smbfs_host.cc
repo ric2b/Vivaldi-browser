@@ -114,6 +114,20 @@ void SmbFsHost::OnUnmountDone(SmbFsHost::UnmountCallback callback,
   std::move(callback).Run(result);
 }
 
+void SmbFsHost::RemoveSavedCredentials(
+    SmbFsHost::RemoveSavedCredentialsCallback callback) {
+  smbfs_->RemoveSavedCredentials(
+      base::BindOnce(&SmbFsHost::OnRemoveSavedCredentialsDone,
+                     base::Unretained(this), std::move(callback)));
+}
+
+void SmbFsHost::OnRemoveSavedCredentialsDone(
+    SmbFsHost::RemoveSavedCredentialsCallback callback,
+    bool success) {
+  LOG_IF(ERROR, !success) << "Unable to remove saved password for smbfs";
+  std::move(callback).Run(success);
+}
+
 void SmbFsHost::OnDisconnect() {
   // Ensure only one disconnection event occurs.
   smbfs_.reset();
@@ -121,6 +135,24 @@ void SmbFsHost::OnDisconnect() {
 
   // This may delete us.
   delegate_->OnDisconnected();
+}
+
+void SmbFsHost::DeleteRecursively(const base::FilePath& path,
+                                  DeleteRecursivelyCallback callback) {
+  smbfs_->DeleteRecursively(
+      path, base::BindOnce(&SmbFsHost::OnDeleteRecursivelyDone,
+                           base::Unretained(this), std::move(callback)));
+}
+
+void SmbFsHost::OnDeleteRecursivelyDone(
+    DeleteRecursivelyCallback callback,
+    smbfs::mojom::DeleteRecursivelyError error) {
+  base::File::Error file_error =
+      error == smbfs::mojom::DeleteRecursivelyError::kOk
+          ? base::File::FILE_OK
+          : base::File::FILE_ERROR_FAILED;
+
+  std::move(callback).Run(file_error);
 }
 
 }  // namespace smbfs

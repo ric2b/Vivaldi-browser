@@ -31,8 +31,10 @@ class AutocompleteResult {
   typedef ACMatches::iterator iterator;
   using MatchDedupComparator = std::pair<GURL, bool>;
 
-  // Max number of matches we'll show from the various providers.
-  static size_t GetMaxMatches();
+  // Max number of matches we'll show from the various providers. This limit may
+  // be different for zero suggest (i.e. when |input_from_omnibox_focus| is
+  // true) and non zero suggest.
+  static size_t GetMaxMatches(bool input_from_omnibox_focus = false);
 
   AutocompleteResult();
   ~AutocompleteResult();
@@ -155,7 +157,9 @@ class AutocompleteResult {
   // Get a list of comparators used for deduping for the matches in this result.
   std::vector<MatchDedupComparator> GetMatchDedupComparators() const;
 
-  base::string16 GetHeaderForGroupId(int suggestion_group_id);
+  // Gets the header string associated with |suggestion_group_id|. Returns an
+  // empty string if no header is found.
+  base::string16 GetHeaderForGroupId(int suggestion_group_id) const;
 
   // Logs metrics for when |new_result| replaces |old_result| asynchronously.
   // |old_result| a list of the comparators for the old matches.
@@ -227,6 +231,7 @@ class AutocompleteResult {
   // |max_url_matches| but will allow more if there are no other types to
   // replace them.
   void LimitNumberOfURLsShown(
+      size_t max_matches,
       size_t max_url_count,
       const CompareWithDemoteByType<AutocompleteMatch>& comparing_object);
 
@@ -248,6 +253,7 @@ class AutocompleteResult {
 
   ACMatches matches_;
 
+  // The map of suggestion group IDs to headers.
   SearchSuggestionParser::HeadersMap headers_map_;
 
   DISALLOW_COPY_AND_ASSIGN(AutocompleteResult);

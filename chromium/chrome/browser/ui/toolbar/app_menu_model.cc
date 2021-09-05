@@ -72,6 +72,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/models/button_menu_item_model.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image.h"
@@ -86,8 +87,10 @@
 
 #if defined(OS_CHROMEOS)
 #include "ash/public/cpp/tablet_mode.h"
+#include "chrome/browser/chromeos/policy/system_features_disable_list_policy_handler.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #endif
 
 #if defined(OS_WIN)
@@ -191,7 +194,7 @@ class HelpMenuModel : public ui::SimpleMenuModel {
     if (browser_defaults::kShowHelpMenuItemIcon) {
       ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
       SetIcon(GetIndexOfCommandId(IDC_HELP_PAGE_VIA_MENU),
-              rb.GetNativeImageNamed(IDR_HELP_MENU));
+              ui::ImageModel::FromImage(rb.GetNativeImageNamed(IDR_HELP_MENU)));
     }
     if (browser->profile()->GetPrefs()->GetBoolean(prefs::kUserFeedbackAllowed))
       AddItemWithStringId(IDC_FEEDBACK, IDS_FEEDBACK);
@@ -272,6 +275,18 @@ void AppMenuModel::Init() {
   tab_strip_model->AddObserver(this);
   Observe(tab_strip_model->GetActiveWebContents());
   UpdateZoomControls();
+
+#if defined(OS_CHROMEOS)
+  PrefService* const local_state = g_browser_process->local_state();
+  if (local_state) {
+    local_state_pref_change_registrar_.Init(local_state);
+    local_state_pref_change_registrar_.Add(
+        policy::policy_prefs::kSystemFeaturesDisableList,
+        base::BindRepeating(&AppMenuModel::UpdateSettingsItemState,
+                            base::Unretained(this)));
+    UpdateSettingsItemState();
+  }
+#endif  // defined(OS_CHROMEOS)
 }
 
 bool AppMenuModel::DoesCommandIdDismissMenu(int command_id) const {
@@ -318,14 +333,14 @@ base::string16 AppMenuModel::GetLabelForCommandId(int command_id) const {
   }
 }
 
-bool AppMenuModel::GetIconForCommandId(int command_id, gfx::Image* icon) const {
+ui::ImageModel AppMenuModel::GetIconForCommandId(int command_id) const {
   if (command_id == IDC_UPGRADE_DIALOG) {
     DCHECK(browser_defaults::kShowUpgradeMenuItem);
     DCHECK(app_menu_icon_controller_);
-    *icon = gfx::Image(app_menu_icon_controller_->GetIconImage(false));
-    return true;
+    return ui::ImageModel::FromImageSkia(
+        app_menu_icon_controller_->GetIconImage(false));
   }
-  return false;
+  return ui::ImageModel();
 }
 
 void AppMenuModel::ExecuteCommand(int command_id, int event_flags) {
@@ -862,13 +877,13 @@ void AppMenuModel::Build() {
   if (chrome::ShouldDisplayManagedUi(browser_->profile())) {
     AddSeparator(ui::LOWER_SEPARATOR);
     const int kIconSize = 18;
-    SkColor color = ui::NativeTheme::GetInstanceForNativeUi()->GetSystemColor(
-        ui::NativeTheme::kColorId_HighlightedMenuItemForegroundColor);
-    const auto icon =
-        gfx::CreateVectorIcon(vector_icons::kBusinessIcon, kIconSize, color);
     AddHighlightedItemWithIcon(
         IDC_SHOW_MANAGEMENT_PAGE,
-        chrome::GetManagedUiMenuItemLabel(browser_->profile()), icon);
+        chrome::GetManagedUiMenuItemLabel(browser_->profile()),
+        ui::ImageModel::FromVectorIcon(
+            vector_icons::kBusinessIcon,
+            ui::NativeTheme::kColorId_HighlightedMenuItemForegroundColor,
+            kIconSize));
   }
 #endif  // !defined(OS_CHROMEOS)
 
@@ -964,3 +979,23 @@ void AppMenuModel::OnZoomLevelChanged(
     const content::HostZoomMap::ZoomLevelChange& change) {
   UpdateZoomControls();
 }
+
+#if defined(OS_CHROMEOS)
+void AppMenuModel::UpdateSettingsItemState() {
+  const base::ListValue* system_features_disable_list_pref = nullptr;
+  PrefService* const local_state = g_browser_process->local_state();
+  if (local_state) {  // Sometimes it's not available in tests.
+    system_features_disable_list_pref =
+        local_state->GetList(policy::policy_prefs::kSystemFeaturesDisableList);
+  }
+
+  bool is_enabled = !system_features_disable_list_pref ||
+                    system_features_disable_list_pref->Find(
+                        base::Value(policy::SystemFeature::BROWSER_SETTINGS)) ==
+                        system_features_disable_list_pref->end();
+
+  int index = GetIndexOfCommandId(IDC_OPTIONS);
+  if (index != -1)
+    SetEnabledAt(index, is_enabled);
+}
+#endif  // defined(OS_CHROMEOS)

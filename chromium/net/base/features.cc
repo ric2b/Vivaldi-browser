@@ -11,6 +11,21 @@ namespace features {
 const base::Feature kAcceptLanguageHeader{"AcceptLanguageHeader",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kDnsHttpssvc{"DnsHttpssvc",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::FeatureParam<bool> kDnsHttpssvcUseHttpssvc{
+    &kDnsHttpssvc, "DnsHttpssvcUseHttpssvc", false};
+
+const base::FeatureParam<bool> kDnsHttpssvcUseIntegrity{
+    &kDnsHttpssvc, "DnsHttpssvcUseIntegrity", false};
+
+const base::FeatureParam<int> kDnsHttpssvcExtraTimeMs{
+    &kDnsHttpssvc, "DnsHttpssvcExtraTimeMs", 10};
+
+const base::FeatureParam<int> kDnsHttpssvcExtraTimePercent{
+    &kDnsHttpssvc, "DnsHttpssvcExtraTimePercent", 5};
+
 const base::Feature kEnableTLS13EarlyData{"EnableTLS13EarlyData",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -90,14 +105,8 @@ const base::Feature kBlockExternalRequestsFromNonSecureInitiators{
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
-const base::Feature kCertVerifierBuiltinFeature {
-  "CertVerifierBuiltin",
-#if defined(OS_CHROMEOS) || defined(OS_LINUX)
-      base::FEATURE_ENABLED_BY_DEFAULT
-#else
-      base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-};
+const base::Feature kCertVerifierBuiltinFeature{
+    "CertVerifierBuiltin", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 const base::Feature kAppendFrameOriginToNetworkIsolationKey{

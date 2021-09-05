@@ -59,6 +59,11 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
     // Prefer to use this field (via SetButtonLabel) rather than override
     // GetDialogButtonLabel - see https://crbug.com/1011446
     base::string16 button_labels[ui::DIALOG_BUTTON_LAST + 1];
+
+    // A bitmask of buttons (from ui::DialogButton) that are enabled in this
+    // dialog. It's legal for a button to be marked enabled that isn't present
+    // in |buttons| (see above).
+    int enabled_buttons = ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL;
   };
 
   DialogDelegate();
@@ -130,7 +135,6 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   DialogDelegate* AsDialogDelegate() override;
   ClientView* CreateClientView(Widget* widget) override;
   NonClientFrameView* CreateNonClientFrameView(Widget* widget) override;
-  void WindowWillClose() override;
 
   static NonClientFrameView* CreateDialogFrameView(Widget* widget);
 
@@ -169,7 +173,11 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   void AddObserver(DialogObserver* observer);
   void RemoveObserver(DialogObserver* observer);
 
-  // Notifies observers when the result of the DialogModel overrides changes.
+  // Notifies DialogDelegate that the result of one of the virtual getter
+  // functions above has changed, which causes it to rebuild its layout. It is
+  // not necessary to call this unless you are overriding
+  // IsDialogButtonEnabled() or manually manipulating the dialog buttons.
+  // TODO(https://crbug.com/1011446): Make this private.
   void DialogModelChanged();
 
   void set_use_round_corners(bool round) { params_.round_corners = round; }
@@ -178,9 +186,12 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   void set_use_custom_frame(bool use) { params_.custom_frame = use; }
   bool use_custom_frame() const { return params_.custom_frame; }
 
+  // These methods internally call DialogModelChanged() if needed, so it is not
+  // necessary to call DialogModelChanged() yourself after calling them.
   void SetDefaultButton(int button);
   void SetButtons(int buttons);
   void SetButtonLabel(ui::DialogButton button, base::string16 label);
+  void SetButtonEnabled(ui::DialogButton button, bool enabled);
   void SetAcceptCallback(base::OnceClosure callback);
   void SetCancelCallback(base::OnceClosure callback);
   void SetCloseCallback(base::OnceClosure callback);
@@ -242,6 +253,10 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   // TODO(ellyjones): Investigate getting rid of this entirely and having all
   // dialogs use the same button row insets.
   void SetButtonRowInsets(const gfx::Insets& insets);
+
+  // Callback for WidgetDelegate when the window this dialog is hosted in is
+  // closing. Don't call this yourself.
+  void WindowWillClose();
 
  protected:
   ~DialogDelegate() override;

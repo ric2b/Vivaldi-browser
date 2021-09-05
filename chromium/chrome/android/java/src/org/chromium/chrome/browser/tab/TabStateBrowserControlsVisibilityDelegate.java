@@ -8,9 +8,10 @@ import android.annotation.SuppressLint;
 import android.os.Handler;
 import android.os.Message;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.ssl.ChromeSecurityStateModelDelegate;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
@@ -22,6 +23,7 @@ import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.BrowserControlsState;
+import org.chromium.ui.base.WindowAndroid;
 
 /**
  * Determines the desired visibility of the browser controls based on the current state of a given
@@ -150,8 +152,8 @@ public class TabStateBrowserControlsVisibilityDelegate
             }
 
             @Override
-            public void onActivityAttachmentChanged(Tab tab, boolean isAttached) {
-                if (isAttached) updateVisibilityConstraints();
+            public void onActivityAttachmentChanged(Tab tab, @Nullable WindowAndroid window) {
+                if (window != null) updateVisibilityConstraints();
             }
 
             @Override
@@ -193,8 +195,8 @@ public class TabStateBrowserControlsVisibilityDelegate
         enableHidingBrowserControls &= !url.startsWith(UrlConstants.CHROME_URL_PREFIX);
         enableHidingBrowserControls &= !url.startsWith(UrlConstants.CHROME_NATIVE_URL_PREFIX);
 
-        enableHidingBrowserControls &= !SecurityStateModel.isContentDangerous(
-                mTab.getWebContents(), ChromeSecurityStateModelDelegate.getInstance());
+        enableHidingBrowserControls &=
+                !SecurityStateModel.isContentDangerous(mTab.getWebContents());
         enableHidingBrowserControls &=
                 !SelectionPopupController.fromWebContents(webContents).isFocusedNodeEditable();
         enableHidingBrowserControls &= !mTab.isShowingErrorPage();

@@ -39,7 +39,7 @@
 #include "components/omnibox/browser/in_memory_url_index_types.h"
 #include "components/omnibox/browser/keyword_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
-#include "components/omnibox/browser/omnibox_pref_names.h"
+#include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/browser/search_provider.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -450,7 +450,7 @@ bool DocumentProvider::IsInputLikelyURL(const AutocompleteInput& input) {
 void DocumentProvider::Start(const AutocompleteInput& input,
                              bool minimal_changes) {
   TRACE_EVENT0("omnibox", "DocumentProvider::Start");
-  matches_.clear();
+  Stop(true, false);
   field_trial_triggered_ = false;
 
   // Perform various checks - feature is enabled, user is allowed to use the
@@ -475,8 +475,6 @@ void DocumentProvider::Start(const AutocompleteInput& input,
   if (IsInputLikelyURL(input)) {
     return;
   }
-
-  Stop(false, false);
 
   input_ = input;
 

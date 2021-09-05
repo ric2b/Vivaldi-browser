@@ -9,12 +9,12 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
-#include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_view.h"
 #include "chrome/browser/extensions/extension_view_host.h"
@@ -26,10 +26,11 @@
 #include "chrome/browser/ui/extensions/icon_with_badge_image_source.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_delegate.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/common/extensions/api/extension_action/action_info.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/sessions/content/session_tab_helper.h"
+#include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_features.h"
 #include "extensions/common/manifest_constants.h"
@@ -159,12 +160,6 @@ bool ExtensionActionViewController::IsEnabled(
              PageInteractionStatus::kPending;
 }
 
-bool ExtensionActionViewController::WantsToRun(
-    content::WebContents* web_contents) const {
-  return ExtensionIsValid() &&
-         (PageActionWantsToRun(web_contents) || HasBeenBlocked(web_contents));
-}
-
 bool ExtensionActionViewController::HasPopup(
     content::WebContents* web_contents) const {
   if (!ExtensionIsValid())
@@ -224,7 +219,8 @@ void ExtensionActionViewController::OnContextMenuClosed() {
     extensions_container_->UndoPopOut();
 }
 
-bool ExtensionActionViewController::ExecuteAction(bool by_user) {
+bool ExtensionActionViewController::ExecuteAction(bool by_user,
+                                                  InvocationSource source) {
   if (!ExtensionIsValid())
     return false;
 
@@ -234,6 +230,7 @@ bool ExtensionActionViewController::ExecuteAction(bool by_user) {
     return false;
   }
 
+  base::UmaHistogramEnumeration("Extensions.Toolbar.InvocationSource", source);
   return ExecuteAction(SHOW_POPUP, by_user);
 }
 
@@ -339,12 +336,9 @@ bool ExtensionActionViewController::GetExtensionCommand(
     return false;
 
   CommandService* command_service = CommandService::Get(browser_->profile());
-  if (extension_action_->action_type() == ActionInfo::TYPE_PAGE) {
-    return command_service->GetPageActionCommand(
-        extension_->id(), CommandService::ACTIVE, command, NULL);
-  }
-  return command_service->GetBrowserActionCommand(
-      extension_->id(), CommandService::ACTIVE, command, NULL);
+  return command_service->GetExtensionActionCommand(
+      extension_->id(), extension_action_->action_type(),
+      CommandService::ACTIVE, command, nullptr);
 }
 
 bool ExtensionActionViewController::CanHandleAccelerators() const {
@@ -375,6 +369,11 @@ ExtensionActionViewController::GetIconImageSourceForTesting(
     content::WebContents* web_contents,
     const gfx::Size& size) {
   return GetIconImageSource(web_contents, size);
+}
+
+bool ExtensionActionViewController::HasBeenBlockedForTesting(
+    content::WebContents* web_contents) const {
+  return HasBeenBlocked(web_contents);
 }
 
 ExtensionActionViewController*

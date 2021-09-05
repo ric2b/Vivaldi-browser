@@ -4,12 +4,13 @@
 
 #include "ios/chrome/browser/ui/first_run/welcome_to_chrome_view_controller.h"
 
+#include "base/check.h"
 #include "base/i18n/rtl.h"
-#include "base/logging.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/notreached.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_reporting_default_state.h"
@@ -20,6 +21,7 @@
 #include "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_coordinator.h"
+#include "ios/chrome/browser/ui/commands/application_commands.h"
 #include "ios/chrome/browser/ui/fancy_ui/primary_action_button.h"
 #import "ios/chrome/browser/ui/first_run/first_run_chrome_signin_view_controller.h"
 #import "ios/chrome/browser/ui/first_run/first_run_constants.h"
@@ -31,7 +33,7 @@
 #include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #include "ios/chrome/common/string_util.h"
-#include "ios/chrome/grit/ios_chromium_strings.h"
+#include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
 #include "net/base/mac/url_conversions.h"
@@ -201,10 +203,12 @@ const BOOL kDefaultStatsCheckboxValue = YES;
              object:self.coordinator];
     __weak WelcomeToChromeViewController* weakSelf = self;
     self.coordinator.signinCompletion =
-        ^(SigninCoordinatorResult signinResult, ChromeIdentity* identity) {
+        ^(SigninCoordinatorResult signinResult,
+          SigninCompletionInfo* signinCompletionInfo) {
           [weakSelf.coordinator stop];
           weakSelf.coordinator = nil;
-          [weakSelf finishFirstRunWithSigninResult:signinResult];
+          [weakSelf finishFirstRunWithSigninResult:signinResult
+                              signinCompletionInfo:signinCompletionInfo];
         };
 
     [self.coordinator start];
@@ -227,7 +231,9 @@ const BOOL kDefaultStatsCheckboxValue = YES;
 }
 
 // Completes the first run operation depending on the |signinResult| state.
-- (void)finishFirstRunWithSigninResult:(SigninCoordinatorResult)signinResult {
+- (void)finishFirstRunWithSigninResult:(SigninCoordinatorResult)signinResult
+                  signinCompletionInfo:
+                      (SigninCompletionInfo*)signinCompletionInfo {
   switch (signinResult) {
     case SigninCoordinatorResultSuccess: {
       // User is considered done with First Run only after successful sign-in.
@@ -251,10 +257,20 @@ const BOOL kDefaultStatsCheckboxValue = YES;
       NOTREACHED();
     }
   }
+  UIViewController* presentingViewController =
+      self.navigationController.presentingViewController;
+  BOOL needsAvancedSettingsSignin =
+      signinCompletionInfo.signinCompletionAction ==
+      SigninCompletionActionShowAdvancedSettingsSignin;
   [self.navigationController.presentingViewController
       dismissViewControllerAnimated:YES
                          completion:^{
                            FirstRunDismissed();
+                           if (needsAvancedSettingsSignin) {
+                             [self.dispatcher
+                                 showAdvancedSigninSettingsFromViewController:
+                                     presentingViewController];
+                           }
                          }];
 }
 

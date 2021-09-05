@@ -6,9 +6,9 @@
 
 #include <string>
 
+#include "base/check.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
-#include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -111,6 +111,7 @@ std::vector<base::FilePath> GetInvalidSnapshots(
 base::Optional<base::Version> GetSnapshotToRestore(
     const base::Version& version,
     const base::FilePath& user_data_dir) {
+  DCHECK(version.IsValid());
   base::FilePath top_snapshot_dir = user_data_dir.Append(kSnapshotsDir);
   auto available_snapshots = GetAvailableSnapshots(top_snapshot_dir);
 

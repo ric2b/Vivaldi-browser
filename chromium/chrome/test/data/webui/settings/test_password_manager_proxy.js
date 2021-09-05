@@ -5,16 +5,42 @@
 /** @fileoverview Test implementation of PasswordManagerProxy. */
 
 // clang-format off
-// #import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
-// #import {makePasswordCheckStatus, PasswordManagerExpectations} from 'chrome://test/settings/passwords_and_autofill_fake_data.m.js';
+import {PasswordManagerProxy} from 'chrome://settings/settings.js';
+
+import {assertEquals} from '../chai_assert.js';
+import {TestBrowserProxy} from '../test_browser_proxy.m.js';
+
+import {makePasswordCheckStatus} from './passwords_and_autofill_fake_data.js';
+
 // clang-format on
+
+export class PasswordManagerExpectations {
+  constructor() {
+    this.requested = {
+      passwords: 0,
+      exceptions: 0,
+      plaintextPassword: 0,
+      accountStorageOptInState: 0,
+    };
+
+    this.removed = {
+      passwords: 0,
+      exceptions: 0,
+    };
+
+    this.listening = {
+      passwords: 0,
+      exceptions: 0,
+      accountStorageOptInState: 0,
+    };
+  }
+}
 
 /**
  * Test implementation
  * @implements {PasswordManagerProxy}
- * @constructor
  */
-/* #export */ class TestPasswordManagerProxy extends TestBrowserProxy {
+export class TestPasswordManagerProxy extends TestBrowserProxy {
   constructor() {
     super([
       'requestPlaintextPassword',
@@ -27,16 +53,19 @@
       'removeCompromisedCredential',
       'recordPasswordCheckInteraction',
       'recordPasswordCheckReferrer',
+      'removeSavedPassword',
+      'removeException',
     ]);
 
-    this.actual_ = new autofill_test_util.PasswordManagerExpectations();
+    /** @private {!PasswordManagerExpectations} */
+    this.actual_ = new PasswordManagerExpectations();
 
     // Set these to have non-empty data.
     this.data = {
       passwords: [],
       exceptions: [],
       leakedCredentials: [],
-      checkStatus: autofill_test_util.makePasswordCheckStatus(),
+      checkStatus: makePasswordCheckStatus(),
     };
 
     // Holds the last callbacks so they can be called when needed/
@@ -46,9 +75,14 @@
       addExceptionListChangedListener: null,
       requestPlaintextPassword: null,
       addCompromisedCredentialsListener: null,
+      addAccountStorageOptInStateListener: null,
     };
 
+    /** @private {string} */
     this.plaintextPassword_ = '';
+
+    /** @private {boolean} */
+    this.isOptedInForAccountStorage_ = false;
   }
 
   /** @override */
@@ -74,10 +108,7 @@
   /** @override */
   removeSavedPassword(id) {
     this.actual_.removed.passwords++;
-
-    if (this.onRemoveSavedPassword) {
-      this.onRemoveSavedPassword(id);
-    }
+    this.methodCalled('removeSavedPassword', id);
   }
 
   /** @override */
@@ -100,10 +131,7 @@
   /** @override */
   removeException(id) {
     this.actual_.removed.exceptions++;
-
-    if (this.onRemoveException) {
-      this.onRemoveException(id);
-    }
+    this.methodCalled('removeException', id);
   }
 
   /** @override */
@@ -114,6 +142,16 @@
 
   setPlaintextPassword(plaintextPassword) {
     this.plaintextPassword_ = plaintextPassword;
+  }
+
+  // Sets the return value of isOptedInForAccountStorage calls and notifies
+  // the last added listener.
+  setIsOptedInForAccountStorageAndNotify(optIn) {
+    this.isOptedInForAccountStorage_ = optIn;
+    if (this.lastCallback.addAccountStorageOptInStateListener) {
+      this.lastCallback.addAccountStorageOptInStateListener(
+          this.isOptedInForAccountStorage_);
+    }
   }
 
   /** @override */
@@ -130,7 +168,7 @@
   /** @override */
   isOptedInForAccountStorage() {
     this.actual_.requested.accountStorageOptInState++;
-    return Promise.resolve(false);
+    return Promise.resolve(this.isOptedInForAccountStorage_);
   }
 
   /**
@@ -162,6 +200,11 @@
   /** @override */
   startBulkPasswordCheck() {
     this.methodCalled('startBulkPasswordCheck');
+    if (this.data.checkStatus.state ===
+        chrome.passwordsPrivate.PasswordCheckState.NO_PASSWORDS) {
+      return Promise.reject('error');
+    }
+    return Promise.resolve();
   }
 
   /** @override */
@@ -204,7 +247,9 @@
       return Promise.reject('Could not obtain plaintext password');
     }
 
-    const newCredential = Object.assign({}, credential);
+    const newCredential =
+        /** @type {PasswordManagerProxy.CompromisedCredential} */ (
+            Object.assign({}, credential));
     newCredential.password = this.plaintextPassword_;
     return Promise.resolve(newCredential);
   }
@@ -229,4 +274,28 @@
   recordPasswordCheckReferrer(referrer) {
     this.methodCalled('recordPasswordCheckReferrer', referrer);
   }
+
+  /** override */
+  addPasswordsFileExportProgressListener() {}
+
+  /** override */
+  cancelExportPasswords() {}
+
+  /** override */
+  exportPasswords() {}
+
+  /** override */
+  importPasswords() {}
+
+  /** override */
+  optInForAccountStorage() {}
+
+  /** override */
+  removePasswordsFileExportProgressListener() {}
+
+  /** override */
+  requestExportProgressStatus() {}
+
+  /** override */
+  undoRemoveSavedPasswordOrException() {}
 }

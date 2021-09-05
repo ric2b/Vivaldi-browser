@@ -112,7 +112,6 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/input/keyboard_event_manager.h"
-#include "third_party/blink/renderer/core/inspector/inspector_issue.h"
 #include "third_party/blink/renderer/core/inspector/main_thread_debugger.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
@@ -189,7 +188,7 @@
 #include "third_party/blink/renderer/platform/wtf/text/string_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_encoding_registry.h"
 #include "ui/base/cursor/cursor.h"
-#include "ui/base/mojom/cursor_type.mojom-blink.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-blink.h"
 #include "ui/base/ui_base_features.h"
 #include "v8/include/v8.h"
 
@@ -199,6 +198,8 @@ using ui::mojom::ImeTextSpanThickness;
 using ui::mojom::ImeTextSpanUnderlineStyle;
 
 namespace {
+
+std::unique_ptr<ScopedMockOverlayScrollbars> g_mock_overlay_scrollbars;
 
 class UseCounterHelperObserverImpl final : public UseCounterHelper::Observer {
  public:
@@ -270,15 +271,9 @@ static ScrollableArea* ScrollableAreaForNode(Node* node) {
   return ToLayoutBox(layout_object)->GetScrollableArea();
 }
 
-static RuntimeEnabledFeatures::Backup* g_s_features_backup = nullptr;
-static std::unique_ptr<ScopedMockOverlayScrollbars> g_s_mock_overlay_scrollbars;
-
 void Internals::ResetToConsistentState(Page* page) {
   DCHECK(page);
 
-  if (!g_s_features_backup)
-    g_s_features_backup = new RuntimeEnabledFeatures::Backup;
-  g_s_features_backup->Restore();
   page->SetIsCursorVisible(true);
   // Ensure the PageScaleFactor always stays within limits, if the test changed
   // the limits. BlinkTestRunner will reset the limits to those set by
@@ -312,7 +307,7 @@ void Internals::ResetToConsistentState(Page* page) {
       OverrideCapsLockState::kDefault);
 
   IntersectionObserver::SetThrottleDelayEnabledForTesting(true);
-  g_s_mock_overlay_scrollbars.reset();
+  g_mock_overlay_scrollbars.reset();
 }
 
 Internals::Internals(ExecutionContext* context)
@@ -1807,7 +1802,9 @@ unsigned Internals::touchEndOrCancelEventHandlerCount(
 
 unsigned Internals::pointerEventHandlerCount(Document* document) const {
   DCHECK(document);
-  return EventHandlerCount(*document, EventHandlerRegistry::kPointerEvent);
+  return EventHandlerCount(*document, EventHandlerRegistry::kPointerEvent) +
+         EventHandlerCount(*document,
+                           EventHandlerRegistry::kPointerRawUpdateEvent);
 }
 
 // Given a vector of rects, merge those that are adjacent, leaving empty rects
@@ -1970,9 +1967,8 @@ void Internals::triggerTestInspectorIssue(Document* document) {
   DCHECK(document);
   auto info = mojom::blink::InspectorIssueInfo::New(
       mojom::InspectorIssueCode::kSameSiteCookieIssue,
-      mojom::blink::InspectorIssueDetails::New(),
-      mojom::blink::AffectedResources::New());
-  document->AddInspectorIssue(InspectorIssue::Create(std::move(info)));
+      mojom::blink::InspectorIssueDetails::New());
+  document->GetFrame()->AddInspectorIssue(std::move(info));
 }
 
 AtomicString Internals::htmlNamespace() {
@@ -2166,6 +2162,7 @@ String Internals::layerTreeAsText(Document* document,
 bool Internals::scrollsWithRespectTo(Element* element1,
                                      Element* element2,
                                      ExceptionState& exception_state) {
+  DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
   DCHECK(element1 && element2);
   element1->GetDocument().View()->UpdateAllLifecyclePhases(
       DocumentUpdateReason::kTest);
@@ -3010,6 +3007,8 @@ bool Internals::loseSharedGraphicsContext3D() {
   if (!shared_provider)
     return false;
   gpu::gles2::GLES2Interface* shared_gl = shared_provider->ContextGL();
+  if (!shared_gl)
+    return false;
   shared_gl->LoseContextCHROMIUM(GL_GUILTY_CONTEXT_RESET_EXT,
                                  GL_INNOCENT_CONTEXT_RESET_EXT);
   // To prevent tests that call loseSharedGraphicsContext3D from being
@@ -3204,10 +3203,6 @@ void Internals::setScrollChain(ScrollState* scroll_state,
   for (wtf_size_t i = 0; i < elements.size(); ++i)
     scroll_chain.push_back(DOMNodeIds::IdForNode(elements[i].Get()));
   scroll_state->SetScrollChain(scroll_chain);
-}
-
-void Internals::scheduleBlinkGC() {
-  ThreadState::Current()->ScheduleForcedGCForTesting();
 }
 
 String Internals::selectedHTMLForClipboard() {
@@ -3528,7 +3523,8 @@ String Internals::getAgentId(DOMWindow* window) {
 }
 
 void Internals::useMockOverlayScrollbars() {
-  g_s_mock_overlay_scrollbars.reset(new ScopedMockOverlayScrollbars(true));
+  g_mock_overlay_scrollbars =
+      std::make_unique<ScopedMockOverlayScrollbars>(true);
 }
 
 bool Internals::overlayScrollbarsEnabled() const {

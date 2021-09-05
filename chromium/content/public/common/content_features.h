@@ -38,6 +38,7 @@ CONTENT_EXPORT extern const base::Feature kCacheStorageEagerReading;
 CONTENT_EXPORT extern const base::Feature kCacheStorageHighPriorityMatch;
 CONTENT_EXPORT extern const base::Feature kCanvas2DImageChromium;
 CONTENT_EXPORT extern const base::Feature kCanvasOopRasterization;
+CONTENT_EXPORT extern const base::Feature kCodeCacheDeletionWithoutFilter;
 CONTENT_EXPORT extern const base::Feature kConsolidatedMovementXY;
 CONTENT_EXPORT extern const base::Feature kConversionMeasurement;
 CONTENT_EXPORT extern const base::Feature kCookieDeprecationMessages;
@@ -54,6 +55,7 @@ CONTENT_EXPORT extern const base::Feature
     kExtraSafelistedRequestHeadersForOutOfBlinkCors;
 CONTENT_EXPORT extern const base::Feature kFeaturePolicyForClientHints;
 CONTENT_EXPORT extern const base::Feature kFeaturePolicyForSandbox;
+CONTENT_EXPORT extern const base::Feature kFirstScrollLatencyMeasurement;
 CONTENT_EXPORT extern const base::Feature kFontSrcLocalMatching;
 #if !defined(OS_ANDROID)
 CONTENT_EXPORT extern const base::Feature
@@ -67,6 +69,7 @@ CONTENT_EXPORT extern const base::Feature kIdleDetection;
 CONTENT_EXPORT extern const base::Feature kInputPredictorTypeChoice;
 CONTENT_EXPORT extern const base::Feature kInstalledApp;
 CONTENT_EXPORT extern const base::Feature kInstalledAppProvider;
+CONTENT_EXPORT extern const base::Feature kInstalledAppsInCbd;
 CONTENT_EXPORT extern const base::Feature kIsolateOrigins;
 CONTENT_EXPORT extern const char kIsolateOriginsFieldTrialParamName[];
 CONTENT_EXPORT extern const base::Feature kLazyFrameLoading;
@@ -78,6 +81,7 @@ CONTENT_EXPORT extern const base::Feature kLegacyWindowsDWriteFontFallback;
 CONTENT_EXPORT extern const base::Feature kLogJsConsoleMessages;
 CONTENT_EXPORT extern const base::Feature kLowPriorityIframes;
 CONTENT_EXPORT extern const base::Feature kMediaDevicesSystemMonitorCache;
+CONTENT_EXPORT extern const base::Feature kMojoDedicatedThread;
 CONTENT_EXPORT extern const base::Feature kMojoVideoCapture;
 CONTENT_EXPORT extern const base::Feature kMojoVideoCaptureSecondary;
 CONTENT_EXPORT extern const base::Feature kMouseSubframeNoImplicitCapture;
@@ -89,9 +93,7 @@ CONTENT_EXPORT extern const base::Feature kNotificationTriggers;
 CONTENT_EXPORT extern const base::Feature kOriginIsolationHeader;
 CONTENT_EXPORT extern const base::Feature kOriginPolicy;
 CONTENT_EXPORT extern const base::Feature kOverscrollHistoryNavigation;
-CONTENT_EXPORT extern const base::Feature kPassiveDocumentEventListeners;
-CONTENT_EXPORT extern const base::Feature kPassiveDocumentWheelEventListeners;
-CONTENT_EXPORT extern const base::Feature kPassiveEventListenersDueToFling;
+CONTENT_EXPORT extern const base::Feature kParkableStringsToDisk;
 CONTENT_EXPORT extern const base::Feature kPeriodicBackgroundSync;
 CONTENT_EXPORT extern const base::Feature kPepper3DImageChromium;
 CONTENT_EXPORT extern const base::Feature kPepperCrossOriginRedirectRestriction;
@@ -112,7 +114,6 @@ CONTENT_EXPORT extern const base::Feature kResamplingInputEvents;
 CONTENT_EXPORT extern const base::Feature
     kRunVideoCaptureServiceInBrowserProcess;
 CONTENT_EXPORT extern const base::Feature kSavePageAsWebBundle;
-CONTENT_EXPORT extern const base::Feature kScriptStreamingOnPreload;
 CONTENT_EXPORT extern const base::Feature
     kSendBeaconThrowForBlobWithNonSimpleType;
 CONTENT_EXPORT extern const base::Feature kServiceWorkerOnUI;
@@ -128,6 +129,8 @@ CONTENT_EXPORT extern const base::Feature
 CONTENT_EXPORT extern const base::Feature kSignedExchangeSubresourcePrefetch;
 CONTENT_EXPORT extern const base::Feature kSignedHTTPExchange;
 CONTENT_EXPORT extern const base::Feature kSignedHTTPExchangePingValidity;
+CONTENT_EXPORT extern const base::Feature
+    kSiteIsolationEnforcementForFileSystemApi;
 CONTENT_EXPORT extern const base::Feature kSmsReceiver;
 CONTENT_EXPORT extern const base::Feature kSpareRendererForSitePerProcess;
 CONTENT_EXPORT extern const base::Feature kStoragePressureUI;
@@ -165,6 +168,7 @@ CONTENT_EXPORT extern const base::Feature kWebPayments;
 CONTENT_EXPORT extern const base::Feature kWebPaymentsMinimalUI;
 CONTENT_EXPORT extern const base::Feature kWebRtcEcdsaDefault;
 CONTENT_EXPORT extern const base::Feature kWebRtcUseGpuMemoryBufferVideoFrames;
+CONTENT_EXPORT extern const base::Feature kWebUIReportOnlyTrustedTypes;
 CONTENT_EXPORT extern const base::Feature kWebUsb;
 CONTENT_EXPORT extern const base::Feature kWebXr;
 CONTENT_EXPORT extern const base::Feature kWebXrArModule;

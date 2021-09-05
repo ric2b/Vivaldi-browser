@@ -21,6 +21,7 @@
 #include "components/performance_manager/public/performance_manager.h"
 #include "components/performance_manager/public/render_process_host_proxy.h"
 #include "components/performance_manager/public/web_contents_proxy.h"
+#include "content/public/common/process_type.h"
 
 class GURL;
 
@@ -103,6 +104,7 @@ class PerformanceManagerImpl : public PerformanceManager {
       bool is_audible,
       base::TimeTicks visibility_change_time);
   static std::unique_ptr<ProcessNodeImpl> CreateProcessNode(
+      content::ProcessType process_type,
       RenderProcessHostProxy proxy);
   static std::unique_ptr<WorkerNodeImpl> CreateWorkerNode(
       const std::string& browser_context_id,
@@ -123,6 +125,11 @@ class PerformanceManagerImpl : public PerformanceManager {
   // Indicates whether or not the caller is currently running on the PM task
   // runner.
   static bool OnPMTaskRunnerForTesting();
+
+  // Allows testing code to know when tear down is complete. This can only be
+  // called from the main thread, and the callback will also be invoked on the
+  // main thread.
+  static void SetOnDestroyedCallbackForTesting(base::OnceClosure callback);
 
  private:
   friend class PerformanceManager;
@@ -162,7 +169,10 @@ class PerformanceManagerImpl : public PerformanceManager {
   static TaskReturnType RunCallbackWithGraphAndReplyWithResult(
       base::OnceCallback<TaskReturnType(GraphImpl*)> task);
 
+  static void SetOnDestroyedCallbackImpl(base::OnceClosure callback);
+
   GraphImpl graph_;
+  base::OnceClosure on_destroyed_callback_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

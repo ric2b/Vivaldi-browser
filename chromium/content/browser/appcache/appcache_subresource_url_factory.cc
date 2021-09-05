@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/debug/crash_logging.h"
-#include "base/logging.h"
 #include "content/browser/appcache/appcache_host.h"
 #include "content/browser/appcache/appcache_request.h"
 #include "content/browser/appcache/appcache_request_handler.h"
@@ -131,16 +131,18 @@ class SubresourceLoader : public network::mojom::URLLoader,
 
   // network::mojom::URLLoader implementation
   // Called by the remote client in the renderer.
-  void FollowRedirect(const std::vector<std::string>& removed_headers,
-                      const net::HttpRequestHeaders& modified_headers,
-                      const base::Optional<GURL>& new_url) override {
-    DCHECK(removed_headers.empty() && modified_headers.IsEmpty())
+  void FollowRedirect(
+      const std::vector<std::string>& removed_headers,
+      const net::HttpRequestHeaders& modified_headers,
+      const net::HttpRequestHeaders& modified_cors_exempt_headers,
+      const base::Optional<GURL>& new_url) override {
+    DCHECK(modified_headers.IsEmpty() && modified_cors_exempt_headers.IsEmpty())
         << "Redirect with modified headers was not supported yet. "
            "crbug.com/845683";
     if (!handler_) {
-      network_loader_->FollowRedirect({} /* removed_headers */,
-                                      {} /* modified_headers */,
-                                      base::nullopt /* new_url */);
+      network_loader_->FollowRedirect(
+          removed_headers, {} /* modified_headers */,
+          {} /* modified_cors_exempt_headers */, base::nullopt /* new_url */);
       return;
     }
     DCHECK(network_loader_);
@@ -157,9 +159,9 @@ class SubresourceLoader : public network::mojom::URLLoader,
     if (handler) {
       CreateAndStartAppCacheLoader(std::move(handler));
     } else {
-      network_loader_->FollowRedirect({} /* removed_headers */,
-                                      {} /* modified_headers */,
-                                      base::nullopt /* new_url */);
+      network_loader_->FollowRedirect(
+          {} /* removed_headers */, {} /* modified_headers */,
+          {} /* modified_cors_exempt_headers */, base::nullopt /* new_url */);
     }
   }
 

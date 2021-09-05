@@ -16,6 +16,15 @@ bool VivaldiTabCheck::IsVivaldiTab(content::WebContents* web_contents) {
 }
 
 // static
+content::WebContents* VivaldiTabCheck::GetOuterVivaldiTab(
+    content::WebContents* web_contents) {
+  while (web_contents && !IsVivaldiTab(web_contents)) {
+    web_contents = web_contents->GetOuterWebContents();
+  }
+  return web_contents;
+}
+
+// static
 bool VivaldiTabCheck::IsOwnedByTabStripOrDevTools(
     content::WebContents* web_contents) {
   return IsVivaldiTab(web_contents) ||

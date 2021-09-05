@@ -33,7 +33,6 @@
 namespace blink {
 
 class ExecutionContext;
-class Document;
 class LocalDOMWindow;
 class LocalFrame;
 
@@ -43,8 +42,8 @@ class LocalFrame;
 // destructor of a GC object.
 //
 // To discourage incorrect usage, these objects both start returning null
-// once the execution context shuts down. For a document, this occurs when
-// the frame navigates to another document or is detached. For a worker global
+// once the execution context shuts down. For a window, this occurs when
+// the frame navigates to another window or is detached. For a worker global
 // scope, this occurs when it shuts down.
 //
 // * If an object only needs to refer to a valid ExecutionContext but does not
@@ -63,17 +62,18 @@ class LocalFrame;
 // derive from ActiveScriptWrappable.
 
 // ExecutionContextClient provides access to the associated execution context
-// until it is shut down (e.g. for a document, at navigation or frame detach).
+// until it is shut down (e.g. for a window, at navigation or frame detach).
 class CORE_EXPORT ExecutionContextClient : public GarbageCollectedMixin {
  public:
   // Returns the execution context until it is detached.
   // From then on, returns null instead.
   ExecutionContext* GetExecutionContext() const;
 
-  // Return a live document if associated with it. Returns null otherwise.
-  Document* GetDocument() const;
+  // If the execution context is a window, returns it. Returns nullptr if the
+  // execution context is not a window or if it has been detached.
+  LocalDOMWindow* DomWindow() const;
 
-  // If associated with a live document, returns the associated frame.
+  // If associated with a live window, returns the associated frame.
   // Returns null otherwise.
   LocalFrame* GetFrame() const;
 
@@ -127,56 +127,12 @@ class CORE_EXPORT ExecutionContextLifecycleObserver
   void Trace(Visitor*) override;
 
  protected:
-  ExecutionContextLifecycleObserver();
-  // TODO(crbug.com/1029822): This is a shim to enable migrating
-  // ExecutionContext to LocalDOMWindow.
-  explicit ExecutionContextLifecycleObserver(Document*,
-                                             Type type = kGenericType);
-
   explicit ExecutionContextLifecycleObserver(
       ExecutionContext* execution_context,
       Type type = kGenericType);
 
  private:
   Type observer_type_;
-};
-
-// DOMWindowClient is a helper to associate an object with a LocalDOMWindow.
-//
-// - domWindow() returns null after the window is detached.
-// - frame() is a syntax sugar for domWindow()->frame(). It returns
-//   null after the window is detached.
-//
-// Both can safely be used up until destruction; i.e., unsafe to
-// call upon in a destructor.
-//
-// If the object is a per-ExecutionContext thing, use ExecutionContextClient/
-// ExecutionContextLifecycleObserver. If the object is a per-DOMWindow thing,
-// use DOMWindowClient. Basically, DOMWindowClient is expected to be used (only)
-// for objects directly held by LocalDOMWindow. Other objects should use
-// ExecutionContextClient/ExecutionContextLifecycleObserver.
-//
-// There is a subtle difference between the timing when the context gets
-// detached and the timing when the window gets detached. In common cases,
-// these two happen at the same timing. The only exception is a case where
-// a frame navigates from an initial empty document to another same-origin
-// document. In this case, a Document is recreated but a DOMWindow is reused.
-// Hence, in the navigated document
-// ExecutionContextClient::GetExecutionContext() returns null while
-// DOMWindowClient::domWindow() keeps returning the window.
-class CORE_EXPORT DOMWindowClient : public GarbageCollectedMixin {
- public:
-  LocalDOMWindow* DomWindow() const;
-  LocalFrame* GetFrame() const;
-
-  void Trace(Visitor*) override;
-
- protected:
-  explicit DOMWindowClient(LocalDOMWindow*);
-  explicit DOMWindowClient(LocalFrame*);
-
- private:
-  WeakMember<LocalDOMWindow> dom_window_;
 };
 
 }  // namespace blink

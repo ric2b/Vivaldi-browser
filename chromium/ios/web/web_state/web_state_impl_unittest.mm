@@ -15,6 +15,7 @@
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
+#include "base/test/gmock_callback_support.h"
 #import "base/test/ios/wait_util.h"
 #include "ios/web/common/features.h"
 #import "ios/web/navigation/navigation_context_impl.h"
@@ -26,6 +27,7 @@
 #import "ios/web/public/session/crw_navigation_item_storage.h"
 #import "ios/web/public/session/crw_session_storage.h"
 #import "ios/web/public/session/serializable_user_data_manager.h"
+#import "ios/web/public/test/fakes/async_web_state_policy_decider.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
 #import "ios/web/public/test/fakes/fake_web_frame.h"
 #include "ios/web/public/test/fakes/test_browser_state.h"
@@ -57,6 +59,7 @@ using testing::Assign;
 using testing::AtMost;
 using testing::DoAll;
 using testing::Return;
+using base::test::RunOnceCallback;
 using base::test::ios::WaitUntilConditionOrTimeout;
 using base::test::ios::kWaitForPageLoadTimeout;
 
@@ -117,10 +120,15 @@ class MockWebStatePolicyDecider : public WebStatePolicyDecider {
   virtual ~MockWebStatePolicyDecider() {}
 
   MOCK_METHOD2(ShouldAllowRequest,
-               bool(NSURLRequest* request,
-                    const WebStatePolicyDecider::RequestInfo& request_info));
-  MOCK_METHOD2(ShouldAllowResponse,
-               bool(NSURLResponse* response, bool for_main_frame));
+               WebStatePolicyDecider::PolicyDecision(
+                   NSURLRequest* request,
+                   const WebStatePolicyDecider::RequestInfo& request_info));
+  MOCK_METHOD3(
+      ShouldAllowResponse,
+      void(NSURLResponse* response,
+           bool for_main_frame,
+           base::OnceCallback<void(WebStatePolicyDecider::PolicyDecision)>
+               callback));
   MOCK_METHOD0(WebStateDestroyed, void());
 };
 
@@ -175,6 +183,43 @@ class WebStateImplTest : public web::WebTest {
   }
   std::unique_ptr<WebStateImpl> web_state_;
 };
+
+// Tests WebState::Getter default implementation.
+TEST_F(WebStateImplTest, DefaultGetter) {
+  WebState::Getter getter = web_state_->CreateDefaultGetter();
+  ASSERT_FALSE(getter.is_null());
+
+  // Verify that the getter returns |web_state_| if executed before
+  // deallocation.
+  EXPECT_EQ(web_state_.get(), getter.Run());
+
+  // Destroy |web_state_| and verify that the getter returns nullptr if executed
+  // after destruction.
+  web_state_ = nullptr;
+  EXPECT_FALSE(getter.Run());
+}
+
+// Tests WebState::OnceGetter default implementation before WebState
+// destruction.
+TEST_F(WebStateImplTest, DefaultOnceGetterBeforeDestruction) {
+  WebState::OnceGetter getter = web_state_->CreateDefaultOnceGetter();
+  ASSERT_FALSE(getter.is_null());
+
+  // Verify that the getter returns |web_state_| if executed before
+  // deallocation.
+  EXPECT_EQ(web_state_.get(), std::move(getter).Run());
+}
+
+// Tests WebState::OnceGetter default implementation after WebState destruction.
+TEST_F(WebStateImplTest, DefaultOnceGetterAfterDestruction) {
+  WebState::OnceGetter getter = web_state_->CreateDefaultOnceGetter();
+  ASSERT_FALSE(getter.is_null());
+
+  // Destroy |web_state_| and verify that the getter returns nullptr if executed
+  // after destruction.
+  web_state_ = nullptr;
+  EXPECT_FALSE(std::move(getter).Run());
+}
 
 TEST_F(WebStateImplTest, WebUsageEnabled) {
   // Default is false.
@@ -268,7 +313,7 @@ TEST_F(WebStateImplTest, ObserverTest) {
 
   // Test that WebFrameDidBecomeAvailable() is called.
   ASSERT_FALSE(observer->web_frame_available_info());
-  web::FakeWebFrame main_frame("main", true, GURL());
+  web::FakeMainWebFrame main_frame(GURL::EmptyGURL());
   web_state_->OnWebFrameAvailable(&main_frame);
   ASSERT_TRUE(observer->web_frame_available_info());
   EXPECT_EQ(web_state_.get(), observer->web_frame_available_info()->web_state);
@@ -582,33 +627,37 @@ TEST_F(WebStateImplTest, PolicyDeciderTest) {
   EXPECT_CALL(decider, ShouldAllowRequest(
                            request, RequestInfoMatch(request_info_main_frame)))
       .Times(1)
-      .WillOnce(Return(true));
+      .WillOnce(Return(WebStatePolicyDecider::PolicyDecision::Allow()));
   EXPECT_CALL(decider2, ShouldAllowRequest(
                             request, RequestInfoMatch(request_info_main_frame)))
       .Times(1)
-      .WillOnce(Return(true));
+      .WillOnce(Return(WebStatePolicyDecider::PolicyDecision::Allow()));
 
-  EXPECT_TRUE(web_state_->ShouldAllowRequest(request, request_info_main_frame));
+  WebStatePolicyDecider::PolicyDecision policy_decision =
+      web_state_->ShouldAllowRequest(request, request_info_main_frame);
+  EXPECT_TRUE(policy_decision.ShouldAllowNavigation());
+  EXPECT_FALSE(policy_decision.ShouldCancelNavigation());
 
   WebStatePolicyDecider::RequestInfo request_info_iframe(
       ui::PageTransition::PAGE_TRANSITION_LINK,
       /*target_main_frame=*/false,
       /*has_user_gesture=*/false);
-
   EXPECT_CALL(decider, ShouldAllowRequest(
                            request, RequestInfoMatch(request_info_iframe)))
       .Times(1)
-      .WillOnce(Return(true));
+      .WillOnce(Return(WebStatePolicyDecider::PolicyDecision::Allow()));
   EXPECT_CALL(decider2, ShouldAllowRequest(
                             request, RequestInfoMatch(request_info_iframe)))
-
       .Times(1)
-      .WillOnce(Return(true));
+      .WillOnce(Return(WebStatePolicyDecider::PolicyDecision::Allow()));
 
-  EXPECT_TRUE(web_state_->ShouldAllowRequest(request, request_info_iframe));
+  policy_decision =
+      web_state_->ShouldAllowRequest(request, request_info_iframe);
+  EXPECT_TRUE(policy_decision.ShouldAllowNavigation());
+  EXPECT_FALSE(policy_decision.ShouldCancelNavigation());
 
   // Test that ShouldAllowRequest() is stopping on negative answer. Only one
-  // one the decider should be called.
+  // of the deciders should be called.
   {
     bool decider_called = false;
     bool decider2_called = false;
@@ -616,40 +665,56 @@ TEST_F(WebStateImplTest, PolicyDeciderTest) {
         decider,
         ShouldAllowRequest(request, RequestInfoMatch(request_info_main_frame)))
         .Times(AtMost(1))
-        .WillOnce(DoAll(Assign(&decider_called, true), Return(false)));
+        .WillOnce(
+            DoAll(Assign(&decider_called, true),
+                  Return(WebStatePolicyDecider::PolicyDecision::Cancel())));
     EXPECT_CALL(
         decider2,
         ShouldAllowRequest(request, RequestInfoMatch(request_info_main_frame)))
         .Times(AtMost(1))
-        .WillOnce(DoAll(Assign(&decider2_called, true), Return(false)));
+        .WillOnce(
+            DoAll(Assign(&decider2_called, true),
+                  Return(WebStatePolicyDecider::PolicyDecision::Cancel())));
 
-    EXPECT_FALSE(
-        web_state_->ShouldAllowRequest(request, request_info_main_frame));
+    WebStatePolicyDecider::PolicyDecision policy_decision =
+        web_state_->ShouldAllowRequest(request, request_info_main_frame);
+    EXPECT_FALSE(policy_decision.ShouldAllowNavigation());
+    EXPECT_TRUE(policy_decision.ShouldCancelNavigation());
     EXPECT_FALSE(decider_called && decider2_called);
   }
 
   // Test that ShouldAllowResponse() is called.
-  EXPECT_CALL(decider, ShouldAllowResponse(response, true))
+  EXPECT_CALL(decider, ShouldAllowResponse(response, true, _))
       .Times(1)
-      .WillOnce(Return(true));
-  EXPECT_CALL(decider2, ShouldAllowResponse(response, true))
+      .WillOnce(
+          RunOnceCallback<2>(WebStatePolicyDecider::PolicyDecision::Allow()));
+  EXPECT_CALL(decider2, ShouldAllowResponse(response, true, _))
       .Times(1)
-      .WillOnce(Return(true));
-  EXPECT_TRUE(web_state_->ShouldAllowResponse(response, true));
+      .WillOnce(
+          RunOnceCallback<2>(WebStatePolicyDecider::PolicyDecision::Allow()));
 
-  // Test that ShouldAllowResponse() is stopping on negative answer. Only one
-  // one the decider should be called.
+  policy_decision = WebStatePolicyDecider::PolicyDecision::Cancel();
+  auto callback = base::Bind(
+      [](WebStatePolicyDecider::PolicyDecision* policy_decision,
+         WebStatePolicyDecider::PolicyDecision result) {
+        *policy_decision = result;
+      },
+      base::Unretained(&policy_decision));
+  web_state_->ShouldAllowResponse(response, true, callback);
+  EXPECT_TRUE(policy_decision.ShouldAllowNavigation());
+  EXPECT_FALSE(policy_decision.ShouldCancelNavigation());
+
+  // Test that ShouldAllowResponse() is stopping on negative answer. Only the
+  // first decider should be called.
   {
-    bool decider_called = false;
-    bool decider2_called = false;
-    EXPECT_CALL(decider, ShouldAllowResponse(response, false))
-        .Times(AtMost(1))
-        .WillOnce(DoAll(Assign(&decider_called, true), Return(false)));
-    EXPECT_CALL(decider2, ShouldAllowResponse(response, false))
-        .Times(AtMost(1))
-        .WillOnce(DoAll(Assign(&decider2_called, true), Return(false)));
-    EXPECT_FALSE(web_state_->ShouldAllowResponse(response, false));
-    EXPECT_FALSE(decider_called && decider2_called);
+    EXPECT_CALL(decider, ShouldAllowResponse(response, false, _))
+        .Times(1)
+        .WillOnce(RunOnceCallback<2>(
+            WebStatePolicyDecider::PolicyDecision::Cancel()));
+
+    web_state_->ShouldAllowResponse(response, false, std::move(callback));
+    EXPECT_FALSE(policy_decision.ShouldAllowNavigation());
+    EXPECT_TRUE(policy_decision.ShouldCancelNavigation());
   }
 
   // Test that WebStateDestroyed() is called.
@@ -657,6 +722,88 @@ TEST_F(WebStateImplTest, PolicyDeciderTest) {
   EXPECT_CALL(decider2, WebStateDestroyed()).Times(1);
   web_state_.reset();
   EXPECT_EQ(nullptr, decider.web_state());
+}
+
+// Verifies that asynchronous decisions for
+// WebStatePolicyDecider::ShouldAllowResponse are correctly handled by
+// WebStateImpl::ShouldAllowResponse.
+TEST_F(WebStateImplTest, AsyncShouldAllowResponseTest) {
+  MockWebStatePolicyDecider sync_decider(web_state_.get());
+  AsyncWebStatePolicyDecider async_decider1(web_state_.get());
+  AsyncWebStatePolicyDecider async_decider2(web_state_.get());
+
+  NSURL* url = [NSURL URLWithString:@"http://example.com"];
+  NSURLResponse* response = [[NSURLResponse alloc] initWithURL:url
+                                                      MIMEType:@"text/html"
+                                         expectedContentLength:0
+                                              textEncodingName:nil];
+
+  __block WebStatePolicyDecider::PolicyDecision policy_decision =
+      WebStatePolicyDecider::PolicyDecision::Allow();
+  __block bool callback_called = false;
+
+  base::RepeatingCallback<void(WebStatePolicyDecider::PolicyDecision)>
+      callback = base::Bind(^(WebStatePolicyDecider::PolicyDecision result) {
+        policy_decision = result;
+        callback_called = true;
+      });
+
+  // Case 1: All deciders allow the navigation.
+  EXPECT_CALL(sync_decider, ShouldAllowResponse(response, true, _))
+      .Times(1)
+      .WillOnce(
+          RunOnceCallback<2>(WebStatePolicyDecider::PolicyDecision::Allow()));
+  web_state_->ShouldAllowResponse(response, /*for_main_frame=*/true, callback);
+  EXPECT_FALSE(callback_called);
+  async_decider1.InvokeCallback(WebStatePolicyDecider::PolicyDecision::Allow());
+  EXPECT_FALSE(callback_called);
+  async_decider2.InvokeCallback(WebStatePolicyDecider::PolicyDecision::Allow());
+  EXPECT_TRUE(callback_called);
+  EXPECT_TRUE(policy_decision.ShouldAllowNavigation());
+
+  // Case 2: One decider allows the navigation, one decider wants to show an
+  // error, and another decider wants to cancel the navigation. In this case,
+  // the navigation should be cancelled, with no error shown.
+  EXPECT_CALL(sync_decider, ShouldAllowResponse(response, true, _))
+      .Times(1)
+      .WillOnce(
+          RunOnceCallback<2>(WebStatePolicyDecider::PolicyDecision::Allow()));
+  callback_called = false;
+  web_state_->ShouldAllowResponse(response, /*for_main_frame=*/true, callback);
+  EXPECT_FALSE(callback_called);
+  NSError* error1 = [NSError errorWithDomain:@"ErrorDomain"
+                                        code:1
+                                    userInfo:nil];
+  async_decider2.InvokeCallback(
+      WebStatePolicyDecider::PolicyDecision::CancelAndDisplayError(error1));
+  EXPECT_FALSE(callback_called);
+  async_decider1.InvokeCallback(
+      WebStatePolicyDecider::PolicyDecision::Cancel());
+  EXPECT_TRUE(callback_called);
+  EXPECT_TRUE(policy_decision.ShouldCancelNavigation());
+  EXPECT_FALSE(policy_decision.ShouldDisplayError());
+
+  // Case 3: Two deciders want to show an error. In this case, the error to be
+  // shown should be from the decider that responded first.
+  EXPECT_CALL(sync_decider, ShouldAllowResponse(response, true, _))
+      .Times(1)
+      .WillOnce(
+          RunOnceCallback<2>(WebStatePolicyDecider::PolicyDecision::Allow()));
+  callback_called = false;
+  web_state_->ShouldAllowResponse(response, /*for_main_frame=*/true, callback);
+  EXPECT_FALSE(callback_called);
+  NSError* error2 = [NSError errorWithDomain:@"ErrorDomain"
+                                        code:2
+                                    userInfo:nil];
+  async_decider1.InvokeCallback(
+      WebStatePolicyDecider::PolicyDecision::CancelAndDisplayError(error2));
+  EXPECT_FALSE(callback_called);
+  async_decider2.InvokeCallback(
+      WebStatePolicyDecider::PolicyDecision::CancelAndDisplayError(error1));
+  EXPECT_TRUE(callback_called);
+  EXPECT_TRUE(policy_decision.ShouldCancelNavigation());
+  EXPECT_TRUE(policy_decision.ShouldDisplayError());
+  EXPECT_EQ(policy_decision.GetDisplayError().code, error2.code);
 }
 
 // Tests that script command callbacks are called correctly.
@@ -668,7 +815,7 @@ TEST_F(WebStateImplTest, ScriptCommand) {
   value_1.SetString("a", "b");
   const GURL kUrl1("http://foo");
   bool is_called_1 = false;
-  web::FakeWebFrame main_frame("main", true, GURL());
+  web::FakeMainWebFrame main_frame(GURL::EmptyGURL());
   auto subscription_1 = web_state_->AddScriptCommandCallback(
       base::BindRepeating(&HandleScriptCommand, &is_called_1, &value_1, kUrl1,
                           /*expected_user_is_interacting*/ false, &main_frame),
@@ -691,7 +838,7 @@ TEST_F(WebStateImplTest, ScriptCommand) {
   value_3.SetString("e", "f");
   const GURL kUrl3("http://iframe");
   bool is_called_3 = false;
-  web::FakeWebFrame subframe("subframe", false, GURL());
+  web::FakeChildWebFrame subframe(GURL::EmptyGURL());
   auto subscription_3 = web_state_->AddScriptCommandCallback(
       base::BindRepeating(&HandleScriptCommand, &is_called_3, &value_3, kUrl3,
                           /*expected_user_is_interacting*/ false, &subframe),

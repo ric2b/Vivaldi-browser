@@ -62,8 +62,9 @@ void VideoFrameSubmitter::StartRendering() {
   DCHECK(!is_rendering_);
   is_rendering_ = true;
 
-  if (compositor_frame_sink_)
-    compositor_frame_sink_->SetNeedsBeginFrame(is_rendering_ && ShouldSubmit());
+  if (compositor_frame_sink_) {
+    compositor_frame_sink_->SetNeedsBeginFrame(IsDrivingFrameUpdates());
+  }
 
   frame_trackers_.StartSequence(cc::FrameSequenceTrackerType::kVideo);
 }
@@ -93,16 +94,18 @@ bool VideoFrameSubmitter::IsDrivingFrameUpdates() const {
   // We drive frame updates only when we believe that something is consuming
   // them.  This is different than VideoLayer, which drives updates any time
   // they're in the layer tree.
-  return is_rendering_ && ShouldSubmit();
+  return (is_rendering_ && ShouldSubmit()) || force_begin_frames_;
 }
 
-void VideoFrameSubmitter::Initialize(cc::VideoFrameProvider* provider) {
+void VideoFrameSubmitter::Initialize(cc::VideoFrameProvider* provider,
+                                     bool is_media_stream) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!provider)
     return;
 
   DCHECK(!video_frame_provider_);
   video_frame_provider_ = provider;
+  is_media_stream_ = is_media_stream;
   context_provider_callback_.Run(
       nullptr, base::BindOnce(&VideoFrameSubmitter::OnReceivedContextProvider,
                               weak_ptr_factory_.GetWeakPtr()));
@@ -137,6 +140,12 @@ void VideoFrameSubmitter::SetIsSurfaceVisible(bool is_visible) {
 void VideoFrameSubmitter::SetIsPageVisible(bool is_visible) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   is_page_visible_ = is_visible;
+  UpdateSubmissionState();
+}
+
+void VideoFrameSubmitter::SetForceBeginFrames(bool force_begin_frames) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  force_begin_frames_ = force_begin_frames;
   UpdateSubmissionState();
 }
 
@@ -270,15 +279,13 @@ void VideoFrameSubmitter::DidAllocateSharedBitmap(
     const viz::SharedBitmapId& id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(compositor_frame_sink_);
-  compositor_frame_sink_->DidAllocateSharedBitmap(
-      std::move(region), SharedBitmapIdToGpuMailboxPtr(id));
+  compositor_frame_sink_->DidAllocateSharedBitmap(std::move(region), id);
 }
 
 void VideoFrameSubmitter::DidDeleteSharedBitmap(const viz::SharedBitmapId& id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(compositor_frame_sink_);
-  compositor_frame_sink_->DidDeleteSharedBitmap(
-      SharedBitmapIdToGpuMailboxPtr(id));
+  compositor_frame_sink_->DidDeleteSharedBitmap(id);
 }
 
 void VideoFrameSubmitter::OnReceivedContextProvider(
@@ -348,6 +355,12 @@ void VideoFrameSubmitter::StartSubmitting() {
   compositor_frame_sink_.set_disconnect_handler(base::BindOnce(
       &VideoFrameSubmitter::OnContextLost, base::Unretained(this)));
 
+  if (!compositor_frame_sink_)
+    return;
+
+  compositor_frame_sink_->InitializeCompositorFrameSinkType(
+      is_media_stream_ ? viz::mojom::CompositorFrameSinkType::kMediaStream
+                       : viz::mojom::CompositorFrameSinkType::kVideo);
   UpdateSubmissionState();
 }
 
@@ -586,7 +599,10 @@ viz::CompositorFrame VideoFrameSubmitter::CreateCompositorFrame(
       child_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
           .allocation_time();
 
-  auto render_pass = viz::RenderPass::Create();
+  // Specify size of shared quad state and quad lists so that RenderPass doesn't
+  // allocate using the defaults of 32 and 128 since we only append one quad.
+  auto render_pass = viz::RenderPass::Create(/*shared_quad_state_list_size=*/1u,
+                                             /*quad_list_size*/ 1u);
   render_pass->SetNew(1, gfx::Rect(frame_size_), gfx::Rect(frame_size_),
                       gfx::Transform());
 

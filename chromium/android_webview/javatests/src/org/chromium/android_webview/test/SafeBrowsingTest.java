@@ -30,8 +30,6 @@ import org.chromium.android_webview.AwContents.InternalAccessDelegate;
 import org.chromium.android_webview.AwContents.NativeDrawFunctorFactory;
 import org.chromium.android_webview.AwContentsClient;
 import org.chromium.android_webview.AwContentsStatics;
-import org.chromium.android_webview.AwFeatureList;
-import org.chromium.android_webview.AwFeatures;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.AwWebContentsObserver;
 import org.chromium.android_webview.ErrorCodeConversionHelper;
@@ -54,7 +52,6 @@ import org.chromium.components.safe_browsing.SafeBrowsingApiBridge;
 import org.chromium.components.safe_browsing.SafeBrowsingApiHandler;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.common.ContentUrlConstants;
@@ -149,17 +146,7 @@ public class SafeBrowsingTest {
         private static final long CHECK_DELTA_US = 10;
 
         @Override
-        public String getSafetyNetId() {
-            return "";
-        }
-
-        @Override
         public boolean init(Observer result) {
-            return init(result, false);
-        }
-
-        @Override
-        public boolean init(Observer result, boolean enableLocalBlacklists) {
             mObserver = result;
             return true;
         }
@@ -393,8 +380,8 @@ public class SafeBrowsingTest {
 
     private void evaluateJavaScriptOnInterstitialOnUiThread(
             final String script, final Callback<String> callback) {
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
-                () -> mAwContents.evaluateJavaScriptOnInterstitialForTesting(script, callback));
+        PostTask.runOrPostTask(
+                UiThreadTaskTraits.DEFAULT, () -> mAwContents.evaluateJavaScript(script, callback));
     }
 
     private String evaluateJavaScriptOnInterstitialOnUiThreadSync(final String script)
@@ -414,15 +401,12 @@ public class SafeBrowsingTest {
         final String script = "document.readyState;";
         final String expected = "\"complete\"";
 
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                try {
-                    String value = evaluateJavaScriptOnInterstitialOnUiThreadSync(script);
-                    return expected.equals(value);
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            try {
+                Assert.assertEquals(
+                        expected, evaluateJavaScriptOnInterstitialOnUiThreadSync(script));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
         });
     }
@@ -451,27 +435,13 @@ public class SafeBrowsingTest {
                 mWebContentsObserver.getAttachedInterstitialPageHelper().getCallCount();
         final String responseUrl = mTestServer.getURL(path);
         mActivityTestRule.loadUrlAsync(mAwContents, responseUrl);
-        if (AwFeatureList.isEnabled(AwFeatures.SAFE_BROWSING_COMMITTED_INTERSTITIALS)) {
-            // Subresource triggered interstitials will trigger after the page containing the
-            // subresource has loaded (and displayed), so we first wait for the interstitial to be
-            // attached to the web contents, then for a visual state callback to allow the
-            // interstitial to render.
-            CriteriaHelper.pollUiThread(new Criteria() {
-                @Override
-                public boolean isSatisfied() {
-                    try {
-                        return mAwContents.isDisplayingInterstitialForTesting();
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-            });
-            // Wait for the interstitial to actually render.
-            mActivityTestRule.waitForVisualStateCallback(mAwContents);
-        } else {
-            mWebContentsObserver.getAttachedInterstitialPageHelper().waitForCallback(
-                    interstitialCount);
-        }
+        // Subresource triggered interstitials will trigger after the page containing the
+        // subresource has loaded (and displayed), so we first wait for the interstitial to be
+        // attached to the web contents, then for a visual state callback to allow the
+        // interstitial to render.
+        CriteriaHelper.pollUiThread(() -> mAwContents.isDisplayingInterstitialForTesting());
+        // Wait for the interstitial to actually render.
+        mActivityTestRule.waitForVisualStateCallback(mAwContents);
     }
 
     private void assertTargetPageHasLoaded(int pageColor) throws Exception {
@@ -724,10 +694,7 @@ public class SafeBrowsingTest {
         // For subresources, the initial site finishes loading before the interstitial is shown,
         // causing an extra onPageFinished call if committed interstitials are enabled (since the
         // proceed action triggers a reload).
-        int numNavigations =
-                AwFeatureList.isEnabled(AwFeatures.SAFE_BROWSING_COMMITTED_INTERSTITIALS) ? 2 : 1;
-        mContentsClient.getOnPageFinishedHelper().waitForCallback(
-                pageFinishedCount, numNavigations);
+        mContentsClient.getOnPageFinishedHelper().waitForCallback(pageFinishedCount, 2);
         assertTargetPageHasLoaded(IFRAME_EMBEDDER_BACKGROUND_COLOR);
     }
 
@@ -761,13 +728,7 @@ public class SafeBrowsingTest {
         OnReceivedError2Helper errorHelper = mContentsClient.getOnReceivedError2Helper();
         int errorCount = errorHelper.getCallCount();
         clickBackToSafety();
-        if (AwFeatureList.isEnabled(AwFeatures.SAFE_BROWSING_COMMITTED_INTERSTITIALS)) {
-            errorHelper.waitForCallback(errorCount);
-        } else {
-            mWebContentsObserver.getDetachedInterstitialPageHelper().waitForCallback(
-                    interstitialCount);
-        }
-
+        errorHelper.waitForCallback(errorCount);
         mActivityTestRule.waitForVisualStateCallback(mAwContents);
         assertTargetPageNotShowing(MALWARE_PAGE_BACKGROUND_COLOR);
         assertGreenPageShowing();
@@ -785,13 +746,7 @@ public class SafeBrowsingTest {
         OnReceivedError2Helper errorHelper = mContentsClient.getOnReceivedError2Helper();
         int errorCount = errorHelper.getCallCount();
         clickBackToSafety();
-        if (AwFeatureList.isEnabled(AwFeatures.SAFE_BROWSING_COMMITTED_INTERSTITIALS)) {
-            errorHelper.waitForCallback(errorCount);
-        } else {
-            mWebContentsObserver.getDetachedInterstitialPageHelper().waitForCallback(
-                    interstitialCount);
-        }
-
+        errorHelper.waitForCallback(errorCount);
         mActivityTestRule.waitForVisualStateCallback(mAwContents);
         assertTargetPageNotShowing(IFRAME_EMBEDDER_BACKGROUND_COLOR);
         assertGreenPageShowing();
@@ -1126,13 +1081,8 @@ public class SafeBrowsingTest {
         int interstitialCount =
                 mWebContentsObserver.getAttachedInterstitialPageHelper().getCallCount();
         mActivityTestRule.loadUrlAsync(mAwContents, WEB_UI_MALWARE_URL);
-        if (AwFeatureList.isEnabled(AwFeatures.SAFE_BROWSING_COMMITTED_INTERSTITIALS)) {
-            // Wait for the interstitial to actually render.
-            mActivityTestRule.waitForVisualStateCallback(mAwContents);
-        } else {
-            mWebContentsObserver.getAttachedInterstitialPageHelper().waitForCallback(
-                    interstitialCount);
-        }
+        // Wait for the interstitial to actually render.
+        mActivityTestRule.waitForVisualStateCallback(mAwContents);
         waitForInterstitialDomToLoad();
     }
 
@@ -1144,13 +1094,8 @@ public class SafeBrowsingTest {
         int interstitialCount =
                 mWebContentsObserver.getAttachedInterstitialPageHelper().getCallCount();
         mActivityTestRule.loadUrlAsync(mAwContents, WEB_UI_PHISHING_URL);
-        if (AwFeatureList.isEnabled(AwFeatures.SAFE_BROWSING_COMMITTED_INTERSTITIALS)) {
-            // Wait for the interstitial to actually render.
-            mActivityTestRule.waitForVisualStateCallback(mAwContents);
-        } else {
-            mWebContentsObserver.getAttachedInterstitialPageHelper().waitForCallback(
-                    interstitialCount);
-        }
+        // Wait for the interstitial to actually render.
+        mActivityTestRule.waitForVisualStateCallback(mAwContents);
         waitForInterstitialDomToLoad();
     }
 
@@ -1163,13 +1108,8 @@ public class SafeBrowsingTest {
         int interstitialCount =
                 mWebContentsObserver.getAttachedInterstitialPageHelper().getCallCount();
         mActivityTestRule.loadUrlAsync(mAwContents, WEB_UI_MALWARE_URL);
-        if (AwFeatureList.isEnabled(AwFeatures.SAFE_BROWSING_COMMITTED_INTERSTITIALS)) {
-            // Wait for the interstitial to actually render.
-            mActivityTestRule.waitForVisualStateCallback(mAwContents);
-        } else {
-            mWebContentsObserver.getAttachedInterstitialPageHelper().waitForCallback(
-                    interstitialCount);
-        }
+        // Wait for the interstitial to actually render.
+        mActivityTestRule.waitForVisualStateCallback(mAwContents);
         waitForInterstitialDomToLoad();
     }
 
@@ -1265,16 +1205,12 @@ public class SafeBrowsingTest {
         int pageFinishedCount = mContentsClient.getOnPageFinishedHelper().getCallCount();
         clickLinkById(linkId);
         mContentsClient.getOnPageFinishedHelper().waitForCallback(pageFinishedCount);
-        if (AwFeatureList.isEnabled(AwFeatures.SAFE_BROWSING_COMMITTED_INTERSTITIALS)) {
-            // Some click tests involve URLs that redirect and mAwContents.getUrl() sometimes
-            // returns the post-redirect URL, so we instead check with ShouldInterceptRequest.
-            AwContentsClient.AwWebResourceRequest requestsForUrl =
-                    mContentsClient.getShouldInterceptRequestHelper().getRequestsForUrl(linkUrl);
-            // Make sure the URL was seen for a main frame navigation.
-            Assert.assertTrue(requestsForUrl.isMainFrame);
-        } else {
-            Assert.assertEquals(new GURL(linkUrl), mAwContents.getUrl());
-        }
+        // Some click tests involve URLs that redirect and mAwContents.getUrl() sometimes
+        // returns the post-redirect URL, so we instead check with ShouldInterceptRequest.
+        AwContentsClient.AwWebResourceRequest requestsForUrl =
+                mContentsClient.getShouldInterceptRequestHelper().getRequestsForUrl(linkUrl);
+        // Make sure the URL was seen for a main frame navigation.
+        Assert.assertTrue(requestsForUrl.isMainFrame);
     }
 
     @Test
@@ -1360,17 +1296,13 @@ public class SafeBrowsingTest {
         // Awcontents#destroy() posts an asynchronous task itself to destroy natives. Therefore, we
         // still need to wait for the real work to actually finish.
         mActivityTestRule.destroyAwContentsOnMainSync(mAwContents);
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                try {
-                    return TestThreadUtils.runOnUiThreadBlocking(() -> {
-                        int count_aw_contents = AwContents.getNativeInstanceCount();
-                        return count_aw_contents == 0;
-                    });
-                } catch (Exception e) {
-                    return false;
-                }
+        CriteriaHelper.pollUiThread(() -> {
+            try {
+                int awContentsCount = TestThreadUtils.runOnUiThreadBlocking(
+                        () -> AwContents.getNativeInstanceCount());
+                Assert.assertEquals(0, awContentsCount);
+            } catch (Exception e) {
+                Assert.fail(e.getMessage());
             }
         });
     }

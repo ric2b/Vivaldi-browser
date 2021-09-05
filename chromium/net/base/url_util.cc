@@ -12,7 +12,7 @@
 #include <ws2tcpip.h>
 #endif
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -264,6 +264,20 @@ std::string GetSuperdomain(base::StringPiece domain) {
   if (dot_pos == std::string::npos)
     return "";
   return domain.substr(dot_pos + 1).as_string();
+}
+
+bool IsSubdomainOf(base::StringPiece subdomain, base::StringPiece superdomain) {
+  // Subdomain must be identical or have strictly more labels than the
+  // superdomain.
+  if (subdomain.length() <= superdomain.length())
+    return subdomain == superdomain;
+
+  // Superdomain must be suffix of subdomain, and the last character not
+  // included in the matching substring must be a dot.
+  if (!subdomain.ends_with(superdomain))
+    return false;
+  subdomain.remove_suffix(superdomain.length());
+  return subdomain.back() == '.';
 }
 
 std::string CanonicalizeHost(base::StringPiece host,

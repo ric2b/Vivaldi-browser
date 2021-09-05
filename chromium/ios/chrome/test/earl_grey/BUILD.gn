@@ -72,6 +72,7 @@ chrome_ios_eg_test("ios_chrome_settings_egtests") {
     "//ios/chrome/browser/ui/settings/google_services:eg_tests",
     "//ios/chrome/browser/ui/settings/language:eg_tests",
     "//ios/chrome/browser/ui/settings/password:eg_tests",
+    "//ios/chrome/browser/ui/settings/sync:eg_tests",
   ]
 
   executable_args = [
@@ -108,6 +109,7 @@ chrome_ios_eg_test("ios_chrome_ui_egtests") {
     "//ios/chrome/browser/ui/tabs:eg_tests",
     "//ios/chrome/browser/ui/toolbar:eg_tests",
     "//ios/chrome/browser/ui/webui:eg_tests",
+    "//ios/chrome/browser/ui/webui/interstitials:eg_tests",
   ]
 
   shards = 2
@@ -282,6 +284,7 @@ source_set("test_support") {
     "//ios/chrome/browser/ui/history:history_ui",
     "//ios/chrome/browser/ui/location_bar:location_bar",
     "//ios/chrome/browser/ui/omnibox:omnibox_internal",
+    "//ios/chrome/browser/ui/omnibox/keyboard_assist",
     "//ios/chrome/browser/ui/popup_menu:constants",
     "//ios/chrome/browser/ui/qr_scanner:test_support",
     "//ios/chrome/browser/ui/recent_tabs:recent_tabs_ui_constants",
@@ -300,7 +303,7 @@ source_set("test_support") {
     "//ios/chrome/browser/ui/settings/google_services:constants",
     "//ios/chrome/browser/ui/settings/password:eg_test_support",
     "//ios/chrome/browser/ui/settings/password:password_constants",
-    "//ios/chrome/browser/ui/settings/privacy",
+    "//ios/chrome/browser/ui/settings/privacy:privacy_ui",
     "//ios/chrome/browser/ui/settings/sync",
     "//ios/chrome/browser/ui/tab_grid:tab_grid_ui_constants",
     "//ios/chrome/browser/ui/tab_grid/grid:grid_ui_constants",
@@ -309,7 +312,6 @@ source_set("test_support") {
     "//ios/chrome/browser/ui/toolbar:test_support",
     "//ios/chrome/browser/ui/toolbar:toolbar_ui",
     "//ios/chrome/browser/ui/toolbar/buttons",
-    "//ios/chrome/browser/ui/toolbar/keyboard_assist",
     "//ios/chrome/browser/ui/toolbar/public",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/web:tab_id_tab_helper",
@@ -328,6 +330,7 @@ source_set("test_support") {
     "//ios/web/public/test/http_server",
     "//net:test_support",
     "//services/metrics/public/cpp:metrics_cpp",
+    "//third_party/metrics_proto",
     "//ui/base",
     "//ui/base:test_support",
     "//url",
@@ -347,6 +350,8 @@ source_set("test_support") {
     "XCTest.framework",
     "IOKit.framework",
   ]
+
+  all_dependent_configs = [ "//third_party/protobuf:protobuf_config" ]
 }
 
 source_set("hooks") {
@@ -438,6 +443,7 @@ source_set("eg_app_support+eg2") {
     "//ios/chrome/browser/ui/material_components",
     "//ios/chrome/browser/ui/omnibox:app_support+eg2",
     "//ios/chrome/browser/ui/omnibox:omnibox_internal",
+    "//ios/chrome/browser/ui/omnibox/keyboard_assist",
     "//ios/chrome/browser/ui/passwords:app_support+eg2",
     "//ios/chrome/browser/ui/popup_menu:constants",
     "//ios/chrome/browser/ui/qr_scanner:eg_app_support+eg2",
@@ -461,7 +467,7 @@ source_set("eg_app_support+eg2") {
     "//ios/chrome/browser/ui/settings/language:eg_app_support+eg2",
     "//ios/chrome/browser/ui/settings/password:eg_app_support+eg2",
     "//ios/chrome/browser/ui/settings/password:password_constants",
-    "//ios/chrome/browser/ui/settings/privacy",
+    "//ios/chrome/browser/ui/settings/privacy:privacy_ui",
     "//ios/chrome/browser/ui/settings/sync",
     "//ios/chrome/browser/ui/signin_interaction:eg_app_support+eg2",
     "//ios/chrome/browser/ui/tab_grid:tab_grid_ui_constants",
@@ -470,7 +476,6 @@ source_set("eg_app_support+eg2") {
     "//ios/chrome/browser/ui/table_view/cells",
     "//ios/chrome/browser/ui/toolbar:eg_app_support+eg2",
     "//ios/chrome/browser/ui/toolbar:toolbar_ui",
-    "//ios/chrome/browser/ui/toolbar/keyboard_assist",
     "//ios/chrome/browser/ui/toolbar/public",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/ui/util:eg_app_support+eg2",
@@ -492,10 +497,13 @@ source_set("eg_app_support+eg2") {
     "//ios/web/public/test:element_selector",
     "//ios/web/public/test:util",
     "//services/metrics/public/cpp:metrics_cpp",
+    "//third_party/metrics_proto",
     "//ui/base",
     "//ui/base:test_support",
   ]
   libs = [ "IOKit.framework" ]
+
+  all_dependent_configs = [ "//third_party/protobuf:protobuf_config" ]
 }
 
 source_set("eg_test_support+eg2") {
@@ -554,9 +562,12 @@ source_set("eg_test_support+eg2") {
     "//ios/web/public/test:element_selector",
     "//ios/web/public/test/http_server",
     "//net:test_support",
+    "//third_party/metrics_proto",
     "//ui/base",
     "//url",
   ]
+
+  all_dependent_configs = [ "//third_party/protobuf:protobuf_config" ]
 }
 
 source_set("chrome_egtest_bundle_main+eg2") {

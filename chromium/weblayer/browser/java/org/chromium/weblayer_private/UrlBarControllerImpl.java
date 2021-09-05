@@ -5,33 +5,40 @@
 package org.chromium.weblayer_private;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.ColorRes;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.base.LifetimeAssert;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.components.omnibox.SecurityButtonAnimationDelegate;
 import org.chromium.components.omnibox.SecurityStatusIcon;
+import org.chromium.components.page_info.PageInfoController;
+import org.chromium.components.page_info.PermissionParamsListBuilderDelegate;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
 import org.chromium.weblayer_private.interfaces.IUrlBarController;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
 import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
+import org.chromium.weblayer_private.interfaces.UrlBarOptionsKeys;
 
 /**
  *  Implementation of {@link IUrlBarController}.
  */
 @JNINamespace("weblayer")
 public class UrlBarControllerImpl extends IUrlBarController.Stub {
-    // To be kept in sync with the constants in UrlBarOptions.java
-    public static final String URL_TEXT_SIZE = "UrlTextSize";
     public static final float DEFAULT_TEXT_SIZE = 10.0F;
     public static final float MINIMUM_TEXT_SIZE = 5.0F;
 
@@ -75,17 +82,33 @@ public class UrlBarControllerImpl extends IUrlBarController.Stub {
     protected class UrlBarView
             extends LinearLayout implements BrowserImpl.VisibleSecurityStateObserver {
         private float mTextSize;
+        private boolean mShowPageInfoWhenUrlTextClicked;
+
+        // These refer to the resources in the embedder's APK, not WebLayer's.
+        private @ColorRes int mUrlTextColor;
+        private @ColorRes int mUrlIconColor;
+
         private TextView mUrlTextView;
         private ImageButton mSecurityButton;
+        private final SecurityButtonAnimationDelegate mSecurityButtonAnimationDelegate;
 
         public UrlBarView(@NonNull Context context, Bundle options) {
             super(context);
-            mTextSize = options.getFloat(URL_TEXT_SIZE, DEFAULT_TEXT_SIZE);
+            setGravity(Gravity.CENTER_HORIZONTAL);
+
+            mTextSize = options.getFloat(UrlBarOptionsKeys.URL_TEXT_SIZE, DEFAULT_TEXT_SIZE);
+            mShowPageInfoWhenUrlTextClicked = options.getBoolean(
+                    UrlBarOptionsKeys.SHOW_PAGE_INFO_WHEN_URL_TEXT_CLICKED, /*default= */ false);
+            mUrlTextColor = options.getInt(UrlBarOptionsKeys.URL_TEXT_COLOR, /*default= */ 0);
+            mUrlIconColor = options.getInt(UrlBarOptionsKeys.URL_ICON_COLOR, /*default= */ 0);
+
             View.inflate(getContext(), R.layout.weblayer_url_bar, this);
             setOrientation(LinearLayout.HORIZONTAL);
             setBackgroundColor(Color.TRANSPARENT);
             mUrlTextView = findViewById(R.id.url_text);
             mSecurityButton = (ImageButton) findViewById(R.id.security_button);
+            mSecurityButtonAnimationDelegate = new SecurityButtonAnimationDelegate(
+                    mSecurityButton, mUrlTextView, R.dimen.security_status_icon_size);
 
             updateView();
         }
@@ -119,14 +142,38 @@ public class UrlBarControllerImpl extends IUrlBarController.Stub {
             mUrlTextView.setText(displayUrl);
             mUrlTextView.setTextSize(
                     TypedValue.COMPLEX_UNIT_SP, Math.max(MINIMUM_TEXT_SIZE, mTextSize));
+            Context embedderContext = mBrowserImpl.getEmbedderActivityContext();
+            if (mUrlTextColor > 0 && embedderContext != null) {
+                mUrlTextView.setTextColor(ContextCompat.getColor(embedderContext, mUrlTextColor));
+            }
 
-            mSecurityButton.setImageResource(getSecurityIcon());
+            mSecurityButtonAnimationDelegate.updateSecurityButton(getSecurityIcon());
             mSecurityButton.setContentDescription(getContext().getResources().getString(
                     SecurityStatusIcon.getSecurityIconContentDescriptionResourceId(
                             UrlBarControllerImplJni.get().getConnectionSecurityLevel(
                                     mNativeUrlBarController))));
 
-            // TODO(crbug.com/1025607): Set a click listener to show Page Info UI.
+            if (mUrlIconColor > 0 && embedderContext != null) {
+                ImageViewCompat.setImageTintList(mSecurityButton,
+                        ColorStateList.valueOf(
+                                ContextCompat.getColor(embedderContext, mUrlIconColor)));
+            }
+
+            mSecurityButton.setOnClickListener(v -> { showPageInfoUi(v); });
+            if (mShowPageInfoWhenUrlTextClicked) {
+                mUrlTextView.setOnClickListener(v -> { showPageInfoUi(v); });
+            }
+        }
+
+        private void showPageInfoUi(View v) {
+            PageInfoController.show(mBrowserImpl.getWindowAndroid().getActivity().get(),
+                    mBrowserImpl.getActiveTab().getWebContents(),
+                    /* contentPublisher= */ null, PageInfoController.OpenedFromSource.TOOLBAR,
+                    new PageInfoControllerDelegateImpl(mBrowserImpl.getContext(),
+                            mBrowserImpl.getProfile().getName(),
+                            mBrowserImpl.getActiveTab().getWebContents().getVisibleUrl(),
+                            mBrowserImpl.getWindowAndroid()::getModalDialogManager),
+                    new PermissionParamsListBuilderDelegate(mBrowserImpl.getProfile()));
         }
 
         @DrawableRes

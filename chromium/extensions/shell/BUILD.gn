@@ -183,7 +183,7 @@ source_set("app_shell_lib") {
       "browser/shell_native_app_window_aura.h",
     ]
     deps += [
-      "//ui/base/mojom:cursor_type",
+      "//ui/base/cursor/mojom:cursor_type",
       "//ui/platform_window",
       "//ui/wm",
       "//ui/wm/public",
@@ -262,7 +262,7 @@ executable("app_shell") {
   deps = [
     ":app_shell_lib",
     "//build/win:default_exe_manifest",
-    "//content/public/app:both",
+    "//content/public/app",
     "//extensions:shell_and_test_pak",
   ]
 

@@ -8,7 +8,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/dns_probe_test_util.h"
-#include "chrome/browser/net/dns_util.h"
+#include "chrome/browser/net/secure_dns_config.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -17,6 +17,7 @@
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_web_ui.h"
 #include "net/dns/public/resolve_error_info.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -28,6 +29,7 @@
 
 using net::DohProviderEntry;
 using testing::_;
+using testing::IsEmpty;
 using testing::Return;
 
 namespace settings {
@@ -35,7 +37,7 @@ namespace settings {
 namespace {
 
 constexpr char kGetSecureDnsResolverList[] = "getSecureDnsResolverList";
-constexpr char kValidateCustomDnsEntry[] = "validateCustomDnsEntry";
+constexpr char kParseCustomDnsEntry[] = "parseCustomDnsEntry";
 constexpr char kProbeCustomDnsTemplate[] = "probeCustomDnsTemplate";
 constexpr char kRecordUserDropdownInteraction[] =
     "recordUserDropdownInteraction";
@@ -208,75 +210,71 @@ IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, SecureDnsModes) {
   std::vector<std::string> secure_dns_templates;
   int management_mode;
 
-  local_state->SetString(prefs::kDnsOverHttpsMode,
-                         chrome_browser_net::kDnsOverHttpsModeOff);
+  local_state->SetString(prefs::kDnsOverHttpsMode, SecureDnsConfig::kModeOff);
   EXPECT_TRUE(GetLastSettingsChangedMessage(
       &secure_dns_mode, &secure_dns_templates, &management_mode));
-  EXPECT_EQ(chrome_browser_net::kDnsOverHttpsModeOff, secure_dns_mode);
+  EXPECT_EQ(SecureDnsConfig::kModeOff, secure_dns_mode);
 
   local_state->SetString(prefs::kDnsOverHttpsMode,
-                         chrome_browser_net::kDnsOverHttpsModeAutomatic);
+                         SecureDnsConfig::kModeAutomatic);
   EXPECT_TRUE(GetLastSettingsChangedMessage(
       &secure_dns_mode, &secure_dns_templates, &management_mode));
-  EXPECT_EQ(chrome_browser_net::kDnsOverHttpsModeAutomatic, secure_dns_mode);
+  EXPECT_EQ(SecureDnsConfig::kModeAutomatic, secure_dns_mode);
 
   local_state->SetString(prefs::kDnsOverHttpsMode,
-                         chrome_browser_net::kDnsOverHttpsModeSecure);
+                         SecureDnsConfig::kModeSecure);
   EXPECT_TRUE(GetLastSettingsChangedMessage(
       &secure_dns_mode, &secure_dns_templates, &management_mode));
-  EXPECT_EQ(chrome_browser_net::kDnsOverHttpsModeSecure, secure_dns_mode);
+  EXPECT_EQ(SecureDnsConfig::kModeSecure, secure_dns_mode);
 
   local_state->SetString(prefs::kDnsOverHttpsMode, "unknown");
   EXPECT_TRUE(GetLastSettingsChangedMessage(
       &secure_dns_mode, &secure_dns_templates, &management_mode));
-  EXPECT_EQ(chrome_browser_net::kDnsOverHttpsModeOff, secure_dns_mode);
+  EXPECT_EQ(SecureDnsConfig::kModeOff, secure_dns_mode);
 }
 
 IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, SecureDnsPolicy) {
   policy::PolicyMap policy_map;
-  SetPolicyForPolicyKey(&policy_map, policy::key::kDnsOverHttpsMode,
-                        std::make_unique<base::Value>(
-                            chrome_browser_net::kDnsOverHttpsModeAutomatic));
+  SetPolicyForPolicyKey(
+      &policy_map, policy::key::kDnsOverHttpsMode,
+      std::make_unique<base::Value>(SecureDnsConfig::kModeAutomatic));
 
   PrefService* local_state = g_browser_process->local_state();
   local_state->SetString(prefs::kDnsOverHttpsMode,
-                         chrome_browser_net::kDnsOverHttpsModeSecure);
+                         SecureDnsConfig::kModeSecure);
 
   std::string secure_dns_mode;
   std::vector<std::string> secure_dns_templates;
   int management_mode;
   EXPECT_TRUE(GetLastSettingsChangedMessage(
       &secure_dns_mode, &secure_dns_templates, &management_mode));
-  EXPECT_EQ(chrome_browser_net::kDnsOverHttpsModeAutomatic, secure_dns_mode);
-  EXPECT_EQ(static_cast<int>(
-                chrome_browser_net::SecureDnsUiManagementMode::kNoOverride),
+  EXPECT_EQ(SecureDnsConfig::kModeAutomatic, secure_dns_mode);
+  EXPECT_EQ(static_cast<int>(SecureDnsConfig::ManagementMode::kNoOverride),
             management_mode);
 }
 
 IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, SecureDnsPolicyChange) {
   policy::PolicyMap policy_map;
-  SetPolicyForPolicyKey(&policy_map, policy::key::kDnsOverHttpsMode,
-                        std::make_unique<base::Value>(
-                            chrome_browser_net::kDnsOverHttpsModeAutomatic));
+  SetPolicyForPolicyKey(
+      &policy_map, policy::key::kDnsOverHttpsMode,
+      std::make_unique<base::Value>(SecureDnsConfig::kModeAutomatic));
 
   std::string secure_dns_mode;
   std::vector<std::string> secure_dns_templates;
   int management_mode;
   EXPECT_TRUE(GetLastSettingsChangedMessage(
       &secure_dns_mode, &secure_dns_templates, &management_mode));
-  EXPECT_EQ(chrome_browser_net::kDnsOverHttpsModeAutomatic, secure_dns_mode);
-  EXPECT_EQ(static_cast<int>(
-                chrome_browser_net::SecureDnsUiManagementMode::kNoOverride),
+  EXPECT_EQ(SecureDnsConfig::kModeAutomatic, secure_dns_mode);
+  EXPECT_EQ(static_cast<int>(SecureDnsConfig::ManagementMode::kNoOverride),
             management_mode);
 
   SetPolicyForPolicyKey(
       &policy_map, policy::key::kDnsOverHttpsMode,
-      std::make_unique<base::Value>(chrome_browser_net::kDnsOverHttpsModeOff));
+      std::make_unique<base::Value>(SecureDnsConfig::kModeOff));
   EXPECT_TRUE(GetLastSettingsChangedMessage(
       &secure_dns_mode, &secure_dns_templates, &management_mode));
-  EXPECT_EQ(chrome_browser_net::kDnsOverHttpsModeOff, secure_dns_mode);
-  EXPECT_EQ(static_cast<int>(
-                chrome_browser_net::SecureDnsUiManagementMode::kNoOverride),
+  EXPECT_EQ(SecureDnsConfig::kModeOff, secure_dns_mode);
+  EXPECT_EQ(static_cast<int>(SecureDnsConfig::ManagementMode::kNoOverride),
             management_mode);
 }
 
@@ -290,18 +288,16 @@ IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, OtherPoliciesSet) {
 
   PrefService* local_state = g_browser_process->local_state();
   local_state->SetString(prefs::kDnsOverHttpsMode,
-                         chrome_browser_net::kDnsOverHttpsModeSecure);
+                         SecureDnsConfig::kModeSecure);
 
   std::string secure_dns_mode;
   std::vector<std::string> secure_dns_templates;
   int management_mode;
   EXPECT_TRUE(GetLastSettingsChangedMessage(
       &secure_dns_mode, &secure_dns_templates, &management_mode));
-  EXPECT_EQ(chrome_browser_net::kDnsOverHttpsModeOff, secure_dns_mode);
-  EXPECT_EQ(
-      static_cast<int>(
-          chrome_browser_net::SecureDnsUiManagementMode::kDisabledManaged),
-      management_mode);
+  EXPECT_EQ(SecureDnsConfig::kModeOff, secure_dns_mode);
+  EXPECT_EQ(static_cast<int>(SecureDnsConfig::ManagementMode::kDisabledManaged),
+            management_mode);
 }
 #endif
 
@@ -479,15 +475,16 @@ IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, TemplateValid) {
   args.AppendString("https://example.template/dns-query");
 
   base::HistogramTester histograms;
-  web_ui_.HandleReceivedMessage(kValidateCustomDnsEntry, &args);
+  web_ui_.HandleReceivedMessage(kParseCustomDnsEntry, &args);
   const content::TestWebUI::CallData& call_data = *web_ui_.call_data().back();
   EXPECT_EQ("cr.webUIResponse", call_data.function_name());
   EXPECT_EQ(kWebUiFunctionName, call_data.arg1()->GetString());
   // The request should be successful.
   ASSERT_TRUE(call_data.arg2()->GetBool());
   // The template should be valid.
-  ASSERT_EQ("https://example.template/dns-query",
-            call_data.arg3()->GetString());
+  auto result = call_data.arg3()->GetList();
+  ASSERT_EQ(1u, result.size());
+  EXPECT_EQ(result[0].GetString(), "https://example.template/dns-query");
   histograms.ExpectBucketCount("Net.DNS.UI.ValidationAttemptSuccess", false, 0);
   histograms.ExpectBucketCount("Net.DNS.UI.ValidationAttemptSuccess", true, 1);
 }
@@ -498,14 +495,14 @@ IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, TemplateInvalid) {
   args.AppendString("invalid_template");
 
   base::HistogramTester histograms;
-  web_ui_.HandleReceivedMessage(kValidateCustomDnsEntry, &args);
+  web_ui_.HandleReceivedMessage(kParseCustomDnsEntry, &args);
   const content::TestWebUI::CallData& call_data = *web_ui_.call_data().back();
   EXPECT_EQ("cr.webUIResponse", call_data.function_name());
   EXPECT_EQ(kWebUiFunctionName, call_data.arg1()->GetString());
   // The request should be successful.
   ASSERT_TRUE(call_data.arg2()->GetBool());
   // The template should be invalid.
-  ASSERT_EQ(std::string(), call_data.arg3()->GetString());
+  EXPECT_THAT(call_data.arg3()->GetList(), IsEmpty());
   histograms.ExpectBucketCount("Net.DNS.UI.ValidationAttemptSuccess", false, 1);
   histograms.ExpectBucketCount("Net.DNS.UI.ValidationAttemptSuccess", true, 0);
 }
@@ -516,23 +513,25 @@ IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, MultipleTemplates) {
   args_valid.AppendString(kWebUiFunctionName);
   args_valid.AppendString(
       "https://example1.template/dns    https://example2.template/dns-query");
-  web_ui_.HandleReceivedMessage(kValidateCustomDnsEntry, &args_valid);
+  web_ui_.HandleReceivedMessage(kParseCustomDnsEntry, &args_valid);
   const content::TestWebUI::CallData& call_data_valid =
       *web_ui_.call_data().back();
   EXPECT_EQ("cr.webUIResponse", call_data_valid.function_name());
   EXPECT_EQ(kWebUiFunctionName, call_data_valid.arg1()->GetString());
   // The request should be successful.
   ASSERT_TRUE(call_data_valid.arg2()->GetBool());
-  // Both templates are valid, so validate returns the first.
-  ASSERT_EQ("https://example1.template/dns",
-            call_data_valid.arg3()->GetString());
+  // Both templates should be valid.
+  auto result = call_data_valid.arg3()->GetList();
+  ASSERT_EQ(2u, result.size());
+  EXPECT_EQ(result[0].GetString(), "https://example1.template/dns");
+  EXPECT_EQ(result[1].GetString(), "https://example2.template/dns-query");
   histograms.ExpectBucketCount("Net.DNS.UI.ValidationAttemptSuccess", false, 0);
   histograms.ExpectBucketCount("Net.DNS.UI.ValidationAttemptSuccess", true, 1);
 
   base::ListValue args_invalid;
   args_invalid.AppendString(kWebUiFunctionName);
   args_invalid.AppendString("invalid_template https://example.template/dns");
-  web_ui_.HandleReceivedMessage(kValidateCustomDnsEntry, &args_invalid);
+  web_ui_.HandleReceivedMessage(kParseCustomDnsEntry, &args_invalid);
   const content::TestWebUI::CallData& call_data_invalid =
       *web_ui_.call_data().back();
   EXPECT_EQ("cr.webUIResponse", call_data_invalid.function_name());
@@ -540,7 +539,7 @@ IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, MultipleTemplates) {
   // The request should be successful.
   ASSERT_TRUE(call_data_invalid.arg2()->GetBool());
   // The entry should be invalid.
-  ASSERT_EQ(std::string(), call_data_invalid.arg3()->GetString());
+  EXPECT_THAT(call_data_invalid.arg3()->GetList(), IsEmpty());
   histograms.ExpectBucketCount("Net.DNS.UI.ValidationAttemptSuccess", false, 1);
   histograms.ExpectBucketCount("Net.DNS.UI.ValidationAttemptSuccess", true, 1);
 }
@@ -602,6 +601,59 @@ IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, TemplateProbeFailure) {
   ASSERT_TRUE(call_data_valid.arg2()->GetBool());
   // The probe query should have failed.
   ASSERT_FALSE(call_data_valid.arg3()->GetBool());
+  histograms.ExpectBucketCount("Net.DNS.UI.ProbeAttemptSuccess", false, 1);
+  histograms.ExpectBucketCount("Net.DNS.UI.ProbeAttemptSuccess", true, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(SecureDnsHandlerTest, TemplateProbeDebounce) {
+  auto network_context_hang =
+      std::make_unique<chrome_browser_net::HangingHostResolverNetworkContext>();
+  auto network_context_fail =
+      std::make_unique<chrome_browser_net::FakeHostResolverNetworkContext>(
+          std::vector<chrome_browser_net::FakeHostResolver::SingleResult>(
+              {chrome_browser_net::FakeHostResolver::SingleResult(
+                  net::ERR_NAME_NOT_RESOLVED,
+                  net::ResolveErrorInfo(net::ERR_DNS_MALFORMED_RESPONSE),
+                  chrome_browser_net::FakeHostResolver::
+                      kNoResponse)}) /* current_config_result_list */,
+          std::vector<chrome_browser_net::FakeHostResolver::
+                          SingleResult>() /* google_config_result_list */);
+  base::HistogramTester histograms;
+  base::ListValue args_valid;
+  args_valid.AppendString(kWebUiFunctionName);
+  args_valid.AppendString("https://example.template/dns-query");
+  // Request a probe that will hang.
+  handler_->SetNetworkContextForTesting(network_context_hang.get());
+  web_ui_.HandleReceivedMessage(kProbeCustomDnsTemplate, &args_valid);
+  size_t responses = web_ui_.call_data().size();
+  base::RunLoop().RunUntilIdle();
+  // No response yet from the hanging probe.
+  EXPECT_EQ(responses, web_ui_.call_data().size());
+
+  // Request a probe that will fail.
+  handler_->SetNetworkContextForTesting(network_context_fail.get());
+  web_ui_.HandleReceivedMessage(kProbeCustomDnsTemplate, &args_valid);
+  // The hanging response should now have arrived.
+  EXPECT_EQ(responses + 1, web_ui_.call_data().size());
+  const content::TestWebUI::CallData& first_response =
+      *web_ui_.call_data().back();
+  ASSERT_EQ("cr.webUIResponse", first_response.function_name());
+  ASSERT_EQ(kWebUiFunctionName, first_response.arg1()->GetString());
+  // The cancelled probe should indicate no error.
+  ASSERT_TRUE(first_response.arg2()->GetBool());
+  EXPECT_TRUE(first_response.arg3()->GetBool());
+
+  // Wait for the second response.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(responses + 2, web_ui_.call_data().size());
+  const content::TestWebUI::CallData& second_response =
+      *web_ui_.call_data().back();
+  ASSERT_EQ("cr.webUIResponse", second_response.function_name());
+  ASSERT_EQ(kWebUiFunctionName, second_response.arg1()->GetString());
+  // The second request should have resolved with a failure indication.
+  ASSERT_TRUE(second_response.arg2()->GetBool());
+  EXPECT_FALSE(second_response.arg3()->GetBool());
+  // Only the second response should be counted in the histograms.
   histograms.ExpectBucketCount("Net.DNS.UI.ProbeAttemptSuccess", false, 1);
   histograms.ExpectBucketCount("Net.DNS.UI.ProbeAttemptSuccess", true, 0);
 }

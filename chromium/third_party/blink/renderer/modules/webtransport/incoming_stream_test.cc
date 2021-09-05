@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/test/mock_callback.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_tester.h"
@@ -19,10 +20,9 @@
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 #include "third_party/blink/renderer/core/streams/readable_stream_default_reader.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
-#include "third_party/blink/renderer/modules/webtransport/mock_web_transport_close_proxy.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
+#include "v8/include/v8.h"
 
 namespace blink {
 
@@ -52,11 +52,8 @@ class IncomingStreamTest : public ::testing::Test {
                                        uint32_t capacity = 0) {
     CreateDataPipe(capacity);
     auto* script_state = scope.GetScriptState();
-    DCHECK(!mock_close_proxy_);
-    mock_close_proxy_ =
-        MakeGarbageCollected<StrictMock<MockWebTransportCloseProxy>>();
     auto* incoming_stream = MakeGarbageCollected<IncomingStream>(
-        script_state, mock_close_proxy_, std::move(data_pipe_consumer_));
+        script_state, mock_on_abort_.Get(), std::move(data_pipe_consumer_));
     incoming_stream->Init();
     return incoming_stream;
   }
@@ -125,7 +122,7 @@ class IncomingStreamTest : public ::testing::Test {
     return ret;
   }
 
-  Persistent<MockWebTransportCloseProxy> mock_close_proxy_;
+  base::MockOnceClosure mock_on_abort_;
   mojo::ScopedDataPipeProducerHandle data_pipe_producer_;
   mojo::ScopedDataPipeConsumerHandle data_pipe_consumer_;
 };
@@ -133,9 +130,7 @@ class IncomingStreamTest : public ::testing::Test {
 TEST_F(IncomingStreamTest, Create) {
   V8TestingScope scope;
   auto* incoming_stream = CreateIncomingStream(scope);
-  EXPECT_TRUE(incoming_stream->readable());
-
-  EXPECT_CALL(*mock_close_proxy_, ForgetStream());
+  EXPECT_TRUE(incoming_stream->Readable());
 }
 
 TEST_F(IncomingStreamTest, AbortReading) {
@@ -144,12 +139,12 @@ TEST_F(IncomingStreamTest, AbortReading) {
   auto* incoming_stream = CreateIncomingStream(scope);
   auto* script_state = scope.GetScriptState();
   auto* reader =
-      incoming_stream->readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
-  ScriptPromise reading_aborted = incoming_stream->readingAborted();
+      incoming_stream->Readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
+  ScriptPromise reading_aborted = incoming_stream->ReadingAborted();
 
-  EXPECT_CALL(*mock_close_proxy_, ForgetStream());
+  EXPECT_CALL(mock_on_abort_, Run());
 
-  incoming_stream->abortReading(nullptr);
+  incoming_stream->AbortReading(nullptr);
 
   // Allow the close signal to propagate down the pipe.
   test::RunPendingTasks();
@@ -165,9 +160,22 @@ TEST_F(IncomingStreamTest, AbortReading) {
   abort_tester.WaitUntilSettled();
   EXPECT_TRUE(abort_tester.IsFulfilled());
 
-  // Calling abortReading() does not error the stream, it simply closes it.
+  // Calling AbortReading() does not error the stream, it simply closes it.
   Iterator result = Read(scope, reader);
   EXPECT_TRUE(result.done);
+}
+
+TEST_F(IncomingStreamTest, AbortReadingTwice) {
+  V8TestingScope scope;
+
+  auto* incoming_stream = CreateIncomingStream(scope);
+
+  EXPECT_CALL(mock_on_abort_, Run());
+
+  incoming_stream->AbortReading(nullptr);
+
+  // The second call to AbortReading should be a no-op.
+  incoming_stream->AbortReading(nullptr);
 }
 
 TEST_F(IncomingStreamTest, ReadArrayBuffer) {
@@ -176,13 +184,12 @@ TEST_F(IncomingStreamTest, ReadArrayBuffer) {
   auto* incoming_stream = CreateIncomingStream(scope);
   auto* script_state = scope.GetScriptState();
   auto* reader =
-      incoming_stream->readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
+      incoming_stream->Readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
   WriteToPipe({'A'});
 
   Iterator result = Read(scope, reader);
   EXPECT_FALSE(result.done);
   EXPECT_THAT(result.value, ElementsAre('A'));
-  EXPECT_CALL(*mock_close_proxy_, ForgetStream());
 }
 
 // Reading data followed by a remote close should not lose data.
@@ -192,7 +199,7 @@ TEST_F(IncomingStreamTest, ReadThenClosedWithFin) {
   auto* incoming_stream = CreateIncomingStream(scope);
   auto* script_state = scope.GetScriptState();
   auto* reader =
-      incoming_stream->readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
+      incoming_stream->Readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
   WriteToPipe({'B'});
   incoming_stream->OnIncomingStreamClosed(true);
 
@@ -220,7 +227,7 @@ TEST_F(IncomingStreamTest, ReadThenClosedWithoutFin) {
   auto* incoming_stream = CreateIncomingStream(scope);
   auto* script_state = scope.GetScriptState();
   auto* reader =
-      incoming_stream->readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
+      incoming_stream->Readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
   WriteToPipe({'B'});
   incoming_stream->OnIncomingStreamClosed(false);
 
@@ -259,7 +266,7 @@ TEST_F(IncomingStreamTest, DataPipeResetBeforeClosedWithFin) {
   auto* incoming_stream = CreateIncomingStream(scope);
   auto* script_state = scope.GetScriptState();
   auto* reader =
-      incoming_stream->readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
+      incoming_stream->Readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
   WriteToPipe({'E'});
   ClosePipe();
   incoming_stream->OnIncomingStreamClosed(true);
@@ -278,7 +285,7 @@ TEST_F(IncomingStreamTest, DataPipeResetBeforeClosedWithoutFin) {
   auto* incoming_stream = CreateIncomingStream(scope);
   auto* script_state = scope.GetScriptState();
   auto* reader =
-      incoming_stream->readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
+      incoming_stream->Readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
   WriteToPipe({'F'});
   ClosePipe();
   incoming_stream->OnIncomingStreamClosed(false);
@@ -300,95 +307,13 @@ TEST_F(IncomingStreamTest, DataPipeResetBeforeClosedWithoutFin) {
             "The stream was aborted by the remote server");
 }
 
-// A live stream will be kept alive even if there is no explicit reference.
-// When the underlying connection is shut down, the connection will be swept.
-TEST_F(IncomingStreamTest, GarbageCollection) {
-  V8TestingScope scope;
-
-  WeakPersistent<IncomingStream> incoming_stream;
-
-  {
-    // The readable stream created when creating a IncomingStream creates some
-    // v8 handles. To ensure these are collected, we need to create a handle
-    // scope. This is not a problem for garbage collection in normal operation.
-    v8::HandleScope handle_scope(scope.GetIsolate());
-
-    incoming_stream = CreateIncomingStream(scope);
-  }
-
-  // Pretend the stack is empty. This will avoid accidentally treating any
-  // copies of the |incoming_stream| pointer as references.
-  V8GCController::CollectAllGarbageForTesting(
-      scope.GetIsolate(), v8::EmbedderHeapTracer::EmbedderStackState::kEmpty);
-
-  ASSERT_TRUE(incoming_stream);
-
-  auto* script_state = scope.GetScriptState();
-
-  EXPECT_CALL(*mock_close_proxy_, ForgetStream());
-
-  ScriptPromise cancel_promise;
-  {
-    // Cancelling also creates v8 handles, so we need a new handle scope as
-    // above.
-    v8::HandleScope handle_scope(scope.GetIsolate());
-    cancel_promise =
-        incoming_stream->readable()->cancel(script_state, ASSERT_NO_EXCEPTION);
-  }
-
-  ScriptPromiseTester tester(script_state, cancel_promise);
-  tester.WaitUntilSettled();
-  EXPECT_TRUE(tester.IsFulfilled());
-
-  V8GCController::CollectAllGarbageForTesting(
-      scope.GetIsolate(), v8::EmbedderHeapTracer::EmbedderStackState::kEmpty);
-
-  EXPECT_FALSE(incoming_stream);
-}
-
-TEST_F(IncomingStreamTest, GarbageCollectionRemoteClose) {
-  V8TestingScope scope;
-
-  WeakPersistent<IncomingStream> incoming_stream;
-
-  {
-    v8::HandleScope handle_scope(scope.GetIsolate());
-
-    incoming_stream = CreateIncomingStream(scope);
-  }
-
-  V8GCController::CollectAllGarbageForTesting(
-      scope.GetIsolate(), v8::EmbedderHeapTracer::EmbedderStackState::kEmpty);
-
-  ASSERT_TRUE(incoming_stream);
-
-  // Close the other end of the pipe.
-  ClosePipe();
-
-  test::RunPendingTasks();
-
-  V8GCController::CollectAllGarbageForTesting(
-      scope.GetIsolate(), v8::EmbedderHeapTracer::EmbedderStackState::kEmpty);
-
-  ASSERT_TRUE(incoming_stream);
-
-  incoming_stream->OnIncomingStreamClosed(false);
-
-  test::RunPendingTasks();
-
-  V8GCController::CollectAllGarbageForTesting(
-      scope.GetIsolate(), v8::EmbedderHeapTracer::EmbedderStackState::kEmpty);
-
-  EXPECT_FALSE(incoming_stream);
-}
-
 TEST_F(IncomingStreamTest, WriteToPipeWithPendingRead) {
   V8TestingScope scope;
 
   auto* incoming_stream = CreateIncomingStream(scope);
   auto* script_state = scope.GetScriptState();
   auto* reader =
-      incoming_stream->readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
+      incoming_stream->Readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
   ScriptPromise read_promise = reader->read(script_state, ASSERT_NO_EXCEPTION);
   ScriptPromiseTester tester(script_state, read_promise);
 
@@ -402,7 +327,6 @@ TEST_F(IncomingStreamTest, WriteToPipeWithPendingRead) {
   Iterator result = IteratorFromReadResult(scope, tester.Value().V8Value());
   EXPECT_FALSE(result.done);
   EXPECT_THAT(result.value, ElementsAre('A'));
-  EXPECT_CALL(*mock_close_proxy_, ForgetStream());
 }
 
 }  // namespace

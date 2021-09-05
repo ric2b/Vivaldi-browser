@@ -22,6 +22,10 @@ const base::Feature kConfirmSuggestionRemovals{
 const base::Feature kDismissPromos{"DismissNtpPromos",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
+// If enabled, the OneGooleBar is loaded in an iframe. Otherwise, it is inlined.
+const base::Feature kIframeOneGoogleBar{"IframeOneGoogleBar",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Depends on kRealbox being enabled. If enabled, the NTP "realbox" will be
 // themed like the omnibox (same background/text/selected/hover colors).
 const base::Feature kRealboxMatchOmniboxTheme{
@@ -38,17 +42,22 @@ const base::Feature kRealboxUseGoogleGIcon{"NtpRealboxUseGoogleGIcon",
 const base::Feature kRealbox{"NtpRealbox", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If enabled, shows Vasco suggestion chips in the NTP below fakebox/realbox
-// despite other config.
+// despite other config except DisableSearchSuggestChips below.
 const base::Feature kSearchSuggestChips{"SearchSuggestChips",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
-// If enabled, shows the Doodle notifier spinner next to Google logo on the NTP.
-const base::Feature kDoodleNotifier{"DoodleNotifier",
-                                    base::FEATURE_ENABLED_BY_DEFAULT};
+// If enabled, hides Vasco suggestion chips in the NTP below fakebox/realbox
+// despite other config.
+const base::Feature kDisableSearchSuggestChips{
+    "DisableSearchSuggestChips", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If enabled, the WebUI new tab page will load when a new tab is created
 // instead of the local NTP.
 const base::Feature kWebUI{"NtpWebUI", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If disabled, the realbox will not show on the WebUI new tab page.
+const base::Feature kWebUIRealbox{"WebUIRealbox",
+                                  base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool IsRealboxEnabled() {
   if (!base::FeatureList::IsEnabled(omnibox::kNewSearchFeatures))

@@ -32,16 +32,10 @@
 #include "app/vivaldi_apptools.h"
 #include "ui/views/widget/widget_delegate.h"
 
-DEFINE_UI_CLASS_PROPERTY_TYPE(views::DesktopWindowTreeHostLinux*)
-
 namespace views {
 
 std::list<gfx::AcceleratedWidget>* DesktopWindowTreeHostLinux::open_windows_ =
     nullptr;
-
-DEFINE_UI_CLASS_PROPERTY_KEY(DesktopWindowTreeHostLinux*,
-                             kHostForRootWindow,
-                             nullptr)
 
 namespace {
 
@@ -85,30 +79,13 @@ DesktopWindowTreeHostLinux::DesktopWindowTreeHostLinux(
     : DesktopWindowTreeHostPlatform(native_widget_delegate,
                                     desktop_native_widget_aura) {}
 
-DesktopWindowTreeHostLinux::~DesktopWindowTreeHostLinux() {
-  window()->ClearProperty(kHostForRootWindow);
-}
-
-// static
-aura::Window* DesktopWindowTreeHostLinux::GetContentWindowForWidget(
-    gfx::AcceleratedWidget widget) {
-  auto* host = DesktopWindowTreeHostLinux::GetHostForWidget(widget);
-  return host ? host->GetContentWindow() : nullptr;
-}
-
-// static
-DesktopWindowTreeHostLinux* DesktopWindowTreeHostLinux::GetHostForWidget(
-    gfx::AcceleratedWidget widget) {
-  aura::WindowTreeHost* host =
-      aura::WindowTreeHost::GetForAcceleratedWidget(widget);
-  return host ? host->window()->GetProperty(kHostForRootWindow) : nullptr;
-}
+DesktopWindowTreeHostLinux::~DesktopWindowTreeHostLinux() = default;
 
 // static
 std::vector<aura::Window*> DesktopWindowTreeHostLinux::GetAllOpenWindows() {
   std::vector<aura::Window*> windows(open_windows().size());
   std::transform(open_windows().begin(), open_windows().end(), windows.begin(),
-                 GetContentWindowForWidget);
+                 DesktopWindowTreeHostPlatform::GetContentWindowForWidget);
   return windows;
 }
 
@@ -119,7 +96,7 @@ void DesktopWindowTreeHostLinux::CleanUpWindowList(
     return;
   while (!open_windows_->empty()) {
     gfx::AcceleratedWidget widget = open_windows_->front();
-    func(GetContentWindowForWidget(widget));
+    func(DesktopWindowTreeHostPlatform::GetContentWindowForWidget(widget));
     if (!open_windows_->empty() && open_windows_->front() == widget)
       open_windows_->erase(open_windows_->begin());
   }
@@ -178,8 +155,6 @@ void DesktopWindowTreeHostLinux::Init(const Widget::InitParams& params) {
 
 void DesktopWindowTreeHostLinux::OnNativeWidgetCreated(
     const Widget::InitParams& params) {
-  window()->SetProperty(kHostForRootWindow, this);
-
   CreateNonClientEventFilter();
   DesktopWindowTreeHostPlatform::OnNativeWidgetCreated(params);
 }
@@ -201,6 +176,15 @@ void DesktopWindowTreeHostLinux::InitModalType(ui::ModalType modal_type) {
       // is rare.
       NOTIMPLEMENTED();
   }
+}
+
+Widget::MoveLoopResult DesktopWindowTreeHostLinux::RunMoveLoop(
+    const gfx::Vector2d& drag_offset,
+    Widget::MoveLoopSource source,
+    Widget::MoveLoopEscapeBehavior escape_behavior) {
+  GetContentWindow()->SetCapture();
+  return DesktopWindowTreeHostPlatform::RunMoveLoop(drag_offset, source,
+                                                    escape_behavior);
 }
 
 void DesktopWindowTreeHostLinux::OnDisplayMetricsChanged(
@@ -334,7 +318,7 @@ bool DesktopWindowTreeHostLinux::OnAtkKeyEvent(AtkKeyEventStruct* atk_event) {
 }
 #endif
 
-bool DesktopWindowTreeHostLinux::IsOverrideRedirect() const {
+bool DesktopWindowTreeHostLinux::IsOverrideRedirect(bool is_tiling_wm) const {
   // BrowserDesktopWindowTreeHostLinux implements this for browser windows.
   return false;
 }

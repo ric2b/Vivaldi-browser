@@ -430,6 +430,12 @@
   <message desc="Describes a HTML radio button named 'name' in the unselected state." name="IDS_CHROMEVOX_DESCRIBE_RADIO_UNSELECTED">
     <ph name="name">$1</ph>, radio button unselected
   </message>
+  <message desc="Describes a HTML menu item radio button named 'name' in the selected state." name="IDS_CHROMEVOX_DESCRIBE_MENU_ITEM_RADIO_SELECTED">
+    <ph name="name">$1</ph>, menu item radio button selected
+  </message>
+  <message desc="Describes a HTML menu item radio button named 'name' in the unselected state." name="IDS_CHROMEVOX_DESCRIBE_MENU_ITEM_RADIO_UNSELECTED">
+    <ph name="name">$1</ph>, menu item radio button unselected
+  </message>
   <message desc="Describes a window named 'name'." name="IDS_CHROMEVOX_DESCRIBE_WINDOW">
     <ph name="name">$1</ph>, window
   </message>
@@ -1492,6 +1498,15 @@
   <message desc="Describes columns within tables on the web." name="IDS_CHROMEVOX_ROLE_COLUMN_BRL">
     col
   </message>
+  <message desc="A message spoken when the user switches to the form field control granularity, which allows users to navigate the page one form field control at a time." name="IDS_CHROMEVOX_FORM_FIELD_CONTROL_GRANULARITY">
+    Form field control
+  </message>
+  <message desc="A message spoken when the user switches to the link granularity, which allows users to navigate the page one link at a time." name="IDS_CHROMEVOX_LINK_GRANULARITY">
+    Link
+  </message>
+  <message desc="A message spoken when the user switches to the heading granularity, which allows users to navigate the page one heading at a time." name="IDS_CHROMEVOX_HEADING_GRANULARITY">
+    Heading
+  </message>
   <message desc="A message spoken when the user switches to the line granularity, which allows users to navigate the page one line at a time." name="IDS_CHROMEVOX_LINE_GRANULARITY">
     Line
   </message>
@@ -1503,6 +1518,9 @@
   </message>
   <message desc="Spoken when the search widget first shows." name="IDS_CHROMEVOX_SEARCH_WIDGET_INTRO">
     Find in page
+  </message>
+  <message desc="Instructions on how to use the ChromeVox find in page text input." name="IDS_CHROMEVOX_SEARCH_WIDGET_DESCRIPTION">
+    Type to search the page. Press enter to jump to the result, up or down arrows to browse results, keep typing to change your search, or escape to cancel.
   </message>
   <message desc="Category displayed in the options page under keyboard commands." name="IDS_CHROMEVOX_MODIFIER_KEYS">
     Modifier Keys
@@ -2287,15 +2305,6 @@
   <message desc="Hint for how to start editing a text field while exploring the screen using touch exploration." name="IDS_CHROMEVOX_HINT_DOUBLE_TAP_TO_EDIT">
     Double tap to start editing
   </message>
-  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_TAP2_GESTURE">
-    Tap with two fingers
-  </message>
-  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_TAP4_GESTURE">
-    Tap with four fingers
-  </message>
-  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_CLICK_GESTURE">
-    Double tap with one finger
-  </message>
   <message desc="Describes Learn Mode when the mode is initially entered." name="IDS_CHROMEVOX_LEARN_MODE_INTRO">
     Starting Learn Mode. Press a qwerty key, refreshable braille key, or touch gesture to learn its function. Press control with w or escape to exit.
   </message>
@@ -2879,8 +2888,11 @@
   <message desc="Used to describe capital letters" name="IDS_CHROMEVOX_ANNOUNCE_CAPITAL_LETTER">
     Cap <ph name="letter">$1<ex>A</ex></ph>
   </message>
-  <message desc="The hint text and label for the search bar in the ChromeVox menus" name="IDS_CHROMEVOX_SEARCH_CHROMEVOX_MENUS">
+  <message desc="The placeholder text for the search bar in the ChromeVox menus" name="IDS_CHROMEVOX_SEARCH_CHROMEVOX_MENUS_PLACEHOLDER">
     Search the menus
+  </message>
+  <message desc="The aria-description text for the search bar in the ChromeVox menus" name="IDS_CHROMEVOX_SEARCH_CHROMEVOX_MENUS_DESCRIPTION">
+    Type to search the menus. Use the up and down arrows to cycle through results. Use the left and right arrows to adjust the text caret, and to move between menus.
   </message>
   <message desc="Title displayed in the panel for the search menu." name="IDS_CHROMEVOX_PANEL_SEARCH_MENU">
     Search
@@ -2911,6 +2923,57 @@
   </message>
   <message desc="Announced to alert the user that ChromeVox has no current focus." name="IDS_CHROMEVOX_NO_FOCUS">
     No current ChromeVox focus. Press Alt+Shift+L to go to the launcher.
+  </message>
+  <message desc="Announced to alert the user that ChromeVox has no current focus when using a touch screen." name="IDS_CHROMEVOX_NO_FOCUS_TOUCH">
+    No current ChromeVox focus. Touch explore to find items.
+  </message>
+  <message desc="Labels the checkbox on the options page that enables or disables Smart Sticky Mode. The label explains how the feature works." name="IDS_CHROMEVOX_OPTIONS_SMART_STICKY_MODE">
+    Turn off sticky mode when editing text (Smart Sticky Mode)
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPEUP1_GESTURE">
+    Swipe one finger up
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPEDOWN1_GESTURE">
+    Swipe one finger down
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPELEFT1_GESTURE">
+    Swipe one finger left
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPERIGHT1_GESTURE">
+    Swipe one finger right
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPEUP2_GESTURE">
+    Swipe two fingers up
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPEDOWN2_GESTURE">
+    Swipe two fingers down
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPELEFT2_GESTURE">
+    Swipe two fingers left
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPERIGHT2_GESTURE">
+    Swipe two fingers right
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPEUP3_GESTURE">
+    Swipe three fingers up
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPEDOWN3_GESTURE">
+    Swipe three fingers down
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPELEFT3_GESTURE">
+    Swipe three fingers left
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPERIGHT3_GESTURE">
+    Swipe three fingers right
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_TAP2_GESTURE">
+    Tap with two fingers
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_TAP4_GESTURE">
+    Tap with four fingers
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_CLICK_GESTURE">
+    Double tap with one finger
   </message>
 
 </grit-part>

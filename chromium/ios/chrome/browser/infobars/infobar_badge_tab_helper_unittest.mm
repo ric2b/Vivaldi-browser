@@ -55,10 +55,8 @@ class InfobarBadgeTabHelperTest : public PlatformTest {
   // ignored. Returns the added infobar.
   FakeInfobarIOS* AddInfobar(bool has_badge, bool replace_existing = false) {
     std::unique_ptr<FakeInfobarIOS> added_infobar =
-        std::make_unique<FakeInfobarIOS>();
-    added_infobar->fake_ui_delegate().infobarType =
-        has_badge ? kInfobarTypeWithBadge : kInfobarTypeNoBadge;
-    added_infobar->fake_ui_delegate().hasBadge = has_badge;
+        std::make_unique<FakeInfobarIOS>(has_badge ? kInfobarTypeWithBadge
+                                                   : kInfobarTypeNoBadge);
     FakeInfobarIOS* infobar = added_infobar.get();
     InfoBarManagerImpl::FromWebState(&web_state_)
         ->AddInfoBar(std::move(added_infobar), replace_existing);
@@ -81,7 +79,7 @@ TEST_F(InfobarBadgeTabHelperTest, TestInfobarBadgeState) {
   // Add a badge-supporting infobar to the InfobarManager to create the badge
   // item.
   FakeInfobarIOS* infobar = AddInfobar(/*has_badge=*/true);
-  InfobarType added_type = infobar->fake_ui_delegate().infobarType;
+  InfobarType added_type = infobar->infobar_type();
   // Simulate presenting the banner UI and verify that the badge state is sent
   // to the delegate.
   tab_helper()->UpdateBadgeForInfobarBannerPresented(added_type);
@@ -105,8 +103,7 @@ TEST_F(InfobarBadgeTabHelperTest, TestInfobarBadgeState) {
 TEST_F(InfobarBadgeTabHelperTest, TestInfobarBadgeStateDeprecated) {
   // Add a badge-supporting infobar to the InfobarManager to create the badge
   // item.
-  InfobarType added_type =
-      AddInfobar(/*has_badge=*/true)->fake_ui_delegate().infobarType;
+  InfobarType added_type = AddInfobar(/*has_badge=*/true)->infobar_type();
   // Simulate presenting the banner UI and verify that the badge state is sent
   // to the delegate.
   tab_helper()->UpdateBadgeForInfobarBannerPresented(added_type);
@@ -128,8 +125,7 @@ TEST_F(InfobarBadgeTabHelperTest, TestInfobarBadgeStateDeprecated) {
 // Tests that adding an infobar that doesn't support badges does not notify the
 // delegate of BadgeItem creation.
 TEST_F(InfobarBadgeTabHelperTest, TestInfobarBadgeStateNoBadge) {
-  InfobarType added_type =
-      AddInfobar(/*has_badge=*/false)->fake_ui_delegate().infobarType;
+  InfobarType added_type = AddInfobar(/*has_badge=*/false)->infobar_type();
   EXPECT_FALSE(
       [delegate_ itemForBadgeType:BadgeTypeForInfobarType(added_type)]);
 }
@@ -139,8 +135,7 @@ TEST_F(InfobarBadgeTabHelperTest, TestInfobarBadgeStateNoBadge) {
 TEST_F(InfobarBadgeTabHelperTest, TestInfobarBadgeOnBannerDismissal) {
   // Add a badge-supporting infobar to the InfobarManager to create the badge
   // item, then simulate presentation and dismissal.
-  InfobarType added_type =
-      AddInfobar(/*has_badge=*/true)->fake_ui_delegate().infobarType;
+  InfobarType added_type = AddInfobar(/*has_badge=*/true)->infobar_type();
   tab_helper()->UpdateBadgeForInfobarBannerPresented(added_type);
   tab_helper()->UpdateBadgeForInfobarBannerDismissed(added_type);
   // Verify that the BadgeItem was not removed and that its state is dismissed.
@@ -156,7 +151,7 @@ TEST_F(InfobarBadgeTabHelperTest, TestInfobarBadgeOnBannerAccepted) {
   // Add a badge-supporting infobar to the InfobarManager to create the badge
   // item, then simulate presentation, acceptance, and dismissal.
   FakeInfobarIOS* infobar = AddInfobar(/*has_badge=*/true);
-  InfobarType added_type = infobar->fake_ui_delegate().infobarType;
+  InfobarType added_type = infobar->infobar_type();
   tab_helper()->UpdateBadgeForInfobarBannerPresented(added_type);
   infobar->set_accepted(true);
   tab_helper()->UpdateBadgeForInfobarBannerDismissed(added_type);
@@ -172,8 +167,7 @@ TEST_F(InfobarBadgeTabHelperTest, TestInfobarBadgeOnBannerAccepted) {
 TEST_F(InfobarBadgeTabHelperTest, TestInfobarBadgeOnBannerAcceptedDeprecated) {
   // Add a badge-supporting infobar to the InfobarManager to create the badge
   // item, then simulate presentation, acceptance, and dismissal.
-  InfobarType added_type =
-      AddInfobar(/*has_badge=*/true)->fake_ui_delegate().infobarType;
+  InfobarType added_type = AddInfobar(/*has_badge=*/true)->infobar_type();
   tab_helper()->UpdateBadgeForInfobarBannerPresented(added_type);
   tab_helper()->UpdateBadgeForInfobarAccepted(added_type);
   tab_helper()->UpdateBadgeForInfobarBannerDismissed(added_type);
@@ -189,7 +183,7 @@ TEST_F(InfobarBadgeTabHelperTest, TestInfobarBadgeOnInfobarDestruction) {
   // Add a badge-supporting infobar to the InfobarManager to create the badge
   // item, then simulate presentation and dismissal.
   FakeInfobarIOS* added_infobar = AddInfobar(/*has_badge=*/true);
-  InfobarType added_type = added_infobar->fake_ui_delegate().infobarType;
+  InfobarType added_type = added_infobar->infobar_type();
   tab_helper()->UpdateBadgeForInfobarBannerPresented(added_type);
   tab_helper()->UpdateBadgeForInfobarBannerDismissed(added_type);
   ASSERT_TRUE([delegate_ itemForBadgeType:BadgeTypeForInfobarType(added_type)]);

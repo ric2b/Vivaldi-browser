@@ -299,9 +299,7 @@ EventTarget* EventTarget::Create(ScriptState* script_state) {
 }
 
 inline LocalDOMWindow* EventTarget::ExecutingWindow() {
-  if (ExecutionContext* context = GetExecutionContext())
-    return context->ExecutingWindow();
-  return nullptr;
+  return DynamicTo<LocalDOMWindow>(GetExecutionContext());
 }
 
 bool EventTarget::IsTopLevelNode() {
@@ -342,8 +340,7 @@ void EventTarget::SetDefaultAddEventListenerOptions(
     }
   }
 
-  if (RuntimeEnabledFeatures::PassiveDocumentEventListenersEnabled() &&
-      IsTouchScrollBlockingEvent(event_type)) {
+  if (IsTouchScrollBlockingEvent(event_type)) {
     if (!options->hasPassive() && IsTopLevelNode()) {
       options->setPassive(true);
       options->SetPassiveForcedForDocumentTarget(true);
@@ -366,11 +363,9 @@ void EventTarget::SetDefaultAddEventListenerOptions(
             executing_window->document(),
             WebFeature::kAddDocumentLevelPassiveDefaultWheelEventListener);
       }
-      if (RuntimeEnabledFeatures::PassiveDocumentWheelEventListenersEnabled()) {
-        options->setPassive(true);
-        options->SetPassiveForcedForDocumentTarget(true);
-        return;
-      }
+      options->setPassive(true);
+      options->SetPassiveForcedForDocumentTarget(true);
+      return;
     }
   }
 

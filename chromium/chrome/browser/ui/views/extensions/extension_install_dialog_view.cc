@@ -22,6 +22,7 @@
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/extensions/expandable_container_view.h"
 #include "chrome/browser/ui/views/extensions/extension_permissions_view.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -200,10 +201,13 @@ ExtensionInstallDialogView::ExtensionInstallDialogView(
       prompt_(std::move(prompt)),
       title_(prompt_->GetDialogTitle()),
       scroll_view_(nullptr),
-      handled_result_(false),
       install_button_enabled_(false),
       withhold_permissions_checkbox_(nullptr) {
   DCHECK(prompt_->extension());
+
+  extensions::ExtensionRegistry* extension_registry =
+      extensions::ExtensionRegistry::Get(profile_);
+  extension_registry_observer_.Add(extension_registry);
 
   int buttons = prompt_->GetDialogButtons();
   DCHECK(buttons & ui::DIALOG_BUTTON_CANCEL);
@@ -217,25 +221,27 @@ ExtensionInstallDialogView::ExtensionInstallDialogView(
     default_button = ui::DIALOG_BUTTON_OK;
 #endif
 
-  DialogDelegate::SetDefaultButton(default_button);
-  DialogDelegate::SetButtons(buttons);
-  DialogDelegate::set_draggable(true);
+  SetDefaultButton(default_button);
+  SetButtons(buttons);
+  SetAcceptCallback(base::BindOnce(
+      &ExtensionInstallDialogView::OnDialogAccepted, base::Unretained(this)));
+  SetCancelCallback(base::BindOnce(
+      &ExtensionInstallDialogView::OnDialogCanceled, base::Unretained(this)));
+  set_draggable(true);
   if (prompt_->has_webstore_data()) {
     auto store_link = std::make_unique<views::Link>(
         l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_STORE_LINK));
     store_link->set_callback(base::BindRepeating(
         &ExtensionInstallDialogView::LinkClicked, base::Unretained(this)));
-    DialogDelegate::SetExtraView(std::move(store_link));
+    SetExtraView(std::move(store_link));
   } else if (prompt_->ShouldDisplayWithholdingUI()) {
     withhold_permissions_checkbox_ =
-        DialogDelegate::SetExtraView(std::make_unique<views::Checkbox>(
+        SetExtraView(std::make_unique<views::Checkbox>(
             l10n_util::GetStringUTF16(IDS_EXTENSION_WITHHOLD_PERMISSIONS)));
   }
 
-  DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_OK,
-                                   prompt_->GetAcceptButtonLabel());
-  DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
-                                   prompt_->GetAbortButtonLabel());
+  SetButtonLabel(ui::DIALOG_BUTTON_OK, prompt_->GetAcceptButtonLabel());
+  SetButtonLabel(ui::DIALOG_BUTTON_CANCEL, prompt_->GetAbortButtonLabel());
   set_close_on_deactivate(false);
   CreateContents();
 
@@ -245,10 +251,8 @@ ExtensionInstallDialogView::ExtensionInstallDialogView(
 }
 
 ExtensionInstallDialogView::~ExtensionInstallDialogView() {
-  if (!handled_result_ && !done_callback_.is_null()) {
-    std::move(done_callback_)
-        .Run(ExtensionInstallPrompt::Result::USER_CANCELED);
-  }
+  if (done_callback_)
+    OnDialogCanceled();
 }
 
 void ExtensionInstallDialogView::SetInstallButtonDelayForTesting(
@@ -294,8 +298,8 @@ void ExtensionInstallDialogView::AddedToWidget() {
   views::ColumnSet* column_set = layout->AddColumnSet(kTitleColumnSetId);
   constexpr int icon_size = extension_misc::EXTENSION_ICON_SMALL;
   column_set->AddColumn(views::GridLayout::CENTER, views::GridLayout::LEADING,
-                        views::GridLayout::kFixedSize, views::GridLayout::FIXED,
-                        icon_size, 0);
+                        views::GridLayout::kFixedSize,
+                        views::GridLayout::ColumnSize::kFixed, icon_size, 0);
 
   // Equalize padding on the left and the right of the icon.
   column_set->AddPaddingColumn(
@@ -304,7 +308,8 @@ void ExtensionInstallDialogView::AddedToWidget() {
   // Set a resize weight so that the title label will be expanded to the
   // available width.
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::LEADING,
-                        1.0, views::GridLayout::USE_PREF, 0, 0);
+                        1.0, views::GridLayout::ColumnSize::kUsePreferred, 0,
+                        0);
 
   // Scale down to icon size, but allow smaller icons (don't scale up).
   const gfx::ImageSkia* image = prompt_->icon().ToImageSkia();
@@ -362,21 +367,19 @@ void ExtensionInstallDialogView::AddedToWidget() {
   GetBubbleFrameView()->SetTitleView(std::move(title_container));
 }
 
-bool ExtensionInstallDialogView::Cancel() {
-  if (handled_result_)
-    return true;
+void ExtensionInstallDialogView::OnDialogCanceled() {
+  DCHECK(done_callback_);
 
-  handled_result_ = true;
   UpdateInstallResultHistogram(false);
+  prompt_->OnDialogCanceled();
   std::move(done_callback_).Run(ExtensionInstallPrompt::Result::USER_CANCELED);
-  return true;
 }
 
-bool ExtensionInstallDialogView::Accept() {
-  DCHECK(!handled_result_);
+void ExtensionInstallDialogView::OnDialogAccepted() {
+  DCHECK(done_callback_);
 
-  handled_result_ = true;
   UpdateInstallResultHistogram(true);
+  prompt_->OnDialogAccepted();
   // If the prompt had a checkbox element and it was checked we send that along
   // as the result, otherwise we just send a normal accepted result.
   auto result =
@@ -385,7 +388,6 @@ bool ExtensionInstallDialogView::Accept() {
           ? ExtensionInstallPrompt::Result::ACCEPTED_AND_OPTION_CHECKED
           : ExtensionInstallPrompt::Result::ACCEPTED;
   std::move(done_callback_).Run(result);
-  return true;
 }
 
 bool ExtensionInstallDialogView::IsDialogButtonEnabled(
@@ -397,6 +399,29 @@ bool ExtensionInstallDialogView::IsDialogButtonEnabled(
 
 bool ExtensionInstallDialogView::ShouldShowCloseButton() const {
   return true;
+}
+
+void ExtensionInstallDialogView::CloseDialog() {
+  GetWidget()->Close();
+}
+
+void ExtensionInstallDialogView::OnExtensionUninstalled(
+    content::BrowserContext* browser_context,
+    const extensions::Extension* extension,
+    extensions::UninstallReason reason) {
+  // Close the dialog if the extension is uninstalled.
+  if (extension->id() != prompt_->extension()->id())
+    return;
+  CloseDialog();
+}
+
+void ExtensionInstallDialogView::OnShutdown(
+    extensions::ExtensionRegistry* registry) {
+  extensions::ExtensionRegistry* extension_registry =
+      extensions::ExtensionRegistry::Get(profile_);
+  DCHECK_EQ(extension_registry, registry);
+  extension_registry_observer_.Remove(extension_registry);
+  CloseDialog();
 }
 
 ax::mojom::Role ExtensionInstallDialogView::GetAccessibleWindowRole() {
@@ -424,7 +449,7 @@ void ExtensionInstallDialogView::LinkClicked() {
     chrome::ScopedTabbedBrowserDisplayer displayer(profile_);
     displayer.browser()->OpenURL(params);
   }
-  GetWidget()->Close();
+  CloseDialog();
 }
 
 void ExtensionInstallDialogView::CreateContents() {

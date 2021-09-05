@@ -21,6 +21,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "jingle/glue/thread_wrapper.h"
+#include "remoting/base/constants.h"
 #include "remoting/protocol/authenticator.h"
 #include "remoting/protocol/port_allocator_factory.h"
 #include "remoting/protocol/sdp_message.h"
@@ -53,6 +54,8 @@ class ScopedAllowThreadJoinForWebRtcTransport
 
 namespace {
 
+using DataChannelState = webrtc::DataChannelInterface::DataState;
+
 // Delay after candidate creation before sending transport-info message to
 // accumulate multiple candidates. This is an optimization to reduce number of
 // transport-info messages.
@@ -70,6 +73,19 @@ const int kMaxBitrateBps = 1e8;  // 100 Mbps.
 // TODO(lambroslambrou): Remove polling when a native API is provided.
 constexpr base::TimeDelta kRtcStatsPollingInterval =
     base::TimeDelta::FromSeconds(2);
+
+// Frequency of polling the event and control data channels for their current
+// state while waiting for them to close.
+constexpr base::TimeDelta kDefaultDataChannelStatePollingInterval =
+    base::TimeDelta::FromMilliseconds(50);
+
+// The maximum amount of time we will wait for the data channels to close before
+// closing the PeerConnection.
+constexpr base::TimeDelta kWaitForDataChannelsClosedTimeout =
+    base::TimeDelta::FromSeconds(5);
+
+base::TimeDelta data_channel_state_polling_interval =
+    kDefaultDataChannelStatePollingInterval;
 
 #if !defined(NDEBUG)
 // Command line switch used to disable signature verification.
@@ -95,49 +111,80 @@ void UpdateCodecParameters(SdpMessage* sdp_message, bool incoming) {
   }
 }
 
-// Returns true if the RTC stats report indicates a relay connection. If the
-// connection type cannot be determined (which should never happen with a valid
-// RTCStatsReport), nullopt is returned.
-base::Optional<bool> IsConnectionRelayed(
+const webrtc::RTCIceCandidatePairStats* GetSelectedCandidatePair(
     const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report) {
   auto transport_stats_list =
       report->GetStatsOfType<webrtc::RTCTransportStats>();
   if (transport_stats_list.size() != 1) {
     LOG(ERROR) << "Unexpected number of transport stats: "
                << transport_stats_list.size();
-    return base::nullopt;
+    return nullptr;
   }
   std::string selected_candidate_pair_id =
       *(transport_stats_list[0]->selected_candidate_pair_id);
-  const webrtc::RTCStats* selected_candidate_pair =
-      report->Get(selected_candidate_pair_id);
+  const auto* selected_candidate_pair =
+      report->GetAs<webrtc::RTCIceCandidatePairStats>(
+          selected_candidate_pair_id);
   if (!selected_candidate_pair) {
     LOG(ERROR) << "Expected to find RTC stats for id: "
                << selected_candidate_pair;
-    return base::nullopt;
   }
-  std::string local_candidate_id =
-      *(selected_candidate_pair->cast_to<webrtc::RTCIceCandidatePairStats>()
-            .local_candidate_id);
-  const webrtc::RTCStats* local_candidate = report->Get(local_candidate_id);
+  return selected_candidate_pair;
+}
+
+template <typename T>
+const T* GetIceCandidate(
+    const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report,
+    const std::string& candidate_id) {
+  const T* candidate = report->GetAs<T>(candidate_id);
+  if (!candidate) {
+    LOG(ERROR) << "Expected to find RTC stats for id: " << candidate_id;
+  }
+  return candidate;
+}
+
+std::string GetTransportProtocol(
+    const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report) {
+  const webrtc::RTCIceCandidatePairStats* selected_candidate_pair =
+      GetSelectedCandidatePair(report);
+  if (!selected_candidate_pair) {
+    return "api-error";
+  }
+  const auto* local_candidate =
+      GetIceCandidate<webrtc::RTCLocalIceCandidateStats>(
+          report, *selected_candidate_pair->local_candidate_id);
   if (!local_candidate) {
-    LOG(ERROR) << "Expected to find RTC stats for id: " << local_candidate_id;
+    return "api-error";
+  }
+  return *local_candidate->candidate_type == "relay"
+             ? *local_candidate->relay_protocol
+             : *local_candidate->protocol;
+}
+
+// Returns true if the RTC stats report indicates a relay connection. If the
+// connection type cannot be determined (which should never happen with a valid
+// RTCStatsReport), nullopt is returned.
+base::Optional<bool> IsConnectionRelayed(
+    const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report) {
+  const webrtc::RTCIceCandidatePairStats* selected_candidate_pair =
+      GetSelectedCandidatePair(report);
+  if (!selected_candidate_pair) {
     return base::nullopt;
   }
-  std::string local_candidate_type =
-      *(local_candidate->cast_to<webrtc::RTCLocalIceCandidateStats>()
-            .candidate_type);
-  std::string remote_candidate_id =
-      *(selected_candidate_pair->cast_to<webrtc::RTCIceCandidatePairStats>()
-            .remote_candidate_id);
-  const webrtc::RTCStats* remote_candidate = report->Get(remote_candidate_id);
+  const auto* local_candidate =
+      GetIceCandidate<webrtc::RTCLocalIceCandidateStats>(
+          report, *selected_candidate_pair->local_candidate_id);
+  if (!local_candidate) {
+    return base::nullopt;
+  }
+  std::string local_candidate_type = *local_candidate->candidate_type;
+  const auto* remote_candidate =
+      GetIceCandidate<webrtc::RTCRemoteIceCandidateStats>(
+          report, *selected_candidate_pair->remote_candidate_id);
   if (!remote_candidate) {
-    LOG(ERROR) << "Expected to find RTC stats for id: " << remote_candidate_id;
     return base::nullopt;
   }
-  std::string remote_candidate_type =
-      *(remote_candidate->cast_to<webrtc::RTCRemoteIceCandidateStats>()
-            .candidate_type);
+  std::string remote_candidate_type = *remote_candidate->candidate_type;
 
   return local_candidate_type == "relay" || remote_candidate_type == "relay";
 }
@@ -373,12 +420,10 @@ WebrtcTransport::WebrtcTransport(
     : transport_context_(transport_context),
       event_handler_(event_handler),
       handshake_hmac_(crypto::HMAC::SHA256) {
-  transport_context_->set_relay_mode(TransportContext::RelayMode::TURN);
-
   video_encoder_factory_ = new WebrtcDummyVideoEncoderFactory();
   std::unique_ptr<cricket::PortAllocator> port_allocator =
       transport_context_->port_allocator_factory()->CreatePortAllocator(
-          transport_context_);
+          transport_context_, weak_factory_.GetWeakPtr());
 
   // Takes ownership of video_encoder_factory_.
   peer_connection_wrapper_.reset(new PeerConnectionWrapper(
@@ -413,8 +458,15 @@ std::unique_ptr<MessagePipe> WebrtcTransport::CreateOutgoingChannel(
     const std::string& name) {
   webrtc::DataChannelInit config;
   config.reliable = true;
-  return std::make_unique<WebrtcDataStreamAdapter>(
-      peer_connection()->CreateDataChannel(name, &config));
+  auto data_channel = peer_connection()->CreateDataChannel(name, &config);
+  if (name == kControlChannelName) {
+    DCHECK(!control_data_channel_);
+    control_data_channel_ = data_channel;
+  } else if (name == kEventChannelName) {
+    DCHECK(!event_data_channel_);
+    event_data_channel_ = data_channel;
+  }
+  return std::make_unique<WebrtcDataStreamAdapter>(data_channel);
 }
 
 void WebrtcTransport::Start(
@@ -553,6 +605,64 @@ bool WebrtcTransport::ProcessTransportInfo(XmlElement* transport_info) {
   return true;
 }
 
+const SessionOptions& WebrtcTransport::session_options() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return session_options_;
+}
+
+// static
+void WebrtcTransport::SetDataChannelPollingIntervalForTests(
+    base::TimeDelta new_polling_interval) {
+  data_channel_state_polling_interval = new_polling_interval;
+}
+
+// static
+void WebrtcTransport::ClosePeerConnection(
+    rtc::scoped_refptr<webrtc::DataChannelInterface> control_data_channel,
+    rtc::scoped_refptr<webrtc::DataChannelInterface> event_data_channel,
+    std::unique_ptr<PeerConnectionWrapper> peer_connection_wrapper,
+    base::Time start_time = base::Time::Now()) {
+  DCHECK(peer_connection_wrapper);
+
+  if (!control_data_channel || !event_data_channel) {
+    LOG(WARNING) << "One or more data channels were not initialized, "
+                 << "destroying PeerConnection.";
+    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
+        FROM_HERE, peer_connection_wrapper.release());
+    return;
+  }
+
+  if ((base::Time::Now() - start_time) > kWaitForDataChannelsClosedTimeout) {
+    LOG(ERROR) << "Timed out waiting for data channels to close, "
+               << "destroying PeerConnection.";
+    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
+        FROM_HERE, peer_connection_wrapper.release());
+    return;
+  }
+
+  // The data channels should have started the closing process before this
+  // function was called.
+  DCHECK(control_data_channel->state() == DataChannelState::kClosed ||
+         control_data_channel->state() == DataChannelState::kClosing);
+  DCHECK(event_data_channel->state() == DataChannelState::kClosed ||
+         event_data_channel->state() == DataChannelState::kClosing);
+
+  if (event_data_channel->state() == DataChannelState::kClosed &&
+      control_data_channel->state() == DataChannelState::kClosed) {
+    VLOG(0) << "Data channels closed, destroying PeerConnection.";
+    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
+        FROM_HERE, peer_connection_wrapper.release());
+    return;
+  }
+
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&ClosePeerConnection, std::move(control_data_channel),
+                     std::move(event_data_channel),
+                     std::move(peer_connection_wrapper), start_time),
+      data_channel_state_polling_interval);
+}
+
 void WebrtcTransport::Close(ErrorCode error) {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!peer_connection_wrapper_)
@@ -560,16 +670,17 @@ void WebrtcTransport::Close(ErrorCode error) {
 
   weak_factory_.InvalidateWeakPtrs();
 
-  // Close and delete PeerConnection asynchronously. PeerConnection may be on
-  // the stack and so it must be destroyed later.
-  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
-      FROM_HERE, peer_connection_wrapper_.release());
+  ClosePeerConnection(std::move(control_data_channel_),
+                      std::move(event_data_channel_),
+                      std::move(peer_connection_wrapper_));
 
   if (error != OK)
     event_handler_->OnWebrtcTransportError(error);
 }
 
 void WebrtcTransport::ApplySessionOptions(const SessionOptions& options) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  session_options_ = options;
   base::Optional<std::string> video_codec = options.Get("Video-Codec");
   if (video_codec) {
     preferred_video_codec_ = *video_codec;
@@ -713,8 +824,16 @@ void WebrtcTransport::OnRemoveStream(
 void WebrtcTransport::OnDataChannel(
     rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  std::string data_channel_name = data_channel->label();
+  if (data_channel_name == kControlChannelName) {
+    DCHECK(!control_data_channel_);
+    control_data_channel_ = data_channel;
+  } else if (data_channel_name == kEventChannelName) {
+    DCHECK(!event_data_channel_);
+    event_data_channel_ = data_channel;
+  }
   event_handler_->OnWebrtcTransportIncomingDataChannel(
-      data_channel->label(),
+      data_channel_name,
       std::make_unique<WebrtcDataStreamAdapter>(data_channel));
 }
 
@@ -790,6 +909,12 @@ void WebrtcTransport::OnStatsDelivered(
       base::BindOnce(&WebrtcTransport::RequestRtcStats,
                      weak_factory_.GetWeakPtr()),
       kRtcStatsPollingInterval);
+
+  std::string transport_protocol = GetTransportProtocol(report);
+  if (transport_protocol != transport_protocol_) {
+    transport_protocol_ = transport_protocol;
+    event_handler_->OnWebrtcTransportProtocolChanged();
+  }
 
   base::Optional<bool> connection_relayed = IsConnectionRelayed(report);
   if (connection_relayed == connection_relayed_) {

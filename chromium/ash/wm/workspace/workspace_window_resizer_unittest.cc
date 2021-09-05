@@ -17,7 +17,6 @@
 #include "ash/wm/workspace/phantom_window_controller.h"
 #include "ash/wm/workspace_controller.h"
 #include "base/command_line.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
@@ -158,15 +157,13 @@ class WorkspaceWindowResizerTest : public AshTestBase {
   // Returns a string identifying the z-order of each of the known child windows
   // of |parent|.  The returned string constains the id of the known windows and
   // is ordered from topmost to bottomost windows.
-  std::string WindowOrderAsString(aura::Window* parent) const {
-    std::string result;
+  std::vector<int> WindowOrderAsIntVector(aura::Window* parent) const {
+    std::vector<int> result;
     const aura::Window::Windows& windows = parent->children();
     for (aura::Window::Windows::const_reverse_iterator i = windows.rbegin();
          i != windows.rend(); ++i) {
       if (*i == window_.get() || *i == window2_.get() || *i == window3_.get()) {
-        if (!result.empty())
-          result += " ";
-        result += base::NumberToString((*i)->id());
+        result.push_back((*i)->id());
       }
     }
     return result;
@@ -197,10 +194,6 @@ class WorkspaceWindowResizerTest : public AshTestBase {
 
   PhantomWindowController* snap_phantom_window_controller() const {
     return workspace_resizer_->snap_phantom_window_controller_.get();
-  }
-
-  std::vector<aura::Window*> empty_windows() const {
-    return std::vector<aura::Window*>();
   }
 
   void InitTouchResizeWindow(const gfx::Rect& bounds, int window_component) {
@@ -633,10 +626,9 @@ TEST_F(WorkspaceWindowResizerTest, Edge) {
     EXPECT_EQ(root_windows[0], window_->GetRootWindow());
     resizer->CompleteDrag();
     EXPECT_EQ(root_windows[1], window_->GetRootWindow());
-    EXPECT_EQ("0,0 250x" + base::NumberToString(bottom),
-              window_->bounds().ToString());
-    EXPECT_EQ("820,30 400x60",
-              window_state->GetRestoreBoundsInScreen().ToString());
+    EXPECT_EQ(gfx::Rect(250, bottom), window_->bounds());
+    EXPECT_EQ(gfx::Rect(820, 30, 400, 60),
+              window_state->GetRestoreBoundsInScreen());
   }
 
   // Restore the window to clear snapped state.
@@ -658,10 +650,9 @@ TEST_F(WorkspaceWindowResizerTest, Edge) {
         screen_util::GetDisplayWorkAreaBoundsInParent(window_.get()).bottom();
     resizer->CompleteDrag();
     // TODO(varkha): Insets are updated because of http://crbug.com/292238
-    EXPECT_EQ("250,0 250x" + base::NumberToString(bottom),
-              window_->bounds().ToString());
-    EXPECT_EQ("820,30 400x60",
-              window_state->GetRestoreBoundsInScreen().ToString());
+    EXPECT_EQ(gfx::Rect(250, 0, 250, bottom), window_->bounds());
+    EXPECT_EQ(gfx::Rect(820, 30, 400, 60),
+              window_state->GetRestoreBoundsInScreen());
   }
 }
 
@@ -812,7 +803,8 @@ TEST_F(WorkspaceWindowResizerTest, RestackAttached) {
     resizer->Drag(CalculateDragPoint(*resizer, 100, -10), 0);
 
     // 2 should be topmost since it's initially the highest in the stack.
-    EXPECT_EQ("2 1 3", WindowOrderAsString(window_->parent()));
+    const std::vector<int> expected_order = {2, 1, 3};
+    EXPECT_EQ(expected_order, WindowOrderAsIntVector(window_->parent()));
   }
 
   {
@@ -826,7 +818,8 @@ TEST_F(WorkspaceWindowResizerTest, RestackAttached) {
     resizer->Drag(CalculateDragPoint(*resizer, 100, -10), 0);
 
     // 2 should be topmost since it's initially the highest in the stack.
-    EXPECT_EQ("2 3 1", WindowOrderAsString(window_->parent()));
+    const std::vector<int> expected_order = {2, 3, 1};
+    EXPECT_EQ(expected_order, WindowOrderAsIntVector(window_->parent()));
   }
 }
 
@@ -844,8 +837,7 @@ TEST_F(WorkspaceWindowResizerTest, DontDragOffBottom) {
   resizer->Drag(CalculateDragPoint(*resizer, 0, 600), 0);
   int expected_y =
       kRootHeight - WorkspaceWindowResizer::kMinOnscreenHeight - 10;
-  EXPECT_EQ("100," + base::NumberToString(expected_y) + " 300x400",
-            window_->bounds().ToString());
+  EXPECT_EQ(gfx::Rect(100, expected_y, 300, 400), window_->bounds());
 }
 
 // Makes sure we don't allow dragging on the work area with multidisplay.
@@ -874,8 +866,7 @@ TEST_F(WorkspaceWindowResizerTest, DontDragOffBottomWithMultiDisplay) {
     // When the mouse cursor is in the primary display, the window cannot move
     // on non-work area but can get all the way towards the bottom,
     // restricted only by the window height.
-    EXPECT_EQ("100," + base::NumberToString(expected_y) + " 300x20",
-              window_->bounds().ToString());
+    EXPECT_EQ(gfx::Rect(100, expected_y, 300, 20), window_->bounds());
     // Revert the drag in order to not remember the restore bounds.
     resizer->RevertDrag();
   }
@@ -893,8 +884,7 @@ TEST_F(WorkspaceWindowResizerTest, DontDragOffBottomWithMultiDisplay) {
         kRootHeight - WorkspaceWindowResizer::kMinOnscreenHeight - 10;
     // When the mouse cursor is in the primary display, the window cannot move
     // on non-work area with kMinOnscreenHeight margin.
-    EXPECT_EQ("100," + base::NumberToString(expected_y) + " 300x400",
-              window_->bounds().ToString());
+    EXPECT_EQ(gfx::Rect(100, expected_y, 300, 400), window_->bounds());
     resizer->CompleteDrag();
   }
 
@@ -949,9 +939,8 @@ TEST_F(WorkspaceWindowResizerTest, ResizeWindowOutsideLeftWorkArea) {
       window_.get(), gfx::Point(pixels_to_left_border, 0), HTRIGHT));
   ASSERT_TRUE(resizer.get());
   resizer->Drag(CalculateDragPoint(*resizer, -window_width, 0), 0);
-  EXPECT_EQ(base::NumberToString(window_x) + ",100 " +
-                base::NumberToString(kMinimumOnScreenArea - window_x) + "x380",
-            window_->bounds().ToString());
+  EXPECT_EQ(gfx::Rect(window_x, 100, kMinimumOnScreenArea - window_x, 380),
+            window_->bounds());
 }
 
 TEST_F(WorkspaceWindowResizerTest, ResizeWindowOutsideRightWorkArea) {
@@ -967,11 +956,11 @@ TEST_F(WorkspaceWindowResizerTest, ResizeWindowOutsideRightWorkArea) {
       CreateResizerForTest(window_.get(), gfx::Point(window_x, 0), HTLEFT));
   ASSERT_TRUE(resizer.get());
   resizer->Drag(CalculateDragPoint(*resizer, window_width, 0), 0);
-  EXPECT_EQ(base::NumberToString(right - kMinimumOnScreenArea) + ",100 " +
-                base::NumberToString(window_width - pixels_to_right_border +
-                                     kMinimumOnScreenArea) +
-                "x380",
-            window_->bounds().ToString());
+  EXPECT_EQ(
+      gfx::Rect(right - kMinimumOnScreenArea, 100,
+                window_width - pixels_to_right_border + kMinimumOnScreenArea,
+                380),
+      window_->bounds());
 }
 
 TEST_F(WorkspaceWindowResizerTest, ResizeWindowOutsideBottomWorkArea) {
@@ -986,11 +975,9 @@ TEST_F(WorkspaceWindowResizerTest, ResizeWindowOutsideBottomWorkArea) {
       window_.get(), gfx::Point(0, bottom - delta_to_bottom), HTTOP));
   ASSERT_TRUE(resizer.get());
   resizer->Drag(CalculateDragPoint(*resizer, 0, bottom), 0);
-  EXPECT_EQ("100," + base::NumberToString(bottom - kMinimumOnScreenArea) +
-                " 300x" +
-                base::NumberToString(height -
-                                     (delta_to_bottom - kMinimumOnScreenArea)),
-            window_->bounds().ToString());
+  EXPECT_EQ(gfx::Rect(100, bottom - kMinimumOnScreenArea, 300,
+                      height - (delta_to_bottom - kMinimumOnScreenArea)),
+            window_->bounds());
 }
 
 // Verifies that 'outside' check of the resizer take into account the extended
@@ -1010,9 +997,8 @@ TEST_F(WorkspaceWindowResizerTest, DragWindowOutsideRightToSecondaryDisplay) {
       CreateResizerForTest(window_.get(), gfx::Point(window_x, 0), HTCAPTION));
   ASSERT_TRUE(resizer.get());
   resizer->Drag(CalculateDragPoint(*resizer, window_width, 0), 0);
-  EXPECT_EQ(base::NumberToString(right - kMinimumOnScreenArea) + ",100 " +
-                base::NumberToString(window_width) + "x380",
-            window_->bounds().ToString());
+  EXPECT_EQ(gfx::Rect(right - kMinimumOnScreenArea, 100, window_width, 380),
+            window_->bounds());
 
   // With secondary display.  Operation itself is same but doesn't change
   // the position because the window is still within the secondary display.
@@ -1021,9 +1007,8 @@ TEST_F(WorkspaceWindowResizerTest, DragWindowOutsideRightToSecondaryDisplay) {
                                          gfx::Insets(0, 0, 50, 0));
   window_->SetBounds(gfx::Rect(window_x, 100, window_width, 380));
   resizer->Drag(CalculateDragPoint(*resizer, window_width, 0), 0);
-  EXPECT_EQ(base::NumberToString(window_x + window_width) + ",100 " +
-                base::NumberToString(window_width) + "x380",
-            window_->bounds().ToString());
+  EXPECT_EQ(gfx::Rect(window_x + window_width, 100, window_width, 380),
+            window_->bounds());
 }
 
 // Verifies snapping to edges works.
@@ -1931,29 +1916,126 @@ TEST_F(WorkspaceWindowResizerTest, ResizeHistogram) {
   histograms.ExpectTotalCount("Ash.InteractiveWindowResize.TimeToPresent", 1);
 }
 
-using MultiDisplayWorkspaceWindowResizerTest = AshTestBase;
+// Tests that windows that are snapped and maximized have to be dragged a
+// certain amount before the window bounds change.
+TEST_F(WorkspaceWindowResizerTest, DraggingThresholdForSnappedAndMaximized) {
+  UpdateDisplay("800x648");
+  const gfx::Rect restore_bounds(30, 30, 300, 300);
+  window_->SetBounds(restore_bounds);
 
-// Makes sure that window drag magnetism still works when a window is dragged
-// between different displays.
-TEST_F(MultiDisplayWorkspaceWindowResizerTest, Magnetism) {
-  UpdateDisplay("800x600,500x500");
-  auto roots = Shell::GetAllRootWindows();
-  ASSERT_EQ(2u, roots.size());
+  // Test that on a normal window, there is no minimal drag amount.
+  std::unique_ptr<WindowResizer> resizer(
+      CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
+  resizer->Drag(gfx::PointF(1.f, 1.f), 0);
+  EXPECT_EQ(gfx::Rect(31, 31, 300, 300), window_->bounds());
 
-  // Create two windows one on the first display, and the other on the second.
-  auto win1 = CreateToplevelTestWindow(gfx::Rect(10, 10, 100, 100), /*id=*/1);
-  auto win2 = CreateToplevelTestWindow(gfx::Rect(1250, 100, 50, 50), /*id=*/2);
-  EXPECT_EQ(win1->GetRootWindow(), roots[0]);
-  EXPECT_EQ(win2->GetRootWindow(), roots[1]);
+  // End the drag in a snap region, and verify the window has snapped.
+  resizer->Drag(gfx::PointF(2.f, 2.f), 0);
+  resizer->CompleteDrag();
+  auto* window_state = WindowState::Get(window_.get());
+  ASSERT_TRUE(window_state->IsSnapped());
+  const gfx::Rect snapped_bounds(400, 600);
+  EXPECT_EQ(snapped_bounds, window_->bounds());
 
-  std::unique_ptr<WindowResizer> resizer = CreateWindowResizer(
-      win1.get(), gfx::PointF(), HTCAPTION, ::wm::WINDOW_MOVE_SOURCE_MOUSE);
-  ASSERT_TRUE(resizer.get());
+  resizer.reset();
+  resizer.reset(CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
 
-  // Drag `win1` such that its right edge is 5 pixels from the left edge of
-  // `win2`. Expect that `win1` will snap to `win2` on its left edge.
-  resizer->Drag(CalculateDragPoint(*resizer, 1135, 0), /*event_flags=*/0);
-  EXPECT_EQ(gfx::Rect(1150, 10, 100, 100), win1->GetBoundsInScreen());
+  // Tests that small drags do not change the window bounds.
+  resizer->Drag(gfx::PointF(1.f, 1.f), 0);
+  EXPECT_EQ(snapped_bounds, window_->bounds());
+
+  // A large enough drag will change the window bounds to its restore bounds.
+  resizer->Drag(gfx::PointF(10.f, 10.f), 0);
+  EXPECT_EQ(restore_bounds.size(), window_->bounds().size());
+
+  // Tests that on drag end, the window will get restored. Make sure the drag
+  // does not end in a snap region.
+  resizer->Drag(gfx::PointF(200.f, 200.f), 0);
+  resizer->CompleteDrag();
+  EXPECT_EQ(restore_bounds.size(), window_->bounds().size());
+  EXPECT_TRUE(window_state->IsNormalStateType());
+
+  // Tests the same things as the snapped window case for the maximized window
+  // case.
+  window_state->Maximize();
+  const gfx::Rect maximized_bounds(800, 600);
+  EXPECT_EQ(maximized_bounds, window_->bounds());
+  resizer.reset();
+  resizer.reset(CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
+  resizer->Drag(gfx::PointF(1.f, 1.f), 0);
+  EXPECT_EQ(maximized_bounds, window_->bounds());
+  resizer->Drag(gfx::PointF(10.f, 10.f), 0);
+  EXPECT_EQ(restore_bounds.size(), window_->bounds().size());
+  resizer->Drag(gfx::PointF(200.f, 200.f), 0);
+  resizer->CompleteDrag();
+  EXPECT_EQ(restore_bounds.size(), window_->bounds().size());
+  EXPECT_TRUE(window_state->IsNormalStateType());
+}
+
+// Tests dragging a window and snapping it to maximized state.
+TEST_F(WorkspaceWindowResizerTest, DragToSnapMaximize) {
+  UpdateDisplay("800x648");
+  const gfx::Rect restore_bounds(30, 30, 300, 300);
+  window_->SetBounds(restore_bounds);
+  window_->SetProperty(aura::client::kResizeBehaviorKey,
+                       aura::client::kResizeBehaviorCanResize |
+                           aura::client::kResizeBehaviorCanMaximize);
+
+  // Drag to a top region of the display and release. The window should be
+  // maximized.
+  std::unique_ptr<WindowResizer> resizer(
+      CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
+  resizer->Drag(gfx::PointF(400.f, 400.f), 0);
+  resizer->Drag(gfx::PointF(400.f, 2.f), 0);
+  resizer->CompleteDrag();
+  auto* window_state = WindowState::Get(window_.get());
+  ASSERT_TRUE(window_state->IsMaximized());
+
+  // Tests that dragging a maximized window and snapping it back to maximized
+  // state works as expected.
+  resizer.reset();
+  resizer.reset(CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
+
+  // First drag to "unmaximize". The window is still maximized at this point,
+  // but the bounds have shrunk to make it look restored.
+  resizer->Drag(gfx::PointF(200.f, 200.f), 0);
+  EXPECT_TRUE(window_state->IsMaximized());
+  EXPECT_EQ(gfx::Size(300, 300), window_->bounds().size());
+
+  // End the drag in the snap to maximize region. The window should be maximized
+  // and sized to fit the whole work area.
+  resizer->Drag(gfx::PointF(200.f, 2.f), 0);
+  resizer->CompleteDrag();
+  EXPECT_TRUE(window_state->IsMaximized());
+  EXPECT_EQ(gfx::Rect(800, 600), window_->bounds());
+}
+
+TEST_F(WorkspaceWindowResizerTest, DragToMaximizeStartingInSnapRegion) {
+  UpdateDisplay("800x648");
+
+  // Drag starting in the snap to maximize region. If we do not leave it, on
+  // drag release the window will not get maximized.
+  window_->SetBounds(gfx::Rect(200, 200));
+  window_->SetProperty(aura::client::kResizeBehaviorKey,
+                       aura::client::kResizeBehaviorCanResize |
+                           aura::client::kResizeBehaviorCanMaximize);
+
+  std::unique_ptr<WindowResizer> resizer(
+      CreateResizerForTest(window_.get(), gfx::Point(400.f, 1.f), HTCAPTION));
+  resizer->Drag(gfx::PointF(400.f, 5.f), 0);
+  resizer->CompleteDrag();
+  ASSERT_FALSE(WindowState::Get(window_.get())->IsMaximized());
+
+  // This time exit the snap region. On returning and completing the drag, the
+  // window should be maximized.
+  WindowState::Get(window_.get())->Maximize();
+  resizer.reset();
+  resizer.reset(
+      CreateResizerForTest(window_.get(), gfx::Point(400.f, 1.f), HTCAPTION));
+  resizer->Drag(gfx::PointF(400.f, 400.f), 0);
+  resizer->Drag(gfx::PointF(400.f, 5.f), 0);
+  resizer->CompleteDrag();
+  EXPECT_TRUE(WindowState::Get(window_.get())->IsMaximized());
 }
 
 // Makes sure that we are not creating any resizer in kiosk mode.
@@ -1978,6 +2060,31 @@ TEST_F(WorkspaceWindowResizerTest, DoNotCreateResizerIfNotActiveSession) {
   GetSessionControllerClient()->SetSessionState(
       session_manager::SessionState::ACTIVE);
   EXPECT_TRUE(CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
+}
+
+using MultiDisplayWorkspaceWindowResizerTest = AshTestBase;
+
+// Makes sure that window drag magnetism still works when a window is dragged
+// between different displays.
+TEST_F(MultiDisplayWorkspaceWindowResizerTest, Magnetism) {
+  UpdateDisplay("800x600,500x500");
+  auto roots = Shell::GetAllRootWindows();
+  ASSERT_EQ(2u, roots.size());
+
+  // Create two windows one on the first display, and the other on the second.
+  auto win1 = CreateToplevelTestWindow(gfx::Rect(10, 10, 100, 100), /*id=*/1);
+  auto win2 = CreateToplevelTestWindow(gfx::Rect(1250, 100, 50, 50), /*id=*/2);
+  EXPECT_EQ(win1->GetRootWindow(), roots[0]);
+  EXPECT_EQ(win2->GetRootWindow(), roots[1]);
+
+  std::unique_ptr<WindowResizer> resizer = CreateWindowResizer(
+      win1.get(), gfx::PointF(), HTCAPTION, ::wm::WINDOW_MOVE_SOURCE_MOUSE);
+  ASSERT_TRUE(resizer.get());
+
+  // Drag `win1` such that its right edge is 5 pixels from the left edge of
+  // `win2`. Expect that `win1` will snap to `win2` on its left edge.
+  resizer->Drag(CalculateDragPoint(*resizer, 1135, 0), /*event_flags=*/0);
+  EXPECT_EQ(gfx::Rect(1150, 10, 100, 100), win1->GetBoundsInScreen());
 }
 
 }  // namespace ash

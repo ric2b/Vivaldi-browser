@@ -27,13 +27,14 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
   const ClientSettings& GetSettings() override;
   const GURL& GetCurrentURL() override;
   const GURL& GetDeeplinkURL() override;
+  const GURL& GetScriptURL() override;
   Service* GetService() override;
   WebController* GetWebController() override;
   TriggerContext* GetTriggerContext() override;
   autofill::PersonalDataManager* GetPersonalDataManager() override;
-  WebsiteLoginFetcher* GetWebsiteLoginFetcher() override;
+  WebsiteLoginManager* GetWebsiteLoginManager() override;
   content::WebContents* GetWebContents() override;
-  std::string GetAccountEmailAddress() override;
+  std::string GetEmailAddressForAccessTokenAccount() override;
   std::string GetLocale() override;
   bool EnterState(AutofillAssistantState state) override;
   void SetTouchableElementArea(const ElementAreaProto& element) override;
@@ -51,6 +52,8 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
   void SetCollectUserDataOptions(CollectUserDataOptions* options) override;
   void WriteUserData(
       base::OnceCallback<void(UserData*, UserData::FieldChange*)>) override;
+  void WriteUserModel(
+      base::OnceCallback<void(UserModel*)> write_callback) override;
   void SetViewportMode(ViewportMode mode) override;
   ViewportMode GetViewportMode() override;
   void SetPeekMode(ConfigureBottomSheetProto::PeekMode peek_mode) override;
@@ -66,8 +69,8 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
   bool HasNavigationError() override;
   bool IsNavigatingToNewDocument() override;
   void RequireUI() override;
-  void AddListener(Listener* listener) override;
-  void RemoveListener(Listener* listener) override;
+  void AddListener(NavigationListener* listener) override;
+  void RemoveListener(NavigationListener* listener) override;
   void SetExpandSheetForPromptAction(bool expand) override;
   void SetBrowseDomainsWhitelist(std::vector<std::string> domains) override;
 
@@ -138,7 +141,7 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
   std::unique_ptr<UserData> payment_request_info_;
   bool navigating_to_new_document_ = false;
   bool navigation_error_ = false;
-  std::set<ScriptExecutorDelegate::Listener*> listeners_;
+  std::set<ScriptExecutorDelegate::NavigationListener*> listeners_;
   ViewportMode viewport_mode_ = ViewportMode::NO_RESIZE;
   ConfigureBottomSheetProto::PeekMode peek_mode_ =
       ConfigureBottomSheetProto::HANDLE;

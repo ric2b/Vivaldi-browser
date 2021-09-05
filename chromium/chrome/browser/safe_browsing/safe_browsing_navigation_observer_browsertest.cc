@@ -24,6 +24,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/download_manager.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -208,7 +209,7 @@ class SBNavigationObserverBrowserTest : public InProcessBrowserTest {
                                                  false);
     content::DownloadManager* manager =
         content::BrowserContext::GetDownloadManager(browser()->profile());
-    DownloadPrefs::FromDownloadManager(manager)->ResetAutoOpen();
+    DownloadPrefs::FromDownloadManager(manager)->ResetAutoOpenByUser();
 
     return true;
   }
@@ -2338,8 +2339,9 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
           SafeBrowsingNavigationObserverManager::NAVIGATION_EVENT_NOT_FOUND));
 }
 
+// Disabled due to flake: https://crbug.com/1048623
 IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
-                       AppendRecentNavigationsToEmptyReferrerChain) {
+                       DISABLED_AppendRecentNavigationsToEmptyReferrerChain) {
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL(kSingleFrameTestURL));
   GURL initial_url = embedded_test_server()->GetURL(kSingleFrameTestURL);

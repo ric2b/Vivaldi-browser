@@ -407,6 +407,13 @@ cr.define('cr.ui', function() {
   };
 
   /**
+   * Click on the primary action button ("Next" usually).
+   */
+  Oobe.clickGaiaPrimaryButtonForTesting = function() {
+    $('gaia-signin').clickPrimaryButtonForTesting();
+  };
+
+  /**
    * Sets the number of users on the views login screen.
    * @param {number} userCount The number of users.
    */
@@ -432,7 +439,14 @@ disableTextSelectAndDrag(function(e) {
 (function() {
 'use strict';
 
-document.addEventListener('DOMContentLoaded', function() {
+function initializeOobe() {
+  if (document.readyState === 'loading')
+    return;
+  document.removeEventListener('DOMContentLoaded', initializeOobe);
+
+  // TODO(crbug.com/1082670): Remove excessive logging after investigation.
+  console.warn('initializing OOBE');
+
   try {
     Oobe.initialize();
   } finally {
@@ -444,11 +458,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // readyForTesting even on failures, just to make test bots happy.
     Oobe.readyForTesting = true;
   }
-});
+}
 
 // Install a global error handler so stack traces are included in logs.
 window.onerror = function(message, file, line, column, error) {
   if (error && error.stack)
     console.error(error.stack);
 };
+
+// TODO(crbug.com/1082670): Remove excessive logging after investigation.
+console.warn('cr_ui loaded');
+
+/**
+ * Final initialization performed after DOM and all scripts have loaded.
+ */
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeOobe);
+} else {
+  initializeOobe();
+}
+
 })();

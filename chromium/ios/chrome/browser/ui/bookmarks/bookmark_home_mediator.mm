@@ -4,13 +4,20 @@
 
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_mediator.h"
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/browser/titled_url_match.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/bookmarks/managed/managed_bookmark_service.h"
+#import "components/prefs/ios/pref_observer_bridge.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_service.h"
+#import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/policy/policy_features.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_consumer.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_shared_state.h"
@@ -35,17 +42,23 @@ namespace {
 const int kMaxBookmarksSearchResults = 50;
 }  // namespace
 
-@interface BookmarkHomeMediator ()<BookmarkHomePromoItemDelegate,
-                                   BookmarkModelBridgeObserver,
-                                   BookmarkPromoControllerDelegate,
-                                   SigninPresenter,
-                                   SyncObserverModelBridge> {
+@interface BookmarkHomeMediator () <BookmarkHomePromoItemDelegate,
+                                    BookmarkModelBridgeObserver,
+                                    BookmarkPromoControllerDelegate,
+                                    PrefObserverDelegate,
+                                    SigninPresenter,
+                                    SyncObserverModelBridge> {
   // Bridge to register for bookmark changes.
   std::unique_ptr<bookmarks::BookmarkModelBridge> _modelBridge;
 
   // Observer to keep track of the signin and syncing status.
   std::unique_ptr<sync_bookmarks::SyncedBookmarksObserverBridge>
       _syncedBookmarksObserver;
+
+  // Pref observer to track changes to prefs.
+  std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
+  // Registrar for pref changes notifications.
+  std::unique_ptr<PrefChangeRegistrar> _prefChangeRegistrar;
 }
 
 // Shared state between Bookmark home classes.
@@ -90,6 +103,20 @@ const int kMaxBookmarksSearchResults = 50;
                                                    delegate:self
                                                   presenter:self];
 
+  _prefChangeRegistrar = std::make_unique<PrefChangeRegistrar>();
+  _prefChangeRegistrar->Init(self.browserState->GetPrefs());
+  _prefObserverBridge.reset(new PrefObserverBridge(self));
+
+  if (IsEditBookmarksIOSEnabled()) {
+    _prefObserverBridge->ObserveChangesForPreference(
+        bookmarks::prefs::kEditBookmarksEnabled, _prefChangeRegistrar.get());
+  }
+
+  if (IsManagedBookmarksEnabled()) {
+    _prefObserverBridge->ObserveChangesForPreference(
+        bookmarks::prefs::kManagedBookmarks, _prefChangeRegistrar.get());
+  }
+
   [self computePromoTableViewData];
   [self computeBookmarkTableViewData];
 }
@@ -100,6 +127,8 @@ const int kMaxBookmarksSearchResults = 50;
   self.browserState = nullptr;
   self.consumer = nil;
   self.sharedState = nil;
+  _prefChangeRegistrar.reset();
+  _prefObserverBridge.reset();
 }
 
 #pragma mark - Initial Model Setup
@@ -179,6 +208,21 @@ const int kMaxBookmarksSearchResults = 50;
     [self.sharedState.tableViewModel
                         addItem:otherItem
         toSectionWithIdentifier:BookmarkHomeSectionIdentifierBookmarks];
+  }
+
+  if (IsManagedBookmarksEnabled()) {
+    // Add "Managed Bookmarks" to the table if it exists.
+    bookmarks::ManagedBookmarkService* managedBookmarkService =
+        ManagedBookmarkServiceFactory::GetForBrowserState(self.browserState);
+    const BookmarkNode* managedNode = managedBookmarkService->managed_node();
+    if (managedNode && managedNode->IsVisible()) {
+      BookmarkHomeNodeItem* managedItem = [[BookmarkHomeNodeItem alloc]
+          initWithType:BookmarkHomeItemTypeBookmark
+          bookmarkNode:managedNode];
+      [self.sharedState.tableViewModel
+                          addItem:managedItem
+          toSectionWithIdentifier:BookmarkHomeSectionIdentifierBookmarks];
+    }
   }
 }
 
@@ -444,6 +488,17 @@ const int kMaxBookmarksSearchResults = 50;
     return;
   }
   [self updateTableViewBackground];
+}
+
+#pragma mark - PrefObserverDelegate
+
+- (void)onPreferenceChanged:(const std::string&)preferenceName {
+  // Editing capability may need to be updated on the bookmarks UI.
+  // Or managed bookmarks contents may need to be updated. 
+  if (preferenceName == bookmarks::prefs::kEditBookmarksEnabled ||
+      preferenceName == bookmarks::prefs::kManagedBookmarks) {
+    [self.consumer refreshContents];
+  }
 }
 
 #pragma mark - Private Helpers

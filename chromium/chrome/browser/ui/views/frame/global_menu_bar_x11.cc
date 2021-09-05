@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -350,7 +350,7 @@ void GlobalMenuBarX11::AddHistoryItemToMenu(std::unique_ptr<HistoryItem> item,
 void GlobalMenuBarX11::GetTopSitesData() {
   DCHECK(top_sites_);
 
-  top_sites_->GetMostVisitedURLs(base::Bind(
+  top_sites_->GetMostVisitedURLs(base::BindOnce(
       &GlobalMenuBarX11::OnTopSitesReceived, weak_ptr_factory_.GetWeakPtr()));
 }
 

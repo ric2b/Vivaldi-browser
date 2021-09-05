@@ -23,11 +23,10 @@ import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
-import org.chromium.url.URI;
+import org.chromium.url.GURL;
 
 /**
  * PaymentHandler coordinator, which owns the component overall, i.e., creates other objects in the
@@ -65,7 +64,7 @@ public class PaymentHandlerCoordinator {
     /**
      * Shows the payment-handler UI.
      *
-     * @param chromeActivity The activity where the UI should be shown.
+     * @param activity The activity where the UI should be shown.
      * @param url The url of the payment handler app, i.e., that of
      *         "PaymentRequestEvent.openWindow(url)".
      * @param isIncognito Whether the tab is in incognito mode.
@@ -74,7 +73,7 @@ public class PaymentHandlerCoordinator {
      * @param uiObserver The {@link PaymentHandlerUiObserver} that observes this Payment Handler UI.
      * @return Whether the payment-handler UI was shown. Can be false if the UI was suppressed.
      */
-    public boolean show(ChromeActivity activity, URI url, boolean isIncognito,
+    public boolean show(ChromeActivity activity, GURL url, boolean isIncognito,
             PaymentHandlerWebContentsObserver webContentsObserver,
             PaymentHandlerUiObserver uiObserver) {
         assert mHider == null : "Already showing payment-handler UI";
@@ -85,7 +84,7 @@ public class PaymentHandlerCoordinator {
                 ViewAndroidDelegate.createBasicDelegate(webContentView), webContentView,
                 activity.getWindowAndroid(), WebContents.createDefaultInternalsHolder());
         webContentsObserver.onWebContentsInitialized(mWebContents);
-        mWebContents.getNavigationController().loadUrl(new LoadUrlParams(url.toString()));
+        mWebContents.getNavigationController().loadUrl(new LoadUrlParams(url.getSpec()));
 
         mToolbarCoordinator = new PaymentHandlerToolbarCoordinator(activity, mWebContents, url);
 
@@ -102,12 +101,11 @@ public class PaymentHandlerCoordinator {
         // Observer is designed to set here rather than in the constructor because
         // PaymentHandlerMediator and PaymentHandlerToolbarCoordinator have mutual dependencies.
         mToolbarCoordinator.setObserver(mediator);
-        ThinWebView thinWebView = ThinWebViewFactory.create(
-                activity, new ActivityWindowAndroid(activity), new ThinWebViewConstraints());
+        ThinWebView thinWebView = ThinWebViewFactory.create(activity, new ThinWebViewConstraints());
         assert webContentView.getParent() == null;
         thinWebView.attachWebContents(mWebContents, webContentView, null);
-        PaymentHandlerView view = new PaymentHandlerView(
-                activity, mWebContents, mToolbarCoordinator.getView(), thinWebView.getView());
+        PaymentHandlerView view = new PaymentHandlerView(activity, mWebContents,
+                mToolbarCoordinator.getView(), thinWebView.getView(), mediator);
         assert mToolbarCoordinator.getToolbarHeightPx() == view.getToolbarHeightPx();
         PropertyModelChangeProcessor changeProcessor =
                 PropertyModelChangeProcessor.create(model, view, PaymentHandlerViewBinder::bind);

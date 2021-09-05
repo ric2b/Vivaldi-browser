@@ -65,8 +65,6 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/spatial_navigation.h"
-#include "third_party/blink/renderer/core/paint/paint_layer.h"
-#include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
@@ -203,6 +201,7 @@ void HTMLSelectElement::SelectMultipleOptionsByPopup(
     }
   }
 
+  select_type_->UpdateTextStyleAndContent();
   SetNeedsValidityCheck();
   if (has_new_selection || !old_selection.IsEmpty()) {
     DispatchInputEvent();
@@ -368,7 +367,11 @@ bool HTMLSelectElement::CanSelectAll() const {
 }
 
 bool HTMLSelectElement::TypeShouldForceLegacyLayout() const {
-  return UsesMenuList();
+  if (UsesMenuList()) {
+    UseCounter::Count(GetDocument(), WebFeature::kLegacyLayoutByMenuList);
+    return true;
+  }
+  return false;
 }
 
 LayoutObject* HTMLSelectElement::CreateLayoutObject(
@@ -523,7 +526,7 @@ void HTMLSelectElement::ScrollToSelection() {
     return;
   if (UsesMenuList())
     return;
-  ScrollToOption(ActiveSelectionEnd());
+  select_type_->ScrollToOption(ActiveSelectionEnd());
   if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
     cache->ListboxActiveIndexChanged(this);
 }
@@ -705,50 +708,6 @@ void HTMLSelectElement::SetSuggestedOption(HTMLOptionElement* option) {
   select_type_->DidSetSuggestedOption(option);
 }
 
-void HTMLSelectElement::ScrollToOption(HTMLOptionElement* option) {
-  if (!option)
-    return;
-  if (UsesMenuList())
-    return;
-  bool has_pending_task = option_to_scroll_to_;
-  // We'd like to keep an HTMLOptionElement reference rather than the index of
-  // the option because the task should work even if unselected option is
-  // inserted before executing scrollToOptionTask().
-  option_to_scroll_to_ = option;
-  if (!has_pending_task) {
-    GetDocument()
-        .GetTaskRunner(TaskType::kUserInteraction)
-        ->PostTask(FROM_HERE, WTF::Bind(&HTMLSelectElement::ScrollToOptionTask,
-                                        WrapPersistent(this)));
-  }
-}
-
-void HTMLSelectElement::ScrollToOptionTask() {
-  HTMLOptionElement* option = option_to_scroll_to_.Release();
-  if (!option || !isConnected())
-    return;
-  // OptionRemoved() makes sure option_to_scroll_to_ doesn't have an option with
-  // another owner.
-  DCHECK_EQ(option->OwnerSelectElement(), this);
-  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kScroll);
-  if (!GetLayoutObject() || UsesMenuList())
-    return;
-  PhysicalRect bounds = option->BoundingBoxForScrollIntoView();
-
-  // The following code will not scroll parent boxes unlike ScrollRectToVisible.
-  auto* box = GetLayoutBox();
-  if (!box->HasOverflowClip())
-    return;
-  DCHECK(box->Layer());
-  DCHECK(box->Layer()->GetScrollableArea());
-  box->Layer()->GetScrollableArea()->ScrollIntoView(
-      bounds,
-      ScrollAlignment::CreateScrollIntoViewParams(
-          ScrollAlignment::ToEdgeIfNeeded(), ScrollAlignment::ToEdgeIfNeeded(),
-          mojom::blink::ScrollType::kProgrammatic, false,
-          mojom::blink::ScrollBehavior::kInstant));
-}
-
 void HTMLSelectElement::OptionSelectionStateChanged(HTMLOptionElement* option,
                                                     bool option_is_selected) {
   DCHECK_EQ(option->OwnerSelectElement(), this);
@@ -798,6 +757,7 @@ bool HTMLSelectElement::ChildrenChangedAllChildrenRemovedNeedsList() const {
 void HTMLSelectElement::OptionInserted(HTMLOptionElement& option,
                                        bool option_is_selected) {
   DCHECK_EQ(option.OwnerSelectElement(), this);
+  option.SetWasOptionInsertedCalled(true);
   SetRecalcListItems();
   if (option_is_selected) {
     SelectOption(&option, IsMultiple() ? 0 : kDeselectOtherOptionsFlag);
@@ -820,6 +780,7 @@ void HTMLSelectElement::OptionInserted(HTMLOptionElement& option,
 }
 
 void HTMLSelectElement::OptionRemoved(HTMLOptionElement& option) {
+  option.SetWasOptionInsertedCalled(false);
   SetRecalcListItems();
   if (option.Selected())
     ResetToDefaultSelection(kResetReasonSelectedOptionRemoved);
@@ -827,8 +788,7 @@ void HTMLSelectElement::OptionRemoved(HTMLOptionElement& option) {
     ResetToDefaultSelection();
   if (last_on_change_option_ == &option)
     last_on_change_option_.Clear();
-  if (option_to_scroll_to_ == &option)
-    option_to_scroll_to_.Clear();
+  select_type_->OptionRemoved(option);
   if (active_selection_anchor_ == &option)
     active_selection_anchor_.Clear();
   if (active_selection_end_ == &option)
@@ -942,11 +902,13 @@ bool HTMLSelectElement::DeselectItemsWithoutValidation(
   }
   bool did_update_selection = false;
   for (auto* const option : GetOptionList()) {
-    if (option != exclude_element) {
-      if (option->Selected())
-        did_update_selection = true;
-      option->SetSelectedState(false);
-    }
+    if (option == exclude_element)
+      continue;
+    if (!option->WasOptionInsertedCalled())
+      continue;
+    if (option->Selected())
+      did_update_selection = true;
+    option->SetSelectedState(false);
   }
   return did_update_selection;
 }
@@ -1083,6 +1045,7 @@ void HTMLSelectElement::ResetImpl() {
     option->SetDirty(false);
   }
   ResetToDefaultSelection();
+  select_type_->UpdateTextStyleAndContent();
   SetNeedsValidityCheck();
 }
 
@@ -1225,7 +1188,7 @@ void HTMLSelectElement::FinishParsingChildren() {
   HTMLFormControlElementWithState::FinishParsingChildren();
   if (UsesMenuList())
     return;
-  ScrollToOption(SelectedOption());
+  select_type_->ScrollToOption(SelectedOption());
   if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
     cache->ListboxActiveIndexChanged(this);
 }
@@ -1251,7 +1214,6 @@ void HTMLSelectElement::Trace(Visitor* visitor) {
   visitor->Trace(last_on_change_option_);
   visitor->Trace(active_selection_anchor_);
   visitor->Trace(active_selection_end_);
-  visitor->Trace(option_to_scroll_to_);
   visitor->Trace(suggested_option_);
   visitor->Trace(select_type_);
   HTMLFormControlElementWithState::Trace(visitor);

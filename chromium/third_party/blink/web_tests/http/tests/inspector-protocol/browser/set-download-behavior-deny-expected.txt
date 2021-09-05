@@ -5,6 +5,7 @@ Downloading via a navigation:
     params : {
         frameId : <string>
         guid : <string>
+        suggestedFilename : hello.txt
         url : http://127.0.0.1:8000/devtools/network/resources/resource.php?download=1
     }
     sessionId : <string>
@@ -35,6 +36,7 @@ Downloading by clicking a link:
     params : {
         frameId : <string>
         guid : <string>
+        suggestedFilename : hello.text
         url : http://127.0.0.1:8000/devtools/network/resources/resource.php
     }
     sessionId : <string>

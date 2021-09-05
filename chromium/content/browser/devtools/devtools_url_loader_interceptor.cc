@@ -337,9 +337,11 @@ class InterceptionJob : public network::mojom::URLLoaderClient,
   }
 
   // network::mojom::URLLoader methods
-  void FollowRedirect(const std::vector<std::string>& removed_headers,
-                      const net::HttpRequestHeaders& modified_headers,
-                      const base::Optional<GURL>& new_url) override;
+  void FollowRedirect(
+      const std::vector<std::string>& removed_headers,
+      const net::HttpRequestHeaders& modified_headers,
+      const net::HttpRequestHeaders& modified_cors_exempt_headers,
+      const base::Optional<GURL>& new_url) override;
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override;
   void PauseReadingBodyFromNet() override;
@@ -893,7 +895,7 @@ Response InterceptionJob::InnerContinueRequest(
     } else {
       // TODO(caseq): report error if other modifications are present.
       state_ = State::kRequestSent;
-      loader_->FollowRedirect({}, {}, base::nullopt);
+      loader_->FollowRedirect({}, {}, {}, base::nullopt);
       return Response::Success();
     }
   }
@@ -902,9 +904,7 @@ Response InterceptionJob::InnerContinueRequest(
     if (modifications->modified_url.isJust()) {
       std::string location = modifications->modified_url.fromJust();
       CancelRequest();
-      auto* headers = response_metadata_->head->headers.get();
-      headers->RemoveHeader("location");
-      headers->AddHeader("location: " + location);
+      response_metadata_->head->headers->SetHeader("location", location);
       GURL redirect_url = create_loader_params_->request.url.Resolve(location);
       if (!redirect_url.is_valid())
         return Response::ServerError("Invalid modified URL");
@@ -1107,7 +1107,7 @@ void InterceptionJob::ProcessSetCookies(const net::HttpResponseHeaders& headers,
           create_loader_params_->request.url,
           create_loader_params_->request.site_for_cookies,
           create_loader_params_->request.request_initiator,
-          (create_loader_params_->request.attach_same_site_cookies ||
+          (create_loader_params_->request.force_ignore_site_for_cookies ||
            should_treat_as_first_party)));
 
   // |this| might be deleted here if |cookies| is empty!
@@ -1117,8 +1117,7 @@ void InterceptionJob::ProcessSetCookies(const net::HttpResponseHeaders& headers,
       base::BarrierClosure(cookies.size(), std::move(callback)));
   for (auto& cookie : cookies) {
     cookie_manager_->SetCanonicalCookie(
-        *cookie, create_loader_params_->request.url.scheme(), options,
-        on_cookie_set);
+        *cookie, create_loader_params_->request.url, options, on_cookie_set);
   }
 }
 
@@ -1256,7 +1255,8 @@ void InterceptionJob::FetchCookies(
       net::cookie_util::ComputeSameSiteContextForRequest(
           request.method, request.url, request.site_for_cookies,
           request.request_initiator,
-          (request.attach_same_site_cookies || should_treat_as_first_party)));
+          (request.force_ignore_site_for_cookies ||
+           should_treat_as_first_party)));
 
   cookie_manager_->GetCookieList(request.url, options, std::move(callback));
 }
@@ -1296,13 +1296,8 @@ void InterceptionJob::Shutdown() {
 void InterceptionJob::FollowRedirect(
     const std::vector<std::string>& removed_headers,
     const net::HttpRequestHeaders& modified_headers,
+    const net::HttpRequestHeaders& modified_cors_exempt_headers,
     const base::Optional<GURL>& new_url) {
-  // TODO(arthursonzogni, juncai): This seems to be correctly implemented, but
-  // not used nor tested so far. Add tests and remove this DCHECK to support
-  // this feature if needed. See https://crbug.com/845683.
-  DCHECK(removed_headers.empty())
-      << "Redirect with removed headers is not supported yet. See "
-         "https://crbug.com/845683";
   DCHECK(!new_url.has_value()) << "Redirect with modified url was not "
                                   "supported yet. crbug.com/845683";
   DCHECK(!waiting_for_resolution_);
@@ -1320,6 +1315,10 @@ void InterceptionJob::FollowRedirect(
   net::RedirectUtil::UpdateHttpRequest(request->url, request->method, info,
                                        removed_headers, modified_headers,
                                        &request->headers, &clear_body);
+  request->cors_exempt_headers.MergeFrom(modified_cors_exempt_headers);
+  for (const std::string& name : removed_headers)
+    request->cors_exempt_headers.RemoveHeader(name);
+
   if (clear_body)
     request->request_body = nullptr;
   request->method = info.new_method;
@@ -1342,6 +1341,7 @@ void InterceptionJob::FollowRedirect(
   if (state_ == State::kRedirectReceived) {
     state_ = State::kRequestSent;
     loader_->FollowRedirect(removed_headers, modified_headers,
+                            modified_cors_exempt_headers,
                             base::nullopt /* new_url */);
     return;
   }

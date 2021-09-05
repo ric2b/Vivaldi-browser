@@ -6,6 +6,8 @@
 #include "ash/home_screen/drag_window_from_shelf_controller.h"
 #include "ash/home_screen/drag_window_from_shelf_controller_test_api.h"
 #include "ash/public/cpp/ash_features.h"
+#include "ash/public/cpp/ash_pref_names.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/contextual_tooltip.h"
 #include "ash/shelf/drag_handle.h"
@@ -17,6 +19,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
+#include "ui/wm/core/window_util.h"
 
 namespace ash {
 namespace {
@@ -63,6 +66,17 @@ class DragHandleContextualNudgeTest : public ShelfLayoutManagerTestBase {
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
+
+class DragHandleContextualNudgeTestA11yPrefs
+    : public DragHandleContextualNudgeTest,
+      public ::testing::WithParamInterface<std::string> {};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    DragHandleContextualNudgeTestA11yPrefs,
+    testing::Values(prefs::kAccessibilityAutoclickEnabled,
+                    prefs::kAccessibilitySpokenFeedbackEnabled,
+                    prefs::kAccessibilitySwitchAccessEnabled));
 
 TEST_F(DragHandleContextualNudgeTest, ShowDragHandleNudgeWithTimer) {
   // Creates a widget to put shelf into in-app state.
@@ -348,6 +362,67 @@ TEST_F(DragHandleContextualNudgeTest, DragHandleNudgeNotShownForHiddenShelf) {
   EXPECT_TRUE(drag_handle->gesture_nudge_target_visibility());
 }
 
+// Tapping the drag handle nudge when auto hide shelf is enabled should hide the
+// drag handle nudge but should not hide the shelf or hotseat.
+TEST_F(DragHandleContextualNudgeTest,
+       DragHandleNudgeTapDoesNotHideAutoHiddenShelf) {
+  // Sets shelf auto hide behavior.
+  GetPrimaryShelf()->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
+
+  TabletModeControllerTestApi().EnterTabletMode();
+
+  // Creates a widget to put shelf into in-app state.
+  views::Widget* widget = CreateTestWidget();
+  widget->Maximize();
+
+  ShelfWidget* const shelf_widget = GetShelfWidget();
+  DragHandle* const drag_handle = shelf_widget->GetDragHandle();
+
+  // The shelf and drag handle should be hidden and the nudge should not be
+  // scheduled because shelf auto hide is set.
+  EXPECT_TRUE(GetPrimaryShelf()->GetAutoHideState() ==
+              ShelfAutoHideState::SHELF_AUTO_HIDE_HIDDEN);
+  EXPECT_FALSE(drag_handle->gesture_nudge_target_visibility());
+  EXPECT_FALSE(drag_handle->has_show_drag_handle_timer_for_testing());
+
+  // Swipe up to show the shelf. This should show the shelf, extend the hotseat,
+  // and schedule the drag handle nudge.
+  SwipeUpOnShelf();
+  EXPECT_TRUE(GetPrimaryShelf()->GetAutoHideState() ==
+              ShelfAutoHideState::SHELF_AUTO_HIDE_SHOWN);
+  EXPECT_EQ(HotseatState::kExtended, GetShelfLayoutManager()->hotseat_state());
+  ASSERT_TRUE(drag_handle->has_show_drag_handle_timer_for_testing());
+  // Firing the show timer should create the nudge set the target visibility for
+  // animations..
+  drag_handle->fire_show_drag_handle_timer_for_testing();
+  EXPECT_TRUE(drag_handle->gesture_nudge_target_visibility());
+  EXPECT_TRUE(drag_handle->drag_handle_nudge() != nullptr);
+
+  // Tapping the drag handle nudge should hide the nudge but not affect the
+  // visibility of the shelf or hotseat.
+  GetEventGenerator()->GestureTapAt(
+      drag_handle->drag_handle_nudge()->GetBoundsInScreen().CenterPoint());
+  EXPECT_FALSE(drag_handle->gesture_nudge_target_visibility());
+  EXPECT_TRUE(GetPrimaryShelf()->GetAutoHideState() ==
+              ShelfAutoHideState::SHELF_AUTO_HIDE_SHOWN);
+  EXPECT_EQ(HotseatState::kExtended, GetShelfLayoutManager()->hotseat_state());
+
+  // Swiping down on shelf should hide the shelf and hotseat.
+  SwipeDownOnShelf();
+  EXPECT_EQ(HotseatState::kHidden, GetShelfLayoutManager()->hotseat_state());
+  EXPECT_TRUE(GetPrimaryShelf()->GetAutoHideState() ==
+              ShelfAutoHideState::SHELF_AUTO_HIDE_HIDDEN);
+
+  // Swiping up on shelf should show the shelf and drag handle but not the
+  // nudge or hotseat.
+  SwipeUpOnShelf();
+  EXPECT_TRUE(GetPrimaryShelf()->GetAutoHideState() ==
+              ShelfAutoHideState::SHELF_AUTO_HIDE_SHOWN);
+  EXPECT_FALSE(drag_handle->has_show_drag_handle_timer_for_testing());
+  EXPECT_TRUE(drag_handle->drag_handle_nudge() == nullptr);
+  EXPECT_EQ(HotseatState::kExtended, GetShelfLayoutManager()->hotseat_state());
+}
+
 // Tests that drag handle show is canceled when the shelf is hidden while the
 // drag handle is scheduled to be shown.
 TEST_F(DragHandleContextualNudgeTest, HidingShelfCancelsDragHandleShow) {
@@ -439,9 +514,8 @@ TEST_F(DragHandleContextualNudgeTest, DragHandleNudgeBoundsInScreen) {
 
   // Verify that nudge widget is centered in shelf.
   gfx::Rect shelf_bounds = shelf_widget->GetWindowBoundsInScreen();
-  gfx::Rect nudge_bounds = drag_handle->drag_handle_nudge_for_testing()
-                               ->label()
-                               ->GetBoundsInScreen();
+  gfx::Rect nudge_bounds =
+      drag_handle->drag_handle_nudge()->label()->GetBoundsInScreen();
   EXPECT_LE(margin_diff(nudge_bounds, shelf_bounds), 1);
 
   // Verify that the nudge vertical bounds - within the shelf bounds, and above
@@ -457,9 +531,7 @@ TEST_F(DragHandleContextualNudgeTest, DragHandleNudgeBoundsInScreen) {
 
   // Verify that nudge widget is centered in shelf.
   shelf_bounds = shelf_widget->GetWindowBoundsInScreen();
-  nudge_bounds = drag_handle->drag_handle_nudge_for_testing()
-                     ->label()
-                     ->GetBoundsInScreen();
+  nudge_bounds = drag_handle->drag_handle_nudge()->label()->GetBoundsInScreen();
   EXPECT_LE(margin_diff(nudge_bounds, shelf_bounds), 1);
 
   // Verify that the nudge vertical bounds - within the shelf bounds, and above
@@ -707,6 +779,114 @@ TEST_F(DragHandleContextualNudgeTest, DragHandleTapShowNudgeInOverview) {
   GetEventGenerator()->GestureTapAt(
       drag_handle->GetBoundsInScreen().CenterPoint());
   EXPECT_TRUE(drag_handle->gesture_nudge_target_visibility());
+}
+
+// Tests that tapping the drag handle in split screen does not show nudge.
+TEST_F(DragHandleContextualNudgeTest,
+       DragHandleTapDoesNotShowNudgeForSplitScreen) {
+  TabletModeControllerTestApi().EnterTabletMode();
+  std::unique_ptr<aura::Window> window =
+      AshTestBase::CreateTestWindow(gfx::Rect(0, 0, 400, 400));
+  wm::ActivateWindow(window.get());
+
+  ShelfWidget* const shelf_widget = GetShelfWidget();
+  DragHandle* const drag_handle = shelf_widget->GetDragHandle();
+
+  // Go into split view mode by first going into overview, and then snapping
+  // the open window on one side.
+  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  overview_controller->StartOverview();
+  SplitViewController* split_view_controller =
+      SplitViewController::Get(shelf_widget->GetNativeWindow());
+  split_view_controller->SnapWindow(window.get(), SplitViewController::LEFT);
+  EXPECT_TRUE(split_view_controller->InSplitViewMode());
+
+  // Tapping the drag handle will not show the drag handle.
+  GetEventGenerator()->GestureTapAt(
+      drag_handle->GetBoundsInScreen().CenterPoint());
+  EXPECT_FALSE(drag_handle->gesture_nudge_target_visibility());
+}
+
+// Tests that entering split screen hides the drag handle nudge.
+TEST_F(DragHandleContextualNudgeTest, DragHandleNudgeHiddenOnSplitScreen) {
+  TabletModeControllerTestApi().EnterTabletMode();
+
+  std::unique_ptr<aura::Window> window =
+      AshTestBase::CreateTestWindow(gfx::Rect(0, 0, 400, 400));
+  wm::ActivateWindow(window.get());
+
+  ShelfWidget* const shelf_widget = GetShelfWidget();
+  DragHandle* const drag_handle = shelf_widget->GetDragHandle();
+
+  // Tapping the drag handle should show the drag handle.
+  GetEventGenerator()->GestureTapAt(
+      drag_handle->GetBoundsInScreen().CenterPoint());
+  EXPECT_TRUE(drag_handle->gesture_nudge_target_visibility());
+
+  // Go into split view mode by first going into overview, and then snapping
+  // the open window on one side.
+  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  overview_controller->StartOverview();
+  SplitViewController* split_view_controller =
+      SplitViewController::Get(shelf_widget->GetNativeWindow());
+  split_view_controller->SnapWindow(window.get(), SplitViewController::LEFT);
+  EXPECT_TRUE(split_view_controller->InSplitViewMode());
+
+  // The drag handle nudge should no longer be visible.
+  EXPECT_FALSE(drag_handle->gesture_nudge_target_visibility());
+}
+
+TEST_P(DragHandleContextualNudgeTestA11yPrefs, HideNudgesForShelfControls) {
+  SCOPED_TRACE(testing::Message() << "Pref=" << GetParam());
+  // Creates a widget to put shelf into in-app state.
+  views::Widget* widget = CreateTestWidget();
+  widget->Maximize();
+  TabletModeControllerTestApi().EnterTabletMode();
+  EXPECT_EQ(ShelfBackgroundType::kInApp, GetShelfWidget()->GetBackgroundType());
+
+  // The drag handle should be showing but the nudge should not. A timer to show
+  // the nudge should be initialized.
+  EXPECT_TRUE(GetShelfWidget()->GetDragHandle()->GetVisible());
+  EXPECT_FALSE(
+      GetShelfWidget()->GetDragHandle()->gesture_nudge_target_visibility());
+  // Firing the timer should show the drag handle nudge.
+  GetShelfWidget()->GetDragHandle()->fire_show_drag_handle_timer_for_testing();
+  EXPECT_TRUE(GetShelfWidget()->GetDragHandle()->GetVisible());
+  EXPECT_TRUE(
+      GetShelfWidget()->GetDragHandle()->gesture_nudge_target_visibility());
+
+  // Enabling accessibility auto click disables gestures and enables shelf
+  // control buttons. In app to home nudge should be hidden.
+  Shell::Get()
+      ->session_controller()
+      ->GetLastActiveUserPrefService()
+      ->SetBoolean(GetParam(), true);
+  EXPECT_TRUE(GetShelfWidget()->GetDragHandle()->GetVisible());
+  EXPECT_FALSE(
+      GetShelfWidget()->GetDragHandle()->gesture_nudge_target_visibility());
+}
+
+TEST_P(DragHandleContextualNudgeTestA11yPrefs, DisableNudgesForShelfControls) {
+  SCOPED_TRACE(testing::Message() << "Pref=" << GetParam());
+  // Turn on accessibility settings to enable shelf controls.
+  Shell::Get()
+      ->session_controller()
+      ->GetLastActiveUserPrefService()
+      ->SetBoolean(GetParam(), true);
+
+  // Creates a widget to put shelf into in-app state.
+  views::Widget* widget = CreateTestWidget();
+  widget->Maximize();
+  TabletModeControllerTestApi().EnterTabletMode();
+  EXPECT_EQ(ShelfBackgroundType::kInApp, GetShelfWidget()->GetBackgroundType());
+  // The drag handle should be showing but the nudge should not. A timer to show
+  // the nudge should not be initialized because shelf controls are on.
+  EXPECT_TRUE(GetShelfWidget()->GetDragHandle()->GetVisible());
+  EXPECT_FALSE(
+      GetShelfWidget()->GetDragHandle()->gesture_nudge_target_visibility());
+  EXPECT_FALSE(GetShelfWidget()
+                   ->GetDragHandle()
+                   ->has_show_drag_handle_timer_for_testing());
 }
 
 }  // namespace ash

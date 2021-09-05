@@ -4,7 +4,6 @@
 
 import("//build/config/buildflags_paint_preview.gni")
 import("//build/config/features.gni")
-import("//build/config/jumbo.gni")
 import("//chrome/common/features.gni")
 import("//components/nacl/features.gni")
 import("//components/offline_pages/buildflags/features.gni")
@@ -42,7 +41,7 @@ grit("resources") {
   }
 }
 
-jumbo_static_library("renderer") {
+static_library("renderer") {
   sources = [
     "benchmarking_extension.cc",
     "benchmarking_extension.h",
@@ -50,12 +49,12 @@ jumbo_static_library("renderer") {
     "browser_exposed_renderer_interfaces.h",
     "chrome_content_renderer_client.cc",
     "chrome_content_renderer_client.h",
+    "chrome_content_settings_agent_delegate.cc",
+    "chrome_content_settings_agent_delegate.h",
     "chrome_render_frame_observer.cc",
     "chrome_render_frame_observer.h",
     "chrome_render_thread_observer.cc",
     "chrome_render_thread_observer.h",
-    "content_settings_agent_impl.cc",
-    "content_settings_agent_impl.h",
     "custom_menu_commands.h",
     "instant_restricted_id_cache.h",
     "loadtimes_extension_bindings.cc",
@@ -64,8 +63,6 @@ jumbo_static_library("renderer") {
     "media/chrome_key_systems.h",
     "media/chrome_key_systems_provider.cc",
     "media/chrome_key_systems_provider.h",
-    "media/chrome_speech_recognition_client.cc",
-    "media/chrome_speech_recognition_client.h",
     "media/flash_embed_rewrite.cc",
     "media/flash_embed_rewrite.h",
     "media/media_feeds.cc",
@@ -128,18 +125,20 @@ jumbo_static_library("renderer") {
 
   defines = []
 
+  public_deps = [ "//components/contextual_search:buildflags" ]
+
   deps = [
     "//chrome:resources",
     "//chrome:strings",
     "//chrome/common",
     "//chrome/common:mojo_bindings",
-    "//chrome/common:search_mojom",
     "//chrome/common/net",
+    "//chrome/common/search:mojo_bindings",
     "//components/autofill/content/renderer",
     "//components/cdm/renderer",
     "//components/content_capture/renderer",
+    "//components/content_settings/renderer",
     "//components/contextual_search/content:renderer",
-    "//components/data_reduction_proxy/content/common",
     "//components/data_reduction_proxy/core/common",
     "//components/dom_distiller/content/renderer",
     "//components/network_hints/renderer",
@@ -273,6 +272,7 @@ jumbo_static_library("renderer") {
       ]
       deps += [
         "//chrome/common/safe_browsing:proto",
+        "//components/safe_browsing/core:client_model_proto",
         "//components/safe_browsing/core:csd_proto",
         "//third_party/smhasher:murmurhash3",
       ]
@@ -344,7 +344,7 @@ jumbo_static_library("renderer") {
       "//media/cast:sender",
       "//services/network/public/cpp",
     ]
-    public_deps = [ "//ipc" ]
+    public_deps += [ "//ipc" ]
   }
   if (enable_extensions) {
     sources += [
@@ -401,6 +401,8 @@ jumbo_static_library("renderer") {
 
   if (!is_android) {
     sources += [
+      "media/chrome_speech_recognition_client.cc",
+      "media/chrome_speech_recognition_client.h",
       "searchbox/search_bouncer.cc",
       "searchbox/search_bouncer.h",
       "searchbox/searchbox.cc",
@@ -440,7 +442,7 @@ jumbo_static_library("renderer") {
   }
 }
 
-jumbo_static_library("test_support") {
+static_library("test_support") {
   testonly = true
   visibility = [ "//chrome/test:test_support" ]
 
@@ -455,7 +457,7 @@ jumbo_static_library("test_support") {
 
   deps = [
     ":renderer",
-    "//chrome/common:search_mojom",
+    "//chrome/common/search:mojo_bindings",
     "//content/test:test_support",
     "//extensions/buildflags",
     "//testing/gmock",

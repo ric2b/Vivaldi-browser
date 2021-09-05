@@ -29,6 +29,15 @@ public class StartSurfaceConfiguration {
     public static final BooleanCachedFieldTrialParameter START_SURFACE_LAST_ACTIVE_TAB_ONLY =
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.START_SURFACE_ANDROID, "show_last_active_tab_only", false);
+    public static final BooleanCachedFieldTrialParameter START_SURFACE_SHOW_STACK_TAB_SWITCHER =
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.START_SURFACE_ANDROID, "show_stack_tab_switcher", false);
+    public static final BooleanCachedFieldTrialParameter START_SURFACE_OPEN_NTP_INSTEAD_OF_START =
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.START_SURFACE_ANDROID, "open_ntp_instead_of_start", false);
+    public static final StringCachedFieldTrialParameter START_SURFACE_OMNIBOX_SCROLL_MODE =
+            new StringCachedFieldTrialParameter(
+                    ChromeFeatureList.START_SURFACE_ANDROID, "omnibox_scroll_mode", "");
     /**
      * @return Whether the Start Surface is enabled.
      */
@@ -47,5 +56,13 @@ public class StartSurfaceConfiguration {
                 && (START_SURFACE_VARIATION.getValue().equals("single")
                         || SharedPreferencesManager.getInstance().readBoolean(
                                 ChromePreferenceKeys.START_SURFACE_SINGLE_PANE_ENABLED_KEY, false));
+    }
+
+    /**
+     *@return Whether the Start Surface Stack Tab Switcher is enabled.
+     */
+    public static boolean isStartSurfaceStackTabSwitcherEnabled() {
+        return isStartSurfaceSinglePaneEnabled()
+                && START_SURFACE_SHOW_STACK_TAB_SWITCHER.getValue();
     }
 }

@@ -7,8 +7,8 @@
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
-#include "chrome/browser/chromeos/extensions/default_web_app_ids.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
+#include "chrome/browser/chromeos/web_applications/default_web_app_ids.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/services/app_service/public/cpp/app_update.h"
 #include "chrome/services/app_service/public/mojom/app_service.mojom.h"
@@ -123,6 +123,10 @@ void RecordDefaultAppLaunch(DefaultAppName default_app_name,
       base::UmaHistogramEnumeration(
           "Apps.DefaultAppLaunch.FromInstalledNotification", default_app_name);
       break;
+    case apps::mojom::LaunchSource::kFromArc:
+      base::UmaHistogramEnumeration("Apps.DefaultAppLaunch.FromArc",
+                                    default_app_name);
+      break;
   }
 }
 
@@ -153,6 +157,7 @@ void RecordBuiltInAppLaunch(apps::BuiltInAppName built_in_app_name,
     case apps::mojom::LaunchSource::kFromMenu:
     case apps::mojom::LaunchSource::kFromInstalledNotification:
     case apps::mojom::LaunchSource::kFromTest:
+    case apps::mojom::LaunchSource::kFromArc:
       break;
   }
 }

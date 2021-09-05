@@ -23,14 +23,12 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/sms_fetcher.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_manager_connection.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "services/service_manager/public/cpp/bind_source_info.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/sms/sms_receiver_destroyed_reason.h"
@@ -43,9 +41,11 @@ using blink::mojom::SmsReceiver;
 using blink::mojom::SmsStatus;
 using std::string;
 using ::testing::_;
+using ::testing::ByMove;
 using ::testing::Invoke;
 using ::testing::NiceMock;
 using ::testing::Return;
+using ::testing::StrictMock;
 using url::Origin;
 
 namespace content {
@@ -64,17 +64,13 @@ const char kTestUrl[] = "https://www.google.com";
 // control the testing environment.
 class Service {
  public:
-  Service(WebContents* web_contents, const Origin& origin) {
-    auto provider = std::make_unique<NiceMock<MockSmsProvider>>();
-    provider_ = provider.get();
-    fetcher_ = static_cast<SmsFetcherImpl*>(
-        SmsFetcher::Get(web_contents->GetBrowserContext()));
-    fetcher_->SetSmsProviderForTesting(std::move(provider));
+  Service(WebContents* web_contents, const Origin& origin)
+      : fetcher_(web_contents->GetBrowserContext(), &provider_) {
     WebContentsImpl* web_contents_impl =
         reinterpret_cast<WebContentsImpl*>(web_contents);
     web_contents_impl->SetDelegate(&delegate_);
     service_ = std::make_unique<SmsService>(
-        fetcher_, origin, web_contents->GetMainFrame(),
+        &fetcher_, origin, web_contents->GetMainFrame(),
         service_remote_.BindNewPipeAndPassReceiver());
   }
 
@@ -82,8 +78,8 @@ class Service {
       : Service(web_contents,
                 web_contents->GetMainFrame()->GetLastCommittedOrigin()) {}
 
-  NiceMock<MockSmsProvider>* provider() { return provider_; }
-  SmsFetcherImpl* fetcher() { return fetcher_; }
+  NiceMock<MockSmsProvider>* provider() { return &provider_; }
+  SmsFetcher* fetcher() { return &fetcher_; }
 
   void CreateSmsPrompt(RenderFrameHost* rfh) {
     EXPECT_CALL(delegate_, CreateSmsPrompt(rfh, _, _, _, _))
@@ -124,13 +120,13 @@ class Service {
   void AbortRequest() { service_remote_->Abort(); }
 
   void NotifyReceive(const GURL& url, const string& otp) {
-    provider_->NotifyReceive(Origin::Create(url), otp);
+    provider_.NotifyReceive(Origin::Create(url), otp);
   }
 
  private:
   NiceMock<MockSmsWebContentsDelegate> delegate_;
-  NiceMock<MockSmsProvider>* provider_;
-  SmsFetcherImpl* fetcher_ = nullptr;
+  NiceMock<MockSmsProvider> provider_;
+  SmsFetcherImpl fetcher_;
   mojo::Remote<blink::mojom::SmsReceiver> service_remote_;
   std::unique_ptr<SmsService> service_;
   base::OnceClosure confirm_callback_;
@@ -175,7 +171,7 @@ TEST_F(SmsServiceTest, Basic) {
 
   service.CreateSmsPrompt(main_rfh());
 
-  EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+  EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
     service.NotifyReceive(GURL(kTestUrl), "hi");
     service.ConfirmPrompt();
   }));
@@ -202,7 +198,7 @@ TEST_F(SmsServiceTest, HandlesMultipleCalls) {
 
     service.CreateSmsPrompt(main_rfh());
 
-    EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+    EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
       service.NotifyReceive(GURL(kTestUrl), "first");
       service.ConfirmPrompt();
     }));
@@ -222,7 +218,7 @@ TEST_F(SmsServiceTest, HandlesMultipleCalls) {
 
     service.CreateSmsPrompt(main_rfh());
 
-    EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+    EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
       service.NotifyReceive(GURL(kTestUrl), "second");
       service.ConfirmPrompt();
     }));
@@ -250,7 +246,7 @@ TEST_F(SmsServiceTest, IgnoreFromOtherOrigins) {
 
   service.CreateSmsPrompt(main_rfh());
 
-  EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+  EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
     // Delivers an SMS from an unrelated origin first and expect the
     // receiver to ignore it.
     service.NotifyReceive(GURL("http://b.com"), "wrong");
@@ -284,7 +280,7 @@ TEST_F(SmsServiceTest, ExpectOneReceiveTwo) {
 
   service.CreateSmsPrompt(main_rfh());
 
-  EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+  EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
     // Delivers two SMSes for the same origin, even if only one was being
     // expected.
     ASSERT_TRUE(service.fetcher()->HasSubscribers());
@@ -323,7 +319,7 @@ TEST_F(SmsServiceTest, AtMostOneSmsRequestPerOrigin) {
   // Expect SMS Prompt to be created once.
   service.CreateSmsPrompt(main_rfh());
 
-  EXPECT_CALL(*service.provider(), Retrieve())
+  EXPECT_CALL(*service.provider(), Retrieve(_))
       .WillOnce(Return())
       .WillOnce(Invoke([&service]() {
         service.NotifyReceive(GURL(kTestUrl), "second");
@@ -373,7 +369,7 @@ TEST_F(SmsServiceTest, SecondRequestDuringPrompt) {
   // Expect SMS Prompt to be created once.
   service.CreateSmsPrompt(main_rfh());
 
-  EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+  EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
     service.NotifyReceive(GURL(kTestUrl), "second");
   }));
 
@@ -412,17 +408,15 @@ TEST_F(SmsServiceTest, CleansUp) {
       reinterpret_cast<WebContentsImpl*>(web_contents());
   web_contents_impl->SetDelegate(&delegate);
 
-  auto provider = std::make_unique<MockSmsProvider>();
-  MockSmsProvider* mock_provider_ptr = provider.get();
-  SmsFetcherImpl fetcher(web_contents()->GetBrowserContext(),
-                         std::move(provider));
+  NiceMock<MockSmsProvider> provider;
+  SmsFetcherImpl fetcher(web_contents()->GetBrowserContext(), &provider);
   mojo::Remote<blink::mojom::SmsReceiver> service;
   SmsService::Create(&fetcher, main_rfh(),
                      service.BindNewPipeAndPassReceiver());
 
   base::RunLoop navigate;
 
-  EXPECT_CALL(*mock_provider_ptr, Retrieve()).WillOnce(Invoke([&navigate]() {
+  EXPECT_CALL(provider, Retrieve(_)).WillOnce(Invoke([&navigate]() {
     navigate.Quit();
   }));
 
@@ -455,7 +449,7 @@ TEST_F(SmsServiceTest, PromptsDialog) {
 
   service.CreateSmsPrompt(main_rfh());
 
-  EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+  EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
     service.NotifyReceive(GURL(kTestUrl), "hi");
     service.ConfirmPrompt();
   }));
@@ -488,7 +482,7 @@ TEST_F(SmsServiceTest, Cancel) {
         loop.Quit();
       }));
 
-  EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+  EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
     service.NotifyReceive(GURL(kTestUrl), "hi");
     service.DismissPrompt();
   }));
@@ -501,9 +495,8 @@ TEST_F(SmsServiceTest, Cancel) {
 TEST_F(SmsServiceTest, CancelForNoDelegate) {
   NavigateAndCommit(GURL(kTestUrl));
 
-  auto provider = std::make_unique<MockSmsProvider>();
-  SmsFetcherImpl fetcher(web_contents()->GetBrowserContext(),
-                         std::move(provider));
+  NiceMock<MockSmsProvider> provider;
+  SmsFetcherImpl fetcher(web_contents()->GetBrowserContext(), &provider);
   mojo::Remote<blink::mojom::SmsReceiver> service;
   SmsService::Create(&fetcher, main_rfh(),
                      service.BindNewPipeAndPassReceiver());
@@ -559,7 +552,7 @@ TEST_F(SmsServiceTest, AbortWhilePrompt) {
         loop.Quit();
       }));
 
-  EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+  EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
     service.NotifyReceive(GURL(kTestUrl), "ABC");
     EXPECT_TRUE(service.IsPromptOpen());
     service.AbortRequest();
@@ -589,7 +582,7 @@ TEST_F(SmsServiceTest, RequestAfterAbortWhilePrompt) {
           loop.Quit();
         }));
 
-    EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+    EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
       service.NotifyReceive(GURL(kTestUrl), "hi");
       EXPECT_TRUE(service.IsPromptOpen());
       service.AbortRequest();
@@ -617,7 +610,7 @@ TEST_F(SmsServiceTest, RequestAfterAbortWhilePrompt) {
           loop.Quit();
         }));
 
-    EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+    EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
       service.NotifyReceive(GURL(kTestUrl), "hi2");
       service.ConfirmPrompt();
     }));
@@ -642,7 +635,7 @@ TEST_F(SmsServiceTest, SecondRequestWhilePrompt) {
         callback_loop1.Quit();
       }));
 
-  EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+  EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
     service.NotifyReceive(GURL(kTestUrl), "hi");
     service.AbortRequest();
   }));
@@ -679,7 +672,7 @@ TEST_F(SmsServiceTest, RecordTimeMetricsForContinueOnSuccess) {
 
   service.CreateSmsPrompt(main_rfh());
 
-  EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+  EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
     service.NotifyReceive(GURL(kTestUrl), "ABC");
     service.ConfirmPrompt();
   }));
@@ -704,7 +697,7 @@ TEST_F(SmsServiceTest, RecordMetricsForCancelOnSuccess) {
 
   service.CreateSmsPrompt(main_rfh());
 
-  EXPECT_CALL(*service.provider(), Retrieve()).WillOnce(Invoke([&service]() {
+  EXPECT_CALL(*service.provider(), Retrieve(_)).WillOnce(Invoke([&service]() {
     service.NotifyReceive(GURL(kTestUrl), "hi");
     service.DismissPrompt();
   }));
@@ -729,17 +722,15 @@ TEST_F(SmsServiceTest, RecordMetricsForNewPage) {
       reinterpret_cast<WebContentsImpl*>(web_contents());
   web_contents_impl->SetDelegate(&delegate);
 
-  auto provider = std::make_unique<MockSmsProvider>();
-  MockSmsProvider* mock_provider_ptr = provider.get();
-  SmsFetcherImpl fetcher(web_contents()->GetBrowserContext(),
-                         std::move(provider));
+  NiceMock<MockSmsProvider> provider;
+  SmsFetcherImpl fetcher(web_contents()->GetBrowserContext(), &provider);
   mojo::Remote<blink::mojom::SmsReceiver> service;
   SmsService::Create(&fetcher, main_rfh(),
                      service.BindNewPipeAndPassReceiver());
 
   base::RunLoop navigate;
 
-  EXPECT_CALL(*mock_provider_ptr, Retrieve()).WillOnce(Invoke([&navigate]() {
+  EXPECT_CALL(provider, Retrieve(_)).WillOnce(Invoke([&navigate]() {
     navigate.Quit();
   }));
 
@@ -769,17 +760,15 @@ TEST_F(SmsServiceTest, RecordMetricsForSamePage) {
       reinterpret_cast<WebContentsImpl*>(web_contents());
   web_contents_impl->SetDelegate(&delegate);
 
-  auto provider = std::make_unique<MockSmsProvider>();
-  MockSmsProvider* mock_provider_ptr = provider.get();
-  SmsFetcherImpl fetcher(web_contents()->GetBrowserContext(),
-                         std::move(provider));
+  NiceMock<MockSmsProvider> provider;
+  SmsFetcherImpl fetcher(web_contents()->GetBrowserContext(), &provider);
   mojo::Remote<blink::mojom::SmsReceiver> service;
   SmsService::Create(&fetcher, main_rfh(),
                      service.BindNewPipeAndPassReceiver());
 
   base::RunLoop navigate;
 
-  EXPECT_CALL(*mock_provider_ptr, Retrieve()).WillOnce(Invoke([&navigate]() {
+  EXPECT_CALL(provider, Retrieve(_)).WillOnce(Invoke([&navigate]() {
     navigate.Quit();
   }));
 
@@ -814,17 +803,15 @@ TEST_F(SmsServiceTest, RecordMetricsForExistingPage) {
       reinterpret_cast<WebContentsImpl*>(web_contents());
   web_contents_impl->SetDelegate(&delegate);
 
-  auto provider = std::make_unique<MockSmsProvider>();
-  MockSmsProvider* mock_provider_ptr = provider.get();
-  SmsFetcherImpl fetcher(web_contents()->GetBrowserContext(),
-                         std::move(provider));
+  NiceMock<MockSmsProvider> provider;
+  SmsFetcherImpl fetcher(web_contents()->GetBrowserContext(), &provider);
   mojo::Remote<blink::mojom::SmsReceiver> service;
   SmsService::Create(&fetcher, main_rfh(),
                      service.BindNewPipeAndPassReceiver());
 
   base::RunLoop navigate;
 
-  EXPECT_CALL(*mock_provider_ptr, Retrieve()).WillOnce(Invoke([&navigate]() {
+  EXPECT_CALL(provider, Retrieve(_)).WillOnce(Invoke([&navigate]() {
     navigate.Quit();
   }));
 

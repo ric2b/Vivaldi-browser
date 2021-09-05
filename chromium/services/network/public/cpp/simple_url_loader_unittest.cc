@@ -13,13 +13,14 @@
 
 #include "base/base_paths.h"
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/format_macros.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/notreached.h"
 #include "base/optional.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -614,7 +615,8 @@ class SimpleURLLoaderTestBase {
     params->process_id = mojom::kBrowserProcessId;
     params->is_corb_enabled = false;
     url::Origin origin = url::Origin::Create(test_server_.base_url());
-    params->network_isolation_key = net::NetworkIsolationKey(origin, origin);
+    params->isolation_info =
+        net::IsolationInfo::CreateForInternalRequest(origin);
     params->is_trusted = true;
     network_context_->CreateURLLoaderFactory(
         url_loader_factory_.BindNewPipeAndPassReceiver(), std::move(params));
@@ -692,8 +694,10 @@ class SimpleURLLoaderTest
     resource_request->trusted_params =
         network::ResourceRequest::TrustedParams();
     url::Origin request_origin = url::Origin::Create(url);
-    resource_request->trusted_params->network_isolation_key =
-        net::NetworkIsolationKey(request_origin, request_origin);
+    resource_request->trusted_params->isolation_info =
+        net::IsolationInfo::Create(
+            net::IsolationInfo::RedirectMode::kUpdateNothing, request_origin,
+            request_origin, net::SiteForCookies());
     return std::make_unique<SimpleLoaderTestHelper>(std::move(resource_request),
                                                     GetParam());
   }
@@ -1974,9 +1978,11 @@ class MockURLLoader : public network::mojom::URLLoader {
   ~MockURLLoader() override {}
 
   // network::mojom::URLLoader implementation:
-  void FollowRedirect(const std::vector<std::string>& removed_headers,
-                      const net::HttpRequestHeaders& modified_headers,
-                      const base::Optional<GURL>& new_url) override {}
+  void FollowRedirect(
+      const std::vector<std::string>& removed_headers,
+      const net::HttpRequestHeaders& modified_headers,
+      const net::HttpRequestHeaders& modified_cors_exempt_headers,
+      const base::Optional<GURL>& new_url) override {}
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override {
     NOTREACHED();

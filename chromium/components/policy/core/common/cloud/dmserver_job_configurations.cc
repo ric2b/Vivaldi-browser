@@ -192,6 +192,9 @@ DMServerJobConfiguration::MapNetErrorAndResponseCodeToDMStatus(
       case DeviceManagementService::kArcDisabled:
         code = DM_STATUS_SERVICE_ARC_DISABLED;
         break;
+      case DeviceManagementService::kTosHasNotBeenAccepted:
+        code = DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED;
+        break;
       default:
         // Handle all unknown 5xx HTTP error codes as temporary and any other
         // unknown error as one that needs more time to recover.

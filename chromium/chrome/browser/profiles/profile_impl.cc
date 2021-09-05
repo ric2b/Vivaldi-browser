@@ -28,6 +28,7 @@
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -119,7 +120,6 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/data_reduction_proxy/core/browser/data_store_impl.h"
 #include "components/history/core/common/pref_names.h"
@@ -168,6 +168,8 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/app_mode/app_mode_utils.h"
+#include "chrome/browser/chromeos/app_mode/app_launch_utils.h"
 #include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/locale_change_guard.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
@@ -406,6 +408,10 @@ void ProfileImpl::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kPrintPreviewDisabled, false);
   registry->RegisterStringPref(
       prefs::kPrintPreviewDefaultDestinationSelectionRules, std::string());
+#if defined(OS_WIN) && BUILDFLAG(ENABLE_PRINTING)
+  registry->RegisterIntegerPref(prefs::kPrintRasterizationMode, 0);
+#endif
+
   registry->RegisterBooleanPref(prefs::kForceEphemeralProfiles, false);
   registry->RegisterBooleanPref(prefs::kEnableMediaRouter, true);
 #if defined(OS_CHROMEOS)
@@ -476,8 +482,6 @@ ProfileImpl::ProfileImpl(
 #else
   LoadPrefsForNormalStartup(async_prefs);
 #endif
-
-  content::BrowserContext::Initialize(this, path_);
 
   // Register on BrowserContext.
   user_prefs::UserPrefs::Set(this, prefs_.get());
@@ -780,16 +784,26 @@ ProfileImpl::~ProfileImpl() {
   ChromePluginServiceFilter::GetInstance()->UnregisterProfile(this);
 #endif
 
-  // Destroy OTR profile and its profile services first.
-  if (off_the_record_profile_) {
-    ProfileDestroyer::DestroyOffTheRecordProfileNow(
-        off_the_record_profile_.get());
-  } else {
+  // Destroy all OTR profiles and their profile services first.
+  std::vector<Profile*> raw_otr_profiles;
+  bool primary_otr_available = false;
+
+  // Get a list of existing OTR profiles since |off_the_record_profile_| might
+  // be modified after the call to |DestroyOffTheRecordProfileNow|.
+  for (auto& otr_profile : otr_profiles_) {
+    raw_otr_profiles.push_back(otr_profile.second.get());
+    primary_otr_available |= (otr_profile.first == OTRProfileID::PrimaryID());
+  }
+
+  for (Profile* otr_profile : raw_otr_profiles)
+    ProfileDestroyer::DestroyOffTheRecordProfileNow(otr_profile);
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+  if (!primary_otr_available) {
     ExtensionPrefValueMapFactory::GetForBrowserContext(this)
         ->ClearAllIncognitoSessionOnlyPreferences();
-#endif
   }
+#endif
 
   FullBrowserTransitionManager::Get()->OnProfileDestroyed(this);
 
@@ -862,33 +876,62 @@ bool ProfileImpl::IsOffTheRecord() const {
   return false;
 }
 
-bool ProfileImpl::IsIndependentOffTheRecordProfile() {
-  return false;
+const Profile::OTRProfileID& ProfileImpl::GetOTRProfileID() const {
+  NOTREACHED();
+  static base::NoDestructor<OTRProfileID> otr_profile_id(
+      "ProfileImp::NoOTRProfileID");
+  return *otr_profile_id;
 }
 
-Profile* ProfileImpl::GetOffTheRecordProfile() {
-  if (!off_the_record_profile_) {
-    std::unique_ptr<Profile> p(CreateOffTheRecordProfile());
-    off_the_record_profile_.swap(p);
+Profile* ProfileImpl::GetOffTheRecordProfile(
+    const OTRProfileID& otr_profile_id) {
+  if (HasOffTheRecordProfile(otr_profile_id))
+    return otr_profiles_[otr_profile_id].get();
 
-    content::NotificationService::current()->Notify(
-        chrome::NOTIFICATION_PROFILE_CREATED,
-        content::Source<Profile>(off_the_record_profile_.get()),
-        content::NotificationService::NoDetails());
-  }
-  return off_the_record_profile_.get();
+  // Create a new OffTheRecordProfile
+  std::unique_ptr<Profile> otr_profile =
+      Profile::CreateOffTheRecordProfile(this, otr_profile_id);
+  Profile* raw_otr_profile = otr_profile.get();
+
+  otr_profiles_[otr_profile_id] = std::move(otr_profile);
+
+  NotifyOffTheRecordProfileCreated(raw_otr_profile);
+
+  content::NotificationService::current()->Notify(
+      chrome::NOTIFICATION_PROFILE_CREATED,
+      content::Source<Profile>(raw_otr_profile),
+      content::NotificationService::NoDetails());
+
+  return raw_otr_profile;
 }
 
-void ProfileImpl::DestroyOffTheRecordProfile() {
-  off_the_record_profile_.reset();
+std::vector<Profile*> ProfileImpl::GetAllOffTheRecordProfiles() {
+  std::vector<Profile*> raw_otr_profiles;
+  for (auto& otr : otr_profiles_)
+    raw_otr_profiles.push_back(otr.second.get());
+  return raw_otr_profiles;
+}
+
+void ProfileImpl::DestroyOffTheRecordProfile(Profile* otr_profile) {
+  CHECK(otr_profile);
+  OTRProfileID profile_id = otr_profile->GetOTRProfileID();
+  DCHECK(HasOffTheRecordProfile(profile_id));
+  otr_profiles_.erase(profile_id);
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  ExtensionPrefValueMapFactory::GetForBrowserContext(this)
-      ->ClearAllIncognitoSessionOnlyPreferences();
+  // Extensions are only supported on primary OTR profile.
+  if (profile_id == OTRProfileID::PrimaryID()) {
+    ExtensionPrefValueMapFactory::GetForBrowserContext(this)
+        ->ClearAllIncognitoSessionOnlyPreferences();
+  }
 #endif
 }
 
-bool ProfileImpl::HasOffTheRecordProfile() {
-  return off_the_record_profile_.get() != NULL;
+bool ProfileImpl::HasOffTheRecordProfile(const OTRProfileID& otr_profile_id) {
+  return base::Contains(otr_profiles_, otr_profile_id);
+}
+
+bool ProfileImpl::HasAnyOffTheRecordProfile() {
+  return !otr_profiles_.empty();
 }
 
 Profile* ProfileImpl::GetOriginalProfile() {
@@ -941,15 +984,22 @@ ExtensionSpecialStoragePolicy* ProfileImpl::GetExtensionSpecialStoragePolicy() {
 
 void ProfileImpl::OnLocaleReady() {
   TRACE_EVENT0("browser", "ProfileImpl::OnLocaleReady");
+
   // Migrate obsolete prefs.
-  if (g_browser_process->local_state())
-    MigrateObsoleteBrowserPrefs(this, g_browser_process->local_state());
   MigrateObsoleteProfilePrefs(this);
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // Note: Extension preferences can be keyed off the extension ID, so need to
   // be handled specially (rather than directly as part of
   // MigrateObsoleteProfilePrefs()).
   extensions::ExtensionPrefs::Get(this)->MigrateObsoleteExtensionPrefs();
+#endif
+
+#if defined(OS_CHROMEOS)
+  // If this is a kiosk profile, reset some of its prefs which should not
+  // persist between sessions.
+  if (chrome::IsRunningInForcedAppMode()) {
+    chromeos::ResetEphemeralKioskPreferences(prefs_.get());
+  }
 #endif
 
   // |kSessionExitType| was added after |kSessionExitedCleanly|. If the pref
@@ -1301,8 +1351,8 @@ ProfileImpl::GetNativeFileSystemPermissionContext() {
 bool ProfileImpl::IsSameProfile(Profile* profile) {
   if (profile == static_cast<Profile*>(this))
     return true;
-  Profile* otr_profile = off_the_record_profile_.get();
-  return otr_profile && profile == otr_profile;
+
+  return profile && profile->GetOriginalProfile() == this;
 }
 
 base::Time ProfileImpl::GetStartTime() const {

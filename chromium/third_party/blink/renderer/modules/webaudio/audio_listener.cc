@@ -161,6 +161,17 @@ bool AudioListener::HasSampleAccurateValues() const {
          upZ()->Handler().HasSampleAccurateValues();
 }
 
+bool AudioListener::IsAudioRate() const {
+  return positionX()->Handler().IsAudioRate() ||
+         positionY()->Handler().IsAudioRate() ||
+         positionZ()->Handler().IsAudioRate() ||
+         forwardX()->Handler().IsAudioRate() ||
+         forwardY()->Handler().IsAudioRate() ||
+         forwardZ()->Handler().IsAudioRate() ||
+         upX()->Handler().IsAudioRate() || upY()->Handler().IsAudioRate() ||
+         upZ()->Handler().IsAudioRate();
+}
+
 void AudioListener::UpdateValuesIfNeeded(uint32_t frames_to_process) {
   double current_time =
       positionX()->Handler().DestinationHandler().CurrentTime();

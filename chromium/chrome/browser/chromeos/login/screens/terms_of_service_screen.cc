@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -43,6 +43,8 @@ std::string TermsOfServiceScreen::GetResultString(Result result) {
       return "Accepted";
     case Result::DECLINED:
       return "Declined";
+    case Result::NOT_APPLICABLE:
+      return BaseScreen::kNotApplicable;
   }
 }
 
@@ -82,6 +84,20 @@ void TermsOfServiceScreen::OnAccept() {
 void TermsOfServiceScreen::OnViewDestroyed(TermsOfServiceScreenView* view) {
   if (view_ == view)
     view_ = nullptr;
+}
+
+bool TermsOfServiceScreen::MaybeSkip() {
+  // Only show the Terms of Service when logging into a public account and Terms
+  // of Service have been specified through policy. In all other cases, advance
+  // to the post-ToS part immediately.
+  if (!user_manager::UserManager::Get()->IsLoggedInAsPublicAccount() ||
+      !ProfileManager::GetActiveUserProfile()->GetPrefs()->IsManagedPreference(
+          prefs::kTermsOfServiceURL)) {
+    exit_callback_.Run(Result::NOT_APPLICABLE);
+    return true;
+  }
+
+  return false;
 }
 
 void TermsOfServiceScreen::ShowImpl() {

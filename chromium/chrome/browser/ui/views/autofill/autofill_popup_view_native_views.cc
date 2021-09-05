@@ -31,6 +31,8 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/color_palette.h"
+#include "ui/gfx/favicon_size.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -71,14 +73,13 @@ constexpr int kAutofillPopupAdditionalDoubleRowHeight = 22;
 // Vertical spacing between labels in one row.
 constexpr int kAdjacentLabelsVerticalSpacing = 2;
 
-// Default sice for icons in the autofill popup.
-constexpr int kIconSize = 16;
-
 // Popup footer items that use a leading icon instead of a trailing one.
 constexpr autofill::PopupItemId kItemTypesUsingLeadingIcons[] = {
     autofill::PopupItemId::POPUP_ITEM_ID_SHOW_ACCOUNT_CARDS,
     autofill::PopupItemId::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY,
+    autofill::PopupItemId::POPUP_ITEM_ID_PASSWORD_ACCOUNT_STORAGE_EMPTY,
     autofill::PopupItemId::POPUP_ITEM_ID_PASSWORD_ACCOUNT_STORAGE_OPT_IN,
+    autofill::PopupItemId::POPUP_ITEM_ID_PASSWORD_ACCOUNT_STORAGE_RE_SIGNIN,
     autofill::PopupItemId::
         POPUP_ITEM_ID_PASSWORD_ACCOUNT_STORAGE_OPT_IN_AND_GENERATE};
 
@@ -100,11 +101,11 @@ void BuildColumnSet(views::GridLayout* layout) {
 
   column_set->AddColumn(views::GridLayout::LEADING, views::GridLayout::FILL,
                         views::GridLayout::kFixedSize,
-                        views::GridLayout::USE_PREF, 0, 0);
+                        views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   column_set->AddPaddingColumn(views::GridLayout::kFixedSize, column_divider);
   column_set->AddColumn(views::GridLayout::LEADING, views::GridLayout::FILL,
                         views::GridLayout::kFixedSize,
-                        views::GridLayout::USE_PREF, 0, 0);
+                        views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
 }
 
 gfx::ImageSkia GetIconImageByName(const std::string& icon_str) {
@@ -114,26 +115,32 @@ gfx::ImageSkia GetIconImageByName(const std::string& icon_str) {
   // For http warning message, get icon images from VectorIcon, which is the
   // same as security indicator icons in location bar.
   if (icon_str == "httpWarning") {
-    return gfx::CreateVectorIcon(omnibox::kHttpIcon, kIconSize,
+    return gfx::CreateVectorIcon(omnibox::kHttpIcon, gfx::kFaviconSize,
                                  gfx::kChromeIconGrey);
   }
   if (icon_str == "httpsInvalid") {
-    return gfx::CreateVectorIcon(omnibox::kNotSecureWarningIcon, kIconSize,
-                                 gfx::kGoogleRed700);
+    return gfx::CreateVectorIcon(omnibox::kNotSecureWarningIcon,
+                                 gfx::kFaviconSize, gfx::kGoogleRed700);
   }
   if (icon_str == "keyIcon") {
-    return gfx::CreateVectorIcon(kKeyIcon, kIconSize, gfx::kChromeIconGrey);
+    return gfx::CreateVectorIcon(kKeyIcon, gfx::kFaviconSize,
+                                 gfx::kChromeIconGrey);
   }
   if (icon_str == "globeIcon") {
-    return gfx::CreateVectorIcon(kGlobeIcon, kIconSize, gfx::kChromeIconGrey);
+    return gfx::CreateVectorIcon(kGlobeIcon, gfx::kFaviconSize,
+                                 gfx::kChromeIconGrey);
   }
   if (icon_str == "settingsIcon") {
-    return gfx::CreateVectorIcon(vector_icons::kSettingsIcon, kIconSize,
+    return gfx::CreateVectorIcon(vector_icons::kSettingsIcon, gfx::kFaviconSize,
+                                 gfx::kChromeIconGrey);
+  }
+  if (icon_str == "empty") {
+    return gfx::CreateVectorIcon(omnibox::kHttpIcon, gfx::kFaviconSize,
                                  gfx::kChromeIconGrey);
   }
   if (icon_str == "google") {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-    return gfx::CreateVectorIcon(kGoogleGLogoIcon, kIconSize,
+    return gfx::CreateVectorIcon(kGoogleGLogoIcon, gfx::kFaviconSize,
                                  gfx::kPlaceholderColor);
 #else
     return gfx::ImageSkia();
@@ -1096,8 +1103,11 @@ void AutofillPopupViewNativeViews::CreateChildViews() {
       case autofill::PopupItemId::POPUP_ITEM_ID_SCAN_CREDIT_CARD:
       case autofill::PopupItemId::POPUP_ITEM_ID_CREDIT_CARD_SIGNIN_PROMO:
       case autofill::PopupItemId::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY:
+      case autofill::PopupItemId::POPUP_ITEM_ID_PASSWORD_ACCOUNT_STORAGE_EMPTY:
       case autofill::PopupItemId::POPUP_ITEM_ID_HIDE_AUTOFILL_SUGGESTIONS:
       case autofill::PopupItemId::POPUP_ITEM_ID_PASSWORD_ACCOUNT_STORAGE_OPT_IN:
+      case autofill::PopupItemId::
+          POPUP_ITEM_ID_PASSWORD_ACCOUNT_STORAGE_RE_SIGNIN:
       case autofill::PopupItemId::
           POPUP_ITEM_ID_PASSWORD_ACCOUNT_STORAGE_OPT_IN_AND_GENERATE:
       case autofill::PopupItemId::POPUP_ITEM_ID_SHOW_ACCOUNT_CARDS:

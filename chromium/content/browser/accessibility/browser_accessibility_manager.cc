@@ -122,10 +122,6 @@ ui::AXTreeUpdate MakeAXTreeUpdate(
   return update;
 }
 
-BrowserAccessibility* BrowserAccessibilityFactory::Create() {
-  return BrowserAccessibility::Create();
-}
-
 BrowserAccessibilityFindInPageInfo::BrowserAccessibilityFindInPageInfo()
     : request_id(-1),
       match_index(-1),
@@ -139,9 +135,8 @@ BrowserAccessibilityFindInPageInfo::BrowserAccessibilityFindInPageInfo()
 // static
 BrowserAccessibilityManager* BrowserAccessibilityManager::Create(
     const ui::AXTreeUpdate& initial_tree,
-    BrowserAccessibilityDelegate* delegate,
-    BrowserAccessibilityFactory* factory) {
-  return new BrowserAccessibilityManager(initial_tree, delegate, factory);
+    BrowserAccessibilityDelegate* delegate) {
+  return new BrowserAccessibilityManager(initial_tree, delegate);
 }
 #endif
 
@@ -153,12 +148,10 @@ BrowserAccessibilityManager* BrowserAccessibilityManager::FromID(
 }
 
 BrowserAccessibilityManager::BrowserAccessibilityManager(
-    BrowserAccessibilityDelegate* delegate,
-    BrowserAccessibilityFactory* factory)
+    BrowserAccessibilityDelegate* delegate)
     : WebContentsObserver(delegate ? delegate->AccessibilityWebContents()
                                    : nullptr),
       delegate_(delegate),
-      factory_(factory),
       user_is_navigating_away_(false),
       connected_to_parent_tree_node_(false),
       ax_tree_id_(ui::AXTreeIDUnknown()),
@@ -171,12 +164,10 @@ BrowserAccessibilityManager::BrowserAccessibilityManager(
 
 BrowserAccessibilityManager::BrowserAccessibilityManager(
     const ui::AXTreeUpdate& initial_tree,
-    BrowserAccessibilityDelegate* delegate,
-    BrowserAccessibilityFactory* factory)
+    BrowserAccessibilityDelegate* delegate)
     : WebContentsObserver(delegate ? delegate->AccessibilityWebContents()
                                    : nullptr),
       delegate_(delegate),
-      factory_(factory),
       user_is_navigating_away_(false),
       ax_tree_id_(ui::AXTreeIDUnknown()),
       device_scale_factor_(1.0f),
@@ -255,7 +246,6 @@ void BrowserAccessibilityManager::FireFocusEventsIfNeeded() {
   if (!focus)
     return;
 
-  DCHECK(focus->instance_active());
   // Don't fire focus events if the window itself doesn't have focus.
   // Bypass this check for some tests.
   if (!never_suppress_or_delay_events_for_testing_ &&
@@ -335,6 +325,18 @@ BrowserAccessibility* BrowserAccessibilityManager::GetParentNodeFromParentTree()
   BrowserAccessibilityManager* parent_manager =
       BrowserAccessibilityManager::FromID(parent_tree_id);
   return parent ? parent_manager->GetFromAXNode(parent) : nullptr;
+}
+
+BrowserAccessibility* BrowserAccessibilityManager::GetPopupRoot() const {
+  DCHECK(popup_root_ids_.size() <= 1);
+  if (popup_root_ids_.size() == 1) {
+    BrowserAccessibility* node = GetFromID(*popup_root_ids_.begin());
+    if (node) {
+      DCHECK(node->GetData().role == ax::mojom::Role::kRootWebArea);
+      return node;
+    }
+  }
+  return nullptr;
 }
 
 const ui::AXTreeData& BrowserAccessibilityManager::GetTreeData() const {
@@ -608,7 +610,7 @@ BrowserAccessibility* BrowserAccessibilityManager::GetActiveDescendant(
   return focus;
 }
 
-bool BrowserAccessibilityManager::NativeViewHasFocus() const {
+bool BrowserAccessibilityManager::NativeViewHasFocus() {
   BrowserAccessibilityDelegate* delegate = GetDelegateFromRootManager();
   return delegate && delegate->AccessibilityViewHasFocus();
 }
@@ -890,13 +892,13 @@ void BrowserAccessibilityManager::ClearAccessibilityFocus(
   delegate_->AccessibilityPerformAction(action_data);
 }
 
-void BrowserAccessibilityManager::HitTest(const gfx::Point& page_point) const {
+void BrowserAccessibilityManager::HitTest(const gfx::Point& frame_point) const {
   if (!delegate_)
     return;
 
   ui::AXActionData action_data;
   action_data.action = ax::mojom::Action::kHitTest;
-  action_data.target_point = page_point;
+  action_data.target_point = frame_point;
   action_data.hit_test_event_to_fire = ax::mojom::Event::kHover;
   delegate_->AccessibilityPerformAction(action_data);
 }
@@ -1277,9 +1279,14 @@ void BrowserAccessibilityManager::OnSubtreeWillBeDeleted(ui::AXTree* tree,
 void BrowserAccessibilityManager::OnNodeCreated(ui::AXTree* tree,
                                                 ui::AXNode* node) {
   DCHECK(node);
-  BrowserAccessibility* wrapper = factory_->Create();
+  BrowserAccessibility* wrapper = BrowserAccessibility::Create();
   id_wrapper_map_[node->id()] = wrapper;
   wrapper->Init(this, node);
+
+  if (tree->root() != node &&
+      node->data().role == ax::mojom::Role::kRootWebArea) {
+    popup_root_ids_.insert(node->id());
+  }
 }
 
 void BrowserAccessibilityManager::OnNodeDeleted(ui::AXTree* tree,
@@ -1287,8 +1294,11 @@ void BrowserAccessibilityManager::OnNodeDeleted(ui::AXTree* tree,
   DCHECK_NE(node_id, ui::AXNode::kInvalidAXID);
   if (BrowserAccessibility* wrapper = GetFromID(node_id)) {
     id_wrapper_map_.erase(node_id);
-    wrapper->Destroy();
+    delete wrapper;
   }
+
+  if (popup_root_ids_.find(node_id) != popup_root_ids_.end())
+    popup_root_ids_.erase(node_id);
 }
 
 void BrowserAccessibilityManager::OnNodeReparented(ui::AXTree* tree,
@@ -1296,10 +1306,24 @@ void BrowserAccessibilityManager::OnNodeReparented(ui::AXTree* tree,
   DCHECK(node);
   BrowserAccessibility* wrapper = GetFromAXNode(node);
   if (!wrapper) {
-    wrapper = factory_->Create();
+    wrapper = BrowserAccessibility::Create();
     id_wrapper_map_[node->id()] = wrapper;
   }
   wrapper->Init(this, node);
+}
+
+void BrowserAccessibilityManager::OnRoleChanged(ui::AXTree* tree,
+                                                ui::AXNode* node,
+                                                ax::mojom::Role old_role,
+                                                ax::mojom::Role new_role) {
+  DCHECK(node);
+  if (tree->root() == node)
+    return;
+  if (new_role == ax::mojom::Role::kRootWebArea) {
+    popup_root_ids_.insert(node->id());
+  } else if (old_role == ax::mojom::Role::kRootWebArea) {
+    popup_root_ids_.erase(node->id());
+  }
 }
 
 void BrowserAccessibilityManager::OnAtomicUpdateFinished(
@@ -1402,12 +1426,8 @@ ui::AXNode* BrowserAccessibilityManager::GetParentNodeFromParentTreeAsAXNode()
 BrowserAccessibilityManager* BrowserAccessibilityManager::GetRootManager()
     const {
   BrowserAccessibility* parent = GetParentNodeFromParentTree();
-  if (parent) {
-    DCHECK(parent->instance_active())
-        << "The BrowserAccessibility object in the parent tree that is hosting "
-           "this tree should not have been destroyed before its child tree.";
+  if (parent)
     return parent->manager() ? parent->manager()->GetRootManager() : nullptr;
-  }
 
   if (IsRootTree())
     return const_cast<BrowserAccessibilityManager*>(this);
@@ -1491,9 +1511,18 @@ BrowserAccessibility* BrowserAccessibilityManager::CachingAsyncHitTest(
   gfx::Rect screen_view_bounds = GetViewBoundsInScreenCoordinates();
 
   if (delegate_) {
+    // Transform from screen to viewport to frame coordinates to pass to Blink.
+    // Note that page scale (pinch zoom) is independent of device scale factor
+    // (display DPI). Only the latter is affected by UseZoomForDSF.
+    // http://www.chromium.org/developers/design-documents/blink-coordinate-spaces
+    gfx::Point viewport_point =
+        blink_screen_point - screen_view_bounds.OffsetFromOrigin();
+    gfx::Point frame_point =
+        gfx::ScaleToRoundedPoint(viewport_point, 1.0f / page_scale_factor_);
+
     // This triggers an asynchronous request to compute the true object that's
     // under the point.
-    HitTest(blink_screen_point - screen_view_bounds.OffsetFromOrigin());
+    HitTest(frame_point);
 
     // Unfortunately we still have to return an answer synchronously because
     // the APIs were designed that way. The best case scenario is that the
@@ -1530,11 +1559,20 @@ void BrowserAccessibilityManager::CacheHitTestResult(
   last_hover_bounds_ = hit_test_result->GetClippedScreenBoundsRect();
 }
 
-void BrowserAccessibilityManager::OnPortalActivated() {
+void BrowserAccessibilityManager::DidActivatePortal(
+    WebContents* predecessor_contents) {
   if (GetTreeData().loaded) {
     FireGeneratedEvent(ui::AXEventGenerator::Event::PORTAL_ACTIVATED,
                        GetRoot());
   }
+}
+
+void BrowserAccessibilityManager::SetPageScaleFactor(float page_scale_factor) {
+  page_scale_factor_ = page_scale_factor;
+}
+
+float BrowserAccessibilityManager::GetPageScaleFactor() const {
+  return page_scale_factor_;
 }
 
 void BrowserAccessibilityManager::CollectChangedNodesAndParentsForAtomicUpdate(
@@ -1548,7 +1586,7 @@ void BrowserAccessibilityManager::CollectChangedNodesAndParentsForAtomicUpdate(
     DCHECK(changed_node);
 
     BrowserAccessibility* obj = GetFromAXNode(changed_node);
-    if (obj && obj->IsNative())
+    if (obj)
       nodes_needing_update->insert(obj->GetAXPlatformNode());
 
     // When a node is a text node or line break, update its parent, because
@@ -1559,7 +1597,7 @@ void BrowserAccessibilityManager::CollectChangedNodesAndParentsForAtomicUpdate(
 
     if (ui::IsTextOrLineBreak(changed_node->data().role)) {
       BrowserAccessibility* parent_obj = GetFromAXNode(parent);
-      if (parent_obj && parent_obj->IsNative())
+      if (parent_obj)
         nodes_needing_update->insert(parent_obj->GetAXPlatformNode());
     }
 
@@ -1573,9 +1611,36 @@ void BrowserAccessibilityManager::CollectChangedNodesAndParentsForAtomicUpdate(
     }
 
     BrowserAccessibility* editable_root_obj = GetFromAXNode(editable_root);
-    if (editable_root_obj && editable_root_obj->IsNative())
+    if (editable_root_obj)
       nodes_needing_update->insert(editable_root_obj->GetAXPlatformNode());
   }
+}
+
+bool BrowserAccessibilityManager::ShouldFireEventForNode(
+    BrowserAccessibility* node) const {
+  if (!node || !node->CanFireEvents())
+    return false;
+
+  // If the root delegate isn't the main-frame, this may be a new frame that
+  // hasn't yet been swapped in or added to the frame tree. Suppress firing
+  // events until then.
+  BrowserAccessibilityDelegate* root_delegate = GetDelegateFromRootManager();
+  if (!root_delegate)
+    return false;
+  if (!root_delegate->AccessibilityIsMainFrame())
+    return false;
+
+  // Don't fire events when this document might be stale as the user has
+  // started navigating to a new document.
+  if (user_is_navigating_away_)
+    return false;
+
+  // Inline text boxes are an internal implementation detail, we don't
+  // expose them to the platform.
+  if (node->GetRole() == ax::mojom::Role::kInlineTextBox)
+    return false;
+
+  return true;
 }
 
 }  // namespace content

@@ -93,16 +93,12 @@ SuggestionContainerView::SuggestionContainerView(
   SetID(AssistantViewID::kSuggestionContainer);
   InitLayout();
 
-  // The AssistantViewDelegate should outlive SuggestionContainerView.
-  delegate->AddSuggestionsModelObserver(this);
-  delegate->AddUiModelObserver(this);
+  assistant_suggestions_model_observer_.Add(
+      AssistantSuggestionsController::Get());
+  assistant_ui_model_observer_.Add(AssistantUiController::Get());
 }
 
-SuggestionContainerView::~SuggestionContainerView() {
-  delegate()->RemoveUiModelObserver(this);
-  delegate()->RemoveSuggestionsModelObserver(this);
-  delegate()->RemoveInteractionModelObserver(this);
-}
+SuggestionContainerView::~SuggestionContainerView() = default;
 
 const char* SuggestionContainerView::GetClassName() const {
   return "SuggestionContainerView";
@@ -123,6 +119,14 @@ void SuggestionContainerView::OnContentsPreferredSizeChanged(
   const int width =
       std::max(content_view->GetPreferredSize().width(), this->width());
   content_view->SetSize(gfx::Size(width, kPreferredHeightDip));
+}
+
+void SuggestionContainerView::OnAssistantControllerDestroying() {
+  AnimatedContainerView::OnAssistantControllerDestroying();
+
+  assistant_ui_model_observer_.Remove(AssistantUiController::Get());
+  assistant_suggestions_model_observer_.Remove(
+      AssistantSuggestionsController::Get());
 }
 
 void SuggestionContainerView::OnCommittedQueryChanged(
@@ -207,8 +211,9 @@ void SuggestionContainerView::OnUiVisibilityChanged(
       entry_point.value() != AssistantEntryPoint::kLauncherSearchResult) {
     // Show conversation starters at the start of a new Assistant session except
     // when the user already started a query in Launcher quick search box (QSB).
-    OnConversationStartersChanged(
-        delegate()->GetSuggestionsModel()->GetConversationStarters());
+    OnConversationStartersChanged(AssistantSuggestionsController::Get()
+                                      ->GetModel()
+                                      ->GetConversationStarters());
     return;
   }
 

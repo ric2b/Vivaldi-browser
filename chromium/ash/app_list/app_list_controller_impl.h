@@ -17,11 +17,11 @@
 #include "ash/app_list/model/app_list_model_observer.h"
 #include "ash/app_list/model/search/search_model.h"
 #include "ash/ash_export.h"
-#include "ash/assistant/assistant_controller_observer.h"
 #include "ash/assistant/model/assistant_ui_model_observer.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/home_screen/home_screen_delegate.h"
 #include "ash/public/cpp/app_list/app_list_controller.h"
+#include "ash/public/cpp/assistant/controller/assistant_controller_observer.h"
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
@@ -90,8 +90,6 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   void MoveItemToFolder(const std::string& id,
                         const std::string& folder_id) override;
   void SetStatus(AppListModelStatus status) override;
-  void SetState(AppListState state) override;
-  void HighlightItemInstalledFromUI(const std::string& id) override;
   void SetSearchEngineIsGoogle(bool is_google) override;
   void SetSearchTabletAndClamshellAccessibleName(
       const base::string16& tablet_accessible_name,
@@ -104,20 +102,12 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   void SetItemMetadata(const std::string& id,
                        std::unique_ptr<AppListItemMetadata> data) override;
   void SetItemIcon(const std::string& id, const gfx::ImageSkia& icon) override;
-  void SetItemIsInstalling(const std::string& id, bool is_installing) override;
-  void SetItemPercentDownloaded(const std::string& id,
-                                int32_t percent_downloaded) override;
   void SetModelData(int profile_id,
                     std::vector<std::unique_ptr<AppListItemMetadata>> apps,
                     bool is_search_engine_google) override;
 
   void SetSearchResultMetadata(
       std::unique_ptr<SearchResultMetadata> metadata) override;
-  void SetSearchResultIsInstalling(const std::string& id,
-                                   bool is_installing) override;
-  void SetSearchResultPercentDownloaded(const std::string& id,
-                                        int32_t percent_downloaded) override;
-  void NotifySearchResultItemInstalled(const std::string& id) override;
 
   void GetIdToAppListIndexMap(GetIdToAppListIndexMapCallback callback) override;
   void FindOrCreateOemFolder(
@@ -168,6 +158,7 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   // AppListViewDelegate:
   AppListModel* GetModel() override;
   SearchModel* GetSearchModel() override;
+  AppListNotifier* GetNotifier() override;
   void StartAssistant() override;
   void StartSearch(const base::string16& raw_query) override;
   void OpenSearchResult(const std::string& result_id,
@@ -220,10 +211,13 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   void MaybeIncreaseAssistantPrivacyInfoShownCount() override;
   void MarkAssistantPrivacyInfoDismissed() override;
   void OnStateTransitionAnimationCompleted(AppListViewState state) override;
+  void OnViewStateChanged(AppListViewState state) override;
+
   void GetAppLaunchedMetricParams(
       AppLaunchedMetricParams* metric_params) override;
   gfx::Rect SnapBoundsToDisplayEdge(const gfx::Rect& bounds) override;
   int GetShelfSize() override;
+  bool IsInTabletMode() override;
 
   void AddObserver(AppListControllerObserver* observer);
   void RemoveObserver(AppListControllerObserver* obsever);
@@ -254,10 +248,11 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   void OnWallpaperColorsChanged() override;
 
   // AssistantStateObserver:
-  void OnAssistantStatusChanged(mojom::AssistantState state) override;
+  void OnAssistantStatusChanged(
+      chromeos::assistant::AssistantStatus status) override;
   void OnAssistantSettingsEnabled(bool enabled) override;
   void OnAssistantFeatureAllowedChanged(
-      mojom::AssistantAllowedState state) override;
+      chromeos::assistant::AssistantAllowedState state) override;
 
   // WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanged() override;

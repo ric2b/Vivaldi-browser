@@ -6,7 +6,8 @@
 
 #include <memory>
 
-#include "base/logging.h"
+#include "base/bind.h"
+#include "base/check_op.h"
 #include "base/stl_util.h"
 #include "base/time/default_tick_clock.h"
 #include "components/performance_manager/graph/frame_node_impl.h"
@@ -332,6 +333,16 @@ base::TimeDelta PageNodeImpl::GetTimeSinceLastNavigation() const {
 
 const FrameNode* PageNodeImpl::GetMainFrameNode() const {
   return GetMainFrameNodeImpl();
+}
+
+bool PageNodeImpl::VisitMainFrameNodes(const FrameNodeVisitor& visitor) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  for (auto* frame_impl : main_frame_nodes_) {
+    const FrameNode* frame = frame_impl;
+    if (!visitor.Run(frame))
+      return false;
+  }
+  return true;
 }
 
 const base::flat_set<const FrameNode*> PageNodeImpl::GetMainFrameNodes() const {

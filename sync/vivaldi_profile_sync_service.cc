@@ -143,11 +143,10 @@ void VivaldiProfileSyncService::OnEngineInitialized(
         debug_info_listener,
     const std::string& birthday,
     const std::string& bag_of_chips,
-    const std::string& last_keystore_key,
     bool success) {
   ProfileSyncService::OnEngineInitialized(
       initial_types, js_backend, debug_info_listener, birthday, bag_of_chips,
-      last_keystore_key, success);
+      success);
 
   if (!force_local_data_reset_)
     return;

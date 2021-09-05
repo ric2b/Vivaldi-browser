@@ -205,6 +205,9 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
                                        Stage stage) override;
   void OnExtensionDownloadCacheStatusRetrieved(const ExtensionId& id,
                                                CacheStatus status) override;
+  void OnExtensionManifestUpdateCheckStatusReceived(
+      const ExtensionId& id,
+      const std::string& status) override;
   void OnExtensionDownloadFailed(const ExtensionId& id,
                                  Error error,
                                  const PingResult& ping,
@@ -213,7 +216,6 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
   void OnExtensionDownloadFinished(const CRXFileInfo& file,
                                    bool file_ownership_passed,
                                    const GURL& download_url,
-                                   const std::string& version,
                                    const PingResult& ping,
                                    const std::set<int>& request_id,
                                    const InstallCallback& callback) override;

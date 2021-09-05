@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/id_map.h"
 #include "base/gtest_prod_util.h"
@@ -26,7 +27,8 @@
 #include "base/test/simple_test_clock.h"
 #include "base/time/clock.h"
 #include "build/build_config.h"
-#include "components/content_settings/core/browser/content_settings_usages_state.h"
+#include "components/content_settings/browser/content_settings_usages_state.h"
+#include "components/content_settings/browser/tab_specific_content_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_context_base.h"
@@ -37,6 +39,7 @@
 #include "components/permissions/test/mock_permission_prompt_factory.h"
 #include "components/permissions/test/test_permissions_client.h"
 #include "components/prefs/testing_pref_service.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
@@ -68,9 +71,7 @@ class TestGeolocationPermissionContextDelegate
     : public GeolocationPermissionContext::Delegate {
  public:
   explicit TestGeolocationPermissionContextDelegate(
-      content::BrowserContext* browser_context)
-      : state_(PermissionsClient::Get()->GetSettingsMap(browser_context),
-               ContentSettingsType::GEOLOCATION) {
+      content::BrowserContext* browser_context) {
 #if defined(OS_ANDROID)
     GeolocationPermissionContextAndroid::RegisterProfilePrefs(
         prefs_.registry());
@@ -86,21 +87,7 @@ class TestGeolocationPermissionContextDelegate
     return false;
   }
 
-  void UpdateTabContext(const PermissionRequestID& id,
-                        const GURL& requesting_frame,
-                        bool allowed) override {
-    state_.OnPermissionSet(requesting_frame, allowed);
-  }
-
 #if defined(OS_ANDROID)
-  bool ShouldRequestAndroidLocationPermission(
-      content::WebContents* web_contents) override {
-    return false;
-  }
-
-  void RequestAndroidPermission(content::WebContents* web_contents,
-                                PermissionUpdatedCallback callback) override {}
-
   bool IsInteractable(content::WebContents* web_contents) override {
     return true;
   }
@@ -120,16 +107,63 @@ class TestGeolocationPermissionContextDelegate
                                  const GURL& embedding_origin) override {}
 #endif
 
-  const ContentSettingsUsagesState& state() { return state_; }
-
   void SetDSEOriginForTesting(const url::Origin& dse_origin) {
     dse_origin_ = dse_origin;
   }
 
  private:
   TestingPrefServiceSimple prefs_;
-  ContentSettingsUsagesState state_;
   base::Optional<url::Origin> dse_origin_;
+};
+
+class TestTabSpecificContentSettingsDelegate
+    : public content_settings::TabSpecificContentSettings::Delegate {
+ public:
+  explicit TestTabSpecificContentSettingsDelegate(
+      content::BrowserContext* browser_context)
+      : browser_context_(browser_context) {}
+
+  // content_settings::TabSpecificContentSettings::Delegate:
+  void UpdateLocationBar() override {}
+
+  void SetContentSettingRules(
+      content::RenderProcessHost* process,
+      const RendererContentSettingRules& rules) override {}
+
+  PrefService* GetPrefs() override { return nullptr; }
+
+  HostContentSettingsMap* GetSettingsMap() override {
+    return PermissionsClient::Get()->GetSettingsMap(browser_context_);
+  }
+
+  std::vector<storage::FileSystemType> GetAdditionalFileSystemTypes() override {
+    return {};
+  }
+
+  browsing_data::CookieHelper::IsDeletionDisabledCallback
+  GetIsDeletionDisabledCallback() override {
+    return base::NullCallback();
+  }
+
+  bool IsMicrophoneCameraStateChanged(
+      content_settings::TabSpecificContentSettings::MicrophoneCameraState
+          microphone_camera_state,
+      const std::string& media_stream_selected_audio_device,
+      const std::string& media_stream_selected_video_device) override {
+    return false;
+  }
+
+  content_settings::TabSpecificContentSettings::MicrophoneCameraState
+  GetMicrophoneCameraState() override {
+    return content_settings::TabSpecificContentSettings::
+        MICROPHONE_CAMERA_NOT_ACCESSED;
+  }
+
+  void OnContentAllowed(ContentSettingsType type) override {}
+  void OnContentBlocked(ContentSettingsType type) override {}
+
+ private:
+  content::BrowserContext* browser_context_;
 };
 }  // namespace
 
@@ -267,8 +301,11 @@ void GeolocationPermissionContextTests::AddNewTab(const GURL& url) {
 void GeolocationPermissionContextTests::CheckTabContentsState(
     const GURL& requesting_frame,
     ContentSetting expected_content_setting) {
+  auto* content_settings =
+      content_settings::TabSpecificContentSettings::FromWebContents(
+          web_contents());
   const ContentSettingsUsagesState::StateMap& state_map =
-      delegate_->state().state_map();
+      content_settings->geolocation_usages_state().state_map();
   EXPECT_EQ(1U, state_map.count(requesting_frame.GetOrigin()));
   EXPECT_EQ(0U, state_map.count(requesting_frame));
   auto settings = state_map.find(requesting_frame.GetOrigin());
@@ -279,6 +316,10 @@ void GeolocationPermissionContextTests::CheckTabContentsState(
 
 void GeolocationPermissionContextTests::SetUp() {
   RenderViewHostTestHarness::SetUp();
+
+  content_settings::TabSpecificContentSettings::CreateForWebContents(
+      web_contents(), std::make_unique<TestTabSpecificContentSettingsDelegate>(
+                          browser_context()));
 
   auto delegate = std::make_unique<TestGeolocationPermissionContextDelegate>(
       browser_context());

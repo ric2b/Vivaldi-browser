@@ -8,10 +8,11 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/check_op.h"
 #include "base/feature_list.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/notreached.h"
 #include "base/task/post_task.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
 #include "content/browser/data_url_loader_factory.h"
@@ -42,8 +43,8 @@
 #include "content/public/common/referrer.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "net/base/isolation_info.h"
 #include "net/base/load_flags.h"
-#include "net/base/network_isolation_key.h"
 #include "net/http/http_request_headers.h"
 #include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -63,11 +64,13 @@ namespace {
 // static
 void WorkerScriptFetchInitiator::Start(
     int worker_process_id,
+    DedicatedWorkerId dedicated_worker_id,
+    SharedWorkerId shared_worker_id,
     const GURL& initial_request_url,
     RenderFrameHost* creator_render_frame_host,
     const net::SiteForCookies& site_for_cookies,
     const url::Origin& request_initiator,
-    const net::NetworkIsolationKey& trusted_network_isolation_key,
+    const net::IsolationInfo& trusted_isolation_info,
     network::mojom::CredentialsMode credentials_mode,
     blink::mojom::FetchClientSettingsObjectPtr
         outside_fetch_client_settings_object,
@@ -153,14 +156,10 @@ void WorkerScriptFetchInitiator::Start(
 
   switch (resource_type) {
     case blink::mojom::ResourceType::kWorker:
-      resource_request->fetch_request_context_type =
-          static_cast<int>(blink::mojom::RequestContextType::WORKER);
       resource_request->destination =
           network::mojom::RequestDestination::kWorker;
       break;
     case blink::mojom::ResourceType::kSharedWorker:
-      resource_request->fetch_request_context_type =
-          static_cast<int>(blink::mojom::RequestContextType::SHARED_WORKER);
       resource_request->destination =
           network::mojom::RequestDestination::kSharedWorker;
       break;
@@ -178,9 +177,9 @@ void WorkerScriptFetchInitiator::Start(
   AddAdditionalRequestHeaders(resource_request.get(), browser_context);
 
   CreateScriptLoader(
-      worker_process_id, initial_request_url, creator_render_frame_host,
-      trusted_network_isolation_key, std::move(resource_request),
-      std::move(factory_bundle_for_browser),
+      worker_process_id, dedicated_worker_id, shared_worker_id,
+      initial_request_url, creator_render_frame_host, trusted_isolation_info,
+      std::move(resource_request), std::move(factory_bundle_for_browser),
       std::move(subresource_loader_factories),
       std::move(service_worker_context), service_worker_handle,
       std::move(appcache_host), std::move(blob_url_loader_factory),
@@ -282,9 +281,11 @@ void WorkerScriptFetchInitiator::AddAdditionalRequestHeaders(
 
 void WorkerScriptFetchInitiator::CreateScriptLoader(
     int worker_process_id,
+    DedicatedWorkerId dedicated_worker_id,
+    SharedWorkerId shared_worker_id,
     const GURL& initial_request_url,
     RenderFrameHost* creator_render_frame_host,
-    const net::NetworkIsolationKey& trusted_network_isolation_key,
+    const net::IsolationInfo& trusted_isolation_info,
     std::unique_ptr<network::ResourceRequest> resource_request,
     std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
         factory_bundle_for_browser_info,
@@ -324,7 +325,7 @@ void WorkerScriptFetchInitiator::CreateScriptLoader(
     // to the COEP reporter in DedicatedWorkerHost.
     network::mojom::URLLoaderFactoryParamsPtr factory_params =
         URLLoaderFactoryParamsHelper::CreateForWorker(
-            factory_process, request_initiator, trusted_network_isolation_key,
+            factory_process, request_initiator, trusted_isolation_info,
             /*coep_reporter=*/mojo::NullRemote());
 
     mojo::PendingReceiver<network::mojom::URLLoaderFactory>
@@ -374,7 +375,8 @@ void WorkerScriptFetchInitiator::CreateScriptLoader(
 
   WorkerScriptFetcher::CreateAndStart(
       std::make_unique<WorkerScriptLoaderFactory>(
-          worker_process_id, service_worker_handle, std::move(appcache_host),
+          worker_process_id, dedicated_worker_id, shared_worker_id,
+          service_worker_handle, std::move(appcache_host),
           browser_context_getter, std::move(url_loader_factory)),
       std::move(throttles), std::move(resource_request),
       base::BindOnce(WorkerScriptFetchInitiator::DidCreateScriptLoader,

@@ -3,8 +3,11 @@
 // found in the LICENSE file.
 
 #include "media/base/buffering_state.h"
+
 #include <string>
-#include "base/logging.h"
+#include <vector>
+
+#include "base/check.h"
 
 namespace media {
 

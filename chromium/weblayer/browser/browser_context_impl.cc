@@ -5,10 +5,12 @@
 #include "weblayer/browser/browser_context_impl.h"
 
 #include "base/threading/thread_restrictions.h"
+#include "components/client_hints/browser/client_hints.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/download/public/common/in_progress_download_manager.h"
 #include "components/embedder_support/pref_names.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/language/core/browser/language_prefs.h"
 #include "components/permissions/permission_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/in_memory_pref_store.h"
@@ -17,6 +19,9 @@
 #include "components/prefs/pref_service_factory.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
+#include "components/security_state/core/security_state.h"
+#include "components/translate/core/browser/translate_pref_names.h"
+#include "components/translate/core/browser/translate_prefs.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/variations/variations_client.h"
 #include "components/variations/variations_http_header_provider.h"
@@ -24,6 +29,7 @@
 #include "content/public/browser/download_request_utils.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "weblayer/browser/client_hints_factory.h"
 #include "weblayer/browser/permissions/permission_manager_factory.h"
 #include "weblayer/browser/stateful_ssl_host_state_delegate_factory.h"
 #include "weblayer/public/common/switches.h"
@@ -72,8 +78,6 @@ BrowserContextImpl::BrowserContextImpl(ProfileImpl* profile_impl,
       path_(path),
       resource_context_(new ResourceContextImpl()),
       download_delegate_(BrowserContext::GetDownloadManager(this)) {
-  content::BrowserContext::Initialize(this, path_);
-
   CreateUserPrefService();
 
   BrowserContextDependencyManager::GetInstance()->CreateBrowserContextServices(
@@ -159,8 +163,7 @@ BrowserContextImpl::GetPermissionControllerDelegate() {
 
 content::ClientHintsControllerDelegate*
 BrowserContextImpl::GetClientHintsControllerDelegate() {
-  // TODO(crbug.com/1065537): implement me.
-  return nullptr;
+  return ClientHintsFactory::GetForBrowserContext(this);
 }
 
 content::BackgroundFetchDelegate*
@@ -234,11 +237,20 @@ void BrowserContextImpl::RegisterPrefs(
   StatefulSSLHostStateDelegate::RegisterProfilePrefs(pref_registry);
   HostContentSettingsMap::RegisterProfilePrefs(pref_registry);
   safe_browsing::RegisterProfilePrefs(pref_registry);
+  security_state::RegisterProfilePrefs(pref_registry);
+  language::LanguagePrefs::RegisterProfilePrefs(pref_registry);
+  translate::TranslatePrefs::RegisterProfilePrefs(pref_registry);
+  pref_registry->RegisterBooleanPref(
+      prefs::kOfferTranslateEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 #if defined(OS_ANDROID)
   cdm::MediaDrmStorageImpl::RegisterProfilePrefs(pref_registry);
   permissions::GeolocationPermissionContextAndroid::RegisterProfilePrefs(
       pref_registry);
 #endif
+
+  BrowserContextDependencyManager::GetInstance()
+      ->RegisterProfilePrefsForServices(pref_registry);
 }
 
 class BrowserContextImpl::WebLayerVariationsClient

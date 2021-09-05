@@ -5,12 +5,11 @@
 package org.chromium.chrome.browser.incognito;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.support.test.InstrumentationRegistry;
 
-import org.chromium.base.ApplicationStatus;
 import org.chromium.base.test.params.ParameterProvider;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -19,7 +18,7 @@ import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -100,6 +99,25 @@ public class IncognitoDataTestUtils {
                 return TestParams.getParameters(true, true);
             }
         }
+
+        public static class RegularToRegular implements ParameterProvider {
+            @Override
+            public List<ParameterSet> getParameters() {
+                return TestParams.getParameters(false, false);
+            }
+        }
+
+        public static class AllTypesToAllTypes implements ParameterProvider {
+            @Override
+            public List<ParameterSet> getParameters() {
+                List<ParameterSet> result = new ArrayList<>();
+                result.addAll(new TestParams.RegularToIncognito().getParameters());
+                result.addAll(new TestParams.IncognitoToRegular().getParameters());
+                result.addAll(new TestParams.IncognitoToIncognito().getParameters());
+                result.addAll(new TestParams.RegularToRegular().getParameters());
+                return result;
+            }
+        }
     }
 
     private static Tab launchUrlInTab(
@@ -109,6 +127,10 @@ public class IncognitoDataTestUtils {
         testRule.startMainActivityOnBlankPage();
 
         Tab tab = testRule.loadUrlInNewTab(url, incognito);
+
+        // Giving time to the WebContents to be ready.
+        CriteriaHelper.pollUiThread(() -> { assertNotNull(tab.getWebContents()); });
+
         assertEquals(incognito, tab.getWebContents().isIncognito());
         return tab;
     }
@@ -125,6 +147,10 @@ public class IncognitoDataTestUtils {
         testRule.startCustomTabActivityWithIntent(intent);
 
         Tab tab = testRule.getActivity().getActivityTab();
+
+        // Giving time to the WebContents to be ready.
+        CriteriaHelper.pollUiThread(() -> { assertNotNull(tab.getWebContents()); });
+
         assertEquals(incognito, tab.getWebContents().isIncognito());
         return tab;
     }
@@ -134,15 +160,5 @@ public class IncognitoDataTestUtils {
         if (activity == null) return;
         activity.getTabModelSelector().getModel(false).closeAllTabs();
         activity.getTabModelSelector().getModel(true).closeAllTabs();
-    }
-
-    public static void finishActivities() {
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            for (Activity runningActivities : ApplicationStatus.getRunningActivities()) {
-                if (runningActivities instanceof ChromeActivity) {
-                    runningActivities.finish();
-                }
-            }
-        });
     }
 }

@@ -21,7 +21,7 @@
 #include "ash/accessibility/key_accessibility_enabler.h"
 #include "ash/ambient/ambient_controller.h"
 #include "ash/app_list/app_list_controller_impl.h"
-#include "ash/assistant/assistant_controller.h"
+#include "ash/assistant/assistant_controller_impl.h"
 #include "ash/autoclick/autoclick_controller.h"
 #include "ash/dbus/ash_dbus_services.h"
 #include "ash/detachable_base/detachable_base_handler.h"
@@ -32,6 +32,7 @@
 #include "ash/display/display_configuration_controller.h"
 #include "ash/display/display_configuration_observer.h"
 #include "ash/display/display_error_observer.h"
+#include "ash/display/display_highlight_controller.h"
 #include "ash/display/display_prefs.h"
 #include "ash/display/display_shutdown_observer.h"
 #include "ash/display/event_transformation_handler.h"
@@ -158,9 +159,10 @@
 #include "ash/wm/workspace_controller.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
@@ -181,7 +183,7 @@
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
-#include "ui/base/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/user_activity/user_activity_detector.h"
@@ -357,10 +359,6 @@ int Shell::GetOpenSystemModalWindowContainerId() {
 // static
 bool Shell::IsSystemModalWindowOpen() {
   return GetOpenSystemModalWindowContainerId() >= 0;
-}
-
-AssistantController* Shell::assistant_controller() {
-  return assistant_controller_.get();
 }
 
 display::DisplayConfigurator* Shell::display_configurator() {
@@ -674,10 +672,10 @@ Shell::~Shell() {
   // it before destroying |tablet_mode_controller_|.
   accessibility_controller_->Shutdown();
 
-  // Destroy tablet mode controller early on since it has some observers which
-  // need to be removed.
+  // Shutdown tablet mode controller early on since it has some observers which
+  // need to be removed. It will be destroyed later after all windows are closed
+  // since it might be accessed during this process.
   tablet_mode_controller_->Shutdown();
-  tablet_mode_controller_.reset();
 
   // Destroy UserSettingsEventLogger before |system_tray_model_| and
   // |video_detector_| which it observes.
@@ -697,8 +695,9 @@ Shell::~Shell() {
 
   // Controllers who have WindowObserver added must be deleted
   // before |window_tree_host_manager_| is deleted.
-
   persistent_window_controller_.reset();
+
+  display_highlight_controller_.reset();
 
   // VideoActivityNotifier must be deleted before |video_detector_| is
   // deleted because it's observing video activity through
@@ -722,6 +721,7 @@ Shell::~Shell() {
   // Close all widgets (including the shelf) and destroy all window containers.
   CloseAllRootWindowChildWindows();
 
+  tablet_mode_controller_.reset();
   login_screen_controller_.reset();
   system_notification_controller_.reset();
   // Should be destroyed after Shelf and |system_notification_controller_|.
@@ -1070,14 +1070,13 @@ void Shell::Init(
 
   magnification_controller_ = std::make_unique<MagnificationController>();
   mru_window_tracker_ = std::make_unique<MruWindowTracker>();
-  assistant_controller_ = std::make_unique<AssistantController>();
+  assistant_controller_ = std::make_unique<AssistantControllerImpl>();
   quick_answers_controller_ = std::make_unique<QuickAnswersControllerImpl>();
 
   // |assistant_controller_| is put before |ambient_controller_| as it will be
   // used by the latter.
-  if (chromeos::features::IsAmbientModeEnabled()) {
+  if (chromeos::features::IsAmbientModeEnabled())
     ambient_controller_ = std::make_unique<AmbientController>();
-  }
 
   home_screen_controller_ = std::make_unique<HomeScreenController>();
 
@@ -1186,6 +1185,11 @@ void Shell::Init(
   if (base::FeatureList::IsEnabled(features::kMediaSessionNotification)) {
     media_notification_controller_ =
         std::make_unique<MediaNotificationControllerImpl>();
+  }
+
+  if (features::IsDisplayIdentificationEnabled()) {
+    display_highlight_controller_ =
+        std::make_unique<DisplayHighlightController>();
   }
 
   for (auto& observer : shell_observers_)

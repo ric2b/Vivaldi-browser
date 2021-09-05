@@ -268,6 +268,10 @@ class CalendarService : public KeyedService {
       const GetALLAccounsCallback& callback,
       base::CancelableTaskTracker* tracker);
 
+  base::CancelableTaskTracker::TaskId GetAllEventTemplates(
+      const QueryCalendarCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
  private:
   class CalendarBackendDelegate;
   friend class base::RefCountedThreadSafe<CalendarService>;

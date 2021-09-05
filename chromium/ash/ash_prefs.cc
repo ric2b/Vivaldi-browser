@@ -7,10 +7,11 @@
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/ambient/ambient_controller.h"
 #include "ash/app_list/app_list_controller_impl.h"
-#include "ash/assistant/assistant_controller.h"
+#include "ash/assistant/assistant_controller_impl.h"
 #include "ash/detachable_base/detachable_base_handler.h"
 #include "ash/display/display_prefs.h"
 #include "ash/display/privacy_screen_controller.h"
+#include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/login/login_screen_controller.h"
 #include "ash/magnifier/docked_magnifier_controller_impl.h"
 #include "ash/media/media_controller_impl.h"
@@ -27,6 +28,7 @@
 #include "ash/system/palette/palette_welcome_bubble.h"
 #include "ash/system/power/power_prefs.h"
 #include "ash/system/session/logout_button_tray.h"
+#include "ash/system/unified/top_shortcuts_view.h"
 #include "ash/touch/touch_devices_controller.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "ash/wm/desks/desks_restore_util.h"
@@ -41,7 +43,7 @@ namespace {
 void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
   AccessibilityControllerImpl::RegisterProfilePrefs(registry);
   AppListControllerImpl::RegisterProfilePrefs(registry);
-  AssistantController::RegisterProfilePrefs(registry);
+  AssistantControllerImpl::RegisterProfilePrefs(registry);
   AmbientController::RegisterProfilePrefs(registry);
   BluetoothPowerController::RegisterProfilePrefs(registry);
   CapsLockNotificationController::RegisterProfilePrefs(registry, for_test);
@@ -52,6 +54,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
                                                                for_test);
   LoginScreenController::RegisterProfilePrefs(registry, for_test);
   LogoutButtonTray::RegisterProfilePrefs(registry);
+  KeyboardControllerImpl::RegisterProfilePrefs(registry);
   MediaControllerImpl::RegisterProfilePrefs(registry);
   MessageCenterController::RegisterProfilePrefs(registry);
   NightLightControllerImpl::RegisterProfilePrefs(registry);
@@ -80,6 +83,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry, bool for_test) {
   DetachableBaseHandler::RegisterPrefs(registry);
   PowerPrefs::RegisterLocalStatePrefs(registry);
   DisplayPrefs::RegisterLocalStatePrefs(registry);
+  TopShortcutsView::RegisterLocalStatePrefs(registry);
 }
 
 void RegisterSigninProfilePrefs(PrefRegistrySimple* registry, bool for_test) {

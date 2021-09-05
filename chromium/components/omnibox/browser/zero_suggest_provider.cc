@@ -32,7 +32,7 @@
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
-#include "components/omnibox/browser/omnibox_pref_names.h"
+#include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/browser/remote_suggestions_service.h"
 #include "components/omnibox/browser/search_provider.h"
 #include "components/omnibox/browser/search_suggestion_parser.h"
@@ -198,8 +198,7 @@ ZeroSuggestProvider* ZeroSuggestProvider::Create(
 }
 
 // static
-void ZeroSuggestProvider::RegisterProfilePrefs(
-    user_prefs::PrefRegistrySyncable* registry) {
+void ZeroSuggestProvider::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(omnibox::kZeroSuggestCachedResults,
                                std::string());
 }
@@ -699,13 +698,38 @@ ZeroSuggestProvider::ResultType ZeroSuggestProvider::TypeOfResultToRun(
   if (base::Contains(field_trial_variants, kNoneVariant))
     return NONE;
 
-  // TODO(tommycli): Since this can be configured via ZeroSuggestVariant, we
-  // should eliminate this special case and use a field trial configuration.
   if (current_page_classification_ == OmniboxEventProto::CHROMEOS_APP_LIST)
     return REMOTE_NO_URL;
 
+  // Contextual Open Web.
+  if (current_page_classification_ == OmniboxEventProto::OTHER &&
+      base::FeatureList::IsEnabled(omnibox::kOnFocusSuggestionsContextualWeb) &&
+      can_send_current_url) {
+    return REMOTE_SEND_URL;
+  }
+
+  // Proactive ZeroSuggest (PZPS) on NTP cases.
+  bool remote_no_url_allowed =
+      RemoteNoUrlSuggestionsAreAllowed(client(), template_url_service);
+  if (remote_no_url_allowed) {
+    // NTP Omnibox.
+    if ((current_page_classification_ == OmniboxEventProto::NTP ||
+         current_page_classification_ ==
+             OmniboxEventProto::INSTANT_NTP_WITH_OMNIBOX_AS_STARTING_FOCUS) &&
+        base::FeatureList::IsEnabled(
+            omnibox::kProactiveZeroSuggestionsOnNTPOmnibox)) {
+      return REMOTE_NO_URL;
+    }
+    // NTP Realbox.
+    if (current_page_classification_ == OmniboxEventProto::NTP_REALBOX &&
+        base::FeatureList::IsEnabled(
+            omnibox::kProactiveZeroSuggestionsOnNTPRealbox)) {
+      return REMOTE_NO_URL;
+    }
+  }
+
   if (base::Contains(field_trial_variants, kRemoteNoUrlVariant)) {
-    if (RemoteNoUrlSuggestionsAreAllowed(client(), template_url_service))
+    if (remote_no_url_allowed)
       return REMOTE_NO_URL;
 
 #if defined(OS_ANDROID)

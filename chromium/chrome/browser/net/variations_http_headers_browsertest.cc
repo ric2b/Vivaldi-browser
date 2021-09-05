@@ -30,6 +30,7 @@
 #include "components/variations/variations_http_header_provider.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/network_connection_change_simulator.h"
 #include "content/public/test/simple_url_loader_test_helper.h"
@@ -288,7 +289,7 @@ std::unique_ptr<net::test_server::HttpResponse>
 VariationsHttpHeadersBrowserTest::RequestHandler(
     const net::test_server::HttpRequest& request) {
   // Retrieve the host name (without port) from the request headers.
-  std::string host = "";
+  std::string host;
   if (request.headers.find("Host") != request.headers.end())
     host = request.headers.find("Host")->second;
   if (host.find(':') != std::string::npos)

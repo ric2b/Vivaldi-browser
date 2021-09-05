@@ -25,6 +25,10 @@ namespace ash {
 class DefaultScaleFactorRetriever;
 }
 
+namespace cryptohome {
+class Identification;
+}
+
 namespace arc {
 
 namespace mojom {
@@ -194,7 +198,8 @@ class ArcSessionImpl
   void Stop() override;
   bool IsStopRequested() override;
   void OnShutdown() override;
-  void SetUserInfo(const std::string& hash,
+  void SetUserInfo(const cryptohome::Identification& cryptohome_id,
+                   const std::string& hash,
                    const std::string& serial_number) override;
 
   // chromeos::SchedulerConfigurationManagerBase::Observer overrides:
@@ -223,8 +228,9 @@ class ArcSessionImpl
   // connect.)
   void OnMojoConnected(std::unique_ptr<mojom::ArcBridgeHost> arc_bridge_host);
 
-  // Request to stop ARC instance via DBus.
-  void StopArcInstance(bool on_shutdown);
+  // Request to stop ARC instance via DBus. Also backs up the ARC
+  // bug report if |should_backup_log| is set to true.
+  void StopArcInstance(bool on_shutdown, bool should_backup_log);
 
   // ArcClientAdapter::Observer:
   void ArcInstanceStopped() override;

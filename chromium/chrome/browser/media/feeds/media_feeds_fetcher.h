@@ -20,21 +20,27 @@ namespace media_feeds {
 // Fetcher object to retrieve a Media Feed schema.org object from a URL.
 class MediaFeedsFetcher {
  public:
+  static const char kFetchSizeKbHistogramName[];
+
   enum class Status {
     kOk,
     kRequestFailed,
     kNotFound,
     kInvalidFeedData,
+    kGone,
   };
 
   using MediaFeedCallback =
       base::OnceCallback<void(const schema_org::improved::mojom::EntityPtr&,
-                              Status)>;
+                              Status,
+                              /*was_fetched_via_cache=*/bool)>;
   explicit MediaFeedsFetcher(
       scoped_refptr<::network::SharedURLLoaderFactory> url_loader_factory);
   ~MediaFeedsFetcher();
 
-  void FetchFeed(const GURL& url, MediaFeedCallback callback);
+  void FetchFeed(const GURL& url,
+                 const bool bypass_cache,
+                 MediaFeedCallback callback);
 
  private:
   // Called when fetch request completes. Parses the received media feed
@@ -43,8 +49,10 @@ class MediaFeedsFetcher {
                           MediaFeedCallback callback,
                           std::unique_ptr<std::string> feed_data);
 
-  void ResolveAllCallbacks(schema_org::improved::mojom::EntityPtr response,
-                           Status status);
+  // Called when parsing and extraction of the schema.org JSON is complete.
+  void OnParseComplete(MediaFeedCallback callback,
+                       const bool was_fetched_via_cache,
+                       schema_org::improved::mojom::EntityPtr parsed_entity);
 
   const scoped_refptr<::network::SharedURLLoaderFactory> url_loader_factory_;
 

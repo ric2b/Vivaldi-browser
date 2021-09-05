@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "chrome/browser/installable/installable_metrics.h"
+#include "chrome/browser/web_applications/components/install_finalizer.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
@@ -58,6 +59,8 @@ class WebAppInstallTask : content::WebContentsObserver {
   // The actual resulting app_id is reported as a part of OnceInstallCallback.
   void ExpectAppId(const AppId& expected_app_id);
 
+  void SetInstallParams(const InstallManager::InstallParams& install_params);
+
   using LoadWebAppAndCheckInstallabilityCallback = base::OnceCallback<void(
       std::unique_ptr<content::WebContents> web_contents,
       const AppId& app_id,
@@ -98,6 +101,15 @@ class WebAppInstallTask : content::WebContentsObserver {
       WebappInstallSource install_source,
       InstallManager::OnceInstallCallback callback);
 
+  // Fetches the icon URLs in |web_application_info| to populate the icon
+  // bitmaps. Once fetched uses the contents of |web_application_info| as the
+  // entire web app installation data.
+  void InstallWebAppFromInfoRetrieveIcons(
+      content::WebContents* web_contents,
+      std::unique_ptr<WebApplicationInfo> web_application_info,
+      InstallFinalizer::FinalizeOptions finalize_options,
+      InstallManager::OnceInstallCallback callback);
+
   // Starts a web app installation process using prefilled
   // |web_application_info| which holds all the data needed for installation.
   // InstallManager doesn't fetch a manifest.
@@ -114,16 +126,6 @@ class WebAppInstallTask : content::WebContentsObserver {
   void InstallWebAppWithParams(
       content::WebContents* web_contents,
       const InstallManager::InstallParams& install_params,
-      WebappInstallSource install_source,
-      InstallManager::OnceInstallCallback callback);
-
-  // Starts background installation of a web app: does not show UI dialog.
-  // |web_application_info| contains all the data needed for installation. Icons
-  // will be downloaded from the icon URLs provided in |web_application_info|.
-  void InstallWebAppFromInfoRetrieveIcons(
-      content::WebContents* web_contents,
-      std::unique_ptr<WebApplicationInfo> web_application_info,
-      bool is_locally_installed,
       WebappInstallSource install_source,
       InstallManager::OnceInstallCallback callback);
 
@@ -205,7 +207,7 @@ class WebAppInstallTask : content::WebContentsObserver {
       bool should_intent_to_store);
 
   void OnIconsRetrieved(std::unique_ptr<WebApplicationInfo> web_app_info,
-                        bool is_locally_installed,
+                        InstallFinalizer::FinalizeOptions finalize_options,
                         IconsMap icons_map);
   void OnIconsRetrievedShowDialog(
       std::unique_ptr<WebApplicationInfo> web_app_info,

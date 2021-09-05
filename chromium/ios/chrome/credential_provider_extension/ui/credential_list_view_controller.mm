@@ -4,9 +4,12 @@
 
 #import "ios/chrome/credential_provider_extension/ui/credential_list_view_controller.h"
 
-#import "base/mac/foundation_util.h"
+#include "base/mac/foundation_util.h"
+#include "ios/chrome/common/app_group/app_group_metrics.h"
 #import "ios/chrome/common/credential_provider/credential.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/pointer_interaction_util.h"
+#import "ios/chrome/credential_provider_extension/metrics_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -18,55 +21,28 @@ NSString* kHeaderIdentifier = @"clvcHeader";
 NSString* kCellIdentifier = @"clvcCell";
 
 const CGFloat kHeaderHeight = 70;
-const CGFloat kFallbackIconSize = 24;
-const CGFloat kFallbackRoundedCorner = 3;
-
-// Returns an icon with centered letter from given |string| and some
-// colors computed from the string.
-// TODO(crbug.com/1045454): draw actual icon or default icon.
-UIImage* GetFallbackImageWithStringAndColor(NSString* string) {
-  int hash = string.hash;
-  UIColor* backgroundColor =
-      [UIColor colorWithRed:0.5 + (hash & 0xff) / 510.0
-                      green:0.5 + ((hash >> 8) & 0xff) / 510.0
-                       blue:0.5 + ((hash >> 16) & 0xff) / 510.0
-                      alpha:1.0];
-
-  UIColor* textColor = [UIColor colorWithRed:(hash & 0xff) / 510.0
-                                       green:((hash >> 8) & 0xff) / 510.0
-                                        blue:((hash >> 16) & 0xff) / 510.0
-                                       alpha:1.0];
-
-  CGRect rect = CGRectMake(0, 0, kFallbackIconSize, kFallbackIconSize);
-
-  UIGraphicsBeginImageContext(rect.size);
-  CGContextRef context = UIGraphicsGetCurrentContext();
-  CGContextSetFillColorWithColor(context, [backgroundColor CGColor]);
-  CGContextSetStrokeColorWithColor(context, [textColor CGColor]);
-
-  UIBezierPath* rounded =
-      [UIBezierPath bezierPathWithRoundedRect:rect
-                                 cornerRadius:kFallbackRoundedCorner];
-  [rounded fill];
-
-  UIFont* font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
-  font = [font fontWithSize:(kFallbackIconSize / 2)];
-  CGRect textRect = CGRectMake(0, (kFallbackIconSize - [font lineHeight]) / 2,
-                               kFallbackIconSize, [font lineHeight]);
-  NSMutableParagraphStyle* paragraphStyle =
-      [[NSMutableParagraphStyle alloc] init];
-  [paragraphStyle setAlignment:NSTextAlignmentCenter];
-  NSMutableDictionary* attributes = [[NSMutableDictionary alloc] init];
-  [attributes setValue:font forKey:NSFontAttributeName];
-  [attributes setValue:textColor forKey:NSForegroundColorAttributeName];
-  [attributes setValue:paragraphStyle forKey:NSParagraphStyleAttributeName];
-  [[string substringToIndex:1] drawInRect:textRect withAttributes:attributes];
-
-  UIImage* image = UIGraphicsGetImageFromCurrentImageContext();
-  UIGraphicsEndImageContext();
-  return image;
 }
+
+#if defined(__IPHONE_13_4)
+// This cell just adds a simple hover pointer interaction to the TableViewCell.
+@interface CredentialListCell : UITableViewCell
+@end
+
+@implementation CredentialListCell
+
+- (instancetype)initWithStyle:(UITableViewCellStyle)style
+              reuseIdentifier:(NSString*)reuseIdentifier {
+  self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+  if (self) {
+    if (@available(iOS 13.4, *)) {
+      [self addInteraction:[[ViewPointerInteraction alloc] init]];
+    }
+  }
+  return self;
 }
+
+@end
+#endif  // defined(__IPHONE_13_4)
 
 @interface CredentialListViewController () <UITableViewDataSource,
                                             UISearchResultsUpdating>
@@ -88,15 +64,33 @@ UIImage* GetFallbackImageWithStringAndColor(NSString* string) {
 
 - (void)viewDidLoad {
   [super viewDidLoad];
+  self.title =
+      NSLocalizedString(@"IDS_IOS_CREDENTIAL_PROVIDER_CREDENTIAL_LIST_TITLE",
+                        @"AutoFill Chrome Password");
   self.view.backgroundColor = [UIColor colorNamed:kBackgroundColor];
+
   self.navigationItem.rightBarButtonItem = [self navigationCancelButton];
 
   self.searchController =
       [[UISearchController alloc] initWithSearchResultsController:nil];
   self.searchController.searchResultsUpdater = self;
   self.searchController.obscuresBackgroundDuringPresentation = NO;
+  self.searchController.searchBar.translucent = YES;
+  self.searchController.searchBar.barTintColor =
+      [UIColor colorNamed:kBackgroundColor];
+
   self.tableView.tableHeaderView = self.searchController.searchBar;
+  self.tableView.tableFooterView = [[UIView alloc] initWithFrame:CGRectZero];
+
   self.navigationController.navigationBar.translucent = NO;
+  self.navigationController.navigationBar.barTintColor =
+      [UIColor colorNamed:kBackgroundColor];
+  self.navigationController.navigationBar.tintColor =
+      [UIColor colorNamed:kBlueColor];
+  self.navigationController.navigationBar.shadowImage = [[UIImage alloc] init];
+  [self.navigationController.navigationBar
+      setBackgroundImage:[[UIImage alloc] init]
+           forBarMetrics:UIBarMetricsDefault];
 
   // Presentation of searchController will walk up the view controller hierarchy
   // until it finds the root view controller or one that defines a presentation
@@ -106,7 +100,6 @@ UIImage* GetFallbackImageWithStringAndColor(NSString* string) {
 
   [self.tableView registerClass:[UITableViewHeaderFooterView class]
       forHeaderFooterViewReuseIdentifier:kHeaderIdentifier];
-  self.tableView.sectionHeaderHeight = kHeaderHeight;
 }
 
 #pragma mark - CredentialListConsumer
@@ -126,7 +119,9 @@ UIImage* GetFallbackImageWithStringAndColor(NSString* string) {
 
 - (NSInteger)tableView:(UITableView*)tableView
     numberOfRowsInSection:(NSInteger)section {
-  if ([self isSuggestedPasswordSection:section]) {
+  if ([self isEmptyTable]) {
+    return 0;
+  } else if ([self isSuggestedPasswordSection:section]) {
     return self.suggestedPasswords.count;
   } else {
     return self.allPasswords.count;
@@ -152,23 +147,38 @@ UIImage* GetFallbackImageWithStringAndColor(NSString* string) {
   UITableViewCell* cell =
       [tableView dequeueReusableCellWithIdentifier:kCellIdentifier];
   if (!cell) {
+#if defined(__IPHONE_13_4)
+    cell =
+        [[CredentialListCell alloc] initWithStyle:UITableViewCellStyleSubtitle
+                                  reuseIdentifier:kCellIdentifier];
+#else
     cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle
                                   reuseIdentifier:kCellIdentifier];
-    cell.accessoryType = UITableViewCellAccessoryDetailButton;
-  }
-  id<Credential> credential;
-  if ([self isSuggestedPasswordSection:indexPath.section]) {
-    credential = self.suggestedPasswords[indexPath.row];
-  } else {
-    credential = self.allPasswords[indexPath.row];
+#endif  // defined(__IPHONE_13_4)
+    cell.accessoryView = [self infoIconButton];
   }
 
-  cell.imageView.image = GetFallbackImageWithStringAndColor(credential.user);
+  cell.backgroundColor = [UIColor colorNamed:kBackgroundColor];
+  cell.contentView.backgroundColor = [UIColor colorNamed:kBackgroundColor];
+
+  id<Credential> credential = [self credentialForIndexPath:indexPath];
+  if (credential.favicon.length) {
+    // TODO(crbug.com/1045454): draw actual icon.
+    cell.imageView.image = [[UIImage imageNamed:@"default_world_favicon"]
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } else {
+    cell.imageView.image = [[UIImage imageNamed:@"default_world_favicon"]
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    cell.imageView.tintColor = [UIColor colorNamed:kPlaceholderImageTintColor];
+  }
   cell.imageView.contentMode = UIViewContentModeScaleAspectFit;
+  cell.accessoryView.backgroundColor = [UIColor colorNamed:kBackgroundColor];
   cell.textLabel.text = credential.user;
   cell.textLabel.textColor = [UIColor colorNamed:kTextPrimaryColor];
   cell.detailTextLabel.text = credential.serviceName;
   cell.detailTextLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
+  cell.selectionStyle = UITableViewCellSelectionStyleNone;
+
   return cell;
 }
 
@@ -184,10 +194,25 @@ UIImage* GetFallbackImageWithStringAndColor(NSString* string) {
   return view;
 }
 
+- (CGFloat)tableView:(UITableView*)tableView
+    heightForHeaderInSection:(NSInteger)section {
+  return kHeaderHeight;
+}
+
+- (void)tableView:(UITableView*)tableView
+    didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
+  UpdateUMACountForKey(app_group::kCredentialExtensionPasswordUseCount);
+  id<Credential> credential = [self credentialForIndexPath:indexPath];
+  [self.delegate userSelectedCredential:credential];
+}
+
 #pragma mark - UISearchResultsUpdating
 
 - (void)updateSearchResultsForSearchController:
     (UISearchController*)searchController {
+  if (searchController.searchBar.text.length) {
+    UpdateUMACountForKey(app_group::kCredentialExtensionSearchCount);
+  }
   [self.delegate updateResultsWithFilter:searchController.searchBar.text];
 }
 
@@ -199,7 +224,52 @@ UIImage* GetFallbackImageWithStringAndColor(NSString* string) {
       initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
                            target:self.delegate
                            action:@selector(navigationCancelButtonWasPressed:)];
+  cancelButton.tintColor = [UIColor colorNamed:kBlueColor];
   return cancelButton;
+}
+
+// Creates a button to be displayed as accessory of the password row item.
+- (UIView*)infoIconButton {
+  UIImage* image = [UIImage imageNamed:@"info_icon"];
+  image = [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+
+  UIButton* button = [UIButton buttonWithType:UIButtonTypeCustom];
+  button.frame = CGRectMake(0.0, 0.0, image.size.width, image.size.height);
+  [button setBackgroundImage:image forState:UIControlStateNormal];
+  [button setTintColor:[UIColor colorNamed:kBlueColor]];
+  [button addTarget:self
+                action:@selector(infoIconButtonTapped:event:)
+      forControlEvents:UIControlEventTouchUpInside];
+
+#if defined(__IPHONE_13_4)
+  if (@available(iOS 13.4, *)) {
+    button.pointerInteractionEnabled = YES;
+    button.pointerStyleProvider = ^UIPointerStyle*(
+        UIButton* button, __unused UIPointerEffect* proposedEffect,
+        __unused UIPointerShape* proposedShape) {
+      UITargetedPreview* preview =
+          [[UITargetedPreview alloc] initWithView:button];
+      UIPointerHighlightEffect* effect =
+          [UIPointerHighlightEffect effectWithPreview:preview];
+      UIPointerShape* shape =
+          [UIPointerShape shapeWithRoundedRect:button.frame
+                                  cornerRadius:button.frame.size.width / 2];
+      return [UIPointerStyle styleWithEffect:effect shape:shape];
+    };
+  }
+#endif  // defined(__IPHONE_13_4)
+
+  return button;
+}
+
+// Called when info icon is tapped.
+- (void)infoIconButtonTapped:(id)sender event:(id)event {
+  CGPoint hitPoint =
+      [base::mac::ObjCCastStrict<UIButton>(sender) convertPoint:CGPointZero
+                                                         toView:self.tableView];
+  NSIndexPath* indexPath = [self.tableView indexPathForRowAtPoint:hitPoint];
+  id<Credential> credential = [self credentialForIndexPath:indexPath];
+  [self.delegate showDetailsForCredential:credential];
 }
 
 // Returns number of sections to display based on |suggestedPasswords| and
@@ -224,6 +294,14 @@ UIImage* GetFallbackImageWithStringAndColor(NSString* string) {
     return YES;
   } else {
     return NO;
+  }
+}
+
+- (id<Credential>)credentialForIndexPath:(NSIndexPath*)indexPath {
+  if ([self isSuggestedPasswordSection:indexPath.section]) {
+    return self.suggestedPasswords[indexPath.row];
+  } else {
+    return self.allPasswords[indexPath.row];
   }
 }
 

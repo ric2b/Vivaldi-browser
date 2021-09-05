@@ -25,35 +25,19 @@ void RenderWidgetMouseLockDispatcher::SendLockMouseRequest(
       requester_frame ? requester_frame->HasTransientUserActivation() : false;
   auto* host = render_widget_->GetInputHandlerHost();
   if (host) {
-    host->RequestMouseLock(has_transient_user_activation, /*privileged=*/false,
-                           request_unadjusted_movement,
-                           base::BindOnce(&MouseLockDispatcher::OnLockMouseACK,
-                                          this->AsWeakPtr()));
-  }
-}
-
-void RenderWidgetMouseLockDispatcher::SendChangeLockRequest(
-    blink::WebLocalFrame* requester_frame,
-    bool request_unadjusted_movement) {
-  auto* host = render_widget_->GetInputHandlerHost();
-  if (host) {
-    host->RequestMouseLockChange(
+    host->RequestMouseLock(
+        has_transient_user_activation, /*privileged=*/false,
         request_unadjusted_movement,
-        base::BindOnce(&MouseLockDispatcher::OnChangeLockAck,
-                       this->AsWeakPtr()));
+        base::BindOnce(&RenderWidgetMouseLockDispatcher::OnMouseLocked,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
-void RenderWidgetMouseLockDispatcher::SendUnlockMouseRequest() {
-  auto* host = render_widget_->GetInputHandlerHost();
-  if (host)
-    host->UnlockMouse();
-}
-
-void RenderWidgetMouseLockDispatcher::OnLockMouseACK(
-    blink::mojom::PointerLockResult result) {
+void RenderWidgetMouseLockDispatcher::OnMouseLocked(
+    blink::mojom::PointerLockResult result,
+    mojo::PendingRemote<blink::mojom::PointerLockContext> context) {
   // Notify the base class.
-  MouseLockDispatcher::OnLockMouseACK(result);
+  MouseLockDispatcher::OnLockMouseACK(result, std::move(context));
 
   // Mouse Lock removes the system cursor and provides all mouse motion as
   // .movementX/Y values on events all sent to a fixed target. This requires

@@ -33,8 +33,8 @@ class BASE_EXPORT StackSampler {
   static std::unique_ptr<StackSampler> Create(
       SamplingProfilerThreadToken thread_token,
       ModuleCache* module_cache,
-      StackSamplerTestDelegate* test_delegate,
-      std::unique_ptr<Unwinder> native_unwinder = nullptr);
+      std::unique_ptr<Unwinder> native_unwinder,
+      StackSamplerTestDelegate* test_delegate);
 
   // Gets the required size of the stack buffer.
   static size_t GetStackBufferSize();
@@ -47,7 +47,9 @@ class BASE_EXPORT StackSampler {
   // thread being sampled).
 
   // Adds an auxiliary unwinder to handle additional, non-native-code unwind
-  // scenarios.
+  // scenarios. When attempting to unwind, the relative priority of auxiliary
+  // unwinders is the inverse of the order of insertion, and the native
+  // unwinder is given the lowest priority
   virtual void AddAuxUnwinder(std::unique_ptr<Unwinder> unwinder) = 0;
 
   // Records a set of frames and returns them.

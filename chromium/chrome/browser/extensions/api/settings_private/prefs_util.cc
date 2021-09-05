@@ -24,7 +24,7 @@
 #include "components/drive/drive_pref_names.h"
 #include "components/embedder_support/pref_names.h"
 #include "components/language/core/browser/pref_names.h"
-#include "components/omnibox/browser/omnibox_pref_names.h"
+#include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/payments/core/payment_prefs.h"
 #include "components/prefs/pref_service.h"
@@ -351,8 +351,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_STRING;
   (*s_whitelist)[::prefs::kAccessibilityCaptionsBackgroundOpacity] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
+#if !defined(OS_ANDROID)
   (*s_whitelist)[::prefs::kLiveCaptionEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+#endif
 
 #if defined(OS_CHROMEOS)
   // Accounts / Users / People.
@@ -455,10 +457,6 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   // Guest OS
   (*s_whitelist)[crostini::prefs::kCrostiniEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[crostini::prefs::kCrostiniMicSharing] =
-      settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[crostini::prefs::kCrostiniMicSharingAtLastLaunch] =
-      settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[crostini::prefs::kCrostiniSharedUsbDevices] =
       settings_api::PrefType::PREF_TYPE_LIST;
   (*s_whitelist)[crostini::prefs::kCrostiniContainers] =
@@ -473,6 +471,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[plugin_vm::prefs::kPluginVmPrintersAllowed] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[plugin_vm::prefs::kPluginVmCameraSharing] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Android Apps.
   (*s_whitelist)[arc::prefs::kArcEnabled] =
@@ -481,8 +481,6 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   // Ambient Mode.
   (*s_whitelist)[ash::ambient::prefs::kAmbientModeEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[ash::ambient::prefs::kAmbientModeTopicSource] =
-      settings_api::PrefType::PREF_TYPE_NUMBER;
 
   // Google Assistant.
   (*s_whitelist)[chromeos::assistant::prefs::kAssistantConsentStatus] =
@@ -500,6 +498,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[chromeos::assistant::prefs::kAssistantLaunchWithMicOpen] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[chromeos::assistant::prefs::kAssistantNotificationEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[chromeos::assistant::prefs::kAssistantQuickAnswersEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Misc.
@@ -629,11 +629,11 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)[::prefs::kLanguageSendFunctionKeys] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kLanguageXkbAutoRepeatEnabled] =
+  (*s_whitelist)[::ash::prefs::kXkbAutoRepeatEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kLanguageXkbAutoRepeatDelay] =
+  (*s_whitelist)[::ash::prefs::kXkbAutoRepeatDelay] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)[::prefs::kLanguageXkbAutoRepeatInterval] =
+  (*s_whitelist)[::ash::prefs::kXkbAutoRepeatInterval] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)[chromeos::kDeviceDisplayResolution] =
       settings_api::PrefType::PREF_TYPE_DICTIONARY;

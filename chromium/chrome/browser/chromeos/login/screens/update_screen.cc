@@ -9,7 +9,9 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/time/default_tick_clock.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/chromeos/login/error_screens_histogram_helper.h"
 #include "chrome/browser/chromeos/login/screen_manager.h"
@@ -39,6 +41,11 @@ constexpr const base::TimeDelta kDelayErrorMessage =
 constexpr const base::TimeDelta kShowDelay =
     base::TimeDelta::FromMicroseconds(400);
 
+void RecordDownloadingTime(base::TimeDelta duration) {
+  base::UmaHistogramLongTimes("OOBE.UpdateScreen.UpdateDownloadingTime",
+                              duration);
+}
+
 }  // anonymous namespace
 
 // static
@@ -65,7 +72,8 @@ UpdateScreen::UpdateScreen(UpdateView* view,
       exit_callback_(exit_callback),
       histogram_helper_(
           std::make_unique<ErrorScreensHistogramHelper>("Update")),
-      version_updater_(std::make_unique<VersionUpdater>(this)) {
+      version_updater_(std::make_unique<VersionUpdater>(this)),
+      tick_clock_(base::DefaultTickClock::GetInstance()) {
   if (view_)
     view_->Bind(this);
 }
@@ -169,7 +177,7 @@ void UpdateScreen::ShowErrorMessage() {
           &UpdateScreen::OnConnectRequested, weak_factory_.GetWeakPtr()));
   error_screen_->SetUIState(NetworkError::UI_STATE_UPDATE);
   error_screen_->SetParentScreen(UpdateView::kScreenId);
-  error_screen_->SetHideCallback(base::BindRepeating(
+  error_screen_->SetHideCallback(base::BindOnce(
       &UpdateScreen::OnErrorScreenHidden, weak_factory_.GetWeakPtr()));
   error_screen_->Show();
   histogram_helper_->OnErrorShow(error_screen_->GetErrorState());
@@ -223,6 +231,7 @@ void UpdateScreen::UpdateInfoChanged(
           hide_progress_on_exit_ = true;
           ExitUpdate(Result::UPDATE_NOT_REQUIRED);
         } else {
+          start_update_downloading_ = tick_clock_->NowTicks();
           VLOG(1) << "Critical update available: " << status.new_version();
         }
       }
@@ -235,6 +244,8 @@ void UpdateScreen::UpdateInfoChanged(
     case update_engine::Operation::UPDATED_NEED_REBOOT:
       MakeSureScreenIsShown();
       if (HasCriticalUpdate()) {
+        RecordDownloadingTime(tick_clock_->NowTicks() -
+                              start_update_downloading_);
         version_updater_->RebootAfterUpdate();
       } else {
         hide_progress_on_exit_ = true;

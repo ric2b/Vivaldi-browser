@@ -96,6 +96,17 @@ bool IsUserHomePage(content::BrowserContext* browser_context, const GURL& url) {
                            ->GetString(prefs::kHomePage);
 }
 
+std::unique_ptr<base::trace_event::TracedValue> CumulativeShiftScoreTraceData(
+    float layout_shift_score,
+    float layout_shift_score_before_input_or_scroll) {
+  std::unique_ptr<base::trace_event::TracedValue> data =
+      std::make_unique<base::trace_event::TracedValue>();
+  data->SetDouble("layoutShiftScore", layout_shift_score);
+  data->SetDouble("layoutShiftScoreBeforeInputOrScroll",
+                  layout_shift_score_before_input_or_scroll);
+  return data;
+}
+
 }  // namespace
 
 // static
@@ -188,8 +199,6 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnCommit(
   // The PageTransition for the navigation may be updated on commit.
   page_transition_ = navigation_handle->GetPageTransition();
   was_cached_ = navigation_handle->WasResponseCached();
-  is_signed_exchange_inner_response_ =
-      navigation_handle->IsSignedExchangeInnerResponse();
   RecordNoStatePrefetchMetrics(navigation_handle, source_id);
   RecordGeneratedNavigationUKM(source_id, navigation_handle->GetURL());
   navigation_is_cross_process_ = !navigation_handle->IsSameProcess();
@@ -474,9 +483,6 @@ void UkmPageLoadMetricsObserver::RecordPageLoadMetrics(
   if (GetDelegate().DidCommit() && was_cached_) {
     builder.SetWasCached(1);
   }
-  if (GetDelegate().DidCommit() && is_signed_exchange_inner_response_) {
-    builder.SetIsSignedExchangeInnerResponse(1);
-  }
   if (GetDelegate().DidCommit() && navigation_is_cross_process_) {
     builder.SetIsCrossProcessNavigation(navigation_is_cross_process_);
   }
@@ -590,6 +596,14 @@ void UkmPageLoadMetricsObserver::ReportLayoutStability() {
       LayoutShiftUmaValue(
           GetDelegate().GetPageRenderData().layout_shift_score));
 
+  TRACE_EVENT_INSTANT1("loading", "CumulativeShiftScore::AllFrames::UMA",
+                       TRACE_EVENT_SCOPE_THREAD, "data",
+                       CumulativeShiftScoreTraceData(
+                           GetDelegate().GetPageRenderData().layout_shift_score,
+                           GetDelegate()
+                               .GetPageRenderData()
+                               .layout_shift_score_before_input_or_scroll));
+
   UMA_HISTOGRAM_COUNTS_100(
       "PageLoad.LayoutInstability.CumulativeShiftScore.MainFrame",
       LayoutShiftUmaValue(
@@ -597,7 +611,7 @@ void UkmPageLoadMetricsObserver::ReportLayoutStability() {
 
   // Note: This depends on PageLoadMetrics internally processing loading
   // behavior before timing metrics if they come in the same IPC update.
-  if (render_delayed_for_web_font_preloading_observed_) {
+  if (font_preload_started_before_rendering_observed_) {
     UMA_HISTOGRAM_COUNTS_100(
         "PageLoad.Clients.FontPreload.LayoutInstability.CumulativeShiftScore",
         LayoutShiftUmaValue(
@@ -773,6 +787,6 @@ void UkmPageLoadMetricsObserver::OnLoadingBehaviorObserved(
     int behavior_flag) {
   if (behavior_flag & blink::LoadingBehaviorFlag::
                           kLoadingBehaviorFontPreloadStartedBeforeRendering) {
-    render_delayed_for_web_font_preloading_observed_ = true;
+    font_preload_started_before_rendering_observed_ = true;
   }
 }

@@ -4,7 +4,7 @@
 
 #include "chrome/browser/chromeos/login/screens/enable_debugging_screen.h"
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 
 namespace chromeos {
@@ -27,6 +27,8 @@ EnableDebuggingScreen::~EnableDebuggingScreen() {
 }
 
 void EnableDebuggingScreen::OnExit(bool success) {
+  if (is_hidden())
+    return;
   exit_callback_.Run();
 }
 

@@ -22,8 +22,8 @@
 #include "base/no_destructor.h"
 #include "base/numerics/ranges.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "chromecast/media/audio/wav_header.h"
 #include "chromecast/media/cma/backend/cast_audio_json.h"
-#include "chromecast/media/cma/backend/cplay/wav_header.h"
 #include "chromecast/media/cma/backend/mixer/mixer_input.h"
 #include "chromecast/media/cma/backend/mixer/mixer_pipeline.h"
 #include "chromecast/media/cma/backend/mixer/post_processing_pipeline_impl.h"
@@ -47,6 +47,8 @@ VolumeMap& GetVolumeMap() {
 namespace {
 
 const int kReadSize = 1024;
+const WavHeader::AudioFormat kDefaultAudioFormat =
+    WavHeader::AudioFormat::kFloat32;
 
 void PrintHelp(const std::string& command) {
   LOG(INFO) << "Usage: " << command;
@@ -162,6 +164,7 @@ class WavOutputHandler : public OutputHandler {
       : wav_file_(path,
                   base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE),
         num_channels_(num_channels) {
+    header_.SetAudioFormat(kDefaultAudioFormat);
     header_.SetNumChannels(num_channels);
     header_.SetSampleRate(sample_rate);
 

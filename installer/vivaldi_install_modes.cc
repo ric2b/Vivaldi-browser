@@ -20,10 +20,6 @@ const wchar_t kProductPathName[] = L"Vivaldi";
 
 const size_t kProductPathNameLength = _countof(kProductPathName) - 1;
 
-const wchar_t kBinariesAppGuid[] = L"";
-
-const wchar_t kBinariesPathName[] = L"";
-
 const char kSafeBrowsingName[] = "vivaldi";
 
 const InstallConstants kInstallModes[] = {
@@ -56,7 +52,6 @@ const InstallConstants kInstallModes[] = {
         true,  // Supports system-level installs.
         true,   // Supports in-product set as default browser UX.
         false,  // Does not support retention experiments.
-        false,  // Supports multi-install.
         icon_resources::kApplicationIndex,  // App icon resource index.
         IDR_MAINFRAME,                      // App icon resource id.
         L"S-1-15-2-3251537155-1984446955-2931258699-841473695-1938553385-"

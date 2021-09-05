@@ -125,6 +125,24 @@ class VmShutdownObserver : public base::CheckedObserver {
   virtual void OnVmShutdown(const std::string& vm_name) = 0;
 };
 
+class ContainerStartedObserver : public base::CheckedObserver {
+ public:
+  // Called when the container has started.
+  virtual void OnContainerStarted(const ContainerId& container_id) = 0;
+};
+
+class ContainerShutdownObserver : public base::CheckedObserver {
+ public:
+  // Called when the container has shutdown.
+  virtual void OnContainerShutdown(const ContainerId& container_id) = 0;
+};
+
+class CrostiniMicSharingEnabledObserver : public base::CheckedObserver {
+ public:
+  // Called when changes are made to the Crostini mic settings.
+  virtual void OnCrostiniMicSharingEnabledChanged(bool enabled) = 0;
+};
+
 // CrostiniManager is a singleton which is used to check arguments for
 // ConciergeClient and CiceroneClient. ConciergeClient is dedicated to
 // communication with the Concierge service, CiceroneClient is dedicated to
@@ -542,6 +560,8 @@ class CrostiniManager : public KeyedService,
   void OnUpgradeContainerProgress(
       const vm_tools::cicerone::UpgradeContainerProgressSignal& signal)
       override;
+  void OnStartLxdProgress(
+      const vm_tools::cicerone::StartLxdProgressSignal& signal) override;
 
   // chromeos::PowerManagerClient::Observer overrides:
   void SuspendImminent(power_manager::SuspendImminent::Reason reason) override;
@@ -561,6 +581,7 @@ class CrostiniManager : public KeyedService,
   // Returns null if VM is not running.
   base::Optional<VmInfo> GetVmInfo(std::string vm_name);
   void AddRunningVmForTesting(std::string vm_name);
+  void AddStoppingVmForTesting(std::string vm_name);
 
   void SetContainerSshfsMounted(std::string vm_name,
                                 std::string container_name,
@@ -600,6 +621,11 @@ class CrostiniManager : public KeyedService,
   void RemoveCrostiniContainerPropertiesObserver(
       CrostiniContainerPropertiesObserver* observer);
 
+  void AddContainerStartedObserver(ContainerStartedObserver* observer);
+  void RemoveContainerStartedObserver(ContainerStartedObserver* observer);
+  void AddContainerShutdownObserver(ContainerShutdownObserver* observer);
+  void RemoveContainerShutdownObserver(ContainerShutdownObserver* observer);
+
   void OnDBusShuttingDownForTesting();
 
   bool IsContainerUpgradeable(const ContainerId& container_id) const;
@@ -609,6 +635,17 @@ class CrostiniManager : public KeyedService,
   bool IsUncleanStartup() const;
   void SetUncleanStartupForTesting(bool is_unclean_startup);
   void RemoveUncleanSshfsMounts();
+  void DeallocateForwardedPortsCallback(Profile* profile,
+                                        const ContainerId& container_id);
+
+  void SetCrostiniMicSharingEnabled(bool enabled);
+  bool crostini_mic_sharing_enabled() const {
+    return crostini_mic_sharing_enabled_;
+  }
+  void AddCrostiniMicSharingEnabledObserver(
+      CrostiniMicSharingEnabledObserver* observer);
+  void RemoveCrostiniMicSharingEnabledObserver(
+      CrostiniMicSharingEnabledObserver* observer);
 
  private:
   class CrostiniRestarter;
@@ -797,7 +834,8 @@ class CrostiniManager : public KeyedService,
 
   // Helper for CrostiniManager::MaybeUpdateCrostini. Makes blocking calls to
   // check for file paths and registered components.
-  static void CheckPathsAndComponents();
+  static void CheckPathsAndComponents(
+      scoped_refptr<component_updater::CrOSComponentManager> component_manager);
 
   // Helper for CrostiniManager::MaybeUpdateCrostini. Separated because the
   // checking component registration code may block.
@@ -890,10 +928,19 @@ class CrostiniManager : public KeyedService,
   base::ObserverList<CrostiniContainerPropertiesObserver>
       crostini_container_properties_observers_;
 
+  base::ObserverList<ContainerStartedObserver> container_started_observers_;
+  base::ObserverList<ContainerShutdownObserver> container_shutdown_observers_;
+
+  base::ObserverList<CrostiniMicSharingEnabledObserver>
+      crostini_mic_sharing_enabled_observers_;
+
   // Contains the types of crostini dialogs currently open. It is generally
   // invalid to show more than one. e.g. uninstalling and installing are
   // mutually exclusive.
   base::flat_set<DialogType> open_crostini_dialogs_;
+
+  // Tracks if Crostini has access to the microphone.
+  bool crostini_mic_sharing_enabled_ = false;
 
   bool dbus_observers_removed_ = false;
 

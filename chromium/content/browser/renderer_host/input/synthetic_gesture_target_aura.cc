@@ -83,7 +83,7 @@ void SyntheticGestureTargetAura::DispatchWebMouseWheelEventToPlatform(
     return;
   }
   base::TimeTicks timestamp = web_wheel.TimeStamp();
-  int modifiers = ui::EF_NONE;
+  int modifiers = ui::WebEventModifiersToEventFlags(web_wheel.GetModifiers());
   if (web_wheel.delta_units == ui::ScrollGranularity::kScrollByPrecisePixel) {
     modifiers |= ui::EF_PRECISION_SCROLLING_DELTA;
   } else if (web_wheel.delta_units == ui::ScrollGranularity::kScrollByPage) {
@@ -108,7 +108,7 @@ void SyntheticGestureTargetAura::DispatchWebGestureEventToPlatform(
     const ui::LatencyInfo& latency_info) {
   DCHECK(blink::WebInputEvent::IsPinchGestureEventType(web_gesture.GetType()) ||
          blink::WebInputEvent::IsFlingGestureEventType(web_gesture.GetType()));
-  ui::EventType event_type = ui::WebEventTypeToEventType(web_gesture.GetType());
+  ui::EventType event_type = web_gesture.GetTypeAsUiEventType();
   int flags = ui::WebEventModifiersToEventFlags(web_gesture.GetModifiers());
   aura::Window* window = GetWindow();
 
@@ -128,7 +128,7 @@ void SyntheticGestureTargetAura::DispatchWebGestureEventToPlatform(
   }
 
   ui::EventMomentumPhase momentum_phase =
-      web_gesture.GetType() == blink::WebInputEvent::kGestureFlingStart
+      web_gesture.GetType() == blink::WebInputEvent::Type::kGestureFlingStart
           ? ui::EventMomentumPhase::BEGAN
           : ui::EventMomentumPhase::END;
   ui::ScrollEvent scroll_event(event_type, web_gesture.PositionInWidget(),
@@ -144,8 +144,7 @@ void SyntheticGestureTargetAura::DispatchWebGestureEventToPlatform(
 void SyntheticGestureTargetAura::DispatchWebMouseEventToPlatform(
     const blink::WebMouseEvent& web_mouse_event,
     const ui::LatencyInfo& latency_info) {
-  ui::EventType event_type =
-      ui::WebEventTypeToEventType(web_mouse_event.GetType());
+  ui::EventType event_type = web_mouse_event.GetTypeAsUiEventType();
   int flags = ui::WebEventModifiersToEventFlags(web_mouse_event.GetModifiers());
   ui::PointerDetails pointer_details(
       ui::WebPointerTypeToEventPointerType(web_mouse_event.pointer_type));

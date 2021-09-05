@@ -44,12 +44,12 @@
 #include "third_party/blink/renderer/modules/peerconnection/call_setup_state_tracker.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_ice_candidate.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection_controller.h"
+#include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection_handler.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_rtp_transceiver.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_session_description_enums.h"
 #include "third_party/blink/renderer/platform/heap/heap_allocator.h"
 #include "third_party/blink/renderer/platform/mediastream/media_constraints.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_peer_connection_handler_client.h"
-#include "third_party/blink/renderer/platform/peerconnection/rtc_peer_connection_handler_platform.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_session_description_request.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_void_request.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
@@ -228,8 +228,6 @@ class MODULES_EXPORT RTCPeerConnection final
   String connectionState() const;
 
   base::Optional<bool> canTrickleIceCandidates() const;
-  // TODO(crbug.com/1060971): Remove |is_null| version.
-  bool canTrickleIceCandidates(bool&) const;  // DEPRECATED
 
   void restartIce();
 
@@ -418,8 +416,8 @@ class MODULES_EXPORT RTCPeerConnection final
   base::TimeTicks WebRtcTimestampToBlinkTimestamp(
       base::TimeTicks webrtc_monotonic_time) const;
 
-  using RtcPeerConnectionHandlerFactoryCallback = base::RepeatingCallback<
-      std::unique_ptr<RTCPeerConnectionHandlerPlatform>()>;
+  using RtcPeerConnectionHandlerFactoryCallback =
+      base::RepeatingCallback<std::unique_ptr<RTCPeerConnectionHandler>()>;
   static void SetRtcPeerConnectionHandlerFactoryForTesting(
       RtcPeerConnectionHandlerFactoryCallback);
 
@@ -604,7 +602,7 @@ class MODULES_EXPORT RTCPeerConnection final
       ice_transports_by_native_transport_;
 
   // TODO(crbug.com/787254): Use RTCPeerConnectionHandler.
-  std::unique_ptr<RTCPeerConnectionHandlerPlatform> peer_handler_;
+  std::unique_ptr<RTCPeerConnectionHandler> peer_handler_;
 
   TaskHandle dispatch_scheduled_events_task_handle_;
   HeapVector<Member<EventWrapper>> scheduled_events_;

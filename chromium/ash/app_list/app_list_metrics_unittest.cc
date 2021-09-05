@@ -143,7 +143,7 @@ class AppListAppLaunchedMetricTest : public AshTestBase {
             ->app_list_main_view()
             ->contents_view()
             ->search_results_page_view()
-            ->result_container_views()[1];
+            ->result_container_views()[0];
 
     // Request focus on the first tile item view.
     search_result_container_view->GetFirstResultView()->RequestFocus();
@@ -169,7 +169,7 @@ class AppListAppLaunchedMetricTest : public AshTestBase {
             ->GetView()
             ->app_list_main_view()
             ->contents_view()
-            ->GetAppsContainerView()
+            ->apps_container_view()
             ->suggestion_chip_container_view_for_test();
 
     // Get focus on the first chip.

@@ -384,6 +384,8 @@ void UiControllerAndroid::OnStateChanged(AutofillAssistantState new_state) {
 }
 
 void UiControllerAndroid::SetupForState() {
+  DCHECK(ui_delegate_ != nullptr);
+
   UpdateActions(ui_delegate_->GetUserActions());
   AutofillAssistantState state = ui_delegate_->GetState();
   bool should_prompt_action_expand_sheet =
@@ -391,19 +393,16 @@ void UiControllerAndroid::SetupForState() {
   switch (state) {
     case AutofillAssistantState::STARTING:
       SetOverlayState(OverlayState::FULL);
-      AllowShowingSoftKeyboard(false);
       SetSpinPoodle(true);
       return;
 
     case AutofillAssistantState::RUNNING:
       SetOverlayState(OverlayState::FULL);
-      AllowShowingSoftKeyboard(false);
       SetSpinPoodle(true);
       return;
 
     case AutofillAssistantState::AUTOSTART_FALLBACK_PROMPT:
       SetOverlayState(OverlayState::HIDDEN);
-      AllowShowingSoftKeyboard(true);
       SetSpinPoodle(false);
 
       if (should_prompt_action_expand_sheet)
@@ -412,7 +411,6 @@ void UiControllerAndroid::SetupForState() {
 
     case AutofillAssistantState::PROMPT:
       SetOverlayState(OverlayState::PARTIAL);
-      AllowShowingSoftKeyboard(true);
       SetSpinPoodle(false);
 
       if (should_prompt_action_expand_sheet)
@@ -421,19 +419,16 @@ void UiControllerAndroid::SetupForState() {
 
     case AutofillAssistantState::BROWSE:
       SetOverlayState(OverlayState::HIDDEN);
-      AllowShowingSoftKeyboard(true);
       SetSpinPoodle(false);
       return;
 
     case AutofillAssistantState::MODAL_DIALOG:
       SetOverlayState(OverlayState::FULL);
-      AllowShowingSoftKeyboard(true);
       SetSpinPoodle(true);
       return;
 
     case AutofillAssistantState::STOPPED:
       SetOverlayState(OverlayState::HIDDEN);
-      AllowShowingSoftKeyboard(true);
       SetSpinPoodle(false);
 
       // Make sure the user sees the error message.
@@ -443,7 +438,6 @@ void UiControllerAndroid::SetupForState() {
 
     case AutofillAssistantState::TRACKING:
       SetOverlayState(OverlayState::HIDDEN);
-      AllowShowingSoftKeyboard(true);
       SetSpinPoodle(false);
 
       Java_AssistantModel_setVisible(AttachCurrentThread(), GetModel(), false);
@@ -514,11 +508,6 @@ void UiControllerAndroid::OnOverlayColorsChanged(
   Java_AssistantOverlayModel_setHighlightBorderColor(
       env, overlay_model,
       ui_controller_android_utils::GetJavaColor(env, colors.highlight_border));
-}
-
-void UiControllerAndroid::AllowShowingSoftKeyboard(bool enabled) {
-  Java_AssistantModel_setAllowSoftKeyboard(AttachCurrentThread(), GetModel(),
-                                           enabled);
 }
 
 void UiControllerAndroid::ShowContentAndExpandBottomSheet() {
@@ -751,6 +740,26 @@ void UiControllerAndroid::OnKeyboardVisibilityChanged(
       !visible);
 }
 
+bool UiControllerAndroid::OnBackButtonClicked(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& caller) {
+  // If the keyboard is currently shown, clicking the back button should
+  // hide the keyboard rather than close autofill assistant.
+  if (Java_AutofillAssistantUiController_isKeyboardShown(env, java_object_)) {
+    Java_AutofillAssistantUiController_hideKeyboard(env, java_object_);
+    return true;
+  }
+
+  // For BROWSE state the back button should react in its default way.
+  if (ui_delegate_ != nullptr &&
+      ui_delegate_->GetState() == AutofillAssistantState::BROWSE) {
+    return false;
+  }
+
+  CloseOrCancel(-1, TriggerContext::CreateEmpty());
+  return true;
+}
+
 void UiControllerAndroid::CloseOrCancel(
     int action_index,
     std::unique_ptr<TriggerContext> trigger_context) {
@@ -850,11 +859,6 @@ void UiControllerAndroid::OnUnexpectedTaps() {
                base::BindOnce(&UiControllerAndroid::Shutdown,
                               weak_ptr_factory_.GetWeakPtr(),
                               Metrics::DropOutReason::OVERLAY_STOP));
-}
-
-void UiControllerAndroid::UpdateTouchableArea() {
-  if (ui_delegate_)
-    ui_delegate_->UpdateTouchableArea();
 }
 
 void UiControllerAndroid::OnUserInteractionInsideTouchableArea() {
@@ -1030,6 +1034,14 @@ void UiControllerAndroid::OnCollectUserDataOptionsChanged(
       env, jmodel,
       base::android::ConvertUTF8ToJavaString(
           env, collect_user_data_options->login_section_title));
+  Java_AssistantCollectUserDataModel_setContactSectionTitle(
+      env, jmodel,
+      base::android::ConvertUTF8ToJavaString(
+          env, collect_user_data_options->contact_details_section_title));
+  Java_AssistantCollectUserDataModel_setShippingSectionTitle(
+      env, jmodel,
+      base::android::ConvertUTF8ToJavaString(
+          env, collect_user_data_options->shipping_address_section_title));
   Java_AssistantCollectUserDataModel_setAcceptTermsAndConditionsText(
       env, jmodel,
       base::android::ConvertUTF8ToJavaString(
@@ -1474,10 +1486,11 @@ void UiControllerAndroid::OnClientSettingsChanged(
   Java_AssistantOverlayModel_setTapTracking(
       env, GetOverlayModel(), settings.tap_count,
       settings.tap_tracking_duration.InMilliseconds());
+
   if (settings.overlay_image.has_value()) {
-    const auto& image = *(settings.overlay_image);
     auto jcontext =
         Java_AutofillAssistantUiController_getContext(env, java_object_);
+    const auto& image = *(settings.overlay_image);
     int image_size = ui_controller_android_utils::GetPixelSizeOrDefault(
         env, jcontext, image.image_size(), 0);
     int top_margin = ui_controller_android_utils::GetPixelSizeOrDefault(
@@ -1506,6 +1519,8 @@ void UiControllerAndroid::OnClientSettingsChanged(
         settings.integration_test_settings
             ->disable_carousel_change_animations());
   }
+  Java_AssistantModel_setTalkbackSheetSizeFraction(
+      env, GetModel(), settings.talkback_sheet_size_fraction);
 }
 
 void UiControllerAndroid::OnGenericUserInterfaceChanged(

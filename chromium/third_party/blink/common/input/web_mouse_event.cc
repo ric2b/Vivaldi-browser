@@ -20,8 +20,8 @@ WebMouseEvent::WebMouseEvent(WebInputEvent::Type type,
                            WebPointerProperties::PointerType::kMouse,
                            button_param),
       click_count(click_count_param) {
-  DCHECK_GE(type, kMouseTypeFirst);
-  DCHECK_LE(type, kMouseTypeLast);
+  DCHECK_GE(type, Type::kMouseTypeFirst);
+  DCHECK_LE(type, Type::kMouseTypeLast);
   SetPositionInWidget(gesture_event.PositionInWidget());
   SetPositionInScreen(gesture_event.PositionInScreen());
   SetFrameScale(gesture_event.FrameScale());
@@ -38,6 +38,30 @@ std::unique_ptr<WebInputEvent> WebMouseEvent::Clone() const {
   return std::make_unique<WebMouseEvent>(*this);
 }
 
+bool WebMouseEvent::CanCoalesce(const WebInputEvent& event) const {
+  if (!IsMouseEventType(event.GetType()))
+    return false;
+  const WebMouseEvent& mouse_event = static_cast<const WebMouseEvent&>(event);
+  // Since we start supporting the stylus input and they are constructed as
+  // mouse events or touch events, we should check the ID and pointer type when
+  // coalescing mouse events.
+  return GetType() == WebInputEvent::Type::kMouseMove &&
+         GetType() == mouse_event.GetType() &&
+         GetModifiers() == mouse_event.GetModifiers() && id == mouse_event.id &&
+         pointer_type == mouse_event.pointer_type;
+}
+
+void WebMouseEvent::Coalesce(const WebInputEvent& event) {
+  DCHECK(CanCoalesce(event));
+  const WebMouseEvent& mouse_event = static_cast<const WebMouseEvent&>(event);
+  // Accumulate movement deltas.
+  int x = movement_x;
+  int y = movement_y;
+  *this = mouse_event;
+  movement_x += x;
+  movement_y += y;
+}
+
 WebMouseEvent WebMouseEvent::FlattenTransform() const {
   WebMouseEvent result = *this;
   result.FlattenTransformSelf();
@@ -52,15 +76,15 @@ void WebMouseEvent::FlattenTransformSelf() {
 
 void WebMouseEvent::SetMenuSourceType(WebInputEvent::Type type) {
   switch (type) {
-    case kGestureTapDown:
-    case kGestureTap:
-    case kGestureDoubleTap:
+    case Type::kGestureTapDown:
+    case Type::kGestureTap:
+    case Type::kGestureDoubleTap:
       menu_source_type = kMenuSourceTouch;
       break;
-    case kGestureLongPress:
+    case Type::kGestureLongPress:
       menu_source_type = kMenuSourceLongPress;
       break;
-    case kGestureLongTap:
+    case Type::kGestureLongTap:
       menu_source_type = kMenuSourceLongTap;
       break;
     default:

@@ -48,10 +48,15 @@ const char kCheckDamageEarly[] = "check-damage-early";
 // Enables the GPU benchmarking extension
 const char kEnableGpuBenchmarking[] = "enable-gpu-benchmarking";
 
+// Disables LayerTreeHost::OnMemoryPressure
+const char kDisableLayerTreeHostMemoryPressure[] =
+    "disable-layer-tree-host-memory-pressure";
+
 // Renders a border around compositor layers to help debug and study
 // layer compositing.
 const char kShowCompositedLayerBorders[] = "show-composited-layer-borders";
 const char kUIShowCompositedLayerBorders[] = "ui-show-composited-layer-borders";
+// Parameters for kUIShowCompositedLayerBorders.
 const char kCompositedRenderPassBorders[] = "renderpass";
 const char kCompositedSurfaceBorders[] = "surface";
 const char kCompositedLayerBorders[] = "layer";
@@ -84,6 +89,10 @@ const char kUIShowSurfaceDamageRects[] = "ui-show-surface-damage-rects";
 // layer.
 const char kShowScreenSpaceRects[] = "show-screenspace-rects";
 const char kUIShowScreenSpaceRects[] = "ui-show-screenspace-rects";
+
+// Highlights layers that can't use lcd text. Layers containing no text won't
+// be highlighted. See DebugColors::NonLCDTextHighlightColor() for the colors.
+const char kHighlightNonLCDTextLayers[] = "highlight-non-lcd-text-layers";
 
 // Switches the ui compositor to use layer lists instead of layer trees.
 const char kUIEnableLayerLists[] = "ui-enable-layer-lists";

@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.tasks.tab_groups;
 
+import static junit.framework.Assert.assertTrue;
+
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertFalse;
@@ -21,7 +23,6 @@ import static org.mockito.Mockito.verify;
 
 import androidx.annotation.Nullable;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -32,7 +33,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
@@ -232,6 +232,7 @@ public class TabGroupModelFilterUnitTest {
 
         if (isTabRestoreCompleted) {
             mTabGroupModelFilter.restoreCompleted();
+            assertTrue(mTabGroupModelFilter.isTabModelRestored());
         }
     }
 
@@ -240,7 +241,6 @@ public class TabGroupModelFilterUnitTest {
         // After setUp, TabModel has 6 tabs in the following order: mTab1, mTab2, mTab3, mTab4,
         // mTab5, mTab6. While mTab2 and mTab3 are in a group, and mTab5 and mTab6 are in a separate
         // group.
-        RecordHistogram.setDisabledForTests(true);
 
         MockitoAnnotations.initMocks(this);
 
@@ -249,34 +249,12 @@ public class TabGroupModelFilterUnitTest {
         setupTabGroupModelFilter(true, false);
     }
 
-    @After
-    public void tearDown() {
-        RecordHistogram.setDisabledForTests(false);
-    }
-
     @Test
     public void setIncognito() {
         setupTabGroupModelFilter(true, false);
         setupTabGroupModelFilter(false, true);
         assertThat(mTabGroupModelFilter.isIncognito(), equalTo(true));
         assertThat(mTabModel.getCount(), equalTo(6));
-    }
-
-    @Test
-    // TODO(mattsimmons): This is actually testing behavior of the superclass but there's no unit
-    //  tests for the superclass today. If one ever exists, this should move to that test.
-    public void isTabModelRestored() {
-        setupTabGroupModelFilter(false, false);
-        assertThat(mTabGroupModelFilter.isTabModelRestored(), equalTo(false));
-
-        setupTabGroupModelFilter(true, false);
-        assertThat(mTabGroupModelFilter.isTabModelRestored(), equalTo(true));
-
-        setupTabGroupModelFilter(false, true);
-        assertThat(mTabGroupModelFilter.isTabModelRestored(), equalTo(true));
-
-        setupTabGroupModelFilter(true, true);
-        assertThat(mTabGroupModelFilter.isTabModelRestored(), equalTo(true));
     }
 
     @Test
@@ -788,11 +766,27 @@ public class TabGroupModelFilterUnitTest {
     public void ignoreUnrelatedMoveTab() {
         // Simulate that the tab restoring is not yet finished.
         setupTabGroupModelFilter(false, false);
+        assertFalse(mTabGroupModelFilter.isTabModelRestored());
 
         mTabModelObserverCaptor.getValue().didMoveTab(mTab1, POSITION1, POSITION6);
         mTabModelObserverCaptor.getValue().didMoveTab(mTab1, POSITION6, POSITION1);
         mTabModelObserverCaptor.getValue().didMoveTab(mTab2, POSITION2, POSITION5);
         mTabModelObserverCaptor.getValue().didMoveTab(mTab2, POSITION5, POSITION2);
+
+        // No call should be made here.
+        verify(mTabGroupModelFilterObserver, never())
+                .didMoveTabOutOfGroup(any(Tab.class), anyInt());
+        verify(mTabGroupModelFilterObserver, never()).didMergeTabToGroup(any(Tab.class), anyInt());
+        verify(mTabGroupModelFilterObserver, never())
+                .didMoveWithinGroup(any(Tab.class), anyInt(), anyInt());
+        verify(mTabGroupModelFilterObserver, never())
+                .didMoveTabGroup(any(Tab.class), anyInt(), anyInt());
+
+        // Ignore any move incognito tabs before TabModel restored.
+        setupTabGroupModelFilter(false, true);
+        assertFalse(mTabGroupModelFilter.isTabModelRestored());
+
+        mTabModelObserverCaptor.getValue().didMoveTab(mTab1, POSITION1, POSITION6);
 
         // No call should be made here.
         verify(mTabGroupModelFilterObserver, never())
@@ -875,11 +869,12 @@ public class TabGroupModelFilterUnitTest {
     }
 
     @Test
-    public void skipRestoringStageMoveTab_Incognito() {
-        // Simulate tab model is in incognito mode, and thus tab restoring will not happen.
-        // Therefore, we should not ignore didMoveTab calls because we have already skipped the
-        // didMoveTab calls from restoring stage.
+    public void moveTab_Incognito() {
         setupTabGroupModelFilter(false, true);
+        assertFalse(mTabGroupModelFilter.isTabModelRestored());
+
+        mTabGroupModelFilter.markTabStateInitialized();
+        assertTrue(mTabGroupModelFilter.isTabModelRestored());
 
         // Simulate that tab3 is going to be moved out of group.
         mTab3.setRootId(TAB3_ID);

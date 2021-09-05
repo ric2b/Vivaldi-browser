@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/omnibox/omnibox_view_controller.h"
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
@@ -24,6 +25,7 @@
 #include "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/dynamic_color_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -328,6 +330,16 @@ const CGFloat kClearButtonSize = 28.0f;
   clearButton.tintColor = [self placeholderAndClearButtonColor];
   SetA11yLabelAndUiAutomationName(clearButton, IDS_IOS_ACCNAME_CLEAR_TEXT,
                                   @"Clear Text");
+
+#if defined(__IPHONE_13_4)
+  if (@available(iOS 13.4, *)) {
+    if (base::FeatureList::IsEnabled(kPointerSupport)) {
+      clearButton.pointerInteractionEnabled = YES;
+      clearButton.pointerStyleProvider =
+          CreateLiftEffectCirclePointerStyleProvider();
+    }
+  }
+#endif  // defined(__IPHONE_13_4)
 
   // Observe text changes to show the clear button when there is text and hide
   // it when the textfield is empty.

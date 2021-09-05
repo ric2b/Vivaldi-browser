@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/ranges.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -23,18 +24,9 @@
 
 namespace blink {
 
-namespace {
-
-// Because including base::ClampToRange would be a dependency violation.
-int ClampToRange(const int value, const int min, const int max) {
-  return std::min(std::max(value, min), max);
-}
-
-}  // namespace
-
 void ThreadedIconLoader::Start(
     ExecutionContext* execution_context,
-    const ResourceRequest& resource_request,
+    const ResourceRequestHead& resource_request,
     const base::Optional<gfx::Size>& resize_dimensions,
     IconCallback callback) {
   DCHECK(!stopped_);
@@ -53,7 +45,7 @@ void ThreadedIconLoader::Start(
   threadable_loader_ = MakeGarbageCollected<ThreadableLoader>(
       *execution_context, this, resource_loader_options);
   threadable_loader_->SetTimeout(resource_request.TimeoutInterval());
-  threadable_loader_->Start(resource_request);
+  threadable_loader_->Start(ResourceRequest(resource_request));
 
   start_time_ = base::TimeTicks::Now();
 }
@@ -146,11 +138,11 @@ void ThreadedIconLoader::DecodeAndResizeImageOnBackgroundThread(
   }
 
   int resized_width =
-      ClampToRange(static_cast<int>(scale * decoded_icon_.width()), 1,
-                   resize_dimensions_->width());
+      base::ClampToRange(static_cast<int>(scale * decoded_icon_.width()), 1,
+                         resize_dimensions_->width());
   int resized_height =
-      ClampToRange(static_cast<int>(scale * decoded_icon_.height()), 1,
-                   resize_dimensions_->height());
+      base::ClampToRange(static_cast<int>(scale * decoded_icon_.height()), 1,
+                         resize_dimensions_->height());
 
   // Use the RESIZE_GOOD quality allowing the implementation to pick an
   // appropriate method for the resize. Can be increased to RESIZE_BETTER

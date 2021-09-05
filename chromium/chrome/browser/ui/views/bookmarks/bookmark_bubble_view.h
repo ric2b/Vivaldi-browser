@@ -35,6 +35,8 @@ class BookmarkBubbleView : public LocationBarBubbleDelegateView,
                            public views::ButtonListener,
                            public views::ComboboxListener {
  public:
+  METADATA_HEADER(BookmarkBubbleView);
+
   // If |anchor_view| is null, |anchor_rect| is used to anchor the bubble and
   // |parent_window| is used to ensure the bubble closes if the parent closes.
   // Returns the newly created bubble's Widget or nullptr in case when the
@@ -42,8 +44,6 @@ class BookmarkBubbleView : public LocationBarBubbleDelegateView,
   static views::Widget* ShowBubble(
       views::View* anchor_view,
       views::Button* highlighted_button,
-      const gfx::Rect& anchor_rect,
-      gfx::NativeView parent_window,
       bookmarks::BookmarkBubbleObserver* observer,
       std::unique_ptr<BubbleSyncPromoDelegate> delegate,
       Profile* profile,
@@ -58,13 +58,8 @@ class BookmarkBubbleView : public LocationBarBubbleDelegateView,
 
   // LocationBarBubbleDelegateView:
   View* GetInitiallyFocusedView() override;
-  base::string16 GetWindowTitle() const override;
-  bool ShouldShowCloseButton() const override;
-  gfx::ImageSkia GetWindowIcon() override;
-  bool ShouldShowWindowIcon() const override;
   void WindowClosing() override;
   void OnDialogInitialized() override;
-  const char* GetClassName() const override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -122,9 +117,6 @@ class BookmarkBubbleView : public LocationBarBubbleDelegateView,
 
   // The bookmark URL.
   const GURL url_;
-
-  // If true, the page was just bookmarked.
-  const bool newly_bookmarked_;
 
   // Textfield showing the name of the bookmark.
   views::Textfield* name_field_ = nullptr;

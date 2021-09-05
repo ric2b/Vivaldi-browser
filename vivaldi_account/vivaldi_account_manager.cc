@@ -3,6 +3,7 @@
 #include "vivaldi_account/vivaldi_account_manager.h"
 
 #include "base/base64.h"
+#include "base/guid.h"
 #include "base/i18n/case_conversion.h"
 #include "base/json/json_reader.h"
 #include "base/rand_util.h"
@@ -22,14 +23,16 @@
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #include "vivaldi_account/vivaldi_account_manager_request_handler.h"
 
+#if defined(OS_ANDROID)
+#include "vivaldi_account/vivaldi_account_manager_android.h"
+#endif
+
 namespace vivaldi {
 
 namespace {
 
-constexpr char kIdentityServerUrl[] =
-    "https://login.vivaldi.net/oauth2/token?scope=openid";
-constexpr char kOpenIdUrl[] =
-    "https://login.vivaldi.net/oauth2/userinfo?schema=openid";
+constexpr char kIdentityServerUrl[] = "https://login.vivaldi.net/oauth2/token";
+constexpr char kOpenIdUrl[] = "https://login.vivaldi.net/oauth2/userinfo";
 constexpr char kClientId[] = "2s_O6XheApKcXNKG3jUeHjPRKDMa";
 constexpr char kClientSecret[] = "AESC013J3umoN7tpkuaHROXAD28a";
 
@@ -37,13 +40,15 @@ constexpr char kRequestTokenFromRefreshToken[] =
     "client_id=%s&"
     "client_secret=%s&"
     "grant_type=refresh_token&"
-    "refresh_token=%s";
+    "refresh_token=%s&"
+    "scope=openid device_%s";
 
 constexpr char kRequestTokenFromCredentials[] =
     "client_id=%s&"
     "client_secret=%s&"
     "grant_type=password&"
-    "username=%s&password=%s";
+    "username=%s&password=%s&"
+    "scope=openid device_%s";
 
 constexpr char kAccessTokenKey[] = "access_token";
 constexpr char kRefreshTokenKey[] = "refresh_token";
@@ -121,10 +126,17 @@ VivaldiAccountManager::FetchError::FetchError(FetchErrorType type,
 
 VivaldiAccountManager::VivaldiAccountManager(Profile* profile)
     : profile_(profile), password_handler_(profile, this) {
+
+#if defined(OS_ANDROID)
+  VivaldiAccountManagerAndroid::CreateNow();
+#endif
+
   account_info_.username =
       profile_->GetPrefs()->GetString(vivaldiprefs::kVivaldiAccountUsername);
   account_info_.account_id =
       profile_->GetPrefs()->GetString(vivaldiprefs::kVivaldiAccountId);
+  device_id_ =
+      profile_->GetPrefs()->GetString(vivaldiprefs::kVivaldiAccountDeviceId);
   if (account_info_.account_id.empty()) {
     if (account_info_.username.empty()) {
       MigrateOldCredentialsIfNeeded();
@@ -133,17 +145,17 @@ VivaldiAccountManager::VivaldiAccountManager(Profile* profile)
   }
 
   std::string encrypted_refresh_token;
-  if (base::Base64Decode(profile_->GetPrefs()->GetString(
+  if (!device_id_.empty() &&
+      base::Base64Decode(profile_->GetPrefs()->GetString(
                              vivaldiprefs::kVivaldiAccountRefreshToken),
                          &encrypted_refresh_token) &&
       !encrypted_refresh_token.empty()) {
     std::string refresh_token;
     if (OSCrypt::DecryptString(encrypted_refresh_token, &refresh_token)) {
       refresh_token_ = refresh_token;
-      base::PostTask(
-          FROM_HERE, {content::BrowserThread::UI},
-          base::Bind(&VivaldiAccountManager::RequestNewToken,
-                     base::Unretained(this)));
+      base::PostTask(FROM_HERE, {content::BrowserThread::UI},
+                     base::Bind(&VivaldiAccountManager::RequestNewToken,
+                                base::Unretained(this)));
       return;
     } else {
       has_encrypted_refresh_token_ = true;
@@ -208,6 +220,9 @@ void VivaldiAccountManager::Login(const std::string& untrimmed_username,
   account_info_.username = username;
   profile_->GetPrefs()->SetString(vivaldiprefs::kVivaldiAccountUsername,
                                   username);
+  device_id_ = base::GenerateGUID();
+  profile_->GetPrefs()->SetString(vivaldiprefs::kVivaldiAccountDeviceId,
+                                  device_id_);
 
   NotifyAccountUpdated();
 
@@ -219,16 +234,20 @@ void VivaldiAccountManager::Login(const std::string& untrimmed_username,
     return;
   }
 
-  std::string enc_client_id = net::EscapeUrlEncodedData(kClientId, true);
-  std::string enc_client_secret =
+  std::string url_encoded_client_id =
+      net::EscapeUrlEncodedData(kClientId, true);
+  std::string url_encoded_client_secret =
       net::EscapeUrlEncodedData(kClientSecret, true);
-  std::string enc_username =
+  std::string url_encoded_username =
       net::EscapeUrlEncodedData(username.substr(0, domain_position), true);
-  std::string enc_password = net::EscapeUrlEncodedData(
+  std::string url_encoded_password = net::EscapeUrlEncodedData(
       password.empty() ? password_handler_.password() : password, true);
+  std::string url_encoded_device_id =
+      net::EscapeUrlEncodedData(device_id_, true);
   std::string body = base::StringPrintf(
-      kRequestTokenFromCredentials, enc_client_id.c_str(),
-      enc_client_secret.c_str(), enc_username.c_str(), enc_password.c_str());
+      kRequestTokenFromCredentials, url_encoded_client_id.c_str(),
+      url_encoded_client_secret.c_str(), url_encoded_username.c_str(),
+      url_encoded_password.c_str(), url_encoded_device_id.c_str());
 
   access_token_request_handler_ =
       std::make_unique<VivaldiAccountManagerRequestHandler>(
@@ -247,21 +266,25 @@ void VivaldiAccountManager::Logout() {
 }
 
 void VivaldiAccountManager::RequestNewToken() {
-  if (refresh_token_.empty())
+  if (refresh_token_.empty() || device_id_.empty())
     return;
 
   // We already have a request in progress.
   if (access_token_request_handler_ && !access_token_request_handler_->done())
     return;
 
-  std::string enc_client_id = net::EscapeUrlEncodedData(kClientId, true);
-  std::string enc_client_secret =
+  std::string url_encoded_client_id =
+      net::EscapeUrlEncodedData(kClientId, true);
+  std::string url_encoded_client_secret =
       net::EscapeUrlEncodedData(kClientSecret, true);
-  std::string enc_refresh_token =
+  std::string url_encoded_refresh_token =
       net::EscapeUrlEncodedData(refresh_token_, true);
-  std::string body =
-      base::StringPrintf(kRequestTokenFromRefreshToken, enc_client_id.c_str(),
-                         enc_client_secret.c_str(), enc_refresh_token.c_str());
+  std::string url_encoded_device_id =
+      net::EscapeUrlEncodedData(device_id_, true);
+  std::string body = base::StringPrintf(
+      kRequestTokenFromRefreshToken, url_encoded_client_id.c_str(),
+      url_encoded_client_secret.c_str(), url_encoded_refresh_token.c_str(),
+      url_encoded_device_id.c_str());
 
   ClearTokens();
 
@@ -277,6 +300,8 @@ void VivaldiAccountManager::ClearTokens() {
   token_received_time_ = base::Time();
   refresh_token_.clear();
   profile_->GetPrefs()->ClearPref(vivaldiprefs::kVivaldiAccountRefreshToken);
+  device_id_.clear();
+  profile_->GetPrefs()->ClearPref(vivaldiprefs::kVivaldiAccountDeviceId);
   has_encrypted_refresh_token_ = false;
 
   last_token_fetch_error_ = FetchError();

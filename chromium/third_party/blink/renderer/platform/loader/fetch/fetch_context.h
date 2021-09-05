@@ -54,6 +54,7 @@ namespace blink {
 
 enum class ResourceType : uint8_t;
 class ClientHintsPreferences;
+class FeaturePolicy;
 class KURL;
 class ResourceTimingInfo;
 class WebScopedVirtualTimePauser;
@@ -118,6 +119,7 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
   }
   virtual base::Optional<ResourceRequestBlockedReason> CheckCSPForRequest(
       mojom::RequestContextType,
+      network::mojom::RequestDestination request_destination,
       const KURL&,
       const ResourceLoaderOptions&,
       ReportingDisposition,
@@ -141,10 +143,14 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
     return MakeGarbageCollected<FetchContext>();
   }
 
+  virtual const FeaturePolicy* GetFeaturePolicy() const { return nullptr; }
+
   // Determine if the request is on behalf of an advertisement. If so, return
   // true.
-  virtual bool CalculateIfAdSubresource(const ResourceRequest& resource_request,
-                                        ResourceType type) {
+  virtual bool CalculateIfAdSubresource(
+      const ResourceRequest& resource_request,
+      ResourceType type,
+      const FetchInitiatorInfo& initiator_info) {
     return false;
   }
 

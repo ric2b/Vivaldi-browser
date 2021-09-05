@@ -56,6 +56,7 @@
 #include "content/public/common/page_state.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -2613,7 +2614,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   // The previous RFH should still be pending deletion, as we wait for either
   // the FrameHostMsg_Unload_ACK or a timeout.
   ASSERT_TRUE(rfh->IsRenderFrameLive());
-  ASSERT_FALSE(rfh->is_active());
+  ASSERT_TRUE(rfh->IsPendingDeletion());
 
   // We specifically want verify behavior between unload and RFH destruction.
   ASSERT_FALSE(rfh_observer.deleted());
@@ -3338,7 +3339,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   // The previous RFH should still be pending deletion, as we wait for either
   // the FrameHostMsg_Unload_ACK or a timeout.
   ASSERT_TRUE(rfh_a->IsRenderFrameLive());
-  ASSERT_FALSE(rfh_a->is_active());
+  ASSERT_TRUE(rfh_a->IsPendingDeletion());
 
   // The corresponding RVH should still be referenced by the proxy and the old
   // frame.
@@ -3408,7 +3409,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   // The previous RFH should still be pending deletion, as we wait for either
   // the unload ACK or a timeout.
   ASSERT_TRUE(rfh_a->IsRenderFrameLive());
-  ASSERT_FALSE(rfh_a->is_active());
+  ASSERT_TRUE(rfh_a->IsPendingDeletion());
 
   // When the previous RFH was unloaded, it should have still gotten a
   // replacement proxy even though it's the last active frame in the process.
@@ -3792,7 +3793,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, LastCommittedOrigin) {
   // The old RFH should now be pending deletion.  Verify it still has correct
   // last committed origin.
   EXPECT_EQ(url::Origin::Create(url_a), rfh_a->GetLastCommittedOrigin());
-  EXPECT_FALSE(rfh_a->is_active());
+  EXPECT_TRUE(rfh_a->IsPendingDeletion());
 
   // Wait for |rfh_a| to be deleted and double-check |rfh_b|'s origin.
   deleted_observer.WaitUntilDeleted();
@@ -3826,7 +3827,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, LastCommittedOrigin) {
   // the iframe's old RFH still has correct origin, even though it's pending
   // deletion.
   if (AreAllSitesIsolatedForTesting()) {
-    EXPECT_FALSE(child_rfh_b->is_active());
+    EXPECT_TRUE(child_rfh_b->IsPendingDeletion());
     EXPECT_NE(child_rfh_b, child->current_frame_host());
     EXPECT_EQ(url::Origin::Create(url_b),
               child_rfh_b->GetLastCommittedOrigin());
@@ -5715,7 +5716,7 @@ class ProcessPerSiteContentBrowserClient : public TestContentBrowserClient {
   }
 
   bool ShouldUseProcessPerSite(BrowserContext* browser_context,
-                               const GURL& effective_url) override {
+                               const GURL& site_url) override {
     return should_use_process_per_site_;
   }
 
@@ -6187,7 +6188,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerUnloadBrowserTest,
 
   // At this point, |rfh| should still be live and pending deletion.
   EXPECT_FALSE(rfh_observer.deleted());
-  EXPECT_FALSE(rfh->is_active());
+  EXPECT_TRUE(rfh->IsPendingDeletion());
   EXPECT_TRUE(rfh->IsRenderFrameLive());
 
   // Meanwhile, the new page should have two subframes.
@@ -7015,6 +7016,52 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   EXPECT_TRUE(is_proxy_live(b3, c_site_instance));
   EXPECT_TRUE(is_proxy_live(c5, a_site_instance));
   EXPECT_TRUE(is_proxy_live(c5, b_site_instance));
+}
+
+// With just the right initial navigations using RendererDebugURLs, creating a
+// new RenderFrameHost can fail. https://crbug.com/1006814
+IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
+                       NavigateFromRevivedRendererDebugURL) {
+  StartEmbeddedServer();
+  // This matches IsRendererDebugURL.
+  GURL debug_url("javascript:'hello'");
+  // Just needs to be any URL that would navigate successfully.
+  GURL other_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+
+  // Go to the debug URL. This is a synchronous navigation.
+  shell()->LoadURL(debug_url);
+  ASSERT_EQ("hello", EvalJs(shell(), "document.body.innerText"));
+
+  // Crash the renderer.
+  FrameTreeNode* root = web_contents->GetFrameTree()->root();
+  RenderFrameHostImpl* rfh = root->current_frame_host();
+  RenderProcessHost* process = rfh->GetProcess();
+  RenderProcessHostWatcher crash_observer(
+      process, RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  process->Shutdown(0);
+  crash_observer.Wait();
+
+  // Load the URL again. This will cause the RenderWidgetHost to be revived,
+  // pointing to a RenderWidget in a new process.
+  shell()->LoadURL(debug_url);
+  ASSERT_EQ("hello", EvalJs(shell(), "document.body.innerText"));
+  RenderProcessHost* new_process = root->current_frame_host()->GetProcess();
+
+  // Now try load another URL. It should cope smoothly with the fact that the
+  // RenderWidgetHost is already revived.
+  ASSERT_TRUE(NavigateToURL(web_contents, other_url));
+
+  // In https://crbug.com/1006814 with site-isolation disabled when creating new
+  // hosts for crashed frames, the process does not change. We check that here
+  // to make sure that we actually recreated the bug. With site-isolation
+  // enabled, the process should change.
+  if (!AreAllSitesIsolatedForTesting()) {
+    ASSERT_EQ(new_process, root->current_frame_host()->GetProcess());
+  } else {
+    ASSERT_NE(new_process, root->current_frame_host()->GetProcess());
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(All,

@@ -25,7 +25,7 @@ class SVGComputedStyle;
 
 class CORE_EXPORT CSSProperty : public CSSUnresolvedProperty {
  public:
-  using Flags = uint16_t;
+  using Flags = uint32_t;
 
   static const CSSProperty& Get(CSSPropertyID);
 
@@ -58,6 +58,11 @@ class CORE_EXPORT CSSProperty : public CSSUnresolvedProperty {
   bool IsValidForMarker() const { return flags_ & kValidForMarker; }
   bool IsSurrogate() const { return flags_ & kSurrogate; }
   bool AffectsFont() const { return flags_ & kAffectsFont; }
+  bool IsBackground() const { return flags_ & kBackground; }
+  bool IsBorder() const { return flags_ & kBorder; }
+  bool IsComputedValueComparable() const {
+    return flags_ & kComputedValueComparable;
+  }
 
   bool IsRepeated() const { return repetition_separator_ != '\0'; }
   char RepetitionSeparator() const { return repetition_separator_; }
@@ -68,6 +73,13 @@ class CORE_EXPORT CSSProperty : public CSSUnresolvedProperty {
   virtual bool IsLayoutDependentProperty() const { return false; }
   virtual bool IsLayoutDependent(const ComputedStyle* style,
                                  LayoutObject* layout_object) const {
+    return false;
+  }
+
+  virtual bool ComputedValuesEqual(const ComputedStyle&,
+                                   const ComputedStyle&) const {
+    // May only be called if IsComputedValueComparable() is true.
+    NOTREACHED();
     return false;
   }
 
@@ -131,6 +143,12 @@ class CORE_EXPORT CSSProperty : public CSSUnresolvedProperty {
     // inline-size is a surrogate for either width or height.
     kSurrogate = 1 << 14,
     kAffectsFont = 1 << 15,
+    // If the author specifies any background or border property on an UI
+    // element, the native appearance must be disabled.
+    kBackground = 1 << 16,
+    kBorder = 1 << 17,
+    // Set if ComputedValuesEqual is implemented for the given CSSProperty.
+    kComputedValueComparable = 1 << 18,
   };
 
   constexpr CSSProperty(CSSPropertyID property_id,

@@ -29,6 +29,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "services/service_manager/embedder/result_codes.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -94,12 +95,12 @@ class UserDataDowngradeBrowserTestBase : public InProcessBrowserTest {
                                .AddExtension(kDowngradeDeleteSuffix);
     if (IsPreTest()) {
       // Create some "other file" to be convinced that stuff is moved.
-      if (base::WriteFile(other_file_, "data", 4) != 4)
+      if (!base::WriteFile(other_file_, "data"))
         return false;
       // Pretend that a higher version of Chrome previously wrote User Data.
       const std::string last_version = GetNextChromeVersion();
       base::WriteFile(user_data_dir_.Append(kDowngradeLastVersionFile),
-                      last_version.c_str(), last_version.size());
+                      last_version);
     }
     return true;
   }

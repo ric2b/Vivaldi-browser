@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/ash/launcher/app_service/app_service_shelf_context_menu.h"
 
 #include "ash/public/cpp/app_menu_constants.h"
+#include "ash/public/cpp/new_window_delegate.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -19,6 +20,7 @@
 #include "chrome/browser/chromeos/guest_os/guest_os_registry_service.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_registry_service_factory.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager_factory.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/launch_util.h"
@@ -36,6 +38,7 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/views/crostini/crostini_app_restart_view.h"
 #include "chrome/browser/ui/webui/settings/chromeos/app_management/app_management_uma.h"
+#include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
@@ -129,23 +132,24 @@ void AppServiceShelfContextMenu::ExecuteCommand(int command_id,
         ShelfContextMenu::ExecuteCommand(ash::MENU_OPEN_NEW, event_flags);
         return;
       }
-      chrome::NewEmptyWindow(controller()->profile());
+      ash::NewWindowDelegate::GetInstance()->NewWindow(/*incognito=*/false);
       break;
 
     case ash::MENU_NEW_INCOGNITO_WINDOW:
-      chrome::NewEmptyWindow(controller()->profile()->GetOffTheRecordProfile());
+      ash::NewWindowDelegate::GetInstance()->NewWindow(/*incognito=*/true);
       break;
 
-    case ash::STOP_APP:
+    case ash::SHUTDOWN_GUEST_OS:
       if (item().id.app_id == crostini::GetTerminalId()) {
         crostini::CrostiniManager::GetForProfile(controller()->profile())
             ->StopVm(crostini::kCrostiniDefaultVmName, base::DoNothing());
       } else if (item().id.app_id == plugin_vm::kPluginVmAppId) {
-        plugin_vm::PluginVmManager::GetForProfile(controller()->profile())
+        plugin_vm::PluginVmManagerFactory::GetForProfile(
+            controller()->profile())
             ->StopPluginVm(plugin_vm::kPluginVmName, /*force=*/false);
       } else {
         LOG(ERROR) << "App " << item().id.app_id
-                   << " should not have a stop app command.";
+                   << " should not have a shutdown guest OS command.";
       }
       break;
 
@@ -214,10 +218,10 @@ bool AppServiceShelfContextMenu::IsCommandIdChecked(int command_id) const {
                 item().id.app_id)) {
           return command_id == ash::LAUNCH_TYPE_TABBED_WINDOW;
         }
-        web_app::DisplayMode effective_display_mode =
-            provider->registrar().GetAppEffectiveDisplayMode(item().id.app_id);
-        return effective_display_mode != web_app::DisplayMode::kUndefined &&
-               effective_display_mode ==
+        web_app::DisplayMode user_display_mode =
+            provider->registrar().GetAppUserDisplayMode(item().id.app_id);
+        return user_display_mode != web_app::DisplayMode::kUndefined &&
+               user_display_mode ==
                    ConvertLaunchTypeCommandToDisplayMode(command_id);
       }
       return ShelfContextMenu::IsCommandIdChecked(command_id);
@@ -238,6 +242,8 @@ bool AppServiceShelfContextMenu::IsCommandIdChecked(int command_id) const {
     case apps::mojom::AppType::kCrostini:
       FALLTHROUGH;
     case apps::mojom::AppType::kBuiltIn:
+      FALLTHROUGH;
+    case apps::mojom::AppType::kPluginVm:
       FALLTHROUGH;
     default:
       return ShelfContextMenu::IsCommandIdChecked(command_id);
@@ -393,9 +399,8 @@ void AppServiceShelfContextMenu::BuildChromeAppMenu(
 
 void AppServiceShelfContextMenu::ShowAppInfo() {
   if (app_type_ == apps::mojom::AppType::kArc) {
-    chrome::ShowAppManagementPage(controller()->profile(), item().id.app_id);
-    base::UmaHistogramEnumeration(
-        kAppManagementEntryPointsHistogramName,
+    chrome::ShowAppManagementPage(
+        controller()->profile(), item().id.app_id,
         AppManagementEntryPoint::kShelfContextMenuAppInfoArc);
     return;
   }
@@ -427,6 +432,8 @@ void AppServiceShelfContextMenu::SetLaunchType(int command_id) {
     case apps::mojom::AppType::kCrostini:
       FALLTHROUGH;
     case apps::mojom::AppType::kBuiltIn:
+      FALLTHROUGH;
+    case apps::mojom::AppType::kPluginVm:
       FALLTHROUGH;
     default:
       return;
@@ -491,6 +498,8 @@ bool AppServiceShelfContextMenu::ShouldAddPinMenu() {
         return true;
       return false;
     }
+    case apps::mojom::AppType::kPluginVm:
+      FALLTHROUGH;
     case apps::mojom::AppType::kBuiltIn: {
       bool show_in_launcher = false;
       apps::AppServiceProxy* proxy =

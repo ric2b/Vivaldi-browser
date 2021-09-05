@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_block_layout_algorithm.h"
 
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/blink/renderer/core/dom/dom_token_list.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/tag_collection.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
@@ -45,9 +46,7 @@ class NGBlockLayoutAlgorithmTest : public NGBaseLayoutAlgorithmTest {
     NGBlockLayoutAlgorithm algorithm({node, fragment_geometry, space});
     MinMaxSizesInput input(
         /* percentage_resolution_block_size */ (LayoutUnit()));
-    auto min_max = algorithm.ComputeMinMaxSizes(input);
-    EXPECT_TRUE(min_max.has_value());
-    return *min_max;
+    return algorithm.ComputeMinMaxSizes(input).sizes;
   }
 
   scoped_refptr<const NGLayoutResult> RunCachedLayoutResult(
@@ -211,17 +210,13 @@ TEST_F(NGBlockLayoutAlgorithmTest, PercentageBlockSizeQuirkDescendantsCaching) {
         <div style="height: 20px;"></div>
         <div style="display: flex; height: 50%;"></div>
       </div>
-      <div id="box6">
-        <div style="height: 20px;"></div>
-        <div style="display: table;"></div>
-      </div>
-      <div id="box7" style="position: relative;">
+      <div id="box6" style="position: relative;">
         <div style="position: absolute; width: 10px; height: 100%;"></div>
       </div>
-      <div id="box8">
+      <div id="box7">
         <img />
       </div>
-      <div id="box9">
+      <div id="box8">
         <img style="height: 100%;" />
       </div>
     </div>
@@ -274,22 +269,17 @@ TEST_F(NGBlockLayoutAlgorithmTest, PercentageBlockSizeQuirkDescendantsCaching) {
   // behaviour, but is %-sized.
   EXPECT_EQ(run_test("box5"), nullptr);
 
-  // Test 6: A table (legacy descendant), which does use the quirks mode
-  // behaviour.
-  // NOTE: This test may fail when tables are converted to LayoutNG.
-  EXPECT_EQ(run_test("box6"), nullptr);
-
-  // Test 7: An OOF positioned descentant which has a %-height, should not
+  // Test 6: An OOF positioned descentant which has a %-height, should not
   // count as a percentage descendant.
+  EXPECT_NE(run_test("box6"), nullptr);
+
+  // Test 7: A replaced element (legacy descendant), shouldn't use the quirks
+  // mode behaviour.
   EXPECT_NE(run_test("box7"), nullptr);
 
   // Test 8: A replaced element (legacy descendant), shouldn't use the quirks
-  // mode behaviour.
-  EXPECT_NE(run_test("box8"), nullptr);
-
-  // Test 9: A replaced element (legacy descendant), shouldn't use the quirks
   // mode behaviour, but is %-sized.
-  EXPECT_EQ(run_test("box9"), nullptr);
+  EXPECT_EQ(run_test("box8"), nullptr);
 }
 
 TEST_F(NGBlockLayoutAlgorithmTest, LineOffsetCaching) {
@@ -2448,6 +2438,52 @@ TEST_F(NGBlockLayoutAlgorithmTest, RootFragmentOffsetInsideLegacy) {
   // TODO(crbug.com/781241: Re-enable when we calculate inline offset at
   // the right time.
   // EXPECT_EQ(PhysicalOffset(20, 10), fragment->Offset());
+}
+
+// This test checks if the inline block baseline is computed correctly when it
+// is from the logical bottom margin edge, even after the simplified layout.
+TEST_F(NGBlockLayoutAlgorithmTest,
+       BaselineAtBlockEndMarginEdgeAfterSimplifiedLayout) {
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <style>
+    #outer {
+      height: 200px;
+    }
+    #outer.after {
+      height: 400px;
+    }
+    #target {
+      display: inline-block;
+      overflow: hidden;
+      width: 300px;
+      height: 100%;
+    }
+    </style>
+    <div id="outer">
+        <div id="target">
+        </div>
+    </div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  // #target uses the logical bottom margin edge for the inline block baseline.
+  auto* target_block_flow =
+      To<LayoutBlockFlow>(GetLayoutObjectByElementId("target"));
+  NGBlockNode target(target_block_flow);
+  ASSERT_TRUE(target.UseBlockEndMarginEdgeForInlineBlockBaseline());
+  scoped_refptr<const NGPhysicalBoxFragment> before =
+      To<NGPhysicalBoxFragment>(target_block_flow->CurrentFragment());
+  EXPECT_EQ(*before->LastBaseline(), LayoutUnit(200));
+
+  // Change the height of the container. This should kick the simplified layout.
+  Element* outer_element = GetElementById("outer");
+  outer_element->classList().Add("after");
+  UpdateAllLifecyclePhasesForTest();
+
+  scoped_refptr<const NGPhysicalBoxFragment> after =
+      To<NGPhysicalBoxFragment>(target_block_flow->CurrentFragment());
+  EXPECT_EQ(*after->LastBaseline(), LayoutUnit(400));
 }
 
 // TODO(dgrogan): Move this to ng_flex_layout_algorithm_test.cc if there ever is

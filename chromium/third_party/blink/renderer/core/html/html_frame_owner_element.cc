@@ -23,6 +23,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-blink.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
@@ -274,7 +275,7 @@ DOMWindow* HTMLFrameOwnerElement::contentWindow() const {
 }
 
 void HTMLFrameOwnerElement::SetSandboxFlags(
-    mojom::blink::WebSandboxFlags flags) {
+    network::mojom::blink::WebSandboxFlags flags) {
   frame_policy_.sandbox_flags = flags;
   // Recalculate the container policy in case the allow-same-origin flag has
   // changed.
@@ -322,11 +323,12 @@ void HTMLFrameOwnerElement::UpdateContainerPolicy(Vector<String>* messages) {
 
 void HTMLFrameOwnerElement::UpdateRequiredPolicy() {
   const auto* frame = GetDocument().GetFrame();
-  DCHECK(frame);
   DocumentPolicy::FeatureState new_required_policy =
-      DocumentPolicy::MergeFeatureState(
-          ConstructRequiredPolicy(), /* self_required_policy */
-          frame->GetRequiredDocumentPolicy() /* parent_required_policy */);
+      frame
+          ? DocumentPolicy::MergeFeatureState(
+                ConstructRequiredPolicy(), /* self_required_policy */
+                frame->GetRequiredDocumentPolicy() /* parent_required_policy */)
+          : ConstructRequiredPolicy();
 
   // Filter out policies that are disabled by origin trials.
   frame_policy_.required_document_policy.clear();
@@ -352,9 +354,28 @@ void HTMLFrameOwnerElement::FrameOwnerPropertiesChanged() {
   // the subframe hasn't been created yet; or if we are in the middle of
   // swapping one frame for another, in which case the final state of
   // properties will be propagated at the end of the swapping operation.
-  if (!is_swapping_frames_ && ContentFrame()) {
-    GetDocument().GetFrame()->Client()->DidChangeFrameOwnerProperties(this);
-  }
+  if (is_swapping_frames_ || !ContentFrame())
+    return;
+
+  mojom::blink::FrameOwnerPropertiesPtr properties =
+      mojom::blink::FrameOwnerProperties::New();
+  properties->name = BrowsingContextContainerName().IsNull()
+                         ? WTF::g_empty_string
+                         : BrowsingContextContainerName(),
+  properties->scrollbar_mode = ScrollbarMode();
+  properties->margin_width = MarginWidth();
+  properties->margin_height = MarginHeight();
+  properties->allow_fullscreen = AllowFullscreen();
+  properties->allow_payment_request = AllowPaymentRequest();
+  properties->is_display_none = IsDisplayNone();
+  properties->required_csp =
+      RequiredCsp().IsNull() ? WTF::g_empty_string : RequiredCsp();
+
+  GetDocument()
+      .GetFrame()
+      ->GetLocalFrameHostRemote()
+      .DidChangeFrameOwnerProperties(ContentFrame()->GetFrameToken(),
+                                     std::move(properties));
 }
 
 void HTMLFrameOwnerElement::AddResourceTiming(const ResourceTimingInfo& info) {

@@ -13,9 +13,7 @@
 #include "cc/input/overscroll_behavior.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
-#include "content/common/edit_command.h"
 #include "content/common/input/input_event.h"
-#include "content/common/input/input_event_ack.h"
 #include "content/common/input/input_event_dispatch_type.h"
 #include "content/common/input/synthetic_gesture_params.h"
 #include "content/common/input/synthetic_pinch_gesture_params.h"
@@ -24,11 +22,10 @@
 #include "content/common/input/synthetic_smooth_drag_gesture_params.h"
 #include "content/common/input/synthetic_smooth_scroll_gesture_params.h"
 #include "content/common/input/synthetic_tap_gesture_params.h"
-#include "content/public/common/input_event_ack_source.h"
-#include "content/public/common/input_event_ack_state.h"
 #include "ipc/ipc_message_macros.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_pointer_properties.h"
+#include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 #include "ui/events/blink/did_overscroll_params.h"
 #include "ui/events/ipc/ui_events_param_traits_macros.h"
 #include "ui/gfx/geometry/point.h"
@@ -42,8 +39,6 @@
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
 
-IPC_ENUM_TRAITS_MAX_VALUE(content::InputEventAckSource,
-                          content::InputEventAckSource::MAX_FROM_RENDERER)
 IPC_ENUM_TRAITS_MAX_VALUE(
     content::SyntheticGestureParams::GestureSourceType,
     content::SyntheticGestureParams::GESTURE_SOURCE_TYPE_MAX)
@@ -59,40 +54,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(
     content::SyntheticPointerActionParams::Button::BUTTON_MAX)
 IPC_ENUM_TRAITS_MAX_VALUE(content::InputEventDispatchType,
                           content::InputEventDispatchType::DISPATCH_TYPE_MAX)
-IPC_ENUM_TRAITS_MIN_MAX_VALUE(blink::WebPointerProperties::Button,
-                              blink::WebPointerProperties::Button::kNoButton,
-                              blink::WebPointerProperties::Button::kMaxValue)
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebPointerProperties::PointerType,
-                          blink::WebPointerProperties::PointerType::kMaxValue)
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebGestureDevice,
-                          blink::WebGestureDevice::kMaxValue)
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebInputEvent::DispatchType,
-                          blink::WebInputEvent::DispatchType::kLastDispatchType)
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebGestureEvent::InertialPhaseState,
-                          blink::WebGestureEvent::InertialPhaseState::kMaxValue)
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebTouchPoint::State,
-                          blink::WebTouchPoint::State::kStateMax)
-IPC_ENUM_TRAITS_MAX_VALUE(
-    cc::OverscrollBehavior::OverscrollBehaviorType,
-    cc::OverscrollBehavior::OverscrollBehaviorType::kOverscrollBehaviorTypeMax)
-
-IPC_STRUCT_TRAITS_BEGIN(ui::DidOverscrollParams)
-  IPC_STRUCT_TRAITS_MEMBER(accumulated_overscroll)
-  IPC_STRUCT_TRAITS_MEMBER(latest_overscroll_delta)
-  IPC_STRUCT_TRAITS_MEMBER(current_fling_velocity)
-  IPC_STRUCT_TRAITS_MEMBER(causal_event_viewport_point)
-  IPC_STRUCT_TRAITS_MEMBER(overscroll_behavior)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(cc::OverscrollBehavior)
-  IPC_STRUCT_TRAITS_MEMBER(x)
-  IPC_STRUCT_TRAITS_MEMBER(y)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(content::EditCommand)
-  IPC_STRUCT_TRAITS_MEMBER(name)
-  IPC_STRUCT_TRAITS_MEMBER(value)
-IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::SyntheticGestureParams)
   IPC_STRUCT_TRAITS_MEMBER(gesture_source_type)
@@ -114,6 +75,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::SyntheticSmoothScrollGestureParams)
   IPC_STRUCT_TRAITS_MEMBER(fling_velocity_x)
   IPC_STRUCT_TRAITS_MEMBER(fling_velocity_y)
   IPC_STRUCT_TRAITS_MEMBER(granularity)
+  IPC_STRUCT_TRAITS_MEMBER(key_modifiers)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::SyntheticPinchGestureParams)

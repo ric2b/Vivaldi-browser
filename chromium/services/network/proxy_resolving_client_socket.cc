@@ -10,8 +10,9 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check_op.h"
 #include "base/compiler_specific.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/optional.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_address.h"
@@ -246,8 +247,8 @@ int ProxyResolvingClientSocket::DoProxyResolve() {
   return network_session_->proxy_resolution_service()->ResolveProxy(
       url_, net::HttpRequestHeaders::kPostMethod,
       net::NetworkIsolationKey::Todo(), &proxy_info_,
-      base::BindRepeating(&ProxyResolvingClientSocket::OnIOComplete,
-                          base::Unretained(this)),
+      base::BindOnce(&ProxyResolvingClientSocket::OnIOComplete,
+                     base::Unretained(this)),
       &proxy_resolve_request_, net_log_);
 }
 

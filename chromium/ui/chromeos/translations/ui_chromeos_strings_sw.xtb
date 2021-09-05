@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Kibodi ya Kijerumani</translation>
 <translation id="1972984168337863910">Panua vidirisha vya maoni ya faili</translation>
 <translation id="1984603991036629094">Kibodi ya Kifonetiki ya Kiarmenia</translation>
+<translation id="1995337122023280937">Nenda mahali faili ilipo</translation>
 <translation id="2001796770603320721">Dhibiti katika Hifadhi ya Google</translation>
 <translation id="2009067268969781306">Hatua ya kubadilisha muundo wa hifadhi itafuta data yote iliyomo. Kitendo hiki hakiwezi kutenduliwa.</translation>
 <translation id="2028997212275086731">Kumbukumbu la RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Hifadhi ya Google haikuweza kupatikana. Tafadhali  <ph name="BEGIN_LINK" />ondoka<ph name="END_LINK" /> na uingie tena.</translation>
 <translation id="2649120831653069427">Samakiupinde</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">Mahali faili ilipo</translation>
 <translation id="2672394958563893062">Hitilafu imetokea. Bofya ili kuanzisha tena kutoka mwanzoni.</translation>
 <translation id="2676946222714718093">Inacheza kwenye</translation>
 <translation id="2735698359135166290">Kibodi wastani ya Kiromania</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826">Hitilafu <ph name="COUNT" />.</translation>
 <translation id="3519867315646775981">Unukuzi wa mfumo wa kuandika (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Kireno</translation>
+<translation id="3524311639100184459">Tahadhari: Faili hizi ni za muda na huenda zikafutwa kiotomatiki ili upate nafasi zaidi ya hifadhi kwenye diski.  <ph name="BEGIN_LINK" />Pata Maelezo Zaidi<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Folda</translation>
 <translation id="3549797760399244642">Nenda kwenye drive.google.com...</translation>
 <translation id="357479282490346887">Kilithuania</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Kichezaji cha Sauti</translation>
 <translation id="4002066346123236978">Kichwa</translation>
+<translation id="4065397611279318371">Ili ufungue faili ukitumia programu za <ph name="APP_NAME" />, zihamishie kwanza kwenye folda ya <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Mbinu ya Kikantoni ya kuingiza data</translation>
 <translation id="4072248638558688893">Kibodi ya Kitamil (Fonetiki)</translation>
 <translation id="4124935795427217608">Farasi mwenye pembe</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Rekebisha kiotomatiki</translation>
 <translation id="4881695831933465202">Fungua</translation>
 <translation id="4886021172213954916">Kibodi ya Kitamil (Typewriter)</translation>
+<translation id="4892969127351273348">Imeshindwa kufungua kwa kutumia <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Iko tayari kuhifadhi nakala ya <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Imerekebishwa</translation>
 <translation id="4935975195727477204">Ua la Gazania</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Dhibiti kushiriki katika Linux</translation>
 <translation id="6808193438228982088">Mbweha</translation>
 <translation id="6820687829547641339">Gzip imebana kumbukumbu ya tar</translation>
+<translation id="6823166707458800069">Nakala za faili zote zilizohifadhiwa kwenye folda hii huhifadhiwa kiotomatiki mtandaoni.</translation>
 <translation id="6825883775269213504">Kirusi</translation>
 <translation id="6827236167376090743">Video hii itaendelea kucheza bila kukoma.</translation>
 <translation id="6847101934483209767">Umeondoa <ph name="ENTRY_NAME" /> kwenye vipengee ulivyochagua.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Ramani ya Google</translation>
 <translation id="7419631653042041064">Kibodi ya Kikatalani</translation>
 <translation id="7434823369735508263">Kibodi ya Dvorak, Uingereza</translation>
+<translation id="7447678886297481665">Faili kwenye folda hizi ni za kusoma tu. Baadhi ya shughuli hazitumiki.</translation>
 <translation id="7460898608667578234">Kiukrania</translation>
 <translation id="7474889694310679759">Kibodi ya Kiingereza cha Kanada</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> imepatikana 

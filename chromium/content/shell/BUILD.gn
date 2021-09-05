@@ -4,6 +4,7 @@
 
 import("//build/config/chromecast_build.gni")
 import("//build/config/features.gni")
+import("//build/config/linux/gtk/gtk.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//build/config/win/console_app.gni")
@@ -15,6 +16,7 @@ import("//ppapi/buildflags/buildflags.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/grit/repack.gni")
 import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
+import("//ui/ozone/ozone.gni")
 if (is_android) {
   import("//build/config/android/config.gni")
 } else if (is_mac) {
@@ -28,8 +30,8 @@ if (is_android) {
 
 declare_args() {
   content_shell_product_name = "Content Shell"
-  content_shell_version = "99.77.34.5"
-  content_shell_major_version = "99"
+  content_shell_version = "999.77.34.5"
+  content_shell_major_version = "999"
 }
 
 config("content_shell_lib_warnings") {
@@ -45,7 +47,24 @@ source_set("android_shell_descriptors") {
   public_deps = [ "//content/public/common:content_descriptors" ]
 }
 
-source_set("web_test_common") {
+mojom("web_test_common_mojom") {
+  sources = [
+    "common/web_test/fake_bluetooth_chooser.mojom",
+    "common/web_test/web_test.mojom",
+    "common/web_test/web_test_bluetooth_fake_adapter_setter.mojom",
+  ]
+  public_deps = [
+    "//content/public/common:web_preferences_mojom",
+    "//mojo/public/mojom/base",
+    "//skia/public/mojom",
+    "//ui/accessibility:ax_enums_mojo",
+    "//ui/gfx/geometry/mojom",
+    "//url/mojom:url_mojom_gurl",
+    "//url/mojom:url_mojom_origin",
+  ]
+}
+
+static_library("web_test_common") {
   testonly = true
   sources = [
     "common/web_test/web_test_constants.h",
@@ -54,9 +73,125 @@ source_set("web_test_common") {
     "common/web_test/web_test_switches.cc",
     "common/web_test/web_test_switches.h",
   ]
+  public_deps = [
+    # #include'ed by renderer/web_test/blink_test_runner.h
+    ":web_test_common_mojom",
+
+    # The generated mojom JS bindings are used by web tests.
+    ":web_test_common_mojom_js",
+  ]
   deps = [
     "//base",
     "//third_party/blink/public:blink_headers",
+    "//v8",
+  ]
+}
+
+static_library("web_test_renderer") {
+  testonly = true
+
+  # This is to support our dependency on //content/renderer.
+  # See comment at the top of //content/BUILD.gn for why this is disabled in
+  # component builds.
+  if (is_component_build) {
+    check_includes = false
+  }
+
+  sources = [
+    "renderer/web_test/accessibility_controller.cc",
+    "renderer/web_test/accessibility_controller.h",
+    "renderer/web_test/app_banner_service.cc",
+    "renderer/web_test/app_banner_service.h",
+    "renderer/web_test/blink_test_helpers.cc",
+    "renderer/web_test/blink_test_helpers.h",
+    "renderer/web_test/blink_test_runner.cc",
+    "renderer/web_test/blink_test_runner.h",
+    "renderer/web_test/event_sender.cc",
+    "renderer/web_test/event_sender.h",
+    "renderer/web_test/gamepad_controller.cc",
+    "renderer/web_test/gamepad_controller.h",
+    "renderer/web_test/gc_controller.cc",
+    "renderer/web_test/gc_controller.h",
+    "renderer/web_test/layout_dump.cc",
+    "renderer/web_test/layout_dump.h",
+    "renderer/web_test/mock_content_settings_client.cc",
+    "renderer/web_test/mock_content_settings_client.h",
+    "renderer/web_test/mock_grammar_check.cc",
+    "renderer/web_test/mock_grammar_check.h",
+    "renderer/web_test/mock_screen_orientation_client.cc",
+    "renderer/web_test/mock_screen_orientation_client.h",
+    "renderer/web_test/mock_spell_check.cc",
+    "renderer/web_test/mock_spell_check.h",
+    "renderer/web_test/mock_web_document_subresource_filter.cc",
+    "renderer/web_test/mock_web_document_subresource_filter.h",
+    "renderer/web_test/pixel_dump.cc",
+    "renderer/web_test/pixel_dump.h",
+    "renderer/web_test/spell_check_client.cc",
+    "renderer/web_test/spell_check_client.h",
+    "renderer/web_test/test_interfaces.cc",
+    "renderer/web_test/test_interfaces.h",
+    "renderer/web_test/test_plugin.cc",
+    "renderer/web_test/test_plugin.h",
+    "renderer/web_test/test_preferences.cc",
+    "renderer/web_test/test_preferences.h",
+    "renderer/web_test/test_runner.cc",
+    "renderer/web_test/test_runner.h",
+    "renderer/web_test/test_runner_for_specific_view.cc",
+    "renderer/web_test/test_runner_for_specific_view.h",
+    "renderer/web_test/test_websocket_handshake_throttle_provider.cc",
+    "renderer/web_test/test_websocket_handshake_throttle_provider.h",
+    "renderer/web_test/text_input_controller.cc",
+    "renderer/web_test/text_input_controller.h",
+    "renderer/web_test/tracked_dictionary.cc",
+    "renderer/web_test/tracked_dictionary.h",
+    "renderer/web_test/web_ax_object_proxy.cc",
+    "renderer/web_test/web_ax_object_proxy.h",
+    "renderer/web_test/web_frame_test_proxy.cc",
+    "renderer/web_test/web_frame_test_proxy.h",
+    "renderer/web_test/web_test_content_renderer_client.cc",
+    "renderer/web_test/web_test_content_renderer_client.h",
+    "renderer/web_test/web_test_render_thread_observer.cc",
+    "renderer/web_test/web_test_render_thread_observer.h",
+    "renderer/web_test/web_test_runtime_flags.cc",
+    "renderer/web_test/web_test_runtime_flags.h",
+    "renderer/web_test/web_view_test_proxy.cc",
+    "renderer/web_test/web_view_test_proxy.h",
+    "renderer/web_test/web_widget_test_proxy.cc",
+    "renderer/web_test/web_widget_test_proxy.h",
+  ]
+  deps = [
+    ":client_hints_util",
+    ":content_shell_lib",
+    ":web_test_common",
+    "//base",
+    "//cc",
+    "//cc/paint",
+    "//components/plugins/renderer",
+    "//components/viz/common",
+    "//components/web_cache/renderer",
+    "//content/public/common",
+    "//content/public/renderer",  # For component builds.
+    "//content/renderer:for_content_tests",  # For non-component builds.
+    "//device/gamepad/public/cpp:shared_with_blink",
+    "//device/gamepad/public/mojom",
+    "//gin",
+    "//gpu",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//media/capture",
+    "//printing",
+    "//services/device/public/mojom",
+    "//skia",
+    "//skia:test_fonts",
+    "//third_party/blink/public:blink_headers",
+    "//third_party/blink/public:test_headers",
+    "//ui/accessibility:ax_base",
+    "//ui/display",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events:events_base",
+    "//ui/events/blink",
+    "//ui/gfx",
+    "//ui/gfx:test_support",
+    "//ui/gfx/geometry",
     "//v8",
   ]
 }
@@ -87,7 +222,9 @@ static_library("content_shell_app") {
   ]
   deps = [
     ":content_shell_lib",
-    "//content/public/app:both",
+    ":web_test_common",
+    ":web_test_renderer",
+    "//content/public/app",
     "//v8",
   ]
   if (!is_fuchsia) {
@@ -111,7 +248,6 @@ static_library("content_shell_lib") {
     "browser/renderer_host/shell_render_widget_host_view_mac_delegate.mm",
     "browser/shell.cc",
     "browser/shell.h",
-    "browser/shell_android.cc",
     "browser/shell_application_mac.h",
     "browser/shell_application_mac.mm",
     "browser/shell_browser_context.cc",
@@ -134,11 +270,13 @@ static_library("content_shell_lib") {
     "browser/shell_javascript_dialog_manager.cc",
     "browser/shell_javascript_dialog_manager.h",
     "browser/shell_javascript_dialog_win.cc",
-    "browser/shell_mac.mm",
     "browser/shell_permission_manager.cc",
     "browser/shell_permission_manager.h",
     "browser/shell_platform_data_aura.cc",
     "browser/shell_platform_data_aura.h",
+    "browser/shell_platform_delegate.h",
+    "browser/shell_platform_delegate_android.cc",
+    "browser/shell_platform_delegate_mac.mm",
     "browser/shell_plugin_service_filter.cc",
     "browser/shell_plugin_service_filter.h",
     "browser/shell_quota_permission_context.cc",
@@ -149,8 +287,6 @@ static_library("content_shell_lib") {
     "browser/shell_web_contents_view_delegate_android.cc",
     "browser/shell_web_contents_view_delegate_creator.h",
     "browser/shell_web_contents_view_delegate_mac.mm",
-    "browser/web_test/blink_test_controller.cc",
-    "browser/web_test/blink_test_controller.h",
     "browser/web_test/devtools_protocol_test_bindings.cc",
     "browser/web_test/devtools_protocol_test_bindings.h",
     "browser/web_test/fake_bluetooth_chooser.cc",
@@ -195,6 +331,8 @@ static_library("content_shell_lib") {
     "browser/web_test/web_test_content_browser_client.h",
     "browser/web_test/web_test_content_index_provider.cc",
     "browser/web_test/web_test_content_index_provider.h",
+    "browser/web_test/web_test_control_host.cc",
+    "browser/web_test/web_test_control_host.h",
     "browser/web_test/web_test_devtools_bindings.cc",
     "browser/web_test/web_test_devtools_bindings.h",
     "browser/web_test/web_test_download_manager_delegate.cc",
@@ -207,6 +345,9 @@ static_library("content_shell_lib") {
     "browser/web_test/web_test_permission_manager.h",
     "browser/web_test/web_test_push_messaging_service.cc",
     "browser/web_test/web_test_push_messaging_service.h",
+    "browser/web_test/web_test_shell_platform_delegate.cc",
+    "browser/web_test/web_test_shell_platform_delegate.h",
+    "browser/web_test/web_test_shell_platform_delegate_mac.mm",
     "browser/web_test/web_test_tts_controller_delegate.cc",
     "browser/web_test/web_test_tts_controller_delegate.h",
     "browser/web_test/web_test_tts_platform.cc",
@@ -223,20 +364,8 @@ static_library("content_shell_lib") {
     "gpu/shell_content_gpu_client.h",
     "renderer/shell_content_renderer_client.cc",
     "renderer/shell_content_renderer_client.h",
-    "renderer/shell_render_view_observer.cc",
-    "renderer/shell_render_view_observer.h",
-    "renderer/web_test/blink_test_helpers.cc",
-    "renderer/web_test/blink_test_helpers.h",
-    "renderer/web_test/blink_test_runner.cc",
-    "renderer/web_test/blink_test_runner.h",
-    "renderer/web_test/test_websocket_handshake_throttle_provider.cc",
-    "renderer/web_test/test_websocket_handshake_throttle_provider.h",
-    "renderer/web_test/web_test_content_renderer_client.cc",
-    "renderer/web_test/web_test_content_renderer_client.h",
-    "renderer/web_test/web_test_render_frame_observer.cc",
-    "renderer/web_test/web_test_render_frame_observer.h",
-    "renderer/web_test/web_test_render_thread_observer.cc",
-    "renderer/web_test/web_test_render_thread_observer.h",
+    "renderer/shell_render_frame_observer.cc",
+    "renderer/shell_render_frame_observer.h",
     "utility/shell_content_utility_client.cc",
     "utility/shell_content_utility_client.h",
   ]
@@ -254,17 +383,18 @@ static_library("content_shell_lib") {
     "CONTENT_SHELL_MAJOR_VERSION=\"$content_shell_major_version\"",
   ]
 
+  # This is to support our dependency on //content/browser.
+  # See comment at the top of //content/BUILD.gn for why this is disabled in
+  # component builds.
+  if (is_component_build) {
+    check_includes = false
+  }
+
   public_deps = [
     ":android_shell_descriptors",
 
-    # #include'ed by renderer/web_test/blink_test_runner.h
-    ":mojo_bindings",
-
-    # The generated mojom JS bindings are used by web tests.
-    ":mojo_bindings_js",
-
-    # This exposes all public content APIs.
-    "//content/public/app:both",
+    # content_shell_lib also exposes all public content APIs.
+    "//content/public/app",
     "//content/public/browser",
     "//content/public/child",
     "//content/public/common",
@@ -275,6 +405,7 @@ static_library("content_shell_lib") {
   ]
   deps = [
     ":client_hints_util",
+    ":content_browsertests_mojom",
     ":resources",
     ":web_test_common",
     "//base",
@@ -292,22 +423,22 @@ static_library("content_shell_lib") {
     "//components/download/public/common:public",
     "//components/keyed_service/content",
     "//components/network_session_configurator/browser",
-    "//components/plugins/renderer",
     "//components/services/storage/test_api",
     "//components/url_formatter",
     "//components/web_cache/renderer",
     "//content:content_resources",
     "//content:dev_ui_content_resources",
     "//content/app/resources",
+    "//content/browser:for_content_tests",  # For non-component builds.
     "//content/gpu",
+    "//content/public/browser",  # For component builds.
     "//content/public/common",
     "//content/public/common:service_names",
-    "//content/shell/test_runner:test_runner",
     "//content/test:blink_test_browser_support",
     "//content/test:content_test_mojo_bindings",
     "//content/test:mojo_web_test_bindings",
     "//content/test:test_support",
-    "//content/test:web_test_support",
+    "//content/test:web_test_support_browser",
     "//device/bluetooth",
     "//device/bluetooth:fake_bluetooth",
     "//device/bluetooth:mocks",
@@ -315,7 +446,6 @@ static_library("content_shell_lib") {
     "//gin",
     "//gpu",
     "//media",
-    "//media/capture",
     "//media/mojo:buildflags",
     "//net",
     "//net:net_resources",
@@ -330,7 +460,6 @@ static_library("content_shell_lib") {
     "//services/test/echo:lib",
     "//services/test/echo/public/mojom",
     "//skia",
-    "//skia:test_fonts",
     "//storage/browser",
     "//testing/gmock",
     "//testing/gtest",
@@ -367,9 +496,6 @@ static_library("content_shell_lib") {
     deps += [ "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.ui.policy" ]
   }
 
-  # Annoyingly, this target and web_test_support have circular includes.
-  allow_circular_includes_from = [ "//content/test:web_test_support" ]
-
   if (enable_plugins) {
     deps += [
       "//cc/paint",
@@ -402,6 +528,16 @@ static_library("content_shell_lib") {
       "//third_party/fontconfig",
       "//ui/gfx:test_support",
     ]
+  }
+
+  if (use_gtk) {
+    deps += [ "//ui/gtk" ]
+    if (use_x11 || ozone_platform_x11) {
+      deps += [
+        "//ui/gfx/x",
+        "//ui/gtk/x",
+      ]
+    }
   }
 
   if (use_x11) {
@@ -437,7 +573,7 @@ static_library("content_shell_lib") {
 
     if (toolkit_views && !is_chromecast) {
       sources += [
-        "browser/shell_views.cc",
+        "browser/shell_platform_delegate_views.cc",
         "browser/shell_web_contents_view_delegate_views.cc",
       ]
       deps += [
@@ -449,7 +585,7 @@ static_library("content_shell_lib") {
       ]
     } else {
       sources += [
-        "browser/shell_aura.cc",
+        "browser/shell_platform_delegate_aura.cc",
         "browser/shell_web_contents_view_delegate_aura.cc",
       ]
     }
@@ -619,7 +755,7 @@ if (is_android) {
       ":content_shell_app",
       ":pak",
       "//build/win:default_exe_manifest",
-      "//content/public/app:both",
+      "//content/public/app",
     ]
 
     data_deps = [
@@ -657,6 +793,7 @@ if (is_android) {
       testonly = true
       binary = ":content_shell"
       package_name_override = "content_shell"
+      manifest = "fuchsia/content_shell.cmx"
     }
 
     fuchsia_package_runner("content_shell_fuchsia") {
@@ -762,7 +899,7 @@ if (is_mac) {
       ":content_shell_framework_helpers",
       ":content_shell_framework_resources",
       ":content_shell_swiftshader_library",
-      "//content/public/app:both",
+      "//content/public/app",
       "//content/public/common",
       "//third_party/icu:icudata",
     ]
@@ -899,23 +1036,8 @@ if (is_mac) {
   }
 }
 
-mojom("mojo_bindings") {
-  sources = [
-    "common/blink_test.mojom",
-    "common/power_monitor_test.mojom",
-    "common/web_test.mojom",
-    "common/web_test/fake_bluetooth_chooser.mojom",
-    "common/web_test/web_test_bluetooth_fake_adapter_setter.mojom",
-  ]
-  public_deps = [
-    "//content/public/common:web_preferences_mojom",
-    "//mojo/public/mojom/base",
-    "//skia/public/mojom",
-    "//ui/accessibility:ax_enums_mojo",
-    "//ui/gfx/geometry/mojom",
-    "//url/mojom:url_mojom_gurl",
-    "//url/mojom:url_mojom_origin",
-  ]
+mojom("content_browsertests_mojom") {
+  sources = [ "common/power_monitor_test.mojom" ]
 }
 
 group("content_shell_crash_test") {

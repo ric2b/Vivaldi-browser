@@ -23,6 +23,7 @@
 #include "components/autofill_assistant/browser/service_impl.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/user_data.h"
+#include "components/google/core/common/google_util.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -158,6 +159,10 @@ const GURL& Controller::GetDeeplinkURL() {
   return deeplink_url_;
 }
 
+const GURL& Controller::GetScriptURL() {
+  return script_url_;
+}
+
 Service* Controller::GetService() {
   return service_.get();
 }
@@ -179,16 +184,16 @@ autofill::PersonalDataManager* Controller::GetPersonalDataManager() {
   return client_->GetPersonalDataManager();
 }
 
-WebsiteLoginFetcher* Controller::GetWebsiteLoginFetcher() {
-  return client_->GetWebsiteLoginFetcher();
+WebsiteLoginManager* Controller::GetWebsiteLoginManager() {
+  return client_->GetWebsiteLoginManager();
 }
 
 content::WebContents* Controller::GetWebContents() {
   return web_contents();
 }
 
-std::string Controller::GetAccountEmailAddress() {
-  return client_->GetAccountEmailAddress();
+std::string Controller::GetEmailAddressForAccessTokenAccount() {
+  return client_->GetEmailAddressForAccessTokenAccount();
 }
 
 std::string Controller::GetLocale() {
@@ -333,16 +338,12 @@ void Controller::ClearGenericUi() {
   }
 }
 
-void Controller::AddListener(ScriptExecutorDelegate::Listener* listener) {
-  auto found = std::find(listeners_.begin(), listeners_.end(), listener);
-  if (found == listeners_.end())
-    listeners_.emplace_back(listener);
+void Controller::AddListener(NavigationListener* listener) {
+  navigation_listeners_.AddObserver(listener);
 }
 
-void Controller::RemoveListener(ScriptExecutorDelegate::Listener* listener) {
-  auto found = std::find(listeners_.begin(), listeners_.end(), listener);
-  if (found != listeners_.end())
-    listeners_.erase(found);
+void Controller::RemoveListener(NavigationListener* listener) {
+  navigation_listeners_.RemoveObserver(listener);
 }
 
 void Controller::SetExpandSheetForPromptAction(bool expand) {
@@ -597,9 +598,8 @@ const ClientSettings& Controller::GetClientSettings() const {
 }
 
 void Controller::ReportNavigationStateChanged() {
-  // Listeners are called in the same order they were added.
-  for (auto* listener : listeners_) {
-    listener->OnNavigationStateChanged();
+  for (auto& listener : navigation_listeners_) {
+    listener.OnNavigationStateChanged();
   }
 }
 
@@ -674,13 +674,13 @@ void Controller::GetOrCheckScripts() {
     return;
 
   const GURL& url = GetCurrentURL();
-  if (script_domain_ != url.host()) {
+  if (!HasSameDomainAs(script_url_, url)) {
     StopPeriodicScriptChecks();
-    script_domain_ = url.host();
+    script_url_ = url;
 #ifdef NDEBUG
     VLOG(2) << "GetScripts for <redacted>";
 #else
-    VLOG(2) << "GetScripts for " << script_domain_;
+    VLOG(2) << "GetScripts for " << script_url_.host();
 #endif
 
     GetService()->GetScriptsForUrl(
@@ -746,14 +746,14 @@ void Controller::OnGetScripts(const GURL& url,
 
   // If the domain of the current URL changed since the request was sent, the
   // response is not relevant anymore and can be safely discarded.
-  if (url.host() != script_domain_)
+  if (!HasSameDomainAs(script_url_, url))
     return;
 
   if (!result) {
 #ifdef NDEBUG
     VLOG(1) << "Failed to get assistant scripts for <redacted>";
 #else
-    VLOG(1) << "Failed to get assistant scripts for " << script_domain_;
+    VLOG(1) << "Failed to get assistant scripts for " << script_url_.host();
 #endif
     OnFatalError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_DEFAULT_ERROR),
                  Metrics::DropOutReason::GET_SCRIPTS_FAILED);
@@ -765,7 +765,7 @@ void Controller::OnGetScripts(const GURL& url,
 #ifdef NDEBUG
     VLOG(2) << __func__ << " from <redacted> returned unparseable response";
 #else
-    VLOG(2) << __func__ << " from " << script_domain_ << " returned "
+    VLOG(2) << __func__ << " from " << script_url_.host() << " returned "
             << "unparseable response";
 #endif
     OnFatalError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_DEFAULT_ERROR),
@@ -795,16 +795,17 @@ void Controller::OnGetScripts(const GURL& url,
   VLOG(2) << __func__ << " from <redacted> returned " << scripts.size()
           << " scripts";
 #else
-  VLOG(2) << __func__ << " from " << script_domain_ << " returned "
+  VLOG(2) << __func__ << " from " << script_url_.host() << " returned "
           << scripts.size() << " scripts";
 #endif
 
   if (VLOG_IS_ON(3)) {
     for (const auto& script : scripts) {
       // Strip domain from beginning if possible (redundant with log above).
-      auto pos = script->handle.path.find(script_domain_);
+      auto pos = script->handle.path.find(script_url_.host());
       if (pos == 0) {
-        DVLOG(3) << "\t" << script->handle.path.substr(script_domain_.length());
+        DVLOG(3) << "\t"
+                 << script->handle.path.substr(script_url_.host().length());
       } else {
         DVLOG(3) << "\t" << script->handle.path;
       }
@@ -1059,10 +1060,6 @@ void Controller::OnScriptSelected(const ScriptHandle& handle,
                     : AutofillAssistantState::PROMPT);
 }
 
-void Controller::UpdateTouchableArea() {
-  touchable_element_area()->Update();
-}
-
 void Controller::OnUserInteractionInsideTouchableArea() {
   GetOrCheckScripts();
 }
@@ -1123,7 +1120,7 @@ void Controller::OnCollectUserDataAdditionalActionTriggered(int index) {
   auto callback =
       std::move(collect_user_data_options_->additional_actions_callback);
   SetCollectUserDataOptions(nullptr);
-  std::move(callback).Run(index);
+  std::move(callback).Run(index, user_data_.get(), &user_model_);
 }
 
 void Controller::OnTextLinkClicked(int link) {
@@ -1132,7 +1129,7 @@ void Controller::OnTextLinkClicked(int link) {
 
   auto callback = std::move(collect_user_data_options_->terms_link_callback);
   SetCollectUserDataOptions(nullptr);
-  std::move(callback).Run(link);
+  std::move(callback).Run(link, user_data_.get(), &user_model_);
 }
 
 void Controller::OnFormActionLinkClicked(int link) {
@@ -1463,7 +1460,7 @@ void Controller::OnFatalError(const std::string& error_message,
   // never will.
   MaybeReportFirstCheckDone();
 
-  if (tracking_ && script_domain_ == GetCurrentURL().host()) {
+  if (tracking_ && HasSameDomainAs(script_url_, GetCurrentURL())) {
     // When tracking the controller should stays until the browser has navigated
     // away from the last domain that was checked to be able to tell callers
     // that the set of user actions is empty.
@@ -1475,7 +1472,8 @@ void Controller::OnFatalError(const std::string& error_message,
 }
 
 void Controller::PerformDelayedShutdownIfNecessary() {
-  if (delayed_shutdown_reason_ && script_domain_ != GetCurrentURL().host()) {
+  if (delayed_shutdown_reason_ &&
+      !HasSameDomainAs(script_url_, GetCurrentURL())) {
     Metrics::DropOutReason reason = delayed_shutdown_reason_.value();
     delayed_shutdown_reason_ = base::nullopt;
     tracking_ = false;
@@ -1604,8 +1602,9 @@ void Controller::DidFinishLoad(content::RenderFrameHost* render_frame_host,
 void Controller::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame() ||
-      navigation_handle->IsSameDocument())
+      navigation_handle->IsSameDocument()) {
     return;
+  }
 
   if (!navigating_to_new_document_) {
     navigating_to_new_document_ = true;
@@ -1660,12 +1659,22 @@ void Controller::DidFinishNavigation(
   // supported.
   if (state_ == AutofillAssistantState::BROWSE) {
     auto current_host = web_contents()->GetLastCommittedURL().host();
-    if (current_host != script_domain_ &&
-        !IsSubdomainOf(current_host, script_domain_) &&
+    auto script_host = script_url_.host();
+    if (current_host != script_host &&
+        !IsSubdomainOf(current_host, script_host) &&
         !IsInWhitelist(current_host, browse_domains_whitelist_)) {
       OnScriptError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_GIVE_UP),
                     Metrics::DropOutReason::DOMAIN_CHANGE_DURING_BROWSE_MODE);
     }
+  }
+  // When in STOPPED state, entered by an unexpected DidStartNavigation or
+  // domain change while in BROWSE state (above), and the new URL is on a
+  // Google property, destroy the UI immediately.
+  if (state_ == AutofillAssistantState::STOPPED &&
+      google_util::IsGoogleDomainUrl(
+          web_contents()->GetLastCommittedURL(), google_util::ALLOW_SUBDOMAIN,
+          google_util::DISALLOW_NON_STANDARD_PORTS)) {
+    client_->DestroyUI();
   }
 
   if (start_after_navigation_) {
@@ -1747,6 +1756,11 @@ void Controller::WriteUserData(
   for (ControllerObserver& observer : observers_) {
     observer.OnUserDataChanged(user_data_.get(), field_change);
   }
+}
+
+void Controller::WriteUserModel(
+    base::OnceCallback<void(UserModel*)> write_callback) {
+  std::move(write_callback).Run(&user_model_);
 }
 
 ElementArea* Controller::touchable_element_area() {

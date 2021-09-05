@@ -16,10 +16,11 @@
 #include "ash/assistant/ui/main_stage/assistant_ui_element_view.h"
 #include "ash/assistant/ui/main_stage/assistant_ui_element_view_factory.h"
 #include "ash/assistant/ui/main_stage/element_animator.h"
+#include "ash/public/cpp/assistant/controller/assistant_interaction_controller.h"
 #include "base/callback.h"
 #include "base/time/time.h"
 #include "cc/base/math_util.h"
-#include "chromeos/services/assistant/public/features.h"
+#include "chromeos/services/assistant/public/cpp/features.h"
 #include "ui/aura/window.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -144,14 +145,8 @@ std::unique_ptr<ElementAnimator> UiElementContainerView::HandleUiElement(
 }
 
 void UiElementContainerView::OnAllViewsAnimatedIn() {
-  if (!chromeos::assistant::features::IsResponseProcessingV2Enabled()) {
-    // TODO(dmblack): Figure out how best to handle A11Y notification of this
-    // event in response processing V2. We may need to debounce it to prevent
-    // dispatching too many accessibility events in quick succession.
-    return;
-  }
-
-  const auto* response = delegate()->GetInteractionModel()->response();
+  const auto* response =
+      AssistantInteractionController::Get()->GetModel()->response();
   DCHECK(response);
 
   // Let screen reader read the query result. This includes the text response

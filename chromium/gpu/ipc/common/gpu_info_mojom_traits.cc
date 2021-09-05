@@ -5,7 +5,7 @@
 #include "gpu/ipc/common/gpu_info_mojom_traits.h"
 #include "build/build_config.h"
 
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "mojo/public/cpp/base/time_mojom_traits.h"
 
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -330,6 +330,8 @@ EnumTraits<gpu::mojom::OverlaySupport, gpu::OverlaySupport>::ToMojom(
       return gpu::mojom::OverlaySupport::DIRECT;
     case gpu::OverlaySupport::kScaling:
       return gpu::mojom::OverlaySupport::SCALING;
+    case gpu::OverlaySupport::kSoftware:
+      return gpu::mojom::OverlaySupport::SOFTWARE;
   }
 }
 
@@ -345,6 +347,9 @@ bool EnumTraits<gpu::mojom::OverlaySupport, gpu::OverlaySupport>::FromMojom(
       break;
     case gpu::mojom::OverlaySupport::SCALING:
       *out = gpu::OverlaySupport::kScaling;
+      break;
+    case gpu::mojom::OverlaySupport::SOFTWARE:
+      *out = gpu::OverlaySupport::kSoftware;
       break;
   }
   return true;

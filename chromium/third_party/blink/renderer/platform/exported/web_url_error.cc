@@ -5,6 +5,7 @@
 #include "third_party/blink/public/platform/web_url_error.h"
 
 #include "net/base/net_errors.h"
+#include "services/network/public/mojom/trust_tokens.mojom-shared.h"
 
 namespace blink {
 
@@ -29,7 +30,7 @@ WebURLError::WebURLError(int reason,
   DCHECK_NE(reason_, 0);
 }
 
-WebURLError::WebURLError(network::BlockedByResponseReason blocked_reason,
+WebURLError::WebURLError(network::mojom::BlockedByResponseReason blocked_reason,
                          net::ResolveErrorInfo resolve_error_info,
                          HasCopyInCache has_copy_in_cache,
                          const WebURL& url)
@@ -49,5 +50,16 @@ WebURLError::WebURLError(const network::CorsErrorStatus& cors_error_status,
       is_web_security_violation_(true),
       url_(url),
       cors_error_status_(cors_error_status) {}
+
+WebURLError::WebURLError(
+    int reason,
+    network::mojom::TrustTokenOperationStatus trust_token_operation_error,
+    const WebURL& url)
+    : reason_(reason),
+      url_(url),
+      trust_token_operation_error_(trust_token_operation_error) {
+  DCHECK_NE(trust_token_operation_error,
+            network::mojom::TrustTokenOperationStatus::kOk);
+}
 
 }  // namespace blink

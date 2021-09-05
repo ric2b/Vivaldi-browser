@@ -27,9 +27,7 @@ import org.chromium.chrome.browser.omnibox.ChromeAutocompleteSchemeClassifier;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.previews.Previews;
-import org.chromium.chrome.browser.previews.PreviewsAndroidBridge;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.ssl.ChromeSecurityStateModelDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tab.TrustedCdn;
@@ -169,16 +167,6 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
                         DomDistillerTabUtils.getFormattedUrlFromOriginalDistillerUrl(originalUrl));
             }
             return buildUrlBarData(url, formattedUrl);
-        }
-
-        // A preview URL may be shown before commit when isPreview() would first return true. Always
-        // check if the visible URL is a preview, and if so, rewrite it.
-        final String previewsOriginalURL = PreviewsAndroidBridge.getInstance().getOriginalURL(url);
-        if (!previewsOriginalURL.equals(url)) {
-            // Strip the scheme if this is a committed preview.
-            return buildUrlBarData(previewsOriginalURL,
-                    isPreview() ? UrlUtilities.stripScheme(previewsOriginalURL)
-                                : previewsOriginalURL);
         }
 
         // Strip the scheme from committed preview pages only.
@@ -413,8 +401,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
     @VisibleForTesting
     @ConnectionSecurityLevel
     int getSecurityLevelFromStateModel(WebContents webContents) {
-        int securityLevel = SecurityStateModel.getSecurityLevelForWebContents(
-                webContents, ChromeSecurityStateModelDelegate.getInstance());
+        int securityLevel = SecurityStateModel.getSecurityLevelForWebContents(webContents);
         return securityLevel;
     }
 

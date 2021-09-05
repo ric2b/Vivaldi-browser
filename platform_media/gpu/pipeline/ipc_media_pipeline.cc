@@ -67,29 +67,31 @@ IPCMediaPipeline::~IPCMediaPipeline() {
   if (data_source_) {
     // In case of abrupt termination like after the renderer process crash the
     // data_source_ here may still have a pending callback. Call it before the
-    // destructor for media_pipeline_ is called to ensure ordered shutdown.
+    // destructor for media_pipeline_ is called to ensure that the callback is
+    // called before the pipeline destructor.
     data_source_->Stop();
   }
 }
 
 // static
 void IPCMediaPipeline::ReadRawData(base::WeakPtr<IPCMediaPipeline> pipeline,
-                                   int64_t position,
-                                   int size,
-                                   ipc_data_source::ReadCB read_cb) {
+                                   ipc_data_source::Buffer source_buffer) {
   if (pipeline) {
     DCHECK_CALLED_ON_VALID_THREAD(pipeline->thread_checker_);
     if (pipeline->data_source_) {
-      pipeline->data_source_->Read(position, size, std::move(read_cb));
+      pipeline->data_source_->Read(std::move(source_buffer));
       return;
     }
   }
-  std::move(read_cb).Run(ipc_data_source::kReadError, nullptr);
+  source_buffer.SetReadError();
+  ipc_data_source::Buffer::SendReply(std::move(source_buffer));
 }
 
-void IPCMediaPipeline::OnInitialize(int64_t data_source_size,
-                                    bool is_data_source_streaming,
-                                    const std::string& mime_type) {
+void IPCMediaPipeline::OnInitialize(
+    int64_t data_source_size,
+    bool is_data_source_streaming,
+    const std::string& mime_type,
+    base::ReadOnlySharedMemoryRegion data_source_region) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " data_size=" << data_source_size
           << " streaming=" << is_data_source_streaming
@@ -102,32 +104,45 @@ void IPCMediaPipeline::OnInitialize(int64_t data_source_size,
     return;
   }
 
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Creating the PlatformMediaPipeline";
-  media_pipeline_ = pipeline_factory_->CreatePipeline();
-  if (!media_pipeline_) {
-    channel_->Send(new MediaPipelineMsg_Initialized(
-        routing_id_, false, 0, PlatformMediaTimeInfo(), PlatformAudioConfig(),
-        PlatformVideoConfig()));
+  do {
+    base::ReadOnlySharedMemoryMapping data_source_mapping =
+        data_source_region.Map();
+    if (!data_source_mapping.IsValid()) {
+      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " failed to map data source region";
+      break;
+    }
+
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " Creating the PlatformMediaPipeline";
+    media_pipeline_ = pipeline_factory_->CreatePipeline();
+    if (!media_pipeline_)
+      break;
+
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " Creating the IPCDataSource";
+    data_source_ = std::make_unique<IPCDataSourceImpl>(channel_, routing_id_);
+
+    ipc_data_source::Info source_info;
+    source_info.is_streaming = is_data_source_streaming;
+    source_info.size = data_source_size;
+    source_info.mime_type = std::move(mime_type);
+
+    source_info.buffer.Init(
+        std::move(data_source_mapping),
+        base::BindRepeating(&IPCMediaPipeline::ReadRawData,
+                            weak_ptr_factory_.GetWeakPtr()));
+
+    state_ = BUSY;
+    media_pipeline_->Initialize(std::move(source_info),
+                                base::Bind(&IPCMediaPipeline::Initialized,
+                                           weak_ptr_factory_.GetWeakPtr()));
     return;
-  }
+  } while (false);
 
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Creating the IPCDataSource";
-  data_source_ = std::make_unique<IPCDataSourceImpl>(channel_, routing_id_);
-
-  ipc_data_source::Reader source_reader = base::BindRepeating(
-      &IPCMediaPipeline::ReadRawData, weak_ptr_factory_.GetWeakPtr());
-
-  ipc_data_source::Info source_info;
-  source_info.is_streaming = is_data_source_streaming;
-  source_info.size = data_source_size;
-  source_info.mime_type = std::move(mime_type);
-
-  state_ = BUSY;
-  media_pipeline_->Initialize(std::move(source_reader), std::move(source_info),
-                              base::Bind(&IPCMediaPipeline::Initialized,
-                                         weak_ptr_factory_.GetWeakPtr()));
+  channel_->Send(new MediaPipelineMsg_Initialized(
+      routing_id_, false, 0, PlatformMediaTimeInfo(), PlatformAudioConfig(),
+      PlatformVideoConfig()));
 }
 
 void IPCMediaPipeline::Initialized(

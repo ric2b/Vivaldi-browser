@@ -91,7 +91,7 @@ ExtensionsMenuView::ExtensionsMenuView(
   browser_->tab_strip_model()->AddObserver(this);
   set_margins(gfx::Insets(0));
 
-  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_NONE);
+  SetButtons(ui::DIALOG_BUTTON_NONE);
 
   EnableUpDownKeyboardAccelerators();
 
@@ -155,7 +155,7 @@ void ExtensionsMenuView::Populate() {
       views::Button::STATE_NORMAL,
       gfx::CreateVectorIcon(vector_icons::kSettingsIcon, 16,
                             GetNativeTheme()->GetSystemColor(
-                                ui::NativeTheme::kColorId_DefaultIconColor)));
+                                ui::NativeTheme::kColorId_MenuIconColor)));
   footer->SetImageLabelSpacing(ChromeLayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_BUTTON_HORIZONTAL_PADDING));
   manage_extensions_button_for_testing_ = footer.get();

@@ -34,7 +34,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/service_manager_connection.h"
 #include "media/audio/audio_features.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/media_log_record.h"
@@ -503,9 +502,6 @@ void MediaInternals::SendGeneralAudioInformation() {
   set_feature_data(features::kAudioServiceLaunchOnStartup);
   set_explicit_feature_data(service_manager::features::kAudioServiceSandbox,
                             service_manager::IsAudioSandboxEnabled());
-  set_explicit_feature_data(features::kWebRtcApmInAudioService,
-                            media::IsWebRtcApmInAudioServiceEnabled());
-
   base::string16 audio_info_update =
       SerializeUpdate("media.updateGeneralAudioInformation", &audio_info_data);
   SendUpdate(audio_info_update);
@@ -560,10 +556,7 @@ void MediaInternals::UpdateVideoCaptureDeviceCapabilities(
     device_dict->SetString("id", descriptor.device_id);
     device_dict->SetString("name", descriptor.GetNameAndModel());
     device_dict->Set("formats", std::move(format_list));
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
-    defined(OS_ANDROID)
     device_dict->SetString("captureApi", descriptor.GetCaptureApiTypeString());
-#endif
     video_capture_capabilities_cached_data_.Append(std::move(device_dict));
   }
 

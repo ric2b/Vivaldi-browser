@@ -7,7 +7,9 @@
  */
 
 GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
+
 GEN('#include "chromeos/constants/chromeos_features.h"');
+GEN('#include "content/public/test/browser_test.h"');
 
 /**
  * @constructor
@@ -24,6 +26,8 @@ PrintManagementBrowserTest.prototype = {
   extraLibraries: [
     '//third_party/mocha/mocha.js',
     '//chrome/test/data/webui/mocha_adapter.js',
+    '//ui/webui/resources/js/assert.js',
+    '//ui/webui/resources/js/promise_resolver.js',
   ],
 
   featureList: {

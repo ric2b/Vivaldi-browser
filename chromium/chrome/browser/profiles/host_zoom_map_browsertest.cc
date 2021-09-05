@@ -37,6 +37,7 @@
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/zoom_event_manager.h"
 #include "content/public/browser/host_zoom_map.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -183,8 +184,7 @@ class HostZoomMapBrowserTestWithPrefs : public HostZoomMapBrowserTest {
         .AppendASCII(TestingProfile::kTestUserProfileDir)
         .Append(chrome::kPreferencesFilename);
     base::CreateDirectory(path_to_prefs.DirName());
-    base::WriteFile(
-        path_to_prefs, prefs_data_.c_str(), prefs_data_.size());
+    base::WriteFile(path_to_prefs, prefs_data_);
     return true;
   }
 

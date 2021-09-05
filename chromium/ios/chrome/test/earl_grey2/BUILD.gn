@@ -59,6 +59,7 @@ chrome_ios_eg2_test("ios_chrome_integration_eg2tests_module") {
     "//ios/chrome/browser/ntp_tiles:eg2_tests",
     "//ios/chrome/browser/passwords:eg2_tests",
     "//ios/chrome/browser/policy:eg2_tests",
+    "//ios/chrome/browser/policy_url_blocking:eg2_tests",
     "//ios/chrome/browser/prerender:eg2_tests",
     "//ios/chrome/browser/translate:eg2_tests",
     "//ios/chrome/browser/ui/autofill:eg2_tests",
@@ -86,6 +87,7 @@ chrome_ios_eg2_test("ios_chrome_settings_eg2tests_module") {
     "//ios/chrome/browser/ui/settings/google_services:eg2_tests",
     "//ios/chrome/browser/ui/settings/language:eg2_tests",
     "//ios/chrome/browser/ui/settings/password:eg2_tests",
+    "//ios/chrome/browser/ui/settings/sync:eg2_tests",
   ]
   data_deps = [ ":ios_chrome_eg2tests" ]
 }
@@ -129,6 +131,7 @@ chrome_ios_eg2_test("ios_chrome_ui_eg2tests_module") {
     "//ios/chrome/browser/ui/tabs:eg2_tests",
     "//ios/chrome/browser/ui/toolbar:eg2_tests",
     "//ios/chrome/browser/ui/webui:eg2_tests",
+    "//ios/chrome/browser/ui/webui/interstitials:eg2_tests",
   ]
   data_deps = [ ":ios_chrome_eg2tests" ]
 

@@ -2,8 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//base/allocator/allocator.gni")
 import("//build/config/features.gni")
 import("//build/config/ios/rules.gni")
+import("//build/mac/tweak_info_plist.gni")
+import("//ios/chrome/features.gni")
 import("//rlz/buildflags/buildflags.gni")
 import("//third_party/protobuf/proto_library.gni")
 
@@ -98,14 +101,12 @@ source_set("browser") {
     "//ios/chrome/browser/complex_tasks",
     "//ios/chrome/browser/download",
     "//ios/chrome/browser/drag_and_drop",
-    "//ios/chrome/browser/find_in_page:feature_flags",
     "//ios/chrome/browser/itunes_urls",
     "//ios/chrome/browser/signin:feature_flags",
     "//ios/chrome/browser/ssl:feature_flags",
     "//ios/chrome/browser/sync/glue",
     "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
-    "//ios/chrome/browser/ui/dialogs:feature_flags",
     "//ios/chrome/browser/ui/fullscreen:feature_flags",
     "//ios/chrome/browser/ui/omnibox",
     "//ios/chrome/browser/ui/toolbar/public:feature_flags",
@@ -192,6 +193,7 @@ source_set("browser_impl") {
   deps = [
     ":browser",
     "//base",
+    "//base/allocator:buildflags",
     "//components/component_updater",
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
@@ -202,6 +204,7 @@ source_set("browser_impl") {
     "//components/language/core/browser",
     "//components/language_usage_metrics",
     "//components/metrics",
+    "//components/metrics:child_call_stack_profile_builder",
     "//components/metrics_services_manager",
     "//components/net_log",
     "//components/network_time",
@@ -254,13 +257,35 @@ source_set("browser_impl") {
   if (enable_rlz) {
     deps += [ "//ios/chrome/browser/rlz" ]
   }
+
+  # Heap profiling is not compiled unless use_allocator_shim is true, as some of
+  # its dependencies require the allocator shim. This variable may be set to
+  # false, for example, in cronet builds.
+  if (use_allocator_shim) {
+    deps += [ "//components/heap_profiling/in_process" ]
+  }
+}
+
+tweak_info_plist("experimental_info_plist") {
+  info_plists = [ "resources/Settings.bundle/Experimental.plist" ]
+  if (ios_enable_metrickit) {
+    info_plists += [ "resources/Settings.bundle/ExperimentalMetricKit.plist" ]
+  }
+  info_plists += [
+    "resources/Settings.bundle/ExperimentalFlags.plist",
+    "resources/Settings.bundle/ExperimentalBlank.plist",
+  ]
+}
+
+bundle_data("settings_resources_experimental_plist") {
+  public_deps = [ ":experimental_info_plist" ]
+  sources = get_target_outputs(":experimental_info_plist")
+  outputs = [ "{{bundle_resources_dir}}/Settings.bundle/Experimental.plist" ]
 }
 
 bundle_data("settings_resources") {
-  sources = [
-    "resources/Settings.bundle/Experimental.plist",
-    "resources/Settings.bundle/Root.plist",
-  ]
+  public_deps = [ ":settings_resources_experimental_plist" ]
+  sources = [ "resources/Settings.bundle/Root.plist" ]
   outputs = [ "{{bundle_resources_dir}}/Settings.bundle/{{source_file_part}}" ]
 }
 

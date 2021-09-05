@@ -5,8 +5,9 @@
 #include "chrome/browser/sync_file_system/drive_backend/fake_drive_uploader.h"
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/location.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "google_apis/drive/drive_api_parser.h"
@@ -64,10 +65,8 @@ CancelCallback FakeDriveServiceWrapper::AddNewDirectory(
     FileResourceCallback callback) {
   if (make_directory_conflict_) {
     FakeDriveService::AddNewDirectory(
-        parent_resource_id,
-        directory_name,
-        options,
-        base::Bind(&DidAddFileOrDirectoryForMakingConflict));
+        parent_resource_id, directory_name, options,
+        base::BindOnce(&DidAddFileOrDirectoryForMakingConflict));
   }
   return FakeDriveService::AddNewDirectory(parent_resource_id, directory_name,
                                            options, std::move(callback));
@@ -93,18 +92,15 @@ CancelCallback FakeDriveUploader::UploadNewFile(
     const std::string& content_type,
     const drive::UploadNewFileOptions& options,
     UploadCompletionCallback callback,
-    const ProgressCallback& progress_callback) {
+    ProgressCallback progress_callback) {
   DCHECK(!callback.is_null());
   const std::string kFileContent = "test content";
 
   if (make_file_conflict_) {
     fake_drive_service_->AddNewFile(
-        content_type,
-        kFileContent,
-        parent_resource_id,
-        title,
+        content_type, kFileContent, parent_resource_id, title,
         false,  // shared_with_me
-        base::Bind(&DidAddFileOrDirectoryForMakingConflict));
+        base::BindOnce(&DidAddFileOrDirectoryForMakingConflict));
   }
 
   fake_drive_service_->AddNewFile(
@@ -122,7 +118,7 @@ CancelCallback FakeDriveUploader::UploadExistingFile(
     const std::string& content_type,
     const drive::UploadExistingFileOptions& options,
     UploadCompletionCallback callback,
-    const ProgressCallback& progress_callback) {
+    ProgressCallback progress_callback) {
   DCHECK(!callback.is_null());
   return fake_drive_service_->GetFileResource(
       resource_id, base::BindOnce(&DidGetFileResourceForUploadExisting,
@@ -134,7 +130,7 @@ CancelCallback FakeDriveUploader::ResumeUploadFile(
     const base::FilePath& local_file_path,
     const std::string& content_type,
     drive::UploadCompletionCallback callback,
-    const ProgressCallback& progress_callback) {
+    ProgressCallback progress_callback) {
   // At the moment, sync file system doesn't support resuming of the uploading.
   // So this method shouldn't be reached.
   NOTREACHED();

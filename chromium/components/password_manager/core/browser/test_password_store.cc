@@ -8,7 +8,8 @@
 
 #include <memory>
 
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/autofill/core/common/password_form.h"
@@ -340,10 +341,36 @@ bool TestPasswordStore::RemoveCompromisedCredentialsImpl(
   return old_size != compromised_credentials_.size();
 }
 
+bool TestPasswordStore::RemoveCompromisedCredentialsByCompromiseTypeImpl(
+    const std::string& signon_realm,
+    const base::string16& username,
+    const CompromiseType& compromise_type,
+    RemoveCompromisedCredentialsReason reason) {
+  const size_t old_size = compromised_credentials_.size();
+  base::EraseIf(compromised_credentials_, [&](const auto& credential) {
+    return credential.signon_realm == signon_realm &&
+           credential.username == username &&
+           credential.compromise_type == compromise_type;
+  });
+  return old_size != compromised_credentials_.size();
+}
+
 std::vector<CompromisedCredentials>
 TestPasswordStore::GetAllCompromisedCredentialsImpl() {
   return std::vector<CompromisedCredentials>(compromised_credentials_.begin(),
                                              compromised_credentials_.end());
+}
+
+std::vector<CompromisedCredentials>
+TestPasswordStore::GetMatchingCompromisedCredentialsImpl(
+    const std::string& signon_realm) {
+  std::vector<CompromisedCredentials> result;
+  std::copy_if(compromised_credentials_.begin(), compromised_credentials_.end(),
+               std::back_inserter(result),
+               [&signon_realm](const CompromisedCredentials& credential) {
+                 return credential.signon_realm == signon_realm;
+               });
+  return result;
 }
 
 bool TestPasswordStore::RemoveCompromisedCredentialsByUrlAndTimeImpl(

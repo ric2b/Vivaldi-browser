@@ -12,6 +12,7 @@
 #include "build/build_config.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/ax_role_properties.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -42,6 +43,8 @@ DialogDelegate::Params::~Params() = default;
 // DialogDelegate:
 
 DialogDelegate::DialogDelegate() {
+  WidgetDelegate::RegisterWindowWillCloseCallback(
+      base::BindOnce(&DialogDelegate::WindowWillClose, base::Unretained(this)));
   UMA_HISTOGRAM_BOOLEAN("Dialog.DialogDelegate.Create", true);
   creation_time_ = base::TimeTicks::Now();
 }
@@ -135,7 +138,7 @@ base::string16 DialogDelegate::GetDialogButtonLabel(
 }
 
 bool DialogDelegate::IsDialogButtonEnabled(ui::DialogButton button) const {
-  return true;
+  return params_.enabled_buttons & button;
 }
 
 bool DialogDelegate::Cancel() {
@@ -324,16 +327,35 @@ void DialogDelegate::DialogModelChanged() {
 }
 
 void DialogDelegate::SetDefaultButton(int button) {
+  if (params_.default_button == button)
+    return;
   params_.default_button = button;
+  DialogModelChanged();
 }
 
 void DialogDelegate::SetButtons(int buttons) {
+  if (params_.buttons == buttons)
+    return;
   params_.buttons = buttons;
+  DialogModelChanged();
+}
+
+void DialogDelegate::SetButtonEnabled(ui::DialogButton button, bool enabled) {
+  if (!!(params_.enabled_buttons & button) == enabled)
+    return;
+  if (enabled)
+    params_.enabled_buttons |= button;
+  else
+    params_.enabled_buttons &= ~button;
+  DialogModelChanged();
 }
 
 void DialogDelegate::SetButtonLabel(ui::DialogButton button,
     base::string16 label) {
+  if (params_.button_labels[button] == label)
+    return;
   params_.button_labels[button] = label;
+  DialogModelChanged();
 }
 
 void DialogDelegate::SetAcceptCallback(base::OnceClosure callback) {
@@ -430,8 +452,7 @@ View* DialogDelegateView::GetContentsView() {
 void DialogDelegateView::ViewHierarchyChanged(
     const ViewHierarchyChangedDetails& details) {
   if (details.is_add && details.child == this && GetWidget() &&
-      (GetAccessibleWindowRole() == ax::mojom::Role::kAlert ||
-       GetAccessibleWindowRole() == ax::mojom::Role::kAlertDialog)) {
+      ui::IsAlert(GetAccessibleWindowRole())) {
     NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
   }
 }

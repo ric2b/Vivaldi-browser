@@ -4,6 +4,8 @@
 
 #include "chrome/browser/web_applications/components/install_finalizer.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
@@ -14,6 +16,13 @@
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
 
 namespace web_app {
+
+InstallFinalizer::FinalizeOptions::FinalizeOptions() = default;
+
+InstallFinalizer::FinalizeOptions::~FinalizeOptions() = default;
+
+InstallFinalizer::FinalizeOptions::FinalizeOptions(const FinalizeOptions&) =
+    default;
 
 void InstallFinalizer::UninstallExternalWebAppByUrl(
     const GURL& app_url,
@@ -32,10 +41,13 @@ void InstallFinalizer::UninstallExternalWebAppByUrl(
                           std::move(callback));
 }
 
-void InstallFinalizer::SetSubsystems(AppRegistrar* registrar,
-                                     WebAppUiManager* ui_manager) {
+void InstallFinalizer::SetSubsystems(
+    AppRegistrar* registrar,
+    WebAppUiManager* ui_manager,
+    AppRegistryController* registry_controller) {
   registrar_ = registrar;
   ui_manager_ = ui_manager;
+  registry_controller_ = registry_controller;
 }
 
 bool InstallFinalizer::CanAddAppToQuickLaunchBar() const {

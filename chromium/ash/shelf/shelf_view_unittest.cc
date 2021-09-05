@@ -85,6 +85,7 @@
 #include "ui/views/animation/bounds_animator.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/test/ink_drop_host_view_test_api.h"
+#include "ui/views/animation/test/ink_drop_impl_test_api.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/view_model.h"
 #include "ui/views/widget/widget.h"
@@ -1175,6 +1176,45 @@ TEST_F(ShelfViewTest, ShouldHideTooltipWithAppListWindowTest) {
       shelf_view_->GetMirroredXInView(center_point.x()), center_point.y())));
 }
 
+// Test that by moving the mouse cursor off the button onto the bubble it closes
+// the bubble.
+TEST_P(HotseatShelfViewTest, ShouldHideTooltipWhenHoveringOnTooltip) {
+  ShelfTooltipManager* tooltip_manager = test_api_->tooltip_manager();
+  tooltip_manager->set_timer_delay_for_test(0);
+  ui::test::EventGenerator* generator = GetEventGenerator();
+
+  // Move the mouse off any item and check that no tooltip is shown.
+  generator->MoveMouseTo(gfx::Point(0, 0));
+  EXPECT_FALSE(tooltip_manager->IsVisible());
+
+  // Move the mouse over the button and check that it is visible.
+  views::View* button = shelf_view_->first_visible_button_for_testing();
+  gfx::Rect bounds = button->GetBoundsInScreen();
+  generator->MoveMouseTo(bounds.CenterPoint());
+  // Wait for the timer to go off.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(tooltip_manager->IsVisible());
+
+  // Move the mouse cursor slightly to the right of the item. The tooltip should
+  // now close.
+  generator->MoveMouseBy(bounds.width() / 2 + 5, 0);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(tooltip_manager->IsVisible());
+
+  // Move back - it should appear again.
+  generator->MoveMouseBy(-(bounds.width() / 2 + 5), 0);
+  // Make sure there is no delayed close.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(tooltip_manager->IsVisible());
+
+  // Now move the mouse cursor slightly above the item - so that it is over the
+  // tooltip bubble. Now it should disappear.
+  generator->MoveMouseBy(0, -(bounds.height() / 2 + 5));
+  // Wait until the delayed close kicked in.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(tooltip_manager->IsVisible());
+}
+
 // Checks the rip an item off from left aligned shelf in secondary monitor.
 TEST_F(ShelfViewTest, CheckRipOffFromLeftShelfAlignmentWithMultiMonitor) {
   UpdateDisplay("800x600,800x600");
@@ -1868,6 +1908,9 @@ class InkDropSpy : public views::InkDrop {
   void HostSizeChanged(const gfx::Size& new_size) override {
     ink_drop_->HostSizeChanged(new_size);
   }
+  void HostTransformChanged(const gfx::Transform& new_transform) override {
+    ink_drop_->HostTransformChanged(new_transform);
+  }
   views::InkDropState GetTargetInkDropState() const override {
     return ink_drop_->GetTargetInkDropState();
   }
@@ -1939,6 +1982,8 @@ class ListMenuShelfItemDelegate : public ShelfItemDelegate {
 class ShelfViewInkDropTest : public ShelfViewTest {
  public:
   ShelfViewInkDropTest() = default;
+  ShelfViewInkDropTest(const ShelfViewInkDropTest&) = delete;
+  ShelfViewInkDropTest& operator=(const ShelfViewInkDropTest&) = delete;
   ~ShelfViewInkDropTest() override = default;
 
  protected:
@@ -1956,9 +2001,12 @@ class ShelfViewInkDropTest : public ShelfViewTest {
   void InitBrowserButtonInkDrop() {
     browser_button_ = test_api_->GetButton(0);
 
+    auto ink_drop_impl = std::make_unique<views::InkDropImpl>(
+        browser_button_, browser_button_->size());
+    browser_button_ink_drop_impl_ = ink_drop_impl.get();
+
     auto browser_button_ink_drop =
-        std::make_unique<InkDropSpy>(std::make_unique<views::InkDropImpl>(
-            browser_button_, browser_button_->size()));
+        std::make_unique<InkDropSpy>(std::move(ink_drop_impl));
     browser_button_ink_drop_ = browser_button_ink_drop.get();
     views::test::InkDropHostViewTestApi(browser_button_)
         .SetInkDrop(std::move(browser_button_ink_drop));
@@ -1968,9 +2016,7 @@ class ShelfViewInkDropTest : public ShelfViewTest {
   InkDropSpy* home_button_ink_drop_ = nullptr;
   ShelfAppButton* browser_button_ = nullptr;
   InkDropSpy* browser_button_ink_drop_ = nullptr;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ShelfViewInkDropTest);
+  views::InkDropImpl* browser_button_ink_drop_impl_ = nullptr;
 };
 
 // Tests that changing visibility of the app list transitions home button's
@@ -2361,6 +2407,26 @@ TEST_F(ShelfViewInkDropTest, DismissingMenuWithDoubleClickDoesntShowInkDrop) {
   EXPECT_FALSE(shelf_view_->IsShowingMenu());
   EXPECT_EQ(views::InkDropState::HIDDEN,
             browser_button_ink_drop_->GetTargetInkDropState());
+}
+
+// Tests that the shelf ink drop transforms when the host transforms. Regression
+// test for https://crbug.com/1097044.
+TEST_F(ShelfViewInkDropTest, ShelfButtonTransformed) {
+  InitBrowserButtonInkDrop();
+  ASSERT_TRUE(browser_button_ink_drop_impl_);
+  auto ink_drop_impl_test_api =
+      std::make_unique<views::test::InkDropImplTestApi>(
+          browser_button_ink_drop_impl_);
+
+  views::Button* button = browser_button_;
+  gfx::Transform transform;
+  transform.Translate(10, 0);
+  button->SetTransform(transform);
+  EXPECT_EQ(transform, ink_drop_impl_test_api->GetRootLayer()->transform());
+
+  button->SetTransform(gfx::Transform());
+  EXPECT_EQ(gfx::Transform(),
+            ink_drop_impl_test_api->GetRootLayer()->transform());
 }
 
 class ShelfViewFocusTest : public ShelfViewTest {

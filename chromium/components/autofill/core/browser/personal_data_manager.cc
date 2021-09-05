@@ -1107,8 +1107,15 @@ std::vector<CreditCard*> PersonalDataManager::GetServerCreditCards() const {
     return result;
 
   result.reserve(server_credit_cards_.size());
-  for (const auto& card : server_credit_cards_)
+  for (const auto& card : server_credit_cards_) {
+    // Do not add Google issued credit card if experiment is disabled.
+    if (card.get()->IsGoogleIssuedCard() &&
+        !base::FeatureList::IsEnabled(
+            autofill::features::kAutofillEnableGoogleIssuedCard)) {
+      continue;
+    }
     result.push_back(card.get());
+  }
   return result;
 }
 
@@ -1119,8 +1126,15 @@ std::vector<CreditCard*> PersonalDataManager::GetCreditCards() const {
   for (const auto& card : local_credit_cards_)
     result.push_back(card.get());
   if (IsAutofillWalletImportEnabled()) {
-    for (const auto& card : server_credit_cards_)
+    for (const auto& card : server_credit_cards_) {
+      // Do not add Google issued credit card if experiment is disabled.
+      if (card.get()->IsGoogleIssuedCard() &&
+          !base::FeatureList::IsEnabled(
+              autofill::features::kAutofillEnableGoogleIssuedCard)) {
+        continue;
+      }
       result.push_back(card.get());
+    }
   }
   return result;
 }
@@ -1680,7 +1694,7 @@ void PersonalDataManager::LoadCreditCardCloudTokenData() {
 }
 
 void PersonalDataManager::LoadUpiIds() {
-  if (!database_helper_->GetServerDatabase())
+  if (!database_helper_->GetLocalDatabase())
     return;
 
   CancelPendingLocalQuery(&pending_upi_ids_query_);
@@ -2047,7 +2061,7 @@ std::vector<Suggestion> PersonalDataManager::GetSuggestionsForCards(
       Suggestion* suggestion = &suggestions.back();
 
       suggestion->value = credit_card->GetInfo(type, app_locale_);
-      suggestion->icon = credit_card->network();
+      suggestion->icon = credit_card->CardIconStringForAutofillSuggestion();
       suggestion->backend_id = credit_card->guid();
       suggestion->match = prefix_matched_suggestion
                               ? Suggestion::PREFIX_MATCH
@@ -2057,7 +2071,8 @@ std::vector<Suggestion> PersonalDataManager::GetSuggestionsForCards(
       // Otherwise the label is the card number, or if that is empty the
       // cardholder name. The label should never repeat the value.
       if (type.GetStorableType() == CREDIT_CARD_NUMBER) {
-        suggestion->value = credit_card->NetworkAndLastFourDigits();
+        suggestion->value =
+            credit_card->CardIdentifierStringForAutofillDisplay();
 
 #if defined(OS_ANDROID) || defined(OS_IOS)
         suggestion->label = credit_card->GetInfo(
@@ -2067,28 +2082,29 @@ std::vector<Suggestion> PersonalDataManager::GetSuggestionsForCards(
 #endif  // defined(OS_ANDROID) || defined(OS_IOS)
 
       } else if (credit_card->number().empty()) {
+        // TODO(crbug/1059087): Update suggestion label with nickname for
+        // empty-number local cards when nickname is supported for local card.
         if (type.GetStorableType() != CREDIT_CARD_NAME_FULL) {
           suggestion->label = credit_card->GetInfo(
               AutofillType(CREDIT_CARD_NAME_FULL), app_locale_);
         }
       } else {
 #if defined(OS_ANDROID)
-        // On Android devices, the label is formatted as "Visa  ••••1234" when
-        // the keyboard accessory experiment is disabled and as "••••1234" when
-        // it's enabled.
+        // On Android devices, the label is formatted as
+        // "Nickname/Network  ••••1234" when the keyboard accessory experiment
+        // is disabled and as "••••1234" when it's enabled.
         suggestion->label =
             base::FeatureList::IsEnabled(features::kAutofillKeyboardAccessory)
                 ? credit_card->ObfuscatedLastFourDigits()
-                : credit_card->NetworkAndLastFourDigits();
+                : credit_card->CardIdentifierStringForAutofillDisplay();
 #elif defined(OS_IOS)
         // E.g. "••••1234"".
         suggestion->label = credit_card->ObfuscatedLastFourDigits();
 #else
-        // E.g. "Visa  ••••1234, expires on 01/25".
+        // E.g. "Nickname/Network  ••••1234, expires on 01/25".
         suggestion->label =
-            credit_card
-                ->NetworkOrBankNameLastFourDigitsAndDescriptiveExpiration(
-                    app_locale_);
+            credit_card->CardIdentifierStringAndDescriptiveExpiration(
+                app_locale_);
 #endif
       }
     }

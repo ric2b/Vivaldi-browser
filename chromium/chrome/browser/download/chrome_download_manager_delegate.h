@@ -85,7 +85,10 @@ class ChromeDownloadManagerDelegate
   bool DetermineDownloadTarget(
       download::DownloadItem* item,
       content::DownloadTargetCallback* callback) override;
-  bool ShouldOpenFileBasedOnExtension(const base::FilePath& path) override;
+  bool ShouldAutomaticallyOpenFile(const GURL& url,
+                                   const base::FilePath& path) override;
+  bool ShouldAutomaticallyOpenFileByPolicy(const GURL& url,
+                                           const base::FilePath& path) override;
   bool ShouldCompleteDownload(download::DownloadItem* item,
                               base::OnceClosure complete_callback) override;
   bool ShouldOpenDownload(

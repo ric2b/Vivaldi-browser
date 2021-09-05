@@ -3,22 +3,25 @@
 // found in the LICENSE file.
 
 // This inclusion is types-only. No actual code to execute.
-// <include src="oobe_types.js">
+// <include src="components/oobe_types.js">
 
 // This inclusion should go before other non-trivial includes, as
 // <{controller,host}-paring-screen> depend of it.
 // <include src="oobe-screen.js">
 
-// <include src="oobe_i18n_behavior.js">
-// <include src="oobe_dialog_host_behavior.js">
-// <include src="login_screen_behavior.js">
+// <include src="components/oobe_i18n_behavior.js">
+// <include src="components/oobe_dialog_host_behavior.js">
+// <include src="components/login_screen_behavior.js">
+// <include src="components/hd-iron-icon.js">
+// <include src="components/html-echo.js">
+// <include src="components/oobe_buttons.js">
+// <include src="components/oobe_dialog.js">
+// <include src="components/oobe_help_dialog.js">
 // <include src="gaia_buttons.js">
 // <include src="gaia_card.js">
 // <include src="gaia_header.js">
 // <include src="gaia_input_form.js">
 // <include src="gaia_input.js">
-// <include src="html-echo.js">
-// <include src="hd-iron-icon.js">
 // <include src="gaia_password_changed.js">
 // <include src="screen_gaia_signin.js">
 // <include src="network_select_login.js">
@@ -29,12 +32,8 @@
 // <include src="navigation_bar.js">
 // <include src="oobe_a11y_option.js">
 // <include src="oobe_adb_sideloading_screen.js">
-// <include src="oobe_buttons.js">
-// <include src="oobe_dialog.js">
-// <include src="oobe_help_dialog.js">
 // <include src="oobe_eula.js">
 // <include src="oobe_enable_kiosk.js">
-// <include src="oobe_terms_of_service.js">
 // <include src="oobe_hid_detection.js">
 // <include src="oobe_reset.js">
 // <include src="oobe_update.js">

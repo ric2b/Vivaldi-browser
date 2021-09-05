@@ -41,6 +41,7 @@ class ProfileMenuView : public ProfileMenuViewBase {
 
  private:
   friend class ProfileMenuViewExtensionsTest;
+  friend class ProfileMenuViewSignoutTest;
 
   // views::BubbleDialogDelegateView:
   base::string16 GetAccessibleWindowTitle() const override;
@@ -55,9 +56,9 @@ class ProfileMenuView : public ProfileMenuViewBase {
   void OnSyncSettingsButtonClicked();
   void OnSyncErrorButtonClicked(sync_ui_util::AvatarSyncErrorType error);
   void OnSigninAccountButtonClicked(AccountInfo account);
-  void OnSignoutButtonClicked();
   void OnCookiesClearedOnExitLinkClicked();
 #if !defined(OS_CHROMEOS)
+  void OnSignoutButtonClicked();
   void OnSigninButtonClicked();
   void OnOtherProfileSelected(const base::FilePath& profile_path);
   void OnAddNewProfileButtonClicked();

@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/css/css_initial_value.h"
 #include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
+#include "third_party/blink/renderer/core/css/css_revert_value.h"
 #include "third_party/blink/renderer/core/css/css_unset_value.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_idioms.h"
 #include "third_party/blink/renderer/core/css/parser/css_property_parser.h"
@@ -647,6 +648,10 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       DCHECK(RuntimeEnabledFeatures::CSSMathStyleEnabled());
       return value_id == CSSValueID::kInline ||
              value_id == CSSValueID::kDisplay;
+    case CSSPropertyID::kMathSuperscriptShiftStyle:
+      DCHECK(RuntimeEnabledFeatures::CSSMathSuperscriptShiftStyleEnabled());
+      return value_id == CSSValueID::kInline ||
+             value_id == CSSValueID::kDisplay;
     case CSSPropertyID::kObjectFit:
       return value_id == CSSValueID::kFill ||
              value_id == CSSValueID::kContain ||
@@ -684,6 +689,10 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       return value_id == CSSValueID::kAuto || value_id == CSSValueID::kAvoid ||
              value_id == CSSValueID::kAvoidPage ||
              value_id == CSSValueID::kAvoidColumn;
+    case CSSPropertyID::kPageOrientation:
+      return value_id == CSSValueID::kUpright ||
+             value_id == CSSValueID::kRotateLeft ||
+             value_id == CSSValueID::kRotateRight;
     case CSSPropertyID::kPointerEvents:
       return value_id == CSSValueID::kVisible ||
              value_id == CSSValueID::kNone || value_id == CSSValueID::kAll ||
@@ -767,11 +776,12 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
              value_id == CSSValueID::kOptimizespeed ||
              value_id == CSSValueID::kOptimizelegibility ||
              value_id == CSSValueID::kGeometricprecision;
-    case CSSPropertyID::kTextTransform:  // capitalize | uppercase | lowercase |
-                                         // none
+    case CSSPropertyID::kTextTransform:
       return (value_id >= CSSValueID::kCapitalize &&
               value_id <= CSSValueID::kLowercase) ||
-             value_id == CSSValueID::kNone;
+             value_id == CSSValueID::kNone ||
+             (RuntimeEnabledFeatures::CSSMathVariantEnabled() &&
+              value_id == CSSValueID::kMathAuto);
     case CSSPropertyID::kUnicodeBidi:
       return value_id == CSSValueID::kNormal ||
              value_id == CSSValueID::kEmbed ||
@@ -793,7 +803,7 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       return (value_id >= CSSValueID::kDrag &&
               value_id <= CSSValueID::kNoDrag) ||
              value_id == CSSValueID::kNone;
-    case CSSPropertyID::kWebkitAppearance:
+    case CSSPropertyID::kAppearance:
       return (value_id >= CSSValueID::kCheckbox &&
               value_id <= CSSValueID::kTextarea) ||
              value_id == CSSValueID::kNone || value_id == CSSValueID::kAuto;
@@ -916,6 +926,8 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
              value_id == CSSValueID::kVisual;
     case CSSPropertyID::kWebkitRubyPosition:
       return value_id == CSSValueID::kBefore || value_id == CSSValueID::kAfter;
+    case CSSPropertyID::kRubyPosition:
+      return value_id == CSSValueID::kOver || value_id == CSSValueID::kUnder;
     case CSSPropertyID::kWebkitTextCombine:
       return value_id == CSSValueID::kNone ||
              value_id == CSSValueID::kHorizontal;
@@ -1009,6 +1021,7 @@ bool CSSParserFastPaths::IsKeywordPropertyID(CSSPropertyID property_id) {
     case CSSPropertyID::kListStyleType:
     case CSSPropertyID::kMaskType:
     case CSSPropertyID::kMathStyle:
+    case CSSPropertyID::kMathSuperscriptShiftStyle:
     case CSSPropertyID::kObjectFit:
     case CSSPropertyID::kOutlineStyle:
     case CSSPropertyID::kOverflowAnchor:
@@ -1020,6 +1033,7 @@ bool CSSParserFastPaths::IsKeywordPropertyID(CSSPropertyID property_id) {
     case CSSPropertyID::kBreakAfter:
     case CSSPropertyID::kBreakBefore:
     case CSSPropertyID::kBreakInside:
+    case CSSPropertyID::kPageOrientation:
     case CSSPropertyID::kPointerEvents:
     case CSSPropertyID::kPosition:
     case CSSPropertyID::kResize:
@@ -1028,6 +1042,7 @@ bool CSSParserFastPaths::IsKeywordPropertyID(CSSPropertyID property_id) {
     case CSSPropertyID::kOverscrollBehaviorBlock:
     case CSSPropertyID::kOverscrollBehaviorX:
     case CSSPropertyID::kOverscrollBehaviorY:
+    case CSSPropertyID::kRubyPosition:
     case CSSPropertyID::kShapeRendering:
     case CSSPropertyID::kSpeak:
     case CSSPropertyID::kStrokeLinecap:
@@ -1049,7 +1064,6 @@ bool CSSParserFastPaths::IsKeywordPropertyID(CSSPropertyID property_id) {
     case CSSPropertyID::kVectorEffect:
     case CSSPropertyID::kVisibility:
     case CSSPropertyID::kWebkitAppRegion:
-    case CSSPropertyID::kWebkitAppearance:
     case CSSPropertyID::kBackfaceVisibility:
     case CSSPropertyID::kBorderBlockEndStyle:
     case CSSPropertyID::kBorderBlockStartStyle:
@@ -1107,13 +1121,15 @@ static CSSValue* ParseKeywordValue(CSSPropertyID property_id,
   DCHECK(!string.IsEmpty());
 
   if (!CSSParserFastPaths::IsKeywordPropertyID(property_id)) {
-    // All properties accept the values of "initial," "inherit" and "unset".
+    // All properties accept CSS-wide keywords.
     if (!EqualIgnoringASCIICase(string, "initial") &&
         !EqualIgnoringASCIICase(string, "inherit") &&
-        !EqualIgnoringASCIICase(string, "unset"))
+        !EqualIgnoringASCIICase(string, "unset") &&
+        (!RuntimeEnabledFeatures::CSSRevertEnabled() ||
+         !EqualIgnoringASCIICase(string, "revert")))
       return nullptr;
 
-    // Parse initial/inherit/unset shorthands using the CSSPropertyParser.
+    // Parse CSS-wide keyword shorthands using the CSSPropertyParser.
     if (shorthandForProperty(property_id).length())
       return nullptr;
 
@@ -1133,6 +1149,10 @@ static CSSValue* ParseKeywordValue(CSSPropertyID property_id,
     return CSSInitialValue::Create();
   if (value_id == CSSValueID::kUnset)
     return cssvalue::CSSUnsetValue::Create();
+  if (RuntimeEnabledFeatures::CSSRevertEnabled() &&
+      value_id == CSSValueID::kRevert) {
+    return cssvalue::CSSRevertValue::Create();
+  }
   if (CSSParserFastPaths::IsValidKeywordPropertyAndValue(property_id, value_id,
                                                          parser_mode))
     return CSSIdentifierValue::Create(value_id);

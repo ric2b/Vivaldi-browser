@@ -46,27 +46,6 @@ public class BookmarkBridge {
             new ObserverList<BookmarkModelObserver>();
 
     /**
-     * @param tab Tab whose current URL is checked against.
-     * @return {@code true} if the current Tab URL has a bookmark associated with it.
-     */
-    public static boolean hasBookmarkIdForTab(Tab tab) {
-        ThreadUtils.assertOnUiThread();
-        if (tab.isFrozen()) return false;
-        return BookmarkBridgeJni.get().getBookmarkIdForWebContents(tab.getWebContents(), false)
-                != BookmarkId.INVALID_ID;
-    }
-
-    /**
-     * @param tab Tab whose current URL is checked against.
-     * @return ser-editable bookmark ID.
-     */
-    public static long getUserBookmarkIdForTab(Tab tab) {
-        ThreadUtils.assertOnUiThread();
-        if (tab.isFrozen()) return BookmarkId.INVALID_ID;
-        return BookmarkBridgeJni.get().getBookmarkIdForWebContents(tab.getWebContents(), true);
-    }
-
-    /**
      * Interface for callback object for fetching bookmarks and folder hierarchy.
      */
     public interface BookmarksCallback {
@@ -338,6 +317,29 @@ public class BookmarkBridge {
     }
 
     /**
+     * @param tab Tab whose current URL is checked against.
+     * @return {@code true} if the current Tab URL has a bookmark associated with it.
+     */
+    public boolean hasBookmarkIdForTab(Tab tab) {
+        ThreadUtils.assertOnUiThread();
+        if (tab.isFrozen()) return false;
+        return BookmarkBridgeJni.get().getBookmarkIdForWebContents(
+                       mNativeBookmarkBridge, this, tab.getWebContents(), false)
+                != BookmarkId.INVALID_ID;
+    }
+
+    /**
+     * @param tab Tab whose current URL is checked against.
+     * @return User-editable bookmark ID.
+     */
+    public long getUserBookmarkIdForTab(Tab tab) {
+        ThreadUtils.assertOnUiThread();
+        if (tab.isFrozen()) return BookmarkId.INVALID_ID;
+        return BookmarkBridgeJni.get().getBookmarkIdForWebContents(
+                mNativeBookmarkBridge, this, tab.getWebContents(), true);
+    }
+
+    /**
      * Load an empty partner bookmark shim for testing. The root node for bookmark will be an
      * empty node.
      */
@@ -563,17 +565,14 @@ public class BookmarkBridge {
     /**
      * Reads sub-folder IDs, sub-bookmark IDs, or both of the given folder.
      *
-     * @param getFolders   Whether sub-folders should be returned.
-     * @param getBookmarks Whether sub-bookmarks should be returned.
      * @return Child IDs of the given folder, with the specified type.
      */
-    public List<BookmarkId> getChildIDs(BookmarkId id, boolean getFolders, boolean getBookmarks) {
+    public List<BookmarkId> getChildIDs(BookmarkId id) {
         ThreadUtils.assertOnUiThread();
-        // TODO(crbug.com/160194): Remove boolean parameters after bookmark reordering launches.
         assert mIsNativeBookmarkModelLoaded;
         List<BookmarkId> result = new ArrayList<BookmarkId>();
-        BookmarkBridgeJni.get().getChildIDs(mNativeBookmarkBridge, BookmarkBridge.this, id.getId(),
-                id.getType(), getFolders, getBookmarks, result);
+        BookmarkBridgeJni.get().getChildIDs(
+                mNativeBookmarkBridge, BookmarkBridge.this, id.getId(), id.getType(), result);
         return result;
     }
 
@@ -1042,7 +1041,8 @@ public class BookmarkBridge {
 
     @NativeMethods
     interface Natives {
-        long getBookmarkIdForWebContents(WebContents webContents, boolean onlyEditable);
+        long getBookmarkIdForWebContents(long nativeBookmarkBridge, BookmarkBridge caller,
+                WebContents webContents, boolean onlyEditable);
         BookmarkItem getBookmarkByID(
                 long nativeBookmarkBridge, BookmarkBridge caller, long id, int type);
         void getTopLevelFolderParentIDs(
@@ -1058,7 +1058,7 @@ public class BookmarkBridge {
         BookmarkId getPartnerFolderId(long nativeBookmarkBridge, BookmarkBridge caller);
         int getChildCount(long nativeBookmarkBridge, BookmarkBridge caller, long id, int type);
         void getChildIDs(long nativeBookmarkBridge, BookmarkBridge caller, long id, int type,
-                boolean getFolders, boolean getBookmarks, List<BookmarkId> bookmarksList);
+                List<BookmarkId> bookmarksList);
         BookmarkId getChildAt(
                 long nativeBookmarkBridge, BookmarkBridge caller, long id, int type, int index);
         int getTotalBookmarkCount(

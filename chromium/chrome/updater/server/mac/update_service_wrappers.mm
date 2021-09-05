@@ -9,10 +9,24 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/strings/sys_string_conversions.h"
 #import "chrome/updater/server/mac/service_protocol.h"
 
-static NSString* const kCRUUpdateState = @"updateState";
+static NSString* const kCRUUpdateStateAppId = @"updateStateAppId";
+static NSString* const kCRUUpdateStateState = @"updateStateState";
+static NSString* const kCRUUpdateStateVersion = @"updateStateVersion";
+static NSString* const kCRUUpdateStateDownloadedBytes =
+    @"updateStateDownloadedBytes";
+static NSString* const kCRUUpdateStateTotalBytes = @"updateStateTotalBytes";
+static NSString* const kCRUUpdateStateInstallProgress =
+    @"updateStateInstallProgress";
+static NSString* const kCRUUpdateStateErrorCategory =
+    @"updateStateErrorCategory";
+static NSString* const kCRUUpdateStateErrorCode = @"updateStateErrorCode";
+static NSString* const kCRUUpdateStateExtraCode = @"updateStateExtraCode";
+
 static NSString* const kCRUPriority = @"priority";
+static NSString* const kCRUErrorCategory = @"errorCategory";
 
 using StateChangeCallback =
     base::RepeatingCallback<void(updater::UpdateService::UpdateState)>;
@@ -45,31 +59,151 @@ using StateChangeCallback =
 
 @synthesize updateState = _updateState;
 
-// Wrapper for updater::UpdateService::UpdateState
-typedef NS_ENUM(NSInteger, CRUUpdateStateEnum) {
-  kCRUUpdateStateUnknown =
-      static_cast<NSInteger>(updater::UpdateService::UpdateState::kUnknown),
-  kCRUUpdateStateNotStarted =
-      static_cast<NSInteger>(updater::UpdateService::UpdateState::kNotStarted),
-  kCRUUpdateStateCheckingForUpdates = static_cast<NSInteger>(
-      updater::UpdateService::UpdateState::kCheckingForUpdates),
-  kCRUUpdateStateDownloading =
-      static_cast<NSInteger>(updater::UpdateService::UpdateState::kDownloading),
-  kCRUUpdateStateInstalling =
-      static_cast<NSInteger>(updater::UpdateService::UpdateState::kInstalling),
-  kCRUUpdateStateUpdated =
-      static_cast<NSInteger>(updater::UpdateService::UpdateState::kUpdated),
-  kCRUUpdateStateNoUpdate =
-      static_cast<NSInteger>(updater::UpdateService::UpdateState::kNoUpdate),
-  kCRUUpdateStateUpdateError =
-      static_cast<NSInteger>(updater::UpdateService::UpdateState::kUpdateError),
+@synthesize appId = _appId;
+@synthesize state = _state;
+@synthesize version = _version;
+@synthesize errorCategory = _errorCategory;
+
+// Designated initializer.
+- (instancetype)initWithAppId:(NSString*)appId
+                        state:(CRUUpdateStateStateWrapper*)state
+                      version:(NSString*)version
+              downloadedBytes:(int64_t)downloadedBytes
+                   totalBytes:(int64_t)totalBytes
+              installProgress:(int)installProgress
+                errorCategory:(CRUErrorCategoryWrapper*)errorCategory
+                    errorCode:(int)errorCode
+                    extraCode:(int)extraCode {
+  if (self = [super init]) {
+    _appId = [appId copy];
+    _state = [state retain];
+    _version = [version copy];
+    _errorCategory = [errorCategory retain];
+
+    _updateState.app_id = base::SysNSStringToUTF8(appId);
+    _updateState.state = state.updateStateState;
+    _updateState.next_version = base::Version(base::SysNSStringToUTF8(version));
+    _updateState.downloaded_bytes = downloadedBytes;
+    _updateState.total_bytes = totalBytes;
+    _updateState.install_progress = installProgress;
+    _updateState.error_category = errorCategory.errorCategory;
+    _updateState.error_code = errorCode;
+    _updateState.extra_code1 = extraCode;
+  }
+  return self;
+}
+
+- (void)dealloc {
+  [_appId release];
+  [_state release];
+  [_version release];
+  [_errorCategory release];
+
+  [super dealloc];
+}
+
+- (int64_t)downloadedBytes {
+  return self.updateState.downloaded_bytes;
+}
+
+- (int64_t)totalBytes {
+  return self.updateState.total_bytes;
+}
+
+- (int)installProgress {
+  return self.updateState.install_progress;
+}
+
+- (int)errorCode {
+  return self.updateState.error_code;
+}
+
+- (int)extraCode {
+  return self.updateState.extra_code1;
+}
+
++ (BOOL)supportsSecureCoding {
+  return YES;
+}
+
+- (instancetype)initWithCoder:(NSCoder*)aDecoder {
+  DCHECK([aDecoder allowsKeyedCoding]);
+  NSString* appId = [aDecoder decodeObjectOfClass:[NSString class]
+                                           forKey:kCRUUpdateStateAppId];
+  CRUUpdateStateStateWrapper* state =
+      [aDecoder decodeObjectOfClass:[CRUUpdateStateStateWrapper class]
+                             forKey:kCRUUpdateStateState];
+  NSString* version = [aDecoder decodeObjectOfClass:[NSString class]
+                                             forKey:kCRUUpdateStateVersion];
+  int64_t downloadedBytes =
+      [aDecoder decodeInt64ForKey:kCRUUpdateStateDownloadedBytes];
+  int64_t totalBytes = [aDecoder decodeInt64ForKey:kCRUUpdateStateTotalBytes];
+  int installProgress =
+      [aDecoder decodeIntForKey:kCRUUpdateStateInstallProgress];
+  CRUErrorCategoryWrapper* errorCategory =
+      [aDecoder decodeObjectOfClass:[CRUErrorCategoryWrapper class]
+                             forKey:kCRUUpdateStateErrorCategory];
+  int errorCode = [aDecoder decodeIntForKey:kCRUUpdateStateErrorCode];
+  int extraCode = [aDecoder decodeIntForKey:kCRUUpdateStateExtraCode];
+
+  return [self initWithAppId:appId
+                       state:state
+                     version:version
+             downloadedBytes:downloadedBytes
+                  totalBytes:totalBytes
+             installProgress:installProgress
+               errorCategory:errorCategory
+                   errorCode:errorCode
+                   extraCode:extraCode];
+}
+
+- (void)encodeWithCoder:(NSCoder*)coder {
+  DCHECK([coder respondsToSelector:@selector(encodeObject:forKey:)]);
+  DCHECK([coder respondsToSelector:@selector(encodeInt:forKey:)]);
+  DCHECK([coder respondsToSelector:@selector(encodeInt64:forKey:)]);
+  [coder encodeObject:self.appId forKey:kCRUUpdateStateAppId];
+  [coder encodeObject:self.state forKey:kCRUUpdateStateState];
+  [coder encodeObject:self.version forKey:kCRUUpdateStateVersion];
+  [coder encodeInt64:self.downloadedBytes
+              forKey:kCRUUpdateStateDownloadedBytes];
+  [coder encodeInt64:self.totalBytes forKey:kCRUUpdateStateTotalBytes];
+  [coder encodeInt:self.installProgress forKey:kCRUUpdateStateInstallProgress];
+  [coder encodeObject:self.errorCategory forKey:kCRUUpdateStateErrorCategory];
+  [coder encodeInt:self.errorCode forKey:kCRUUpdateStateErrorCode];
+  [coder encodeInt:self.extraCode forKey:kCRUUpdateStateExtraCode];
+}
+
+@end
+
+@implementation CRUUpdateStateStateWrapper
+
+@synthesize updateStateState = _updateStateState;
+
+// Wrapper for updater::UpdateService::UpdateState::State
+typedef NS_ENUM(NSInteger, CRUUpdateStateStateEnum) {
+  kCRUUpdateStateStateUnknown = static_cast<NSInteger>(
+      updater::UpdateService::UpdateState::State::kUnknown),
+  kCRUUpdateStateStateNotStarted = static_cast<NSInteger>(
+      updater::UpdateService::UpdateState::State::kNotStarted),
+  kCRUUpdateStateStateCheckingForUpdates = static_cast<NSInteger>(
+      updater::UpdateService::UpdateState::State::kCheckingForUpdates),
+  kCRUUpdateStateStateDownloading = static_cast<NSInteger>(
+      updater::UpdateService::UpdateState::State::kDownloading),
+  kCRUUpdateStateStateInstalling = static_cast<NSInteger>(
+      updater::UpdateService::UpdateState::State::kInstalling),
+  kCRUUpdateStateStateUpdated = static_cast<NSInteger>(
+      updater::UpdateService::UpdateState::State::kUpdated),
+  kCRUUpdateStateStateNoUpdate = static_cast<NSInteger>(
+      updater::UpdateService::UpdateState::State::kNoUpdate),
+  kCRUUpdateStateStateUpdateError = static_cast<NSInteger>(
+      updater::UpdateService::UpdateState::State::kUpdateError),
 };
 
 // Designated initializer.
-- (instancetype)initWithUpdateState:
-    (updater::UpdateService::UpdateState)updateState {
+- (instancetype)initWithUpdateStateState:
+    (updater::UpdateService::UpdateState::State)updateStateState {
   if (self = [super init]) {
-    _updateState = updateState;
+    _updateStateState = updateStateState;
   }
   return self;
 }
@@ -80,42 +214,47 @@ typedef NS_ENUM(NSInteger, CRUUpdateStateEnum) {
 
 - (instancetype)initWithCoder:(NSCoder*)aDecoder {
   DCHECK([aDecoder allowsKeyedCoding]);
-  NSInteger enumValue = [aDecoder decodeIntegerForKey:kCRUUpdateState];
+  NSInteger enumValue = [aDecoder decodeIntegerForKey:kCRUUpdateStateState];
 
   switch (enumValue) {
-    case kCRUUpdateStateUnknown:
-      return [self
-          initWithUpdateState:updater::UpdateService::UpdateState::kUnknown];
-    case kCRUUpdateStateNotStarted:
-      return [self
-          initWithUpdateState:updater::UpdateService::UpdateState::kNotStarted];
-    case kCRUUpdateStateCheckingForUpdates:
-      return [self initWithUpdateState:updater::UpdateService::UpdateState::
-                                           kCheckingForUpdates];
-    case kCRUUpdateStateDownloading:
-      return [self initWithUpdateState:updater::UpdateService::UpdateState::
-                                           kDownloading];
-    case kCRUUpdateStateInstalling:
-      return [self
-          initWithUpdateState:updater::UpdateService::UpdateState::kInstalling];
-    case kCRUUpdateStateUpdated:
-      return [self
-          initWithUpdateState:updater::UpdateService::UpdateState::kUpdated];
-    case kCRUUpdateStateNoUpdate:
-      return [self
-          initWithUpdateState:updater::UpdateService::UpdateState::kNoUpdate];
-    case kCRUUpdateStateUpdateError:
-      return [self initWithUpdateState:updater::UpdateService::UpdateState::
-                                           kUpdateError];
+    case kCRUUpdateStateStateUnknown:
+      return [self initWithUpdateStateState:updater::UpdateService::
+                                                UpdateState::State::kUnknown];
+    case kCRUUpdateStateStateNotStarted:
+      return [self initWithUpdateStateState:
+                       updater::UpdateService::UpdateState::State::kNotStarted];
+    case kCRUUpdateStateStateCheckingForUpdates:
+      return
+          [self initWithUpdateStateState:updater::UpdateService::UpdateState::
+                                             State::kCheckingForUpdates];
+    case kCRUUpdateStateStateDownloading:
+      return
+          [self initWithUpdateStateState:updater::UpdateService::UpdateState::
+                                             State::kDownloading];
+    case kCRUUpdateStateStateInstalling:
+      return [self initWithUpdateStateState:
+                       updater::UpdateService::UpdateState::State::kInstalling];
+    case kCRUUpdateStateStateUpdated:
+      return [self initWithUpdateStateState:updater::UpdateService::
+                                                UpdateState::State::kUpdated];
+    case kCRUUpdateStateStateNoUpdate:
+      return [self initWithUpdateStateState:updater::UpdateService::
+                                                UpdateState::State::kNoUpdate];
+    case kCRUUpdateStateStateUpdateError:
+      return
+          [self initWithUpdateStateState:updater::UpdateService::UpdateState::
+                                             State::kUpdateError];
     default:
-      DLOG(ERROR) << "Unexpected value for CRUUpdateStateEnum: " << enumValue;
+      DLOG(ERROR) << "Unexpected value for CRUUpdateStateStateEnum: "
+                  << enumValue;
       return nil;
   }
 }
 
 - (void)encodeWithCoder:(NSCoder*)coder {
   DCHECK([coder respondsToSelector:@selector(encodeInt:forKey:)]);
-  [coder encodeInt:static_cast<NSInteger>(_updateState) forKey:kCRUUpdateState];
+  [coder encodeInt:static_cast<NSInteger>(self.updateStateState)
+            forKey:kCRUUpdateStateState];
 }
 
 @end
@@ -167,7 +306,76 @@ typedef NS_ENUM(NSInteger, CRUUpdatePriorityEnum) {
 }
 - (void)encodeWithCoder:(NSCoder*)coder {
   DCHECK([coder respondsToSelector:@selector(encodeInt:forKey:)]);
-  [coder encodeInt:static_cast<NSInteger>(_priority) forKey:kCRUPriority];
+  [coder encodeInt:static_cast<NSInteger>(self.priority) forKey:kCRUPriority];
+}
+
+@end
+
+@implementation CRUErrorCategoryWrapper
+
+@synthesize errorCategory = _errorCategory;
+
+// Wrapper for updater::UpdateService::ErrorCategory
+typedef NS_ENUM(NSInteger, CRUErrorCategoryEnum) {
+  kCRUErrorCategoryNone =
+      static_cast<NSInteger>(updater::UpdateService::ErrorCategory::kNone),
+  kCRUErrorCategoryDownload =
+      static_cast<NSInteger>(updater::UpdateService::ErrorCategory::kDownload),
+  kCRUErrorCategoryUnpack =
+      static_cast<NSInteger>(updater::UpdateService::ErrorCategory::kUnpack),
+  kCRUErrorCategoryInstall =
+      static_cast<NSInteger>(updater::UpdateService::ErrorCategory::kInstall),
+  kCRUErrorCategoryService =
+      static_cast<NSInteger>(updater::UpdateService::ErrorCategory::kService),
+  kCRUErrorCategoryUpdateCheck = static_cast<NSInteger>(
+      updater::UpdateService::ErrorCategory::kUpdateCheck),
+};
+
+// Designated initializer.
+- (instancetype)initWithErrorCategory:
+    (updater::UpdateService::ErrorCategory)errorCategory {
+  if (self = [super init]) {
+    _errorCategory = errorCategory;
+  }
+  return self;
+}
+
++ (BOOL)supportsSecureCoding {
+  return YES;
+}
+
+- (instancetype)initWithCoder:(NSCoder*)aDecoder {
+  DCHECK([aDecoder allowsKeyedCoding]);
+  NSInteger enumValue = [aDecoder decodeIntegerForKey:kCRUErrorCategory];
+
+  switch (enumValue) {
+    case kCRUErrorCategoryNone:
+      return [self
+          initWithErrorCategory:updater::UpdateService::ErrorCategory::kNone];
+    case kCRUErrorCategoryDownload:
+      return [self initWithErrorCategory:updater::UpdateService::ErrorCategory::
+                                             kDownload];
+    case kCRUErrorCategoryUnpack:
+      return [self
+          initWithErrorCategory:updater::UpdateService::ErrorCategory::kUnpack];
+    case kCRUErrorCategoryInstall:
+      return [self initWithErrorCategory:updater::UpdateService::ErrorCategory::
+                                             kInstall];
+    case kCRUErrorCategoryService:
+      return [self initWithErrorCategory:updater::UpdateService::ErrorCategory::
+                                             kService];
+    case kCRUErrorCategoryUpdateCheck:
+      return [self initWithErrorCategory:updater::UpdateService::ErrorCategory::
+                                             kUpdateCheck];
+    default:
+      DLOG(ERROR) << "Unexpected value for CRUErrorCategoryEnum: " << enumValue;
+      return nil;
+  }
+}
+- (void)encodeWithCoder:(NSCoder*)coder {
+  DCHECK([coder respondsToSelector:@selector(encodeInt:forKey:)]);
+  [coder encodeInt:static_cast<NSInteger>(self.errorCategory)
+            forKey:kCRUErrorCategory];
 }
 
 @end

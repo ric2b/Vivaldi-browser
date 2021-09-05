@@ -14,13 +14,7 @@
 #include "content/browser/appcache/appcache_service_impl.h"
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
-#include "third_party/blink/public/common/origin_trials/trial_token.h"
-#include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
 #include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
-
-namespace {
-constexpr char kAppCacheOriginTrialName[] = "AppCache";
-}
 
 namespace content {
 
@@ -106,37 +100,6 @@ void AppCacheStorage::LoadResponseInfo(const GURL& manifest_url,
   info_load->StartIfNeeded();
 }
 
-base::Time AppCacheStorage::GetOriginTrialExpiration(
-    const GURL& request_url,
-    const net::HttpResponseHeaders* response_headers,
-    base::Time current_time) {
-  if (!blink::TrialTokenValidator::IsTrialPossibleOnOrigin(request_url))
-    return base::Time();
-
-  if (!response_headers)
-    return base::Time();
-
-  blink::TrialTokenValidator validator;
-  std::string token_feature;
-  base::Time expiry_time;
-  url::Origin origin = url::Origin::Create(request_url);
-  size_t iter = 0;
-  std::string token;
-  while (response_headers->EnumerateHeader(&iter, "Origin-Trial", &token)) {
-    if (validator.ValidateToken(token, origin, current_time, &token_feature,
-                                &expiry_time) ==
-        blink::OriginTrialTokenStatus::kSuccess) {
-      if (token_feature == kAppCacheOriginTrialName)
-        return expiry_time;
-    }
-  }
-  return base::Time();
-}
-
-std::string AppCacheStorage::GetOriginTrialNameForTesting() {
-  return kAppCacheOriginTrialName;
-}
-
 base::WeakPtr<AppCacheStorage> AppCacheStorage::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
@@ -151,7 +114,7 @@ void AppCacheStorage::UpdateUsageMapAndNotify(const url::Origin& origin,
     usage_map_.erase(origin);
   if (new_usage != old_usage && service()->quota_manager_proxy()) {
     service()->quota_manager_proxy()->NotifyStorageModified(
-        storage::QuotaClient::kAppcache, origin,
+        storage::QuotaClientType::kAppcache, origin,
         blink::mojom::StorageType::kTemporary, new_usage - old_usage);
   }
 }
@@ -160,7 +123,7 @@ void AppCacheStorage::ClearUsageMapAndNotify() {
   if (service()->quota_manager_proxy()) {
     for (const auto& pair : usage_map_) {
       service()->quota_manager_proxy()->NotifyStorageModified(
-          storage::QuotaClient::kAppcache, pair.first,
+          storage::QuotaClientType::kAppcache, pair.first,
           blink::mojom::StorageType::kTemporary, -(pair.second));
     }
   }

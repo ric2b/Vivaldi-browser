@@ -13,6 +13,7 @@
 #import "components/content_settings/core/common/content_settings.h"
 #include "components/sync/base/model_type.h"
 #import "ios/testing/earl_grey/base_eg_test_helper_impl.h"
+#include "third_party/metrics_proto/user_demographics.pb.h"
 #include "url/gurl.h"
 
 @class ElementSelector;
@@ -74,6 +75,9 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Clears browsing history. Raises an EarlGrey exception if history is not
 // cleared within a timeout.
 - (void)clearBrowsingHistory;
+
+// Gets the number of entries in the browsing history database.
+- (NSInteger)getBrowsingHistoryEntryCount;
 
 // Clears browsing cache. Raises an EarlGrey exception if history is not
 // cleared within a timeout.
@@ -155,11 +159,14 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Stops the sync server. The server should be running when calling this.
 - (void)stopSync;
 
-// Injects user demographics into the fake sync server. The year is the
-// un-noised birth year, and the gender corresponds to the options in
+// Injects user demographics into the fake sync server. |rawBirthYear| is the
+// true birth year, pre-noise, and the gender corresponds to the proto enum
 // UserDemographicsProto::Gender.
-- (void)addUserDemographicsToSyncServerWithBirthYear:(int)birthYear
-                                              gender:(int)gender;
+- (void)
+    addUserDemographicsToSyncServerWithBirthYear:(int)rawBirthYear
+                                          gender:
+                                              (metrics::UserDemographicsProto::
+                                                   Gender)gender;
 
 // Clears the autofill profile for the given |GUID|.
 - (void)clearAutofillProfileWithGUID:(const std::string&)GUID;
@@ -242,6 +249,9 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 
 // Simulates opening http://www.example.com/ from another application.
 - (void)simulateExternalAppURLOpening;
+
+// Simulates opening the add account sign-in flow from the web.
+- (void)simulateAddAccountFromWeb;
 
 // Closes the current tab and waits for the UI to complete.
 - (void)closeCurrentTab;
@@ -346,6 +356,10 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Returns the current sync cache GUID. The sync server must be running when
 // calling this.
 - (std::string)syncCacheGUID;
+
+// Adds a bookmark with a sync passphrase. The sync server will need the sync
+// passphrase to start.
+- (void)addBookmarkWithSyncPassphrase:(NSString*)syncPassphrase;
 
 #pragma mark - WebState Utilities (EG2)
 

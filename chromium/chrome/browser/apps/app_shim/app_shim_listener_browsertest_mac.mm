@@ -7,8 +7,8 @@
 #include <unistd.h>
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/files/file_path.h"
-#include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/macros.h"
 #include "base/optional.h"
@@ -27,6 +27,7 @@
 #include "chrome/common/mac/app_shim.mojom.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/version_info/version_info.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"

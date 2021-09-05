@@ -8,7 +8,7 @@
  */
 
 // clang-format off
-// #import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
+import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
 // clang-format on
 
 /**
@@ -19,43 +19,35 @@
  *   isUnknownError: boolean,
  * }};
  */
-/* #export */ let DefaultBrowserInfo;
+export let DefaultBrowserInfo;
 
-cr.define('settings', function() {
-  /** @interface */
-  /* #export */ class DefaultBrowserBrowserProxy {
-    /**
-     * Get the initial DefaultBrowserInfo and begin sending updates to
-     * 'settings.updateDefaultBrowserState'.
-     * @return {!Promise<!DefaultBrowserInfo>}
-     */
-    requestDefaultBrowserState() {}
+/** @interface */
+export class DefaultBrowserBrowserProxy {
+  /**
+   * Get the initial DefaultBrowserInfo and begin sending updates to
+   * 'settings.updateDefaultBrowserState'.
+   * @return {!Promise<!DefaultBrowserInfo>}
+   */
+  requestDefaultBrowserState() {}
 
-    /*
-     * Try to set the current browser as the default browser. The new status of
-     * the settings will be sent to 'settings.updateDefaultBrowserState'.
-     */
-    setAsDefaultBrowser() {}
+  /*
+   * Try to set the current browser as the default browser. The new status of
+   * the settings will be sent to 'settings.updateDefaultBrowserState'.
+   */
+  setAsDefaultBrowser() {}
+}
+
+/** @implements {DefaultBrowserBrowserProxy} */
+export class DefaultBrowserBrowserProxyImpl {
+  /** @override */
+  requestDefaultBrowserState() {
+    return sendWithPromise('requestDefaultBrowserState');
   }
 
-  /** @implements {settings.DefaultBrowserBrowserProxy} */
-  /* #export */ class DefaultBrowserBrowserProxyImpl {
-    /** @override */
-    requestDefaultBrowserState() {
-      return cr.sendWithPromise('requestDefaultBrowserState');
-    }
-
-    /** @override */
-    setAsDefaultBrowser() {
-      chrome.send('setAsDefaultBrowser');
-    }
+  /** @override */
+  setAsDefaultBrowser() {
+    chrome.send('setAsDefaultBrowser');
   }
+}
 
-  cr.addSingletonGetter(DefaultBrowserBrowserProxyImpl);
-
-  // #cr_define_end
-  return {
-    DefaultBrowserBrowserProxy: DefaultBrowserBrowserProxy,
-    DefaultBrowserBrowserProxyImpl: DefaultBrowserBrowserProxyImpl,
-  };
-});
+addSingletonGetter(DefaultBrowserBrowserProxyImpl);

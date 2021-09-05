@@ -46,11 +46,11 @@ WebScreenInfo GetScreenInfo(LocalFrame& frame) {
 
 }  // namespace
 
-Screen::Screen(LocalFrame* frame) : DOMWindowClient(frame) {}
+Screen::Screen(LocalFrame* frame) : ExecutionContextClient(frame) {}
 
 int Screen::height() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
     return display_->bounds.height();
   }
   LocalFrame* frame = GetFrame();
@@ -67,7 +67,7 @@ int Screen::height() const {
 
 int Screen::width() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
     return display_->bounds.width();
   }
   LocalFrame* frame = GetFrame();
@@ -84,7 +84,7 @@ int Screen::width() const {
 
 unsigned Screen::colorDepth() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
     return display_->color_depth;
   }
   LocalFrame* frame = GetFrame();
@@ -99,7 +99,7 @@ unsigned Screen::pixelDepth() const {
 
 int Screen::availLeft() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
     return display_->work_area.x();
   }
   LocalFrame* frame = GetFrame();
@@ -116,7 +116,7 @@ int Screen::availLeft() const {
 
 int Screen::availTop() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
     return display_->work_area.y();
   }
   LocalFrame* frame = GetFrame();
@@ -133,7 +133,7 @@ int Screen::availTop() const {
 
 int Screen::availHeight() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
     return display_->work_area.height();
   }
   LocalFrame* frame = GetFrame();
@@ -150,7 +150,7 @@ int Screen::availHeight() const {
 
 int Screen::availWidth() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
     return display_->work_area.width();
   }
   LocalFrame* frame = GetFrame();
@@ -167,21 +167,23 @@ int Screen::availWidth() const {
 
 void Screen::Trace(Visitor* visitor) {
   ScriptWrappable::Trace(visitor);
-  DOMWindowClient::Trace(visitor);
+  ExecutionContextClient::Trace(visitor);
   Supplementable<Screen>::Trace(visitor);
 }
 
 Screen::Screen(display::mojom::blink::DisplayPtr display,
                bool internal,
-               bool primary)
-    : DOMWindowClient(static_cast<LocalFrame*>(nullptr)),
+               bool primary,
+               const String& id)
+    : ExecutionContextClient(static_cast<LocalFrame*>(nullptr)),
       display_(std::move(display)),
       internal_(internal),
-      primary_(primary) {}
+      primary_(primary),
+      id_(id) {}
 
 int Screen::left() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
     return display_->bounds.x();
   }
   LocalFrame* frame = GetFrame();
@@ -198,7 +200,7 @@ int Screen::left() const {
 
 int Screen::top() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
     return display_->bounds.y();
   }
   LocalFrame* frame = GetFrame();
@@ -215,7 +217,7 @@ int Screen::top() const {
 
 bool Screen::internal() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
     return internal_.has_value() && internal_.value();
   }
   // TODO(http://crbug.com/994889): Implement this for |window.screen|?
@@ -225,7 +227,7 @@ bool Screen::internal() const {
 
 bool Screen::primary() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
     return primary_.has_value() && primary_.value();
   }
   // TODO(http://crbug.com/994889): Implement this for |window.screen|?
@@ -235,7 +237,7 @@ bool Screen::primary() const {
 
 float Screen::scaleFactor() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
     return display_->device_scale_factor;
   }
   LocalFrame* frame = GetFrame();
@@ -244,19 +246,30 @@ float Screen::scaleFactor() const {
   return GetScreenInfo(*frame).device_scale_factor;
 }
 
-const String Screen::name() const {
-  // TODO(http://crbug.com/994889): Implement this.
-  NOTIMPLEMENTED_LOG_ONCE();
+const String Screen::id() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
-    return "Generic Screen";
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
+    return id_;
   }
+  // TODO(http://crbug.com/994889): Implement this for |window.screen|?
+  NOTIMPLEMENTED_LOG_ONCE();
   return String();
+}
+
+bool Screen::touchSupport() const {
+  if (display_) {
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
+    return display_->touch_support ==
+           display::mojom::blink::TouchSupport::AVAILABLE;
+  }
+  // TODO(http://crbug.com/994889): Implement this for |window.screen|?
+  NOTIMPLEMENTED_LOG_ONCE();
+  return false;
 }
 
 int64_t Screen::DisplayId() const {
   if (display_) {
-    DCHECK(RuntimeEnabledFeatures::ScreenEnumerationEnabled());
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
     return display_->id;
   }
   return kInvalidDisplayId;

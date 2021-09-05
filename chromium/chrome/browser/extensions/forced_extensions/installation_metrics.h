@@ -59,7 +59,7 @@ class InstallationMetrics : public InstallationTracker::Observer {
   // Calls ReportMetrics method if there is a non-empty list of
   // force-installed extensions, and is responsible for cleanup of
   // observers.
-  void OnForceInstallationFinished() override;
+  void OnForceInstalledExtensionsLoaded() override;
 
  private:
   // Returns true only in case of some well-known misconfigurations which are
@@ -73,6 +73,10 @@ class InstallationMetrics : public InstallationTracker::Observer {
   // Returns Session Type in case extension fails to install.
   SessionType GetSessionType();
 #endif  // defined(OS_CHROMEOS)
+
+  // Reports disable reasons for the extensions which are installed but not
+  // loaded.
+  void ReportDisableReason(const ExtensionId& extension_id);
 
   // If |kInstallationTimeout| report time elapsed for extensions load,
   // otherwise amount of not yet loaded extensions and reasons

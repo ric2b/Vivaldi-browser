@@ -166,6 +166,8 @@ static_library("common") {
     "evaluate_capability.h",
     "forward_process_stats_agent.cc",
     "forward_process_stats_agent.h",
+    "ftl_echo_message_listener.cc",
+    "ftl_echo_message_listener.h",
     "ftl_host_change_notification_listener.cc",
     "ftl_host_change_notification_listener.h",
     "ftl_signaling_connector.cc",
@@ -176,8 +178,6 @@ static_library("common") {
     "host_attributes.h",
     "host_config.cc",
     "host_config.h",
-    "host_config_upgrader.cc",
-    "host_config_upgrader.h",
     "host_details.cc",
     "host_details.h",
     "host_event_logger.h",
@@ -278,12 +278,6 @@ static_library("common") {
     "server_log_entry_host.h",
     "shutdown_watchdog.cc",
     "shutdown_watchdog.h",
-    "single_window_desktop_environment.cc",
-    "single_window_desktop_environment.h",
-    "single_window_input_injector.h",
-    "single_window_input_injector_linux.cc",
-    "single_window_input_injector_mac.cc",
-    "single_window_input_injector_win.cc",
     "test_echo_extension.cc",
     "test_echo_extension.h",
     "test_echo_extension_session.cc",
@@ -365,11 +359,10 @@ static_library("common") {
   }
 
   if (use_x11) {
-    configs += [
-      "//build/config/linux:x11",
-      "//build/config/linux:xrandr",
+    deps += [
+      "//remoting/host/linux:x11",
+      "//ui/gfx/x",
     ]
-    deps += [ "//remoting/host/linux:x11" ]
     if (is_desktop_linux) {
       deps += [ "//build/config/linux/gtk" ]
     }
@@ -491,6 +484,7 @@ source_set("unit_tests") {
     "desktop_display_info_unittest.cc",
     "desktop_process_unittest.cc",
     "desktop_session_agent_unittest.cc",
+    "ftl_echo_message_listener_unittest.cc",
     "ftl_host_change_notification_listener_unittest.cc",
     "ftl_signaling_connector_unittest.cc",
     "heartbeat_sender_unittest.cc",

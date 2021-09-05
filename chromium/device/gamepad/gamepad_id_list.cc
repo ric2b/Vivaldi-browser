@@ -263,6 +263,8 @@ constexpr struct GamepadInfo {
     // NVIDIA Corp.
     {0x0955, 0x7210, kXInputTypeNone},
     {0x0955, 0x7214, kXInputTypeNone},
+    // Broadcom Corp.
+    {0x0a5c, 0x8502, kXInputTypeNone},
     // ASUSTek Computer, Inc.
     {0x0b05, 0x4500, kXInputTypeNone},
     // Play.com, Inc.
@@ -643,7 +645,8 @@ XInputType GamepadIdList::GetXInputType(uint16_t vendor_id,
   return entry ? entry->xtype : kXInputTypeNone;
 }
 
-GamepadId GamepadIdList::GetGamepadId(uint16_t vendor_id,
+GamepadId GamepadIdList::GetGamepadId(base::StringPiece product_name,
+                                      uint16_t vendor_id,
                                       uint16_t product_id) const {
   const auto* entry = GetGamepadInfo(vendor_id, product_id);
   // The ID value combines the vendor and product IDs.

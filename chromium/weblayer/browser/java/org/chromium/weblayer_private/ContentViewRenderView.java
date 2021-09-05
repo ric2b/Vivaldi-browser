@@ -17,6 +17,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.ValueCallback;
 import android.widget.FrameLayout;
+import android.widget.RelativeLayout;
 
 import androidx.annotation.IntDef;
 
@@ -41,7 +42,7 @@ import java.util.ArrayList;
  * visually seamless.
  */
 @JNINamespace("weblayer")
-public class ContentViewRenderView extends FrameLayout {
+public class ContentViewRenderView extends RelativeLayout {
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({MODE_SURFACE_VIEW, MODE_SURFACE_VIEW})
     public @interface Mode {}
@@ -75,6 +76,8 @@ public class ContentViewRenderView extends FrameLayout {
     private int mPhysicalHeight;
 
     private int mWebContentsHeightDelta;
+
+    private boolean mCompositorHasSurface;
 
     // Common interface to listen to surface related events.
     private interface SurfaceEventListener {
@@ -142,6 +145,7 @@ public class ContentViewRenderView extends FrameLayout {
             assert mSurfaceData == ContentViewRenderView.this.mCurrent;
             ContentViewRenderViewJni.get().surfaceChanged(mNativeContentViewRenderView,
                     canBeUsedWithSurfaceControl, format, width, height, surface);
+            mCompositorHasSurface = surface != null;
             if (mWebContents != null) {
                 ContentViewRenderViewJni.get().onPhysicalBackingSizeChanged(
                         mNativeContentViewRenderView, mWebContents, width, height);
@@ -154,6 +158,7 @@ public class ContentViewRenderView extends FrameLayout {
             assert mSurfaceData == ContentViewRenderView.this.mCurrent;
             ContentViewRenderViewJni.get().surfaceDestroyed(
                     mNativeContentViewRenderView, cacheBackBuffer);
+            mCompositorHasSurface = false;
         }
     }
 
@@ -702,6 +707,10 @@ public class ContentViewRenderView extends FrameLayout {
 
     public ResourceManager getResourceManager() {
         return ContentViewRenderViewJni.get().getResourceManager(mNativeContentViewRenderView);
+    }
+
+    public boolean hasSurface() {
+        return mCompositorHasSurface;
     }
 
     @CalledByNative

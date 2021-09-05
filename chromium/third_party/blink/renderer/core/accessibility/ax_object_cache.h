@@ -31,8 +31,10 @@
 
 #include "base/macros.h"
 #include "third_party/blink/renderer/core/accessibility/axid.h"
+#include "third_party/blink/renderer/core/accessibility/blink_ax_event_intent.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/platform/wtf/hash_counted_set.h"
 
 namespace blink {
 
@@ -48,6 +50,10 @@ class LocalFrameView;
 
 class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
  public:
+  using BlinkAXEventIntentsSet = HashCountedSet<BlinkAXEventIntent,
+                                                BlinkAXEventIntentHash,
+                                                BlinkAXEventIntentHashTraits>;
+
   static AXObjectCache* Create(Document&);
 
   virtual ~AXObjectCache() = default;
@@ -88,7 +94,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   virtual void DidInsertChildrenOfNode(Node*) = 0;
 
   // Returns true if the AXObjectCache cares about this attribute
-  virtual bool HandleAttributeChanged(const QualifiedName& attr_name,
+  virtual void HandleAttributeChanged(const QualifiedName& attr_name,
                                       Element*) = 0;
   virtual void HandleFocusedUIElementChanged(Element* old_focused_node,
                                              Element* new_focused_node) = 0;
@@ -147,6 +153,19 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   // Static helper functions.
   static bool IsInsideFocusableElementOrARIAWidget(const Node&);
 
+ protected:
+  friend class ScopedBlinkAXEventIntent;
+  FRIEND_TEST_ALL_PREFIXES(ScopedBlinkAXEventIntentTest, SingleIntent);
+  FRIEND_TEST_ALL_PREFIXES(ScopedBlinkAXEventIntentTest,
+                           MultipleIdenticalIntents);
+  FRIEND_TEST_ALL_PREFIXES(ScopedBlinkAXEventIntentTest,
+                           NestedIndividualIntents);
+  FRIEND_TEST_ALL_PREFIXES(ScopedBlinkAXEventIntentTest, NestedMultipleIntents);
+  FRIEND_TEST_ALL_PREFIXES(ScopedBlinkAXEventIntentTest,
+                           NestedIdenticalIntents);
+
+  virtual BlinkAXEventIntentsSet& ActiveEventIntents() = 0;
+
  private:
   friend class AXObjectCacheBase;
   AXObjectCache() = default;
@@ -157,4 +176,4 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_ACCESSIBILITY_AX_OBJECT_CACHE_H_

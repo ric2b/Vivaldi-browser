@@ -9,11 +9,11 @@ import org.chromium.ui.modelutil.PropertyModel.WritableBooleanPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableFloatPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableIntPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableObjectPropertyKey;
-import org.chromium.url.URI;
+import org.chromium.url.GURL;
 
 /** PaymentHandlerToolbar UI properties, which fully describe the state of the UI. */
 /* package */ class PaymentHandlerToolbarProperties {
-    /* package */ static final WritableObjectPropertyKey<URI> URL =
+    /* package */ static final WritableObjectPropertyKey<GURL> URL =
             new WritableObjectPropertyKey<>();
 
     /* package */ static final WritableObjectPropertyKey<String> TITLE =
@@ -27,8 +27,11 @@ import org.chromium.url.URI;
 
     /* package */ static final WritableIntPropertyKey SECURITY_ICON = new WritableIntPropertyKey();
 
-    /* package */ static final PropertyKey[] ALL_KEYS =
-            new PropertyKey[] {URL, TITLE, LOAD_PROGRESS, PROGRESS_VISIBLE, SECURITY_ICON};
+    /* package */ static final WritableObjectPropertyKey<String> SECURITY_ICON_CONTENT_DESCRIPTION =
+            new WritableObjectPropertyKey<>();
+
+    /* package */ static final PropertyKey[] ALL_KEYS = new PropertyKey[] {URL, TITLE,
+            LOAD_PROGRESS, PROGRESS_VISIBLE, SECURITY_ICON, SECURITY_ICON_CONTENT_DESCRIPTION};
 
     // Prevent instantiation.
     private PaymentHandlerToolbarProperties() {}

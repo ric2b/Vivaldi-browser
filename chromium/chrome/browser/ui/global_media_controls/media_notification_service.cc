@@ -36,6 +36,15 @@ constexpr int kAutoDismissTimerInMinutesDefault = 60;  // minutes
 
 constexpr const char kAutoDismissTimerInMinutesParamName[] = "timer_in_minutes";
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class MediaNotificationClickSource {
+  kMedia = 0,
+  kPresentation,
+  kMediaFling,
+  kMaxValue = kMediaFling
+};
+
 // Returns the time value to be used for the auto-dismissing of the
 // notifications after they are inactive.
 // If the feature (auto-dismiss) is disabled, the returned value will be
@@ -204,6 +213,10 @@ void MediaNotificationService::Session::OnSessionOverlayStateChanged(
     // inactive.
     StartInactiveTimer();
   }
+}
+
+bool MediaNotificationService::Session::IsPlaying() {
+  return is_playing_;
 }
 
 // static
@@ -473,6 +486,9 @@ void MediaNotificationService::OnContainerClicked(const std::string& id) {
   if (!delegate)
     return;
 
+  base::UmaHistogramEnumeration("Media.Notification.Click",
+                                MediaNotificationClickSource::kMedia);
+
   delegate->ActivateContents(web_contents);
 }
 
@@ -599,7 +615,15 @@ void MediaNotificationService::SetDialogDelegate(
   if (!dialog_delegate_)
     return;
 
+  std::list<std::string> sorted_session_ids;
   for (const std::string& id : active_controllable_session_ids_) {
+    if (sessions_.find(id)->second.IsPlaying())
+      sorted_session_ids.push_front(id);
+    else
+      sorted_session_ids.push_back(id);
+  }
+
+  for (const std::string& id : sorted_session_ids) {
     base::WeakPtr<media_message_center::MediaNotificationItem> item =
         GetNotificationItem(id);
     MediaNotificationContainerImpl* container =

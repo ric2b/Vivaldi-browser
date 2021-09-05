@@ -18,6 +18,7 @@
 # huge sequence of random-looking conditionals.
 
 import("//base/allocator/allocator.gni")
+import("//base/trace_event/features.gni")
 import("//build/buildflag_header.gni")
 import("//build/config/allocator.gni")
 import("//build/config/arm.gni")
@@ -195,6 +196,10 @@ jumbo_component("base") {
     "callback_internal.h",
     "callback_list.h",
     "cancelable_callback.h",
+    "check.cc",
+    "check.h",
+    "check_op.cc",
+    "check_op.h",
     "command_line.cc",
     "command_line.h",
     "compiler_specific.h",
@@ -316,6 +321,7 @@ jumbo_component("base") {
     "macros.h",
     "memory/aligned_memory.cc",
     "memory/aligned_memory.h",
+    "memory/checked_ptr.h",
     "memory/discardable_memory.cc",
     "memory/discardable_memory.h",
     "memory/discardable_memory_allocator.cc",
@@ -426,6 +432,8 @@ jumbo_component("base") {
     "native_library.cc",
     "native_library.h",
     "no_destructor.h",
+    "notreached.cc",
+    "notreached.h",
     "observer_list.h",
     "observer_list_internal.cc",
     "observer_list_internal.h",
@@ -478,7 +486,6 @@ jumbo_component("base") {
     "profiler/module_cache.cc",
     "profiler/module_cache.h",
     "profiler/native_unwinder.h",
-    "profiler/profile_builder.cc",
     "profiler/profile_builder.h",
     "profiler/register_context.h",
     "profiler/sample_metadata.cc",
@@ -956,6 +963,8 @@ jumbo_component("base") {
       "files/file_path_watcher_win.cc",
       "files/file_util_win.cc",
       "files/file_win.cc",
+      "files/important_file_writer_cleaner.cc",
+      "files/important_file_writer_cleaner.h",
       "files/memory_mapped_file_win.cc",
       "logging_win.cc",
       "logging_win.h",
@@ -1196,6 +1205,7 @@ jumbo_component("base") {
       "native_library_ios.mm",
       "process/launch_ios.cc",
       "process/process_metrics_ios.cc",
+      "profiler/module_cache_mac.cc",
       "profiler/stack_sampler_ios.cc",
     ]
   }
@@ -1209,8 +1219,6 @@ jumbo_component("base") {
       "message_loop/message_pump_android.h",
       "os_compat_android.cc",
       "os_compat_android.h",
-      "profiler/native_unwinder_android.cc",
-      "profiler/native_unwinder_android.h",
       "profiler/stack_sampler_android.cc",
       "threading/platform_thread_android.cc",
       "trace_event/cpufreq_monitor_android.cc",
@@ -1355,7 +1363,7 @@ jumbo_component("base") {
         "allocator/allocator_shim_override_linker_wrapped_symbols.h",
       ]
       all_dependent_configs += [ "//base/allocator:wrap_malloc_symbols" ]
-    } else if (is_mac) {
+    } else if (is_mac || is_ios) {
       sources += [
         "allocator/allocator_shim_default_dispatch_to_mac_zoned_malloc.cc",
         "allocator/allocator_shim_default_dispatch_to_mac_zoned_malloc.h",
@@ -1390,7 +1398,6 @@ jumbo_component("base") {
       "android/android_image_reader_abi.h",
       "android/android_image_reader_compat.cc",
       "android/android_image_reader_compat.h",
-      "android/animation_frame_time_histogram.cc",
       "android/apk_assets.cc",
       "android/apk_assets.h",
       "android/application_status_listener.cc",
@@ -1413,6 +1420,7 @@ jumbo_component("base") {
       "android/early_trace_event_binding.h",
       "android/event_log.cc",
       "android/event_log.h",
+      "android/feature_list_jni.cc",
       "android/field_trial_list.cc",
       "android/important_file_writer_android.cc",
       "android/int_string_callback.cc",
@@ -1477,6 +1485,7 @@ jumbo_component("base") {
       "android/timezone_utils.cc",
       "android/timezone_utils.h",
       "android/trace_event_binding.cc",
+      "android/trace_event_binding.h",
       "android/unguessable_token_android.cc",
       "android/unguessable_token_android.h",
       "memory/platform_shared_memory_region_android.cc",
@@ -1770,6 +1779,7 @@ jumbo_component("base") {
         "allocator/partition_allocator/partition_alloc.cc",
         "allocator/partition_allocator/partition_alloc.h",
         "allocator/partition_allocator/partition_alloc_constants.h",
+        "allocator/partition_allocator/partition_alloc_forward.h",
         "allocator/partition_allocator/partition_bucket.cc",
         "allocator/partition_allocator/partition_bucket.h",
         "allocator/partition_allocator/partition_cookie.h",
@@ -1961,10 +1971,6 @@ jumbo_component("base") {
       "process/process_iterator.h",
       "process/process_metrics_posix.cc",
       "process/process_posix.cc",
-      "sampling_heap_profiler/poisson_allocation_sampler.cc",
-      "sampling_heap_profiler/poisson_allocation_sampler.h",
-      "sampling_heap_profiler/sampling_heap_profiler.cc",
-      "sampling_heap_profiler/sampling_heap_profiler.h",
       "sync_socket.h",
       "sync_socket_posix.cc",
       "synchronization/waitable_event_watcher.h",
@@ -2002,7 +2008,6 @@ jumbo_component("base") {
       "message_loop/message_pump_mac.mm",
       "power_monitor/power_monitor_device_source_ios.mm",
       "process/memory_stubs.cc",
-      "profiler/module_cache_stub.cc",
       "strings/sys_string_conversions_mac.mm",
       "synchronization/waitable_event_mac.cc",
       "system/sys_info_ios.mm",
@@ -2012,6 +2017,22 @@ jumbo_component("base") {
       "time/time_conversion_posix.cc",
       "time/time_mac.cc",
     ]
+
+    if (use_allocator_shim) {
+      sources += [
+        "allocator/allocator_interception_mac.h",
+        "allocator/allocator_interception_mac.mm",
+        "allocator/malloc_zone_functions_mac.cc",
+        "allocator/malloc_zone_functions_mac.h",
+      ]
+    } else {
+      sources -= [
+        "sampling_heap_profiler/poisson_allocation_sampler.cc",
+        "sampling_heap_profiler/poisson_allocation_sampler.h",
+        "sampling_heap_profiler/sampling_heap_profiler.cc",
+        "sampling_heap_profiler/sampling_heap_profiler.h",
+      ]
+    }
 
     if (current_cpu == "x64" || current_cpu == "arm64") {
       sources += [ "time/time_exploded_posix.cc" ]
@@ -2176,6 +2197,7 @@ buildflag_header("clang_profiling_buildflags") {
   flags = [
     "CLANG_PROFILING=$use_clang_profiling",
     "CLANG_PROFILING_INSIDE_SANDBOX=$use_clang_profiling_inside_sandbox",
+    "USE_CLANG_COVERAGE=$use_clang_coverage",
   ]
 }
 
@@ -2291,6 +2313,7 @@ test("base_perftests") {
     "message_loop/message_pump_perftest.cc",
     "observer_list_perftest.cc",
     "strings/string_util_perftest.cc",
+    "task/job_perftest.cc",
     "task/sequence_manager/sequence_manager_perftest.cc",
     "task/thread_pool/thread_pool_perftest.cc",
     "threading/thread_local_storage_perftest.cc",
@@ -2353,6 +2376,11 @@ if (!is_ios) {
       "//build/win:default_exe_manifest",
     ]
   }
+
+  executable("json_perftest_decodebench") {
+    sources = [ "json/json_perftest_decodebench.cc" ]
+    deps = [ ":base" ]
+  }
 }
 
 if (is_win) {
@@ -2380,13 +2408,29 @@ if (is_win) {
   }
 }
 
-if (is_win || is_mac) {
-  if (current_cpu == "x64" || (current_cpu == "arm64" && is_win)) {
-    # Must be a shared library so that it can be unloaded during testing.
-    loadable_module("base_profiler_test_support_library") {
-      testonly = true
-      sources = [ "profiler/test_support_library.cc" ]
-    }
+if ((is_win && (current_cpu == "x64" || current_cpu == "arm64")) || is_mac ||
+    (is_android && (current_cpu == "arm" || current_cpu == "arm64"))) {
+  # Must be a loadable module so that it can be loaded/unloaded at runtime
+  # during testing.
+  loadable_module("base_profiler_test_support_library") {
+    testonly = true
+    sources = [ "profiler/test_support_library.cc" ]
+  }
+}
+
+if (is_android && (current_cpu == "arm" || current_cpu == "arm64")) {
+  source_set("native_unwinder_android") {
+    sources = [
+      "profiler/native_unwinder_android.cc",
+      "profiler/native_unwinder_android.h",
+      "profiler/unwindstack_internal_android.cc",
+      "profiler/unwindstack_internal_android.h",
+    ]
+
+    include_dirs = [ "//third_party/libunwindstack/src/libunwindstack/include" ]
+
+    public_deps = [ ":base" ]
+    deps = [ "//third_party/libunwindstack" ]
   }
 }
 
@@ -2492,6 +2536,7 @@ test("base_unittests") {
     "callback_list_unittest.cc",
     "callback_unittest.cc",
     "cancelable_callback_unittest.cc",
+    "check_unittest.cc",
     "command_line_unittest.cc",
     "component_export_unittest.cc",
     "containers/adapters_unittest.cc",
@@ -2564,6 +2609,7 @@ test("base_unittests") {
     "location_unittest.cc",
     "logging_unittest.cc",
     "memory/aligned_memory_unittest.cc",
+    "memory/checked_ptr_unittest.cc",
     "memory/discardable_memory_backing_field_trial_unittest.cc",
     "memory/discardable_shared_memory_unittest.cc",
     "memory/memory_pressure_listener_unittest.cc",
@@ -2705,6 +2751,7 @@ test("base_unittests") {
     "task/thread_pool/tracked_ref_unittest.cc",
     "task/thread_pool/worker_thread_stack_unittest.cc",
     "task/thread_pool/worker_thread_unittest.cc",
+    "task/thread_pool_unittest.cc",
     "task_runner_unittest.cc",
     "task_runner_util_unittest.cc",
     "template_util_unittest.cc",
@@ -2817,6 +2864,7 @@ test("base_unittests") {
     sources += [
       "debug/gdi_debug_util_win_unittest.cc",
       "file_version_info_win_unittest.cc",
+      "files/important_file_writer_cleaner_unittest.cc",
       "process/launch_unittest_win.cc",
       "test/test_reg_util_win_unittest.cc",
       "threading/platform_thread_win_unittest.cc",
@@ -2927,6 +2975,18 @@ test("base_unittests") {
     if (current_cpu == "arm") {
       sources += [ "profiler/chrome_unwinder_android_unittest.cc" ]
     }
+    if (!exclude_unwind_tables &&
+        (current_cpu == "arm" || current_cpu == "arm64")) {
+      sources += [ "profiler/native_unwinder_android_unittest.cc" ]
+      include_dirs =
+          [ "//third_party/libunwindstack/src/libunwindstack/include" ]
+      deps += [
+        ":base_profiler_test_support_java",
+        ":base_profiler_test_support_jni_headers",
+        ":base_profiler_test_support_library",
+        ":native_unwinder_android",
+      ]
+    }
 
     sources += [
       "android/android_image_reader_compat_unittest.cc",
@@ -2998,6 +3058,13 @@ test("base_unittests") {
       "mac/scoped_nsobject_unittest.mm",
       "strings/sys_string_conversions_mac_unittest.mm",
     ]
+
+    if (use_allocator_shim) {
+      sources += [
+        "allocator/allocator_interception_mac_unittest.mm",
+        "allocator/malloc_zone_functions_mac_unittest.cc",
+      ]
+    }
   }
 
   if (use_partition_alloc) {
@@ -3148,6 +3215,7 @@ if (enable_nocompile_tests) {
       "containers/buffer_iterator_unittest.nc",
       "containers/checked_iterators_unittest.nc",
       "containers/span_unittest.nc",
+      "memory/checked_ptr_unittest.nc",
       "memory/ref_counted_unittest.nc",
       "memory/weak_ptr_unittest.nc",
       "metrics/field_trial_params_unittest.nc",
@@ -3174,7 +3242,6 @@ if (enable_nocompile_tests) {
 if (is_android) {
   generate_jni("base_jni_headers") {
     sources = [
-      "android/java/src/org/chromium/base/AnimationFrameTimeHistogram.java",
       "android/java/src/org/chromium/base/ApkAssets.java",
       "android/java/src/org/chromium/base/ApplicationStatus.java",
       "android/java/src/org/chromium/base/BuildInfo.java",
@@ -3185,6 +3252,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/CpuFeatures.java",
       "android/java/src/org/chromium/base/EarlyTraceEvent.java",
       "android/java/src/org/chromium/base/EventLog.java",
+      "android/java/src/org/chromium/base/FeatureList.java",
       "android/java/src/org/chromium/base/FieldTrialList.java",
       "android/java/src/org/chromium/base/ImportantFileWriterAndroid.java",
       "android/java/src/org/chromium/base/IntStringCallback.java",
@@ -3252,12 +3320,11 @@ if (is_android) {
       "//third_party/android_deps:androidx_collection_collection_java",
       "//third_party/android_deps:androidx_core_core_java",
       "//third_party/android_deps:androidx_multidex_multidex_java",
-      "//third_party/jsr-305:jsr_305_javalib",
+      "//third_party/android_deps:com_google_code_findbugs_jsr305_java",
     ]
 
     sources = [
       "android/java/src/org/chromium/base/ActivityState.java",
-      "android/java/src/org/chromium/base/AnimationFrameTimeHistogram.java",
       "android/java/src/org/chromium/base/ApiCompatibilityUtils.java",
       "android/java/src/org/chromium/base/ApkAssets.java",
       "android/java/src/org/chromium/base/ApplicationStatus.java",
@@ -3498,7 +3565,6 @@ if (is_android) {
       "test/android/javatests/src/org/chromium/base/test/BaseTestResult.java",
       "test/android/javatests/src/org/chromium/base/test/BundleTestRule.java",
       "test/android/javatests/src/org/chromium/base/test/DestroyActivitiesRule.java",
-      "test/android/javatests/src/org/chromium/base/test/DisableNativeTestRule.java",
       "test/android/javatests/src/org/chromium/base/test/LifetimeAssertRule.java",
       "test/android/javatests/src/org/chromium/base/test/LoadNative.java",
       "test/android/javatests/src/org/chromium/base/test/ReachedCodeProfiler.java",
@@ -3569,13 +3635,12 @@ if (is_android) {
   }
 
   android_library("base_junit_test_support") {
-    # Platform checks are broken for Robolectric.
+    # Platform checks are broken for Robolectric. See https://crbug.com/1071638.
     bypass_platform_checks = true
     testonly = true
     sources = [
       "//third_party/robolectric/custom_asynctask/java/src/org/chromium/base/task/test/ShadowAsyncTask.java",
       "//third_party/robolectric/custom_asynctask/java/src/org/chromium/base/task/test/ShadowAsyncTaskBridge.java",
-      "android/junit/src/org/chromium/base/metrics/test/DisableHistogramsRule.java",
       "android/junit/src/org/chromium/base/metrics/test/ShadowRecordHistogram.java",
       "test/android/junit/src/org/chromium/base/task/test/BackgroundShadowAsyncTask.java",
       "test/android/junit/src/org/chromium/base/task/test/CustomShadowAsyncTask.java",
@@ -3598,7 +3663,6 @@ if (is_android) {
   junit_binary("base_junit_tests") {
     skip_jetify = true
     sources = [
-      "android/junit/src/org/chromium/base/AnimationFrameTimeHistogramTest.java",
       "android/junit/src/org/chromium/base/ApplicationStatusTest.java",
       "android/junit/src/org/chromium/base/DiscardableReferencePoolTest.java",
       "android/junit/src/org/chromium/base/FileUtilsTest.java",
@@ -3649,6 +3713,24 @@ if (is_android) {
       "metrics/histogram_base.h",
       "task/task_traits.h",
       "trace_event/trace_config.h",
+    ]
+  }
+
+  generate_jni("base_profiler_test_support_jni_headers") {
+    testonly = true
+    sources =
+        [ "android/javatests/src/org/chromium/base/profiler/TestSupport.java" ]
+  }
+
+  android_library("base_profiler_test_support_java") {
+    testonly = true
+    sources =
+        [ "android/javatests/src/org/chromium/base/profiler/TestSupport.java" ]
+
+    annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+    deps = [
+      "//base:base_java",
+      "//base:jni_java",
     ]
   }
 

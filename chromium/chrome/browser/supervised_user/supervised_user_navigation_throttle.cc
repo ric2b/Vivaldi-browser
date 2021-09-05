@@ -5,10 +5,11 @@
 #include "chrome/browser/supervised_user/supervised_user_navigation_throttle.h"
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/notreached.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/profiles/profile.h"
@@ -158,8 +159,8 @@ SupervisedUserNavigationThrottle::CheckURL() {
   DCHECK_EQ(SupervisedUserURLFilter::INVALID, behavior_);
   GURL url = navigation_handle()->GetURL();
   bool got_result = url_filter_->GetFilteringBehaviorForURLWithAsyncChecks(
-      url, base::Bind(&SupervisedUserNavigationThrottle::OnCheckDone,
-                      weak_ptr_factory_.GetWeakPtr(), url));
+      url, base::BindOnce(&SupervisedUserNavigationThrottle::OnCheckDone,
+                          weak_ptr_factory_.GetWeakPtr(), url));
   DCHECK_EQ(got_result, behavior_ != SupervisedUserURLFilter::INVALID);
   // If we got a "not blocked" result synchronously, don't defer.
   deferred_ = !got_result || (behavior_ == SupervisedUserURLFilter::BLOCK);

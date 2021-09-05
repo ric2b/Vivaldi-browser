@@ -76,6 +76,7 @@
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/case_map.h"
+#include "third_party/blink/renderer/platform/wtf/text/math_transform.h"
 #include "ui/base/ui_base_features.h"
 
 namespace blink {
@@ -101,7 +102,7 @@ struct SameSizeAsComputedStyleBase {
   }
 
  private:
-  void* data_refs[7];
+  void* data_refs[8];
   unsigned bitfields[5];
 };
 
@@ -290,8 +291,16 @@ ComputedStyle::ComputeDifferenceIgnoringInheritedFirstLineStyle(
   if (!non_inherited_equal && old_style.HasExplicitlyInheritedProperties()) {
     return Difference::kInherited;
   }
-  if (!old_style.IndependentInheritedEqual(new_style))
+  bool variables_independent = RuntimeEnabledFeatures::CSSCascadeEnabled() &&
+                               !old_style.HasVariableReference() &&
+                               !old_style.HasVariableDeclaration();
+  bool inherited_variables_equal = old_style.InheritedVariablesEqual(new_style);
+  if (!inherited_variables_equal && !variables_independent)
+    return Difference::kInherited;
+  if (!old_style.IndependentInheritedEqual(new_style) ||
+      !inherited_variables_equal) {
     return Difference::kIndependentInherited;
+  }
   if (non_inherited_equal) {
     DCHECK(old_style == new_style);
     if (PseudoElementStylesEqual(old_style, new_style))
@@ -311,6 +320,8 @@ ComputedStyle::ComputeDifferenceIgnoringInheritedFirstLineStyle(
 void ComputedStyle::PropagateIndependentInheritedProperties(
     const ComputedStyle& parent_style) {
   ComputedStyleBase::PropagateIndependentInheritedProperties(parent_style);
+  if (!HasVariableReference() && !HasVariableDeclaration())
+    InheritCustomPropertiesFrom(parent_style);
 }
 
 StyleSelfAlignmentData ResolvedSelfAlignment(
@@ -1072,7 +1083,7 @@ void ComputedStyle::UpdateIsStackingContext(bool is_document_element,
 }
 
 void ComputedStyle::AddCallbackSelector(const String& selector) {
-  if (!CallbackSelectorsInternal().Contains(selector))
+  if (!CallbackSelectors().Contains(selector))
     MutableCallbackSelectorsInternal().push_back(selector);
 }
 
@@ -1102,6 +1113,9 @@ static bool IsWillChangeCompositingHintProperty(CSSPropertyID property) {
     return true;
   switch (property) {
     case CSSPropertyID::kOpacity:
+    case CSSPropertyID::kFilter:
+    case CSSPropertyID::kAliasWebkitFilter:
+    case CSSPropertyID::kBackdropFilter:
     case CSSPropertyID::kTop:
     case CSSPropertyID::kLeft:
     case CSSPropertyID::kBottom:
@@ -1336,7 +1350,7 @@ bool ComputedStyle::SetEffectiveZoom(float f) {
   float clamped_effective_zoom = clampTo<float>(f, 1e-6, 1e6);
   if (EffectiveZoom() == clamped_effective_zoom)
     return false;
-  SetInternalEffectiveZoom(clamped_effective_zoom);
+  SetEffectiveZoomInternal(clamped_effective_zoom);
   // Record UMA for the effective zoom in order to assess the relative
   // importance of sub-pixel behavior, and related features and bugs.
   // Clamp to a max of 400%, to make the histogram behave better at no
@@ -1454,7 +1468,16 @@ FloatRoundedRect ComputedStyle::GetRoundedInnerBorderFor(
   inner_rect_size.ClampNegativeToZero();
   inner_rect.SetSize(inner_rect_size);
 
-  FloatRoundedRect rounded_rect(PixelSnappedIntRect(inner_rect));
+  // The standard LayoutRect::PixelSnappedIntRect() method will not
+  // let small sizes snap to zero, but that has the side effect here of
+  // preventing an inner border for a very thin element from snapping to
+  // zero size as occurs when a unit width border is applied to a sub-pixel
+  // sized element. So round without forcing non-near-zero sizes to one.
+  FloatRoundedRect rounded_rect(IntRect(
+      RoundedIntPoint(inner_rect.Location()),
+      IntSize(
+          SnapSizeToPixelAllowingZero(inner_rect.Width(), inner_rect.X()),
+          SnapSizeToPixelAllowingZero(inner_rect.Height(), inner_rect.Y()))));
 
   if (HasBorderRadius()) {
     FloatRoundedRect::Radii radii = GetRoundedBorderFor(border_rect).GetRadii();
@@ -1632,6 +1655,26 @@ static String DisableNewGeorgianCapitalLetters(const String& text) {
   return result.ToString();
 }
 
+namespace {
+
+// TODO(https://crbug.com/1076420): this needs to handle all text-transform
+// values.
+static void ApplyMathTransform(String* text, ETextTransform math_variant) {
+  DCHECK(math_variant == ETextTransform::kMathAuto);
+  DCHECK_EQ(text->length(), 1u);
+  UChar character = (*text)[0];
+  UChar32 transformed_char = MathVariant((*text)[0]);
+  if (transformed_char == static_cast<UChar32>(character))
+    return;
+
+  Vector<UChar> transformed_text(U16_LENGTH(transformed_char));
+  int i = 0;
+  U16_APPEND_UNSAFE(transformed_text, i, transformed_char);
+  *text = String(transformed_text);
+}
+
+}  // namespace
+
 void ComputedStyle::ApplyTextTransform(String* text,
                                        UChar previous_character) const {
   switch (TextTransform()) {
@@ -1652,6 +1695,10 @@ void ComputedStyle::ApplyTextTransform(String* text,
       *text = case_map.ToLower(*text);
       return;
     }
+    case ETextTransform::kMathAuto:
+      if (text->length() == 1)
+        ApplyMathTransform(text, ETextTransform::kMathAuto);
+      return;
   }
   NOTREACHED();
 }
@@ -1829,6 +1876,17 @@ static bool HasInitialVariables(const StyleInitialData* initial_data) {
 bool ComputedStyle::HasVariables() const {
   return InheritedVariables() || NonInheritedVariables() ||
          HasInitialVariables(InitialDataInternal().get());
+}
+
+HashSet<AtomicString> ComputedStyle::GetVariableNames() const {
+  HashSet<AtomicString> names;
+  if (auto* initial_data = InitialDataInternal().get())
+    initial_data->CollectVariableNames(names);
+  if (auto* inherited_variables = InheritedVariables())
+    inherited_variables->CollectNames(names);
+  if (auto* non_inherited_variables = NonInheritedVariables())
+    non_inherited_variables->CollectNames(names);
+  return names;
 }
 
 StyleInheritedVariables* ComputedStyle::InheritedVariables() const {
@@ -2234,11 +2292,9 @@ int ComputedStyle::OutlineOutsetExtent() const {
     return 0;
   if (OutlineStyleIsAuto()) {
     return GraphicsContext::FocusRingOutsetExtent(
-        OutlineOffset(), GetDefaultOffsetForFocusRing(),
-        std::ceil(GetOutlineStrokeWidthForFocusRing()),
-        LayoutTheme::GetTheme().IsFocusRingOutset());
+        OutlineOffsetInt(), std::ceil(GetOutlineStrokeWidthForFocusRing()));
   }
-  return base::ClampAdd(OutlineWidth(), OutlineOffset()).Max(0);
+  return base::ClampAdd(OutlineWidthInt(), OutlineOffsetInt()).Max(0);
 }
 
 float ComputedStyle::GetOutlineStrokeWidthForFocusRing() const {
@@ -2247,29 +2303,12 @@ float ComputedStyle::GetOutlineStrokeWidthForFocusRing() const {
   }
 
 #if defined(OS_MACOSX)
-  return OutlineWidth();
+  return OutlineWidthInt();
 #else
-  if (LayoutTheme::GetTheme().IsFocusRingOutset()) {
-    return OutlineWidth();
-  }
   // Draw an outline with thickness in proportion to the zoom level, but never
   // so narrow that it becomes invisible.
   return std::max(EffectiveZoom(), 1.f);
 #endif
-}
-
-int ComputedStyle::GetDefaultOffsetForFocusRing() const {
-  if (!::features::IsFormControlsRefreshEnabled())
-    return 0;
-
-  if (EffectiveAppearance() == kCheckboxPart ||
-      EffectiveAppearance() == kRadioPart) {
-    return 2;
-  } else if (IsLink()) {
-    return 1;
-  }
-
-  return 0;
 }
 
 bool ComputedStyle::ColumnRuleEquivalent(

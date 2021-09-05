@@ -148,13 +148,14 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   virtual void ExecuteEditCommand(
       const std::string& command,
       const base::Optional<base::string16>& value) = 0;
+  virtual void Undo() = 0;
+  virtual void Redo() = 0;
   virtual void Cut() = 0;
   virtual void Copy() = 0;
   virtual void Paste() = 0;
+  virtual void PasteAndMatchStyle() = 0;
   virtual void SelectAll() = 0;
   // Undo/Redo/Delete addeded by Vivaldi
-  virtual void Undo() {}
-  virtual void Redo() {}
   virtual void Delete() {}
 
 
@@ -223,9 +224,9 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // solid color is displayed instead.
   virtual bool ShouldShowStaleContentOnEviction();
 
-  // Returns the display mode for the view.
-  virtual blink::mojom::DisplayMode GetDisplayMode(
-      RenderWidgetHostImpl* render_widget_host) const;
+  // Returns the display mode for all widgets in the frame tree. Only applies
+  // to frame-based widgets. Other widgets are always kBrowser.
+  virtual blink::mojom::DisplayMode GetDisplayMode() const;
 
   // Notification that the widget has lost capture.
   virtual void LostCapture(RenderWidgetHostImpl* render_widget_host) {}
@@ -309,14 +310,15 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // if the eTLD+1 is not known for |render_widget_host|.
   virtual bool AddDomainInfoToRapporSample(rappor::Sample* sample);
 
-  // Get the UKM source ID for current content. This is used for providing
-  // data about the content to the URL-keyed metrics service.
-  // Note: This is also exposed by the RenderFrameHostDelegate.
-  virtual ukm::SourceId GetUkmSourceIdForLastCommittedSource() const;
-
   // Return this object cast to a WebContents, if it is one. If the object is
   // not a WebContents, returns nullptr.
   virtual WebContents* GetAsWebContents();
+
+  // Get the UKM source ID for current content. This is used for providing
+  // data about the content to the URL-keyed metrics service.
+  // Note: Prefer using RenderFrameHost::GetPageUkmSourceId wherever
+  // possible.
+  virtual ukm::SourceId GetCurrentPageUkmSourceId();
 
   // Returns true if there is context menu shown on page.
   virtual bool IsShowingContextMenuOnPage() const;
@@ -334,7 +336,7 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
       viz::VerticalScrollDirection scroll_direction) {}
 
   // Returns true if the delegate is a portal.
-  virtual bool IsPortal() const;
+  virtual bool IsPortal();
 
   // Notify the delegate that the screen orientation has been changed.
   virtual void DidChangeScreenOrientation() {}

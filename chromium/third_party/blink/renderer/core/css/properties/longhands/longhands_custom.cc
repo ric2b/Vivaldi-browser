@@ -25,6 +25,7 @@
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/css_value_pair.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
+#include "third_party/blink/renderer/core/css/parser/css_parser_fast_paths.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_local_context.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_mode.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token.h"
@@ -2854,29 +2855,6 @@ const CSSValue* ForcedColorAdjust::CSSValueFromComputedStyleInternal(
   return CSSIdentifierValue::Create(style.ForcedColorAdjust());
 }
 
-void InternalEffectiveZoom::ApplyInitial(StyleResolverState& state) const {
-  auto initial = ComputedStyleInitialValues::InitialInternalEffectiveZoom();
-  state.SetEffectiveZoom(initial);
-}
-
-void InternalEffectiveZoom::ApplyInherit(StyleResolverState& state) const {
-  state.SetEffectiveZoom(state.ParentStyle()->EffectiveZoom());
-}
-
-void InternalEffectiveZoom::ApplyValue(StyleResolverState& state,
-                                       const CSSValue& value) const {
-  state.SetEffectiveZoom(StyleBuilderConverter::ConvertZoom(state, value));
-}
-
-const CSSValue* InternalEffectiveZoom::ParseSingleValue(
-    CSSParserTokenRange& range,
-    const CSSParserContext& context,
-    const CSSParserLocalContext& local_context) const {
-  ValueRange value_range = kValueRangeNonNegative;
-  return css_property_parser_helpers::ConsumeNumber(range, context,
-                                                    value_range);
-}
-
 void InternalVisitedColor::ApplyInitial(StyleResolverState& state) const {
   if (!RuntimeEnabledFeatures::CSSCascadeEnabled()) {
     state.SetCascadedVisitedColorValue(
@@ -4133,6 +4111,14 @@ const CSSValue* MathStyle::CSSValueFromComputedStyleInternal(
     const LayoutObject*,
     bool allow_visited_style) const {
   return CSSIdentifierValue::Create(style.MathStyle());
+}
+
+const CSSValue* MathSuperscriptShiftStyle::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const SVGComputedStyle&,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  return CSSIdentifierValue::Create(style.MathSuperscriptShiftStyle());
 }
 
 const CSSValue* MaxBlockSize::ParseSingleValue(
@@ -5934,21 +5920,21 @@ const CSSValue* StrokeWidth::CSSValueFromComputedStyleInternal(
   return CSSValue::Create(svg_style.StrokeWidth().length(), 1);
 }
 
-const CSSValue* SubtreeVisibility::CSSValueFromComputedStyleInternal(
+const CSSValue* ContentVisibility::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return CSSIdentifierValue::Create(style.SubtreeVisibility());
+  return CSSIdentifierValue::Create(style.ContentVisibility());
 }
 
-const CSSValue* SubtreeVisibility::ParseSingleValue(
+const CSSValue* ContentVisibility::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
     const CSSParserLocalContext&) const {
   auto id = range.Peek().Id();
   if (id == CSSValueID::kHiddenMatchable &&
-      !RuntimeEnabledFeatures::CSSSubtreeVisibilityHiddenMatchableEnabled()) {
+      !RuntimeEnabledFeatures::CSSContentVisibilityHiddenMatchableEnabled()) {
     return nullptr;
   }
   if (!css_property_parser_helpers::IdentMatches<
@@ -6106,6 +6092,32 @@ const CSSValue* TextDecorationStyle::CSSValueFromComputedStyleInternal(
       style.TextDecorationStyle());
 }
 
+const CSSValue* TextDecorationThickness::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  DCHECK(RuntimeEnabledFeatures::UnderlineOffsetThicknessEnabled());
+  if (auto* ident =
+          css_property_parser_helpers::ConsumeIdent<CSSValueID::kFromFont,
+                                                    CSSValueID::kAuto>(range)) {
+    return ident;
+  }
+  return css_property_parser_helpers::ConsumeLengthOrPercent(range, context,
+                                                             kValueRangeAll);
+}
+
+const CSSValue* TextDecorationThickness::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const SVGComputedStyle&,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  if (style.GetTextDecorationThickness().IsFromFont())
+    return CSSIdentifierValue::Create(CSSValueID::kFromFont);
+
+  return ComputedStyleUtils::ZoomAdjustedPixelValueForLength(
+      style.GetTextDecorationThickness().Thickness(), style);
+}
+
 const CSSValue* TextIndent::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
@@ -6227,6 +6239,15 @@ const CSSValue* TextOrientation::CSSValueFromComputedStyleInternal(
     const LayoutObject*,
     bool allow_visited_style) const {
   return CSSIdentifierValue::Create(style.GetTextOrientation());
+}
+
+void TextOrientation::ApplyInitial(StyleResolverState& state) const {
+  state.SetTextOrientation(
+      ComputedStyleInitialValues::InitialTextOrientation());
+}
+
+void TextOrientation::ApplyInherit(StyleResolverState& state) const {
+  state.SetTextOrientation(state.ParentStyle()->GetTextOrientation());
 }
 
 void TextOrientation::ApplyValue(StyleResolverState& state,
@@ -6371,6 +6392,26 @@ const CSSValue* TextUnderlinePosition::CSSValueFromComputedStyleInternal(
   return list;
 }
 
+const CSSValue* TextUnderlineOffset::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  DCHECK(RuntimeEnabledFeatures::UnderlineOffsetThicknessEnabled());
+  if (range.Peek().Id() == CSSValueID::kAuto)
+    return css_property_parser_helpers::ConsumeIdent(range);
+  return css_property_parser_helpers::ConsumeLengthOrPercent(range, context,
+                                                             kValueRangeAll);
+}
+
+const CSSValue* TextUnderlineOffset::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const SVGComputedStyle&,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  return ComputedStyleUtils::ZoomAdjustedPixelValueForLength(
+      style.TextUnderlineOffset(), style);
+}
+
 const CSSValue* Top::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
@@ -6484,7 +6525,7 @@ const CSSValue* Transform::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject* layout_object,
     bool allow_visited_style) const {
-  return ComputedStyleUtils::ComputedTransform(layout_object, style);
+  return ComputedStyleUtils::ResolvedTransform(layout_object, style);
 }
 
 const CSSValue* TransformOrigin::ParseSingleValue(
@@ -6834,7 +6875,24 @@ void WebkitAppRegion::ApplyValue(StyleResolverState& state,
   state.GetDocument().SetHasAnnotatedRegions(true);
 }
 
-const CSSValue* WebkitAppearance::CSSValueFromComputedStyleInternal(
+const CSSValue* Appearance::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext& local_context) const {
+  CSSValueID id = range.Peek().Id();
+  CSSPropertyID property = CSSPropertyID::kAppearance;
+  if (CSSParserFastPaths::IsValidKeywordPropertyAndValue(property, id,
+                                                         context.Mode())) {
+    if (local_context.UseAliasParsing())
+      property = CSSPropertyID::kAliasWebkitAppearance;
+    css_property_parser_helpers::CountKeywordOnlyPropertyUsage(property,
+                                                               context, id);
+    return css_property_parser_helpers::ConsumeIdent(range);
+  }
+  return nullptr;
+}
+
+const CSSValue* Appearance::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
     const SVGComputedStyle&,
     const LayoutObject*,
@@ -7409,6 +7467,21 @@ const CSSValue* WebkitRubyPosition::CSSValueFromComputedStyleInternal(
   return CSSIdentifierValue::Create(style.GetRubyPosition());
 }
 
+const CSSValue* RubyPosition::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const SVGComputedStyle&,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  switch (style.GetRubyPosition()) {
+    case blink::RubyPosition::kBefore:
+      return CSSIdentifierValue::Create(CSSValueID::kOver);
+    case blink::RubyPosition::kAfter:
+      return CSSIdentifierValue::Create(CSSValueID::kUnder);
+  }
+  NOTREACHED();
+  return CSSIdentifierValue::Create(CSSValueID::kOver);
+}
+
 const CSSValue* WebkitTapHighlightColor::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
@@ -7822,6 +7895,13 @@ const CSSValue* WebkitWritingMode::CSSValueFromComputedStyleInternal(
   return CSSIdentifierValue::Create(style.GetWritingMode());
 }
 
+void WebkitWritingMode::ApplyInitial(StyleResolverState& state) const {
+  state.SetWritingMode(ComputedStyleInitialValues::InitialWritingMode());
+}
+void WebkitWritingMode::ApplyInherit(StyleResolverState& state) const {
+  state.SetWritingMode(state.ParentStyle()->GetWritingMode());
+}
+
 void WebkitWritingMode::ApplyValue(StyleResolverState& state,
                                    const CSSValue& value) const {
   state.SetWritingMode(
@@ -7913,6 +7993,7 @@ const CSSValue* WillChange::ParseSingleValue(
         case CSSValueID::kDefault:
         case CSSValueID::kInitial:
         case CSSValueID::kInherit:
+        case CSSValueID::kRevert:
           return nullptr;
         case CSSValueID::kContents:
         case CSSValueID::kScrollPosition:
@@ -8024,6 +8105,14 @@ const CSSValue* WritingMode::CSSValueFromComputedStyleInternal(
   return CSSIdentifierValue::Create(style.GetWritingMode());
 }
 
+void WritingMode::ApplyInitial(StyleResolverState& state) const {
+  state.SetWritingMode(ComputedStyleInitialValues::InitialWritingMode());
+}
+
+void WritingMode::ApplyInherit(StyleResolverState& state) const {
+  state.SetWritingMode(state.ParentStyle()->GetWritingMode());
+}
+
 void WritingMode::ApplyValue(StyleResolverState& state,
                              const CSSValue& value) const {
   state.SetWritingMode(
@@ -8087,8 +8176,10 @@ const CSSValue* Zoom::ParseSingleValue(CSSParserTokenRange& range,
   const CSSParserToken& token = range.Peek();
   CSSValue* zoom = nullptr;
   if (token.GetType() == kIdentToken) {
-    zoom =
-        css_property_parser_helpers::ConsumeIdent<CSSValueID::kNormal>(range);
+    CSSIdentifierValue* ident = css_property_parser_helpers::ConsumeIdent<
+        CSSValueID::kNormal, CSSValueID::kInternalResetEffective>(range);
+    if (ident && isValueAllowedInMode(ident->GetValueID(), context.Mode()))
+      zoom = ident;
   } else {
     zoom = css_property_parser_helpers::ConsumePercent(range, context,
                                                        kValueRangeNonNegative);
@@ -8126,6 +8217,14 @@ void Zoom::ApplyInherit(StyleResolverState& state) const {
 }
 
 void Zoom::ApplyValue(StyleResolverState& state, const CSSValue& value) const {
+  // TODO(crbug.com/976224): Support zoom on foreignObject
+  if (const auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
+    if (ident->GetValueID() == CSSValueID::kInternalResetEffective) {
+      state.SetEffectiveZoom(ComputedStyleInitialValues::InitialZoom());
+      return;
+    }
+  }
+
   state.SetZoom(StyleBuilderConverter::ConvertZoom(state, value));
 }
 

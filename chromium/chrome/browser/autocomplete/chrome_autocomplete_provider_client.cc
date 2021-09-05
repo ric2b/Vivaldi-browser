@@ -24,6 +24,8 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_key.h"
+#include "chrome/browser/query_tiles/tile_service_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
@@ -159,6 +161,12 @@ ChromeAutocompleteProviderClient::GetRemoteSuggestionsService(
     bool create_if_necessary) const {
   return RemoteSuggestionsServiceFactory::GetForProfile(profile_,
                                                         create_if_necessary);
+}
+
+query_tiles::TileService*
+ChromeAutocompleteProviderClient::GetQueryTileService() const {
+  ProfileKey* profile_key = profile_->GetProfileKey();
+  return query_tiles::TileServiceFactory::GetForKey(profile_key);
 }
 
 DocumentSuggestionsService*

@@ -9,8 +9,8 @@
 #include <limits>
 #include <memory>
 
+#include "base/check.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
@@ -230,7 +230,7 @@ GestureRecognizerImpl::GetEventPerPointForConsumer(GestureConsumer* consumer,
   for (size_t i = 0; i < pointer_state.GetPointerCount(); ++i) {
     auto touch_event = std::make_unique<TouchEvent>(
         type, gfx::Point(), EventTimeForNow(),
-        PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH,
+        PointerDetails(ui::EventPointerType::kTouch,
                        pointer_state.GetPointerId(i)),
         EF_IS_SYNTHESIZED);
     gfx::PointF point(pointer_state.GetX(i), pointer_state.GetY(i));

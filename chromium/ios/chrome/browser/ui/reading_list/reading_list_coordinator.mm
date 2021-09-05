@@ -20,8 +20,8 @@
 #include "ios/chrome/browser/reading_list/offline_url_utils.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
-#import "ios/chrome/browser/ui/reading_list/context_menu/reading_list_context_menu_commands.h"
 #import "ios/chrome/browser/ui/reading_list/context_menu/reading_list_context_menu_coordinator.h"
+#import "ios/chrome/browser/ui/reading_list/context_menu/reading_list_context_menu_delegate.h"
 #import "ios/chrome/browser/ui/reading_list/context_menu/reading_list_context_menu_params.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_list_item_factory.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_list_view_controller_audience.h"
@@ -47,10 +47,10 @@
 #error "This file requires ARC support."
 #endif
 
-@interface ReadingListCoordinator ()<ReadingListContextMenuCommands,
-                                     ReadingListListViewControllerAudience,
-                                     ReadingListListViewControllerDelegate,
-                                     UIViewControllerTransitioningDelegate>
+@interface ReadingListCoordinator () <ReadingListContextMenuDelegate,
+                                      ReadingListListViewControllerAudience,
+                                      ReadingListListViewControllerDelegate,
+                                      UIViewControllerTransitioningDelegate>
 
 // Whether the coordinator is started.
 @property(nonatomic, assign, getter=isStarted) BOOL started;
@@ -94,11 +94,12 @@
   // Create the mediator.
   ReadingListModel* model =
       ReadingListModelFactory::GetInstance()->GetForBrowserState(
-          self.browserState);
+          self.browser->GetBrowserState());
   ReadingListListItemFactory* itemFactory =
       [[ReadingListListItemFactory alloc] init];
   FaviconLoader* faviconLoader =
-      IOSChromeFaviconLoaderFactory::GetForBrowserState(self.browserState);
+      IOSChromeFaviconLoaderFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
   self.mediator = [[ReadingListMediator alloc] initWithModel:model
                                                faviconLoader:faviconLoader
                                              listItemFactory:itemFactory];
@@ -108,6 +109,7 @@
   self.tableViewController.delegate = self;
   self.tableViewController.audience = self;
   self.tableViewController.dataSource = self.mediator;
+  self.tableViewController.browser = self.browser;
   itemFactory.accessibilityDelegate = self.tableViewController;
 
   // Add the "Done" button and hook it up to |stop|.
@@ -149,7 +151,8 @@
 
   // Send the "Viewed Reading List" event to the feature_engagement::Tracker
   // when the user opens their reading list.
-  feature_engagement::TrackerFactory::GetForBrowserState(self.browserState)
+  feature_engagement::TrackerFactory::GetForBrowserState(
+      self.browser->GetBrowserState())
       ->NotifyEvent(feature_engagement::events::kViewedReadingList);
 
   [super start];
@@ -181,7 +184,7 @@
   self.navigationController.toolbarHidden = !hasItems;
 }
 
-#pragma mark - ReadingListContextMenuCommands
+#pragma mark - ReadingListContextMenuDelegate
 
 - (void)openURLInNewTabForContextMenuWithParams:
     (ReadingListContextMenuParams*)params {
@@ -253,8 +256,9 @@
 
   self.contextMenuCoordinator = [[ReadingListContextMenuCoordinator alloc]
       initWithBaseViewController:self.navigationController
+                         browser:self.browser
                           params:params];
-  self.contextMenuCoordinator.commandHandler = self;
+  self.contextMenuCoordinator.delegate = self;
   [self.contextMenuCoordinator start];
 }
 
@@ -361,7 +365,7 @@ animationControllerForDismissedController:(UIViewController*)dismissed {
   web::WebState* activeWebState =
       self.browser->GetWebStateList()->GetActiveWebState();
   new_tab_page_uma::RecordAction(
-      self.browserState, activeWebState,
+      self.browser->GetBrowserState(), activeWebState,
       new_tab_page_uma::ACTION_OPENED_READING_LIST_ENTRY);
 
   // Load the offline URL if available.

@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/platform/heap/blink_gc.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/heap_page.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
 
 namespace blink {
@@ -39,15 +40,6 @@ void MarkingVisitorCommon::RegisterWeakCallback(WeakCallback callback,
   weak_callback_worklist_.Push({callback, object});
 }
 
-void MarkingVisitorCommon::RegisterBackingStoreReference(
-    const void* const* slot) {
-  if (marking_mode_ != kGlobalMarkingWithCompaction)
-    return;
-  if (Heap().ShouldRegisterMovingAddress()) {
-    movable_reference_worklist_.Push(slot);
-  }
-}
-
 void MarkingVisitorCommon::RegisterBackingStoreCallback(
     const void* backing,
     MovingObjectCallback callback) {
@@ -55,6 +47,14 @@ void MarkingVisitorCommon::RegisterBackingStoreCallback(
     return;
   if (Heap().ShouldRegisterMovingAddress()) {
     backing_store_callback_worklist_.Push({backing, callback});
+  }
+}
+
+void MarkingVisitorCommon::RegisterMovableSlot(const void* const* slot) {
+  if (marking_mode_ != kGlobalMarkingWithCompaction)
+    return;
+  if (Heap().ShouldRegisterMovingAddress()) {
+    movable_reference_worklist_.Push(slot);
   }
 }
 
@@ -72,61 +72,46 @@ void MarkingVisitorCommon::VisitWeak(const void* object,
   RegisterWeakCallback(callback, object_weak_ref);
 }
 
-void MarkingVisitorCommon::VisitBackingStoreStrongly(
-    const void* object,
-    const void* const* object_slot,
-    TraceDescriptor desc) {
-  RegisterBackingStoreReference(object_slot);
-  if (!object)
+void MarkingVisitorCommon::VisitEphemeron(const void* key,
+                                          const void* value,
+                                          TraceCallback value_trace_callback) {
+  if (!HeapObjectHeader::FromPayload(key)
+           ->IsMarked<HeapObjectHeader::AccessMode::kAtomic>())
     return;
-  Visit(object, desc);
+  value_trace_callback(this, value);
 }
 
-// All work is registered through RegisterWeakCallback.
-void MarkingVisitorCommon::VisitBackingStoreWeakly(
+void MarkingVisitorCommon::VisitWeakContainer(
     const void* object,
-    const void* const* object_slot,
-    TraceDescriptor strong_desc,
+    const void* const*,
+    TraceDescriptor,
     TraceDescriptor weak_desc,
     WeakCallback weak_callback,
     const void* weak_callback_parameter) {
-  RegisterBackingStoreReference(object_slot);
-
   // In case there's no object present, weakness processing is omitted. The GC
   // relies on the fact that in such cases touching the weak data structure will
   // strongify its references.
   if (!object)
     return;
 
+  // Only trace the container initially. Its buckets will be processed after
+  // marking. The interesting cases  are:
+  // - The backing of the container is dropped using clear(): The backing can
+  //   still be compacted but empty/deleted buckets will only be destroyed once
+  //   the backing is reclaimed by the garbage collector on the next cycle.
+  // - The container expands/shrinks: Buckets are moved to the new backing
+  //   store and strongified, resulting in all buckets being alive. The old
+  //   backing store is marked but only contains empty/deleted buckets as all
+  //   non-empty/deleted buckets have been moved to the new backing store.
+  HeapObjectHeader* header = HeapObjectHeader::FromPayload(object);
+  MarkHeaderNoTracing(header);
+  AccountMarkedBytes(header);
+
   // Register final weak processing of the backing store.
   RegisterWeakCallback(weak_callback, weak_callback_parameter);
   // Register ephemeron callbacks if necessary.
   if (weak_desc.callback)
     weak_table_worklist_.Push(weak_desc);
-}
-
-bool MarkingVisitorCommon::VisitEphemeronKeyValuePair(
-    const void* key,
-    const void* value,
-    EphemeronTracingCallback key_trace_callback,
-    EphemeronTracingCallback value_trace_callback) {
-  const bool key_is_dead = key_trace_callback(this, key);
-  if (key_is_dead)
-    return true;
-  const bool value_is_dead = value_trace_callback(this, value);
-  DCHECK(!value_is_dead);
-  return false;
-}
-
-void MarkingVisitorCommon::VisitBackingStoreOnly(
-    const void* object,
-    const void* const* object_slot) {
-  RegisterBackingStoreReference(object_slot);
-  if (!object)
-    return;
-  HeapObjectHeader* header = HeapObjectHeader::FromPayload(object);
-  MarkHeaderNoTracing(header);
-  AccountMarkedBytes(header);
 }
 
 // static
@@ -226,7 +211,9 @@ MarkingVisitor::MarkingVisitor(ThreadState* state, MarkingMode marking_mode)
 }
 
 void MarkingVisitor::DynamicallyMarkAddress(ConstAddress address) {
-  HeapObjectHeader* const header = HeapObjectHeader::FromInnerAddress(address);
+  HeapObjectHeader* const header =
+      HeapObjectHeader::FromInnerAddress<HeapObjectHeader::AccessMode::kAtomic>(
+          address);
   DCHECK(header);
   DCHECK(!IsInConstruction(header));
   if (MarkHeaderNoTracing(header)) {

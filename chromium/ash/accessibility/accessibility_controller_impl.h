@@ -36,8 +36,10 @@ namespace ash {
 
 class AccessibilityHighlightController;
 class AccessibilityObserver;
+class FloatingAccessibilityController;
 class ScopedBacklightsForcedOff;
 class SelectToSpeakEventHandler;
+class SwitchAccessMenuBubbleController;
 class SwitchAccessEventHandler;
 
 enum AccessibilityNotificationVisibility {
@@ -57,6 +59,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
     kCaretHighlight,
     KCursorHighlight,
     kDictation,
+    kFloatingMenu,
     kFocusHighlight,
     kFullscreenMagnifier,
     kDockedMagnifier,
@@ -165,6 +168,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   Feature& caret_highlight() const;
   Feature& cursor_highlight() const;
   FeatureWithDialog& dictation() const;
+  Feature& floating_menu() const;
   Feature& focus_highlight() const;
   FeatureWithDialog& fullscreen_magnifier() const;
   FeatureWithDialog& docked_magnifier() const;
@@ -198,9 +202,13 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
 
   void SetAutoclickEventType(AutoclickEventType event_type);
   AutoclickEventType GetAutoclickEventType();
-  void SetAutoclickMenuPosition(AutoclickMenuPosition position);
-  AutoclickMenuPosition GetAutoclickMenuPosition();
+  void SetAutoclickMenuPosition(FloatingMenuPosition position);
+  FloatingMenuPosition GetAutoclickMenuPosition();
   void RequestAutoclickScrollableBoundsForPoint(gfx::Point& point_in_screen);
+
+  void SetFloatingMenuPosition(FloatingMenuPosition position);
+  FloatingMenuPosition GetFloatingMenuPosition();
+  FloatingAccessibilityController* GetFloatingMenuController();
 
   // Update the autoclick menu bounds if necessary. This may need to happen when
   // the display work area changes, or if system ui regions change (like the
@@ -286,6 +294,8 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
     return tablet_mode_shelf_navigation_buttons_enabled_;
   }
 
+  void ShowFloatingMenuIfEnabled() override;
+
   bool dictation_active() const { return dictation_active_; }
 
   // Returns true if accessibility shortcuts have been disabled.
@@ -363,6 +373,11 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
       SelectToSpeakEventHandlerDelegate* delegate) override;
   void SetSwitchAccessEventHandlerDelegate(
       SwitchAccessEventHandlerDelegate* delegate) override;
+  void HideSwitchAccessBackButton() override;
+  void HideSwitchAccessMenu() override;
+  void ShowSwitchAccessBackButton(const gfx::Rect& anchor) override;
+  void ShowSwitchAccessMenu(const gfx::Rect& anchor,
+                            std::vector<std::string> actions_to_show) override;
   void SetDictationActive(bool is_active) override;
   void ToggleDictationFromSource(DictationToggleSource source) override;
   void OnAutoclickScrollableBoundsFound(gfx::Rect& bounds_in_screen) override;
@@ -382,6 +397,9 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
 
   // Test helpers:
   SwitchAccessEventHandler* GetSwitchAccessEventHandlerForTest();
+  SwitchAccessMenuBubbleController* GetSwitchAccessBubbleControllerForTest() {
+    return switch_access_bubble_controller_.get();
+  }
   void no_switch_access_disable_confirmation_dialog_for_testing(
       bool skip_dialog) {
     no_switch_access_disable_confirmation_dialog_for_testing_ = skip_dialog;
@@ -411,6 +429,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void UpdateAutoclickStabilizePositionFromPref();
   void UpdateAutoclickMovementThresholdFromPref();
   void UpdateAutoclickMenuPositionFromPref();
+  void UpdateFloatingMenuPositionFromPref();
   void UpdateLargeCursorFromPref();
   void UpdateSwitchAccessKeyCodesFromPref(SwitchAccessCommand command);
   void UpdateSwitchAccessAutoScanEnabledFromPref();
@@ -444,6 +463,8 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
 
   // List of key codes that Switch Access should capture.
   std::vector<int> switch_access_keys_to_capture_;
+  std::unique_ptr<SwitchAccessMenuBubbleController>
+      switch_access_bubble_controller_;
   std::unique_ptr<SwitchAccessEventHandler> switch_access_event_handler_;
   SwitchAccessEventHandlerDelegate* switch_access_event_handler_delegate_ =
       nullptr;
@@ -452,6 +473,14 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   // Used to control the highlights of caret, cursor and focus.
   std::unique_ptr<AccessibilityHighlightController>
       accessibility_highlight_controller_;
+
+  // Used to display accessibility floating menu.
+  std::unique_ptr<FloatingAccessibilityController> floating_menu_controller_;
+  // By default, floating accessibility menu is not shown unless
+  // ShowFloatingMenuIfEnabled() is called. This is used in kiosk mode to
+  // postpone the showing of the menu till the splash screen closes. This value
+  // makes floating menu visible as soon as it is enabled.
+  bool always_show_floating_menu_when_enabled_ = false;
 
   // Used to force the backlights off to darken the screen.
   std::unique_ptr<ScopedBacklightsForcedOff> scoped_backlights_forced_off_;

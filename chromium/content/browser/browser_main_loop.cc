@@ -15,7 +15,6 @@
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/debug/alias.h"
 #include "base/deferred_sequenced_task_runner.h"
 #include "base/feature_list.h"
 #include "base/location.h"
@@ -84,6 +83,7 @@
 #include "content/browser/scheduler/responsiveness/watcher.h"
 #include "content/browser/screenlock_monitor/screenlock_monitor.h"
 #include "content/browser/screenlock_monitor/screenlock_monitor_device_source.h"
+#include "content/browser/sms/sms_provider.h"
 #include "content/browser/speech/speech_recognition_manager_impl.h"
 #include "content/browser/startup_data_impl.h"
 #include "content/browser/startup_task_runner.h"
@@ -226,7 +226,6 @@
 #if defined(USE_X11)
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "ui/base/x/x11_util_internal.h"  // nogncheck
-#include "ui/gfx/x/x11_connection.h"      // nogncheck
 #include "ui/gfx/x/x11_types.h"           // nogncheck
 #endif
 
@@ -295,13 +294,11 @@ static void SetUpGLibLogHandler() {
 }
 #endif  // defined(USE_GLIB)
 
-// Tell compiler not to inline this function so it's possible to tell what
-// thread was unresponsive by inspecting the callstack.
+// NOINLINE so it's possible to tell what thread was unresponsive by inspecting
+// the callstack.
 NOINLINE void ResetThread_IO(
     std::unique_ptr<BrowserProcessSubThread> io_thread) {
-  const int line_number = __LINE__;
   io_thread.reset();
-  base::debug::Alias(&line_number);
 }
 
 enum WorkerPoolType : size_t {
@@ -411,7 +408,6 @@ class OopDataDecoder : public data_decoder::ServiceProvider {
     ServiceProcessHost::Launch(
         std::move(receiver),
         ServiceProcessHost::Options()
-            .WithSandboxType(service_manager::SandboxType::kUtility)
             .WithDisplayName("Data Decoder Service")
             .Pass());
   }
@@ -593,7 +589,7 @@ void BrowserMainLoop::Init() {
         static_cast<StartupDataImpl*>(parameters_.startup_data);
     // This is always invoked before |io_thread_| is initialized (i.e. never
     // resets it).
-    io_thread_ = std::move(startup_data->ipc_thread);
+    io_thread_ = std::move(startup_data->io_thread);
     mojo_ipc_support_ = std::move(startup_data->mojo_ipc_support);
     service_manager_shutdown_closure_ =
         std::move(startup_data->service_manager_shutdown_closure);
@@ -617,8 +613,8 @@ int BrowserMainLoop::EarlyInitialization() {
 
 #if defined(USE_X11)
   if (UsingInProcessGpu()) {
-    if (!gfx::InitializeThreadedX11()) {
-      LOG(ERROR) << "Failed to put Xlib into threaded mode.";
+    if (!gfx::GetXDisplay()) {
+      LOG(ERROR) << "Failed to open an X11 connection.";
     }
   }
 #endif
@@ -1575,6 +1571,18 @@ bool BrowserMainLoop::AudioServiceOutOfProcess() const {
   // embedder does not provide its own in-process AudioManager.
   return base::FeatureList::IsEnabled(features::kAudioServiceOutOfProcess) &&
          !GetContentClient()->browser()->OverridesAudioManager();
+}
+
+SmsProvider* BrowserMainLoop::GetSmsProvider() {
+  if (!sms_provider_) {
+    sms_provider_ = SmsProvider::Create();
+  }
+  return sms_provider_.get();
+}
+
+void BrowserMainLoop::SetSmsProviderForTesting(
+    std::unique_ptr<SmsProvider> provider) {
+  sms_provider_ = std::move(provider);
 }
 
 }  // namespace content

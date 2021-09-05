@@ -5,18 +5,23 @@
 #ifndef CHROME_BROWSER_TAB_STATE_TAB_STATE_DB_H_
 #define CHROME_BROWSER_TAB_STATE_TAB_STATE_DB_H_
 
+#include <queue>
 #include <string>
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/sequenced_task_runner.h"
 #include "chrome/browser/tab/state/tab_state_db_content.pb.h"
+#include "components/keyed_service/core/keyed_service.h"
 #include "components/leveldb_proto/public/proto_database.h"
 
 namespace leveldb_proto {
 class ProtoDatabaseProvider;
 }  // namespace leveldb_proto
 
+class TabStateDBFactory;
+class TabStateDBFactoryTest;
 class TabStateDBTest;
 
 // TabStateDatabase is leveldb backend store for NonCriticalPersistedTabData.
@@ -26,8 +31,7 @@ class TabStateDBTest;
 // <NonCriticalPersistedTabData id>_<Tab id>
 
 // NonCriticalPersistedTabData is stored in key/value pairs.
-// TODO(crbug.com/1061258) add a KeyedService so TabStateDB is per profile
-class TabStateDB {
+class TabStateDB : public KeyedService {
  public:
   using KeyAndValue = std::pair<std::string, std::vector<uint8_t>>;
 
@@ -43,15 +47,7 @@ class TabStateDB {
   using ContentEntry = leveldb_proto::ProtoDatabase<
       tab_state_db::TabStateContentProto>::KeyEntryVector;
 
-  // Initializes the database
-  TabStateDB(leveldb_proto::ProtoDatabaseProvider* proto_database_provider,
-             const base::FilePath& profile_directory,
-             base::OnceClosure closure);
-
-  ~TabStateDB();
-
-  // Returns true if initialization has finished successfully, otherwise false.
-  bool IsInitialized() const;
+  ~TabStateDB() override;
 
   // Loads the content data for the key and passes them to the callback
   void LoadContent(const std::string& key, LoadCallback callback);
@@ -71,15 +67,20 @@ class TabStateDB {
 
  private:
   friend class ::TabStateDBTest;
+  friend class ::TabStateDBFactory;
+  friend class ::TabStateDBFactoryTest;
+
+  // Initializes the database
+  TabStateDB(leveldb_proto::ProtoDatabaseProvider* proto_database_provider,
+             const base::FilePath& profile_directory);
+
   // Used for tests
   explicit TabStateDB(std::unique_ptr<leveldb_proto::ProtoDatabase<
                           tab_state_db::TabStateContentProto>> storage_database,
-                      scoped_refptr<base::SequencedTaskRunner> task_runner,
-                      base::OnceClosure closure);
+                      scoped_refptr<base::SequencedTaskRunner> task_runner);
 
   // Passes back database status following database initialization
-  void OnDatabaseInitialized(base::OnceClosure closure,
-                             leveldb_proto::Enums::InitStatus status);
+  void OnDatabaseInitialized(leveldb_proto::Enums::InitStatus status);
 
   // Callback when content is loaded
   void OnLoadContent(
@@ -90,13 +91,23 @@ class TabStateDB {
   // Callback when an operation (e.g. insert or delete) is called
   void OnOperationCommitted(OperationCallback callback, bool success);
 
+  // Returns true if initialization status of database is not yet known
+  bool InitStatusUnknown() const;
+
+  // Returns true if the database failed to initialize
+  bool FailedToInit() const;
+
   // Status of the database initialization.
-  leveldb_proto::Enums::InitStatus database_status_;
+  base::Optional<leveldb_proto::Enums::InitStatus> database_status_;
 
   // The database for storing content storage information.
   std::unique_ptr<
       leveldb_proto::ProtoDatabase<tab_state_db::TabStateContentProto>>
       storage_database_;
+
+  // Store operations until the database is initialized at which point
+  // deferred_operations_ is flushed and all operations are executed.
+  std::vector<base::OnceClosure> deferred_operations_;
 
   base::WeakPtrFactory<TabStateDB> weak_ptr_factory_{this};
 

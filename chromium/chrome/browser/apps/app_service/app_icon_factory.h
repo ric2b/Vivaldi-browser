@@ -9,16 +9,13 @@
 
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
+#include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/services/app_service/public/mojom/app_service.mojom.h"
 #include "chrome/services/app_service/public/mojom/types.mojom.h"
 #include "ui/gfx/image/image_skia.h"
 
 namespace content {
 class BrowserContext;
-}
-
-namespace web_app {
-class AppIconManager;
 }
 
 namespace apps {
@@ -39,6 +36,9 @@ enum IconEffects : uint32_t {
   kRoundCorners = 0x08,  // Bookmark apps get round corners.
   kPaused = 0x10,  // Paused apps are grayed out and badged to indicate they
                    // cannot be launched.
+  kPendingLocalLaunch = 0x20,  // Apps that are installed through sync, but
+                               // have not been launched locally yet. They
+                               // should appear gray until they are launched.
 };
 
 // Modifies |image_skia| to apply icon post-processing effects like badging and
@@ -56,7 +56,7 @@ void LoadIconFromExtension(apps::mojom::IconCompression icon_compression,
                            apps::mojom::Publisher::LoadIconCallback callback);
 
 // Loads an icon from a web app.
-void LoadIconFromWebApp(const web_app::AppIconManager& icon_manager,
+void LoadIconFromWebApp(content::BrowserContext* context,
                         apps::mojom::IconCompression icon_compression,
                         int size_hint_in_dip,
                         const std::string& web_app_id,
@@ -68,6 +68,10 @@ void LoadIconFromWebApp(const web_app::AppIconManager& icon_manager,
 // The file named by |path| might be empty, not found or otherwise unreadable.
 // If so, "fallback(callback)" is run. If the file is non-empty and readable,
 // just "callback" is run, even if that file doesn't contain a valid image.
+//
+// |fallback| should run its callback argument once complete, even on a
+// failure. A failure should be indicated by passing nullptr, in which case the
+// pipeline will use a generic fallback icon.
 void LoadIconFromFileWithFallback(
     apps::mojom::IconCompression icon_compression,
     int size_hint_in_dip,

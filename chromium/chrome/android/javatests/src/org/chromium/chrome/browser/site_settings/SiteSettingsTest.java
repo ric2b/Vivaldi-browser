@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.site_settings;
 
-import static org.chromium.chrome.browser.site_settings.WebsitePreferenceBridge.SITE_WILDCARD;
+import static org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge.SITE_WILDCARD;
 
 import android.content.Intent;
 import android.os.Build;
@@ -30,13 +30,14 @@ import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
-import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
+import org.chromium.chrome.browser.notifications.channels.ChromeChannelDefinitions;
 import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
-import org.chromium.chrome.browser.site_settings.FourStateCookieSettingsPreference.CookieSettingsState;
+import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.InfoBarTestAnimationListener;
@@ -45,8 +46,19 @@ import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.LocationSettingsTestUtil;
 import org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.browser_ui.site_settings.FourStateCookieSettingsPreference;
+import org.chromium.components.browser_ui.site_settings.FourStateCookieSettingsPreference.CookieSettingsState;
+import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
+import org.chromium.components.browser_ui.site_settings.SingleWebsiteSettings;
+import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
+import org.chromium.components.browser_ui.site_settings.TriStateSiteSettingsPreference;
+import org.chromium.components.browser_ui.site_settings.Website;
+import org.chromium.components.browser_ui.site_settings.WebsiteAddress;
+import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
+import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsFeatureList;
 import org.chromium.components.content_settings.ContentSettingsType;
+import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.permissions.nfc.NfcSystemLevelSetting;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -87,6 +99,10 @@ public class SiteSettingsTest {
         mTestServer.stopAndDestroyServer();
     }
 
+    private BrowserContextHandle getBrowserContextHandle() {
+        return Profile.getLastUsedRegularProfile();
+    }
+
     private void setAllowLocation(final boolean enabled) {
         LocationSettingsTestUtil.setSystemLocationSettingEnabled(true);
         final SettingsActivity settingsActivity = SiteSettingsTestUtils.startSiteSettingsCategory(
@@ -101,7 +117,8 @@ public class SiteSettingsTest {
 
             websitePreferences.onPreferenceChange(location, enabled);
             Assert.assertEquals("Location should be " + (enabled ? "allowed" : "blocked"), enabled,
-                    WebsitePreferenceBridge.areAllLocationSettingsEnabled());
+                    WebsitePreferenceBridge.areAllLocationSettingsEnabled(
+                            getBrowserContextHandle()));
             settingsActivity.finish();
         });
     }
@@ -177,7 +194,8 @@ public class SiteSettingsTest {
             }
 
             private boolean doesAcceptCookies() {
-                return WebsitePreferenceBridge.isCategoryEnabled(ContentSettingsType.COOKIES);
+                return WebsitePreferenceBridge.isCategoryEnabled(
+                        getBrowserContextHandle(), ContentSettingsType.COOKIES);
             }
         });
     }
@@ -207,7 +225,8 @@ public class SiteSettingsTest {
             }
 
             private boolean doesAcceptCookies() {
-                return WebsitePreferenceBridge.isCategoryEnabled(ContentSettingsType.COOKIES);
+                return WebsitePreferenceBridge.isCategoryEnabled(
+                        getBrowserContextHandle(), ContentSettingsType.COOKIES);
             }
         });
     }
@@ -247,7 +266,8 @@ public class SiteSettingsTest {
             }
 
             private boolean doesAcceptCookies() {
-                return WebsitePreferenceBridge.isCategoryEnabled(ContentSettingsType.COOKIES);
+                return WebsitePreferenceBridge.isCategoryEnabled(
+                        getBrowserContextHandle(), ContentSettingsType.COOKIES);
             }
 
             private boolean improvedControlsEnabled() {
@@ -261,7 +281,7 @@ public class SiteSettingsTest {
     /**
      * Checks if the button representing the given state matches the managed expectation.
      */
-    private void checkFourStateCookieToggleButtonUnmanaged(final SettingsActivity settingsActivity,
+    private void checkFourStateCookieToggleButtonEnabled(final SettingsActivity settingsActivity,
             final CookieSettingsState state, final boolean expected) {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             SingleCategorySettings preferences =
@@ -269,8 +289,8 @@ public class SiteSettingsTest {
             FourStateCookieSettingsPreference fourStateCookieToggle =
                     (FourStateCookieSettingsPreference) preferences.findPreference(
                             SingleCategorySettings.FOUR_STATE_COOKIE_TOGGLE_KEY);
-            Assert.assertNotEquals("Button should be " + (expected ? "unmanaged" : "managed"),
-                    fourStateCookieToggle.isStateEnforced(state), expected);
+            Assert.assertEquals(state + " button should be " + (expected ? "enabled" : "disabled"),
+                    fourStateCookieToggle.isButtonEnabledForTesting(state), expected);
         });
     }
 
@@ -278,7 +298,8 @@ public class SiteSettingsTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals(
                     "Default Cookie Setting should be " + (expected ? "managed" : "unmanaged"),
-                    WebsitePreferenceBridge.isContentSettingManaged(ContentSettingsType.COOKIES),
+                    WebsitePreferenceBridge.isContentSettingManaged(
+                            getBrowserContextHandle(), ContentSettingsType.COOKIES),
                     expected);
         });
     }
@@ -344,7 +365,8 @@ public class SiteSettingsTest {
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals("Popups should be " + (enabled ? "allowed" : "blocked"), enabled,
-                    WebsitePreferenceBridge.isCategoryEnabled(ContentSettingsType.POPUPS));
+                    WebsitePreferenceBridge.isCategoryEnabled(
+                            getBrowserContextHandle(), ContentSettingsType.POPUPS));
         });
     }
 
@@ -354,7 +376,7 @@ public class SiteSettingsTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals("Camera should be " + (enabled ? "allowed" : "blocked"), enabled,
                     WebsitePreferenceBridge.isCategoryEnabled(
-                            ContentSettingsType.MEDIASTREAM_CAMERA));
+                            getBrowserContextHandle(), ContentSettingsType.MEDIASTREAM_CAMERA));
         });
     }
 
@@ -472,6 +494,7 @@ public class SiteSettingsTest {
         SettingsActivity settingsActivity =
                 SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.COOKIES);
         setCookiesEnabled(settingsActivity, true);
+        settingsActivity.finish();
 
         final String url = mTestServer.getURL("/chrome/test/data/android/cookie.html");
 
@@ -486,15 +509,16 @@ public class SiteSettingsTest {
 
         // Set specific rule to block site and ensure it cannot set cookies.
         mActivityTestRule.loadUrl(url + "#clear");
+        settingsActivity =
+                SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.COOKIES);
         setBlockCookiesSiteException(settingsActivity, url, false);
+        settingsActivity.finish();
         mActivityTestRule.runJavaScriptCodeInCurrentTab("setCookie()");
         Assert.assertEquals("\"\"", mActivityTestRule.runJavaScriptCodeInCurrentTab("getCookie()"));
 
         // Load the page again and ensure the cookie remains unset.
         mActivityTestRule.loadUrl(url);
         Assert.assertEquals("\"\"", mActivityTestRule.runJavaScriptCodeInCurrentTab("getCookie()"));
-
-        settingsActivity.finish();
     }
 
     /**
@@ -544,58 +568,57 @@ public class SiteSettingsTest {
     }
 
     /**
-     * Set the cookie content setting to managed and ensure the correct radio buttons are enforced.
+     * Set the cookie content setting to allow through policy and ensure the correct radio buttons
+     * are enabled.
      */
     @Test
     @SmallTest
     @Feature({"Preferences"})
     @Policies.Add({ @Policies.Item(key = "DefaultCookiesSetting", string = "1") })
-    public void testDefaultCookiesSettingManagedTrue() throws Exception {
+    public void testDefaultCookiesSettingManagedAllow() throws Exception {
         checkDefaultCookiesSettingManaged(true);
         checkThirdPartyCookieBlockingManaged(false);
-        // The ContentSetting is managed (and set to true) while ThirdPartyCookieBlocking is not
-        // managed. This means that every button other than BLOCKED is unmanaged.
+        // The ContentSetting is managed (and set to ALLOW) while ThirdPartyCookieBlocking is not
+        // managed. This means that every button other than BLOCK is enabled.
         SettingsActivity settingsActivity =
                 SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.COOKIES);
-        checkFourStateCookieToggleButtonUnmanaged(
-                settingsActivity, CookieSettingsState.ALLOW, true);
-        checkFourStateCookieToggleButtonUnmanaged(
+        checkFourStateCookieToggleButtonEnabled(settingsActivity, CookieSettingsState.ALLOW, true);
+        checkFourStateCookieToggleButtonEnabled(
                 settingsActivity, CookieSettingsState.BLOCK_THIRD_PARTY_INCOGNITO, true);
-        checkFourStateCookieToggleButtonUnmanaged(
+        checkFourStateCookieToggleButtonEnabled(
                 settingsActivity, CookieSettingsState.BLOCK_THIRD_PARTY, true);
-        checkFourStateCookieToggleButtonUnmanaged(
-                settingsActivity, CookieSettingsState.BLOCK, false);
+        checkFourStateCookieToggleButtonEnabled(settingsActivity, CookieSettingsState.BLOCK, false);
         settingsActivity.finish();
     }
 
     /**
-     * Set the cookie content setting to managed and ensure the correct radio buttons are enforced.
+     * Set the cookie content setting to block through a policy and ensure the correct radio buttons
+     * are enabled.
      */
     @Test
     @SmallTest
     @Feature({"Preferences"})
     @Policies.Add({ @Policies.Item(key = "DefaultCookiesSetting", string = "2") })
-    public void testDefaultCookiesSettingManagedFalse() throws Exception {
+    public void testDefaultCookiesSettingManagedBlock() {
         checkDefaultCookiesSettingManaged(true);
         checkThirdPartyCookieBlockingManaged(false);
-        // The ContentSetting is managed (and set to false) while ThirdPartyCookieBlocking is not
+        // The ContentSetting is managed (and set to BLOCK) while ThirdPartyCookieBlocking is not
         // managed. This means cookies should always be blocked, so the user cannot choose any other
-        // options and all buttons should be managed.
+        // options and all buttons except the active one should be disabled.
         SettingsActivity settingsActivity =
                 SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.COOKIES);
-        checkFourStateCookieToggleButtonUnmanaged(
-                settingsActivity, CookieSettingsState.ALLOW, false);
-        checkFourStateCookieToggleButtonUnmanaged(
+        checkFourStateCookieToggleButtonEnabled(settingsActivity, CookieSettingsState.ALLOW, false);
+        checkFourStateCookieToggleButtonEnabled(
                 settingsActivity, CookieSettingsState.BLOCK_THIRD_PARTY_INCOGNITO, false);
-        checkFourStateCookieToggleButtonUnmanaged(
+        checkFourStateCookieToggleButtonEnabled(
                 settingsActivity, CookieSettingsState.BLOCK_THIRD_PARTY, false);
-        checkFourStateCookieToggleButtonUnmanaged(
-                settingsActivity, CookieSettingsState.BLOCK, false);
+        checkFourStateCookieToggleButtonEnabled(settingsActivity, CookieSettingsState.BLOCK, true);
         settingsActivity.finish();
     }
 
     /**
-     * Set third-party cookie blocking to managed and ensure the correct radio buttons are enforced.
+     * Enable third-party cookie blocking through policy and ensure the correct radio buttons are
+     * enabled.
      */
     @Test
     @SmallTest
@@ -607,22 +630,21 @@ public class SiteSettingsTest {
         checkThirdPartyCookieBlockingManaged(true);
         // ThirdPartyCookieBlocking is managed (and set to true) while the ContentSetting is not
         // managed. This means a user can choose only between BLOCK_THIRD_PARTY and BLOCK, so only
-        // these should be unmanaged.
+        // these should be enabled.
         SettingsActivity settingsActivity =
                 SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.COOKIES);
-        checkFourStateCookieToggleButtonUnmanaged(
-                settingsActivity, CookieSettingsState.ALLOW, false);
-        checkFourStateCookieToggleButtonUnmanaged(
+        checkFourStateCookieToggleButtonEnabled(settingsActivity, CookieSettingsState.ALLOW, false);
+        checkFourStateCookieToggleButtonEnabled(
                 settingsActivity, CookieSettingsState.BLOCK_THIRD_PARTY_INCOGNITO, false);
-        checkFourStateCookieToggleButtonUnmanaged(
+        checkFourStateCookieToggleButtonEnabled(
                 settingsActivity, CookieSettingsState.BLOCK_THIRD_PARTY, true);
-        checkFourStateCookieToggleButtonUnmanaged(
-                settingsActivity, CookieSettingsState.BLOCK, true);
+        checkFourStateCookieToggleButtonEnabled(settingsActivity, CookieSettingsState.BLOCK, true);
         settingsActivity.finish();
     }
 
     /**
-     * Set third-party cookie blocking to managed and ensure the correct radio buttons are enforced.
+     * Disable third-party cookie blocking through policy and ensure the correct radio buttons are
+     * enabled.
      */
     @Test
     @SmallTest
@@ -634,23 +656,21 @@ public class SiteSettingsTest {
         checkThirdPartyCookieBlockingManaged(true);
         // ThirdPartyCookieBlocking is managed (and set to false) while the ContentSetting is not
         // managed. This means a user can only choose to ALLOW all cookies or BLOCK all cookies, so
-        // only these should be unmanaged.
+        // only these should be enabled.
         SettingsActivity settingsActivity =
                 SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.COOKIES);
-        checkFourStateCookieToggleButtonUnmanaged(
-                settingsActivity, CookieSettingsState.ALLOW, true);
-        checkFourStateCookieToggleButtonUnmanaged(
+        checkFourStateCookieToggleButtonEnabled(settingsActivity, CookieSettingsState.ALLOW, true);
+        checkFourStateCookieToggleButtonEnabled(
                 settingsActivity, CookieSettingsState.BLOCK_THIRD_PARTY_INCOGNITO, false);
-        checkFourStateCookieToggleButtonUnmanaged(
+        checkFourStateCookieToggleButtonEnabled(
                 settingsActivity, CookieSettingsState.BLOCK_THIRD_PARTY, false);
-        checkFourStateCookieToggleButtonUnmanaged(
-                settingsActivity, CookieSettingsState.BLOCK, true);
+        checkFourStateCookieToggleButtonEnabled(settingsActivity, CookieSettingsState.BLOCK, true);
         settingsActivity.finish();
     }
 
     /**
-     * Set both the cookie content setting and third-party cookie blocking to managed and ensure the
-     * correct radio buttons are enforced.
+     * Set both the cookie content setting and third-party cookie blocking through policy and ensure
+     * the correct radio buttons are enabled.
      */
     @Test
     @SmallTest
@@ -664,18 +684,16 @@ public class SiteSettingsTest {
         checkDefaultCookiesSettingManaged(true);
         checkThirdPartyCookieBlockingManaged(true);
         // The ContentSetting and ThirdPartyCookieBlocking are managed. This means a user has a
-        // fixed setting for cookies that they cannot change. Therefore, all buttons should be
-        // managed.
+        // fixed setting for cookies that they cannot change. Therefore, all buttons except the
+        // selected one should be disabled.
         SettingsActivity settingsActivity =
                 SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.COOKIES);
-        checkFourStateCookieToggleButtonUnmanaged(
-                settingsActivity, CookieSettingsState.ALLOW, false);
-        checkFourStateCookieToggleButtonUnmanaged(
+        checkFourStateCookieToggleButtonEnabled(settingsActivity, CookieSettingsState.ALLOW, true);
+        checkFourStateCookieToggleButtonEnabled(
                 settingsActivity, CookieSettingsState.BLOCK_THIRD_PARTY_INCOGNITO, false);
-        checkFourStateCookieToggleButtonUnmanaged(
+        checkFourStateCookieToggleButtonEnabled(
                 settingsActivity, CookieSettingsState.BLOCK_THIRD_PARTY, false);
-        checkFourStateCookieToggleButtonUnmanaged(
-                settingsActivity, CookieSettingsState.BLOCK, false);
+        checkFourStateCookieToggleButtonEnabled(settingsActivity, CookieSettingsState.BLOCK, false);
         settingsActivity.finish();
     }
 
@@ -689,17 +707,15 @@ public class SiteSettingsTest {
         checkDefaultCookiesSettingManaged(false);
         checkThirdPartyCookieBlockingManaged(false);
         // The ContentSetting and ThirdPartyCookieBlocking are unmanaged. This means all buttons
-        // should be unmanaged.
+        // should be enabled.
         SettingsActivity settingsActivity =
                 SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.COOKIES);
-        checkFourStateCookieToggleButtonUnmanaged(
-                settingsActivity, CookieSettingsState.ALLOW, true);
-        checkFourStateCookieToggleButtonUnmanaged(
+        checkFourStateCookieToggleButtonEnabled(settingsActivity, CookieSettingsState.ALLOW, true);
+        checkFourStateCookieToggleButtonEnabled(
                 settingsActivity, CookieSettingsState.BLOCK_THIRD_PARTY_INCOGNITO, true);
-        checkFourStateCookieToggleButtonUnmanaged(
+        checkFourStateCookieToggleButtonEnabled(
                 settingsActivity, CookieSettingsState.BLOCK_THIRD_PARTY, true);
-        checkFourStateCookieToggleButtonUnmanaged(
-                settingsActivity, CookieSettingsState.BLOCK, true);
+        checkFourStateCookieToggleButtonEnabled(settingsActivity, CookieSettingsState.BLOCK, true);
         settingsActivity.finish();
     }
 
@@ -948,7 +964,8 @@ public class SiteSettingsTest {
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertFalse("Mic should be blocked",
-                    WebsitePreferenceBridge.isCategoryEnabled(ContentSettingsType.MEDIASTREAM_MIC));
+                    WebsitePreferenceBridge.isCategoryEnabled(
+                            getBrowserContextHandle(), ContentSettingsType.MEDIASTREAM_MIC));
         });
 
         // Test that the microphone permission doesn't get requested.
@@ -1020,7 +1037,8 @@ public class SiteSettingsTest {
         setGlobalToggleForCategory(SiteSettingsCategory.Type.BACKGROUND_SYNC, enabled);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals("Background Sync should be " + (enabled ? "enabled" : "disabled"),
-                    WebsitePreferenceBridge.isCategoryEnabled(ContentSettingsType.BACKGROUND_SYNC),
+                    WebsitePreferenceBridge.isCategoryEnabled(
+                            getBrowserContextHandle(), ContentSettingsType.BACKGROUND_SYNC),
                     enabled);
         });
     }
@@ -1047,7 +1065,8 @@ public class SiteSettingsTest {
         setGlobalToggleForCategory(SiteSettingsCategory.Type.USB, enabled);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals("USB should be " + (enabled ? "enabled" : "disabled"),
-                    WebsitePreferenceBridge.isCategoryEnabled(ContentSettingsType.USB_GUARD),
+                    WebsitePreferenceBridge.isCategoryEnabled(
+                            getBrowserContextHandle(), ContentSettingsType.USB_GUARD),
                     enabled);
         });
     }
@@ -1077,7 +1096,7 @@ public class SiteSettingsTest {
             Assert.assertEquals(
                     "Automatic Downloads should be " + (enabled ? "enabled" : "disabled"),
                     WebsitePreferenceBridge.isCategoryEnabled(
-                            ContentSettingsType.AUTOMATIC_DOWNLOADS),
+                            getBrowserContextHandle(), ContentSettingsType.AUTOMATIC_DOWNLOADS),
                     enabled);
         });
     }
@@ -1107,7 +1126,7 @@ public class SiteSettingsTest {
             Assert.assertEquals(
                     "Bluetooth scanning should be " + (enabled ? "enabled" : "disabled"),
                     WebsitePreferenceBridge.isCategoryEnabled(
-                            ContentSettingsType.BLUETOOTH_SCANNING),
+                            getBrowserContextHandle(), ContentSettingsType.BLUETOOTH_SCANNING),
                     enabled);
         });
     }
@@ -1135,7 +1154,9 @@ public class SiteSettingsTest {
         setGlobalToggleForCategory(SiteSettingsCategory.Type.NFC, enabled);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals("NFC should be " + (enabled ? "enabled" : "disabled"),
-                    WebsitePreferenceBridge.isCategoryEnabled(ContentSettingsType.NFC), enabled);
+                    WebsitePreferenceBridge.isCategoryEnabled(
+                            getBrowserContextHandle(), ContentSettingsType.NFC),
+                    enabled);
         });
     }
 
@@ -1162,7 +1183,9 @@ public class SiteSettingsTest {
         setGlobalToggleForCategory(SiteSettingsCategory.Type.AUGMENTED_REALITY, enabled);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals("AR should be " + (enabled ? "enabled" : "disabled"),
-                    WebsitePreferenceBridge.isCategoryEnabled(ContentSettingsType.AR), enabled);
+                    WebsitePreferenceBridge.isCategoryEnabled(
+                            getBrowserContextHandle(), ContentSettingsType.AR),
+                    enabled);
         });
     }
 
@@ -1189,7 +1212,9 @@ public class SiteSettingsTest {
         setGlobalToggleForCategory(SiteSettingsCategory.Type.VIRTUAL_REALITY, enabled);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals("VR should be " + (enabled ? "enabled" : "disabled"),
-                    WebsitePreferenceBridge.isCategoryEnabled(ContentSettingsType.VR), enabled);
+                    WebsitePreferenceBridge.isCategoryEnabled(
+                            getBrowserContextHandle(), ContentSettingsType.VR),
+                    enabled);
         });
     }
 
@@ -1227,7 +1252,8 @@ public class SiteSettingsTest {
             mActivityTestRule.runJavaScriptCodeInCurrentTab("requestPermissionAndRespond()");
         }
 
-        Intent intent = SettingsLauncher.getInstance().createIntentForSettingsPage(
+        SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+        Intent intent = settingsLauncher.createSettingsActivityIntent(
                 InstrumentationRegistry.getTargetContext(), SingleWebsiteSettings.class.getName(),
                 SingleWebsiteSettings.createFragmentArgsForSite(url));
         final SettingsActivity settingsActivity =
@@ -1245,7 +1271,7 @@ public class SiteSettingsTest {
 
             // Ensure that a proper separate channel has indeed been created to allow the user to
             // alter the setting.
-            Assert.assertNotEquals(ChannelDefinitions.ChannelId.SITES,
+            Assert.assertNotEquals(ChromeChannelDefinitions.ChannelId.SITES,
                     SiteChannelsManager.getInstance().getChannelIdForOrigin(
                             Origin.createOrThrow(url).toString()));
         });

@@ -39,6 +39,19 @@
 namespace ash {
 namespace {
 
+void DoScopedAnimationSetting(
+    ui::ScopedLayerAnimationSettings* animation_setter,
+    ui::AnimationMetricsReporter* metrics_reporter) {
+  animation_setter->SetTransitionDuration(
+      ShelfConfig::Get()->shelf_animation_duration());
+  animation_setter->SetTweenType(gfx::Tween::EASE_OUT);
+  animation_setter->SetPreemptionStrategy(
+      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+  if (metrics_reporter) {
+    animation_setter->SetAnimationMetricsReporter(metrics_reporter);
+  }
+}
+
 // Custom window targeter for the hotseat. Used so the hotseat only processes
 // events that land on the visible portion of the hotseat, and only while the
 // hotseat is not animating.
@@ -96,7 +109,8 @@ class HotseatWidget::DelegateView : public HotseatTransitionAnimator::Observer,
 
   // Initializes the view.
   void Init(ScrollableShelfView* scrollable_shelf_view,
-            ui::Layer* parent_layer);
+            ui::Layer* parent_layer,
+            HotseatWidget* hotseat_widget);
 
   // Updates the hotseat background.
   void UpdateTranslucentBackground();
@@ -145,6 +159,7 @@ class HotseatWidget::DelegateView : public HotseatTransitionAnimator::Observer,
   // A background layer that may be visible depending on HotseatState.
   ui::Layer translucent_background_;
   ScrollableShelfView* scrollable_shelf_view_ = nullptr;  // unowned.
+  HotseatWidget* hotseat_widget_ = nullptr;               // unowned.
   // Blur is disabled during animations to improve performance.
   int blur_lock_ = 0;
 
@@ -158,8 +173,7 @@ class HotseatWidget::DelegateView : public HotseatTransitionAnimator::Observer,
 HotseatWidget::DelegateView::~DelegateView() {
   WallpaperControllerImpl* wallpaper_controller =
       Shell::Get()->wallpaper_controller();
-  OverviewController* overview_controller =
-      Shell::Get()->overview_controller();
+  OverviewController* overview_controller = Shell::Get()->overview_controller();
   if (wallpaper_controller)
     wallpaper_controller->RemoveObserver(this);
   if (overview_controller)
@@ -168,25 +182,25 @@ HotseatWidget::DelegateView::~DelegateView() {
 
 void HotseatWidget::DelegateView::Init(
     ScrollableShelfView* scrollable_shelf_view,
-    ui::Layer* parent_layer) {
+    ui::Layer* parent_layer,
+    HotseatWidget* hotseat_widget) {
+  hotseat_widget_ = hotseat_widget;
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
   WallpaperControllerImpl* wallpaper_controller =
       Shell::Get()->wallpaper_controller();
-  OverviewController* overview_controller =
-      Shell::Get()->overview_controller();
+  OverviewController* overview_controller = Shell::Get()->overview_controller();
   if (wallpaper_controller)
     wallpaper_controller->AddObserver(this);
   if (overview_controller) {
     overview_controller->AddObserver(this);
-    if(overview_controller->InOverviewSession())
+    if (overview_controller->InOverviewSession())
       ++blur_lock_;
   }
   SetParentLayer(parent_layer);
 
   DCHECK(scrollable_shelf_view);
   scrollable_shelf_view_ = scrollable_shelf_view;
-  UpdateTranslucentBackground();
 }
 
 void HotseatWidget::DelegateView::UpdateTranslucentBackground() {
@@ -206,28 +220,34 @@ void HotseatWidget::DelegateView::SetTranslucentBackground(
 
   translucent_background_.SetVisible(true);
   SetBackgroundBlur(/*enable_blur=*/true);
-
-  // Animate the bounds change if we're changing the background, or if there's
-  // a change of width (for instance when dragging an app into, or out of,
-  // the shelf.
-  bool animate =
-      ShelfConfig::Get()->GetDefaultShelfColor() != target_color_ ||
-      background_bounds.width() != translucent_background_.bounds().width();
-  ui::ScopedLayerAnimationSettings animation_setter(
-      translucent_background_.GetAnimator());
-  animation_setter.SetTransitionDuration(
-      animate ? ShelfConfig::Get()->shelf_animation_duration()
-              : base::TimeDelta::FromMilliseconds(0));
-  animation_setter.SetTweenType(gfx::Tween::EASE_OUT);
-  animation_setter.SetPreemptionStrategy(
-      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+  ui::AnimationMetricsReporter* metrics_reporter =
+      hotseat_widget_
+          ? hotseat_widget_->GetTranslucentBackgroundMetricsReporter()
+          : nullptr;
 
   if (ShelfConfig::Get()->GetDefaultShelfColor() != target_color_) {
+    ui::ScopedLayerAnimationSettings color_animation_setter(
+        translucent_background_.GetAnimator());
+    DoScopedAnimationSetting(&color_animation_setter, metrics_reporter);
     target_color_ = ShelfConfig::Get()->GetDefaultShelfColor();
     translucent_background_.SetColor(target_color_);
   }
 
-  const int radius = ShelfConfig::Get()->hotseat_size() / 2;
+  // Animate the bounds change if there's a change of width (for instance when
+  // dragging an app into, or out of, the shelf) and meanwhile scrollable
+  // shelf's bounds does not update at the same time.
+  const bool animate_bounds =
+      background_bounds.width() != translucent_background_.bounds().width() &&
+      (scrollable_shelf_view_ &&
+       !scrollable_shelf_view_->NeedUpdateToTargetBounds());
+  base::Optional<ui::ScopedLayerAnimationSettings> bounds_animation_setter;
+  if (animate_bounds) {
+    bounds_animation_setter.emplace(translucent_background_.GetAnimator());
+    DoScopedAnimationSetting(&bounds_animation_setter.value(),
+                             metrics_reporter);
+  }
+
+  const int radius = hotseat_widget_->GetHotseatSize() / 2;
   gfx::RoundedCornersF rounded_corners = {radius, radius, radius, radius};
   if (translucent_background_.rounded_corner_radii() != rounded_corners)
     translucent_background_.SetRoundedCornerRadius(rounded_corners);
@@ -339,8 +359,12 @@ void HotseatWidget::Initialize(aura::Window* container, Shelf* shelf) {
 
   scrollable_shelf_view_ = GetContentsView()->AddChildView(
       std::make_unique<ScrollableShelfView>(ShelfModel::Get(), shelf));
+  delegate_view_->Init(scrollable_shelf_view(), GetLayer(), this);
+
+  // The initialization of scrollable shelf should update the translucent
+  // background which is stored in |delegate_view_|. So initializes
+  // |scrollable_shelf_view_| after |delegate_view_|.
   scrollable_shelf_view_->Init();
-  delegate_view_->Init(scrollable_shelf_view(), GetLayer());
 }
 
 void HotseatWidget::OnHotseatTransitionAnimatorCreated(
@@ -377,15 +401,14 @@ void HotseatWidget::OnShelfConfigUpdated() {
 
 bool HotseatWidget::IsExtended() const {
   DCHECK(GetShelfView()->shelf()->IsHorizontalAlignment());
-  const int extended_y =
+  const int extended_bottom =
       display::Screen::GetScreen()
           ->GetDisplayNearestView(GetShelfView()->GetWidget()->GetNativeView())
           .bounds()
           .bottom() -
       (ShelfConfig::Get()->shelf_size() +
-       ShelfConfig::Get()->hotseat_bottom_padding() +
-       ShelfConfig::Get()->hotseat_size());
-  return GetWindowBoundsInScreen().y() == extended_y;
+       ShelfConfig::Get()->hotseat_bottom_padding());
+  return GetWindowBoundsInScreen().bottom() == extended_bottom;
 }
 
 void HotseatWidget::FocusFirstOrLastFocusableChild(bool last) {
@@ -396,11 +419,11 @@ void HotseatWidget::OnTabletModeChanged() {
   GetShelfView()->OnTabletModeChanged();
 }
 
-float HotseatWidget::CalculateOpacity() const {
+float HotseatWidget::CalculateShelfViewOpacity() const {
   const float target_opacity =
       GetShelfView()->shelf()->shelf_layout_manager()->GetOpacity();
-  return (state() == HotseatState::kExtended) ? 1.0f  // fully translucent
-                                              : target_opacity;
+  // Hotseat's shelf view should not be dimmed if hotseat is kExtended.
+  return (state() == HotseatState::kExtended) ? 1.0f : target_opacity;
 }
 
 void HotseatWidget::SetTranslucentBackground(
@@ -412,7 +435,7 @@ int HotseatWidget::CalculateHotseatYInScreen(
     HotseatState hotseat_target_state) const {
   DCHECK(shelf_->IsHorizontalAlignment());
   int hotseat_distance_from_bottom_of_display;
-  const int hotseat_size = ShelfConfig::Get()->hotseat_size();
+  const int hotseat_size = GetHotseatSize();
   switch (hotseat_target_state) {
     case HotseatState::kShownClamshell:
       hotseat_distance_from_bottom_of_display = hotseat_size;
@@ -478,7 +501,7 @@ void HotseatWidget::CalculateTargetBounds() {
     }
     hotseat_origin =
         gfx::Point(hotseat_x, CalculateHotseatYInScreen(hotseat_target_state));
-    hotseat_height = ShelfConfig::Get()->hotseat_size();
+    hotseat_height = GetHotseatSize();
   } else {
     hotseat_origin = gfx::Point(shelf_bounds.x(),
                                 nav_bounds.bottom() + vertical_edge_spacing);
@@ -490,6 +513,10 @@ void HotseatWidget::CalculateTargetBounds() {
   }
   target_bounds_ =
       gfx::Rect(hotseat_origin, gfx::Size(hotseat_width, hotseat_height));
+
+  // Check whether |target_bounds_| will change the state of app scaling. If
+  // so, update |target_bounds_| here to avoid re-layout later.
+  MaybeAdjustTargetBoundsForAppScaling(hotseat_target_state);
 }
 
 gfx::Rect HotseatWidget::GetTargetBounds() const {
@@ -505,9 +532,10 @@ void HotseatWidget::UpdateLayout(bool animate) {
   if (!new_layout_inputs.is_active_session_state)
     Hide();
 
-  ui::Layer* layer = GetNativeView()->layer();
+  ui::Layer* shelf_view_layer = GetShelfView()->layer();
   {
-    ui::ScopedLayerAnimationSettings animation_setter(layer->GetAnimator());
+    ui::ScopedLayerAnimationSettings animation_setter(
+        shelf_view_layer->GetAnimator());
     animation_setter.SetTransitionDuration(
         animate ? ShelfConfig::Get()->shelf_animation_duration()
                 : base::TimeDelta::FromMilliseconds(0));
@@ -517,7 +545,26 @@ void HotseatWidget::UpdateLayout(bool animate) {
     animation_setter.SetAnimationMetricsReporter(
         shelf_->GetHotseatTransitionMetricsReporter(state_));
 
-    layer->SetOpacity(new_layout_inputs.opacity);
+    shelf_view_layer->SetOpacity(new_layout_inputs.shelf_view_opacity);
+  }
+
+  ui::Layer* hotseat_layer = GetNativeView()->layer();
+  {
+    ui::ScopedLayerAnimationSettings animation_setter(
+        hotseat_layer->GetAnimator());
+    animation_setter.SetTransitionDuration(
+        animate ? ShelfConfig::Get()->shelf_animation_duration()
+                : base::TimeDelta::FromMilliseconds(0));
+    animation_setter.SetTweenType(gfx::Tween::EASE_OUT);
+    animation_setter.SetPreemptionStrategy(
+        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+    animation_setter.SetAnimationMetricsReporter(
+        shelf_->GetHotseatTransitionMetricsReporter(state_));
+
+    // If shelf view is invisible, the hotseat should be as well. Otherwise the
+    // hotseat opacit should be 1.0f to preserve background blur.
+    hotseat_layer->SetOpacity(
+        new_layout_inputs.shelf_view_opacity == 0.0f ? 0.0f : 1.0f);
     SetBounds(new_layout_inputs.bounds);
     layout_inputs_ = new_layout_inputs;
     delegate_view_->UpdateTranslucentBackground();
@@ -525,7 +572,8 @@ void HotseatWidget::UpdateLayout(bool animate) {
 
   // Setting visibility during an animation causes the visibility property to
   // animate. Set the visibility property without an animation.
-  if (new_layout_inputs.opacity && new_layout_inputs.is_active_session_state) {
+  if (new_layout_inputs.shelf_view_opacity != 0.0f &&
+      new_layout_inputs.is_active_session_state) {
     ShowInactive();
   }
 }
@@ -553,6 +601,26 @@ ShelfView* HotseatWidget::GetShelfView() {
   return scrollable_shelf_view_->shelf_view();
 }
 
+int HotseatWidget::GetHotseatSize() const {
+  return ShelfConfig::Get()->GetShelfButtonSize(is_forced_dense_);
+}
+
+int HotseatWidget::GetHotseatFullDragAmount() const {
+  ShelfConfig* shelf_config = ShelfConfig::Get();
+  return shelf_config->shelf_size() + shelf_config->hotseat_bottom_padding() +
+         GetHotseatSize();
+}
+
+bool HotseatWidget::UpdateAppScalingIfNeeded() {
+  if (ShouldTriggerAppScaling(target_bounds_.size(), state_) ==
+      is_forced_dense_) {
+    return false;
+  }
+
+  shelf_->shelf_layout_manager()->LayoutShelf(/*animate=*/true);
+  return true;
+}
+
 int HotseatWidget::GetHotseatBackgroundBlurForTest() const {
   return delegate_view_->background_blur();
 }
@@ -568,6 +636,11 @@ bool HotseatWidget::IsShowingShelfMenu() const {
 const ShelfView* HotseatWidget::GetShelfView() const {
   return const_cast<const ShelfView*>(
       const_cast<HotseatWidget*>(this)->GetShelfView());
+}
+
+ui::AnimationMetricsReporter*
+HotseatWidget::GetTranslucentBackgroundMetricsReporter() {
+  return shelf_->GetTranslucentBackgroundMetricsReporter(state_);
 }
 
 void HotseatWidget::SetState(HotseatState state) {
@@ -588,8 +661,51 @@ void HotseatWidget::SetState(HotseatState state) {
 
 HotseatWidget::LayoutInputs HotseatWidget::GetLayoutInputs() const {
   const ShelfLayoutManager* layout_manager = shelf_->shelf_layout_manager();
-  return {target_bounds_, CalculateOpacity(),
+  return {target_bounds_, CalculateShelfViewOpacity(),
           layout_manager->is_active_session_state()};
+}
+
+void HotseatWidget::MaybeAdjustTargetBoundsForAppScaling(
+    HotseatState hotseat_target_state) {
+  // Return early if app scaling state does not change.
+  const bool should_trigger_app_scaling =
+      ShouldTriggerAppScaling(target_bounds_.size(), hotseat_target_state);
+  if (should_trigger_app_scaling == is_forced_dense_)
+    return;
+
+  is_forced_dense_ = should_trigger_app_scaling;
+
+  // Update app icons of shelf view.
+  scrollable_shelf_view_->shelf_view()->OnShelfConfigUpdated();
+
+  const gfx::Point adjusted_hotseat_origin = gfx::Point(
+      target_bounds_.x(), CalculateHotseatYInScreen(hotseat_target_state));
+  target_bounds_ =
+      gfx::Rect(adjusted_hotseat_origin,
+                gfx::Size(target_bounds_.width(), GetHotseatSize()));
+}
+
+bool HotseatWidget::ShouldTriggerAppScaling(
+    const gfx::Size& available_size,
+    HotseatState hotseat_target_state) const {
+  if (!ash::features::IsAppScalingEnabled())
+    return false;
+
+  // Do not trigger app scaling if shelf is in dense mode.
+  if (ShelfConfig::Get()->is_dense())
+    return false;
+
+  // Currently we only update app scaling in home launcher due to performance
+  // concerns in hotseat animation transition between home launcher state
+  // and extended state.
+  // TODO(crbug.com/1081476).
+  if (hotseat_target_state != HotseatState::kShownHomeLauncher)
+    return is_forced_dense_;
+
+  const int normal_button_size =
+      ShelfConfig::Get()->GetShelfButtonSize(/*force_dense=*/false);
+  return scrollable_shelf_view_->RequiresScrollingForItemSize(
+      available_size, normal_button_size);
 }
 
 }  // namespace ash

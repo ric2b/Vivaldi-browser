@@ -6,27 +6,51 @@
 
 #include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/metrics/user_metrics.h"
-#include "base/numerics/safe_conversions.h"
-#include "base/rand_util.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
-#include "base/time/time.h"
-#include "base/values.h"
 #include "components/autofill/core/common/password_generation_util.h"
-#include "components/password_manager/core/common/password_manager_pref_names.h"
-#include "components/prefs/pref_service.h"
-#include "components/prefs/scoped_user_pref_update.h"
-#include "url/gurl.h"
 
 using autofill::password_generation::PasswordGenerationType;
-using base::ListValue;
-using base::Value;
 
 namespace password_manager {
 
 namespace metrics_util {
+
+std::string GetPasswordAccountStorageUserStateHistogramSuffix(
+    PasswordAccountStorageUserState user_state) {
+  switch (user_state) {
+    case PasswordAccountStorageUserState::kSignedOutUser:
+      return "SignedOutUser";
+    case PasswordAccountStorageUserState::kSignedOutAccountStoreUser:
+      return "SignedOutAccountStoreUser";
+    case PasswordAccountStorageUserState::kSignedInUser:
+      return "SignedInUser";
+    case PasswordAccountStorageUserState::kSignedInUserSavingLocally:
+      return "SignedInUserSavingLocally";
+    case PasswordAccountStorageUserState::kSignedInAccountStoreUser:
+      return "SignedInAccountStoreUser";
+    case PasswordAccountStorageUserState::
+        kSignedInAccountStoreUserSavingLocally:
+      return "SignedInAccountStoreUserSavingLocally";
+    case PasswordAccountStorageUserState::kSyncUser:
+      return "SyncUser";
+  }
+  NOTREACHED();
+  return std::string();
+}
+
+std::string GetPasswordAccountStorageUsageLevelHistogramSuffix(
+    PasswordAccountStorageUsageLevel usage_level) {
+  switch (usage_level) {
+    case PasswordAccountStorageUsageLevel::kNotUsingAccountStorage:
+      return "NotUsingAccountStorage";
+    case PasswordAccountStorageUsageLevel::kUsingAccountStorage:
+      return "UsingAccountStorage";
+    case PasswordAccountStorageUsageLevel::kSyncing:
+      return "Syncing";
+  }
+  NOTREACHED();
+  return std::string();
+}
 
 void LogGeneralUIDismissalReason(UIDismissalReason reason) {
   base::UmaHistogramEnumeration("PasswordManager.UIDismissalReason", reason,
@@ -41,12 +65,6 @@ void LogSaveUIDismissalReason(UIDismissalReason reason) {
 void LogUpdateUIDismissalReason(UIDismissalReason reason) {
   base::UmaHistogramEnumeration("PasswordManager.UpdateUIDismissalReason",
                                 reason, NUM_UI_RESPONSES);
-}
-
-void LogPresavedUpdateUIDismissalReason(UIDismissalReason reason) {
-  base::UmaHistogramEnumeration(
-      "PasswordManager.PresavedUpdateUIDismissalReason", reason,
-      NUM_UI_RESPONSES);
 }
 
 void LogLeakDialogTypeAndDismissalReason(LeakDialogType type,
@@ -67,25 +85,6 @@ void LogLeakDialogTypeAndDismissalReason(LeakDialogType type,
   base::UmaHistogramEnumeration(kHistogram, reason);
   base::UmaHistogramEnumeration(base::StrCat({kHistogram, ".", GetSuffix()}),
                                 reason);
-}
-
-void LogOnboardingState(OnboardingState state) {
-  base::UmaHistogramEnumeration("PasswordManager.Onboarding.State", state);
-}
-
-void LogOnboardingUIDismissalReason(OnboardingUIDismissalReason reason) {
-  base::UmaHistogramEnumeration("PasswordManager.Onboarding.UIDismissalReason",
-                                reason);
-}
-
-void LogResultOfSavingFlow(OnboardingResultOfSavingFlow result) {
-  base::UmaHistogramEnumeration("PasswordManager.Onboarding.ResultOfSavingFlow",
-                                result);
-}
-
-void LogResultOfOnboardingSavingFlow(OnboardingResultOfSavingFlow result) {
-  base::UmaHistogramEnumeration(
-      "PasswordManager.Onboarding.ResultOfSavingFlowAfterOnboarding", result);
 }
 
 void LogUIDisplayDisposition(UIDisplayDisposition disposition) {
@@ -238,13 +237,15 @@ void LogDeleteCorruptedPasswordsResult(DeleteCorruptedPasswordsResult result) {
       "PasswordManager.DeleteCorruptedPasswordsResult", result);
 }
 
-void LogNewlySavedPasswordIsGenerated(bool value) {
+void LogNewlySavedPasswordIsGenerated(
+    bool value,
+    PasswordAccountStorageUsageLevel account_storage_usage_level) {
   base::UmaHistogramBoolean("PasswordManager.NewlySavedPasswordIsGenerated",
                             value);
-}
-
-void LogGenerationPresaveConflict(GenerationPresaveConflict value) {
-  base::UmaHistogramEnumeration("PasswordGeneration.PresaveConflict", value);
+  std::string suffix = GetPasswordAccountStorageUsageLevelHistogramSuffix(
+      account_storage_usage_level);
+  base::UmaHistogramBoolean(
+      "PasswordManager.NewlySavedPasswordIsGenerated." + suffix, value);
 }
 
 void LogGenerationDialogChoice(GenerationDialogChoice choice,

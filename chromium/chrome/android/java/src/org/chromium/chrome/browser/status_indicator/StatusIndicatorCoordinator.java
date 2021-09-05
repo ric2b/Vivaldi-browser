@@ -12,6 +12,7 @@ import android.view.ViewStub;
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 
+import org.chromium.base.Callback;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
@@ -58,11 +59,12 @@ public class StatusIndicatorCoordinator {
      *                                        browser controls can be animated. This will be false
      *                                        where we can't have a reliable cc::BCOM instance, e.g.
      *                                        tab switcher.
+     * @param requestRender Runnable to request a render when the cc-layer needs to be updated.
      */
     public StatusIndicatorCoordinator(Activity activity, ResourceManager resourceManager,
             ChromeFullscreenManager fullscreenManager,
             Supplier<Integer> statusBarColorWithoutStatusIndicatorSupplier,
-            Supplier<Boolean> canAnimateNativeBrowserControls) {
+            Supplier<Boolean> canAnimateNativeBrowserControls, Callback<Runnable> requestRender) {
         // TODO(crbug.com/1005843): Create this view lazily if/when we need it. This is a task for
         // when we have the public API figured out. First, we should avoid inflating the view here
         // in case it's never used.
@@ -77,8 +79,15 @@ public class StatusIndicatorCoordinator {
         PropertyModelChangeProcessor.create(model,
                 new StatusIndicatorViewBinder.ViewHolder(root, mSceneLayer),
                 StatusIndicatorViewBinder::bind);
+        Callback<Runnable> invalidateCompositorView = callback -> {
+            root.getResourceAdapter().invalidate(null);
+            requestRender.onResult(callback);
+        };
+        Runnable requestLayout = () -> root.requestLayout();
+
         mMediator = new StatusIndicatorMediator(model, fullscreenManager,
-                statusBarColorWithoutStatusIndicatorSupplier, canAnimateNativeBrowserControls);
+                statusBarColorWithoutStatusIndicatorSupplier, canAnimateNativeBrowserControls,
+                invalidateCompositorView, requestLayout);
         resourceManager.getDynamicResourceLoader().registerResource(
                 root.getId(), root.getResourceAdapter());
         root.addOnLayoutChangeListener(mMediator);
@@ -87,6 +96,7 @@ public class StatusIndicatorCoordinator {
 
     public void destroy() {
         mRemoveOnLayoutChangeListener.run();
+        mMediator.destroy();
     }
 
     // TODO(sinansahin): Destroy the view when not needed.
@@ -102,10 +112,9 @@ public class StatusIndicatorCoordinator {
      */
     public void show(@NonNull String statusText, Drawable statusIcon, @ColorInt int backgroundColor,
             @ColorInt int textColor, @ColorInt int iconTint) {
-        // TODO(sinansahin): Once we've moved the connectivity detection code to a separate class,
-        // we should make sure #show(), #updateContent(), and #hide() are called correctly there,
-        // e.g. show shouldn't be called if we're already showing. Then, we can turn these if checks
-        // into asserts.
+        // TODO(crbug.com/1081471): We should make sure #show, #hide, and #updateContent can't be
+        // called at the wrong time, or the call is ignored with a way to communicate this to the
+        // caller, e.g. returning a boolean.
         if (mIsShowing) return;
         mIsShowing = true;
 

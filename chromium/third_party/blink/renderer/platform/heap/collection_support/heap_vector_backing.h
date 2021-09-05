@@ -9,15 +9,19 @@
 #include "third_party/blink/renderer/platform/heap/finalizer_traits.h"
 #include "third_party/blink/renderer/platform/heap/gc_info.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/heap_allocator.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
 #include "third_party/blink/renderer/platform/heap/threading_traits.h"
 #include "third_party/blink/renderer/platform/heap/trace_traits.h"
+#include "third_party/blink/renderer/platform/wtf/conditional_destructor.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
 
 template <typename T, typename Traits = WTF::VectorTraits<T>>
-class HeapVectorBacking final {
+class HeapVectorBacking final
+    : public WTF::ConditionalDestructor<HeapVectorBacking<T, Traits>,
+                                        !Traits::kNeedsDestruction> {
   DISALLOW_NEW();
   IS_GARBAGE_COLLECTED_TYPE();
 
@@ -33,12 +37,12 @@ class HeapVectorBacking final {
         type_name);
   }
 
-  static void Finalize(void* pointer);
-  void FinalizeGarbageCollectedObject() { Finalize(this); }
+  // Conditionally invoked via destructor.
+  void Finalize();
 };
 
 template <typename T, typename Traits>
-void HeapVectorBacking<T, Traits>::Finalize(void* pointer) {
+void HeapVectorBacking<T, Traits>::Finalize() {
   static_assert(Traits::kNeedsDestruction,
                 "Only vector buffers with items requiring destruction should "
                 "be finalized");
@@ -50,11 +54,11 @@ void HeapVectorBacking<T, Traits>::Finalize(void* pointer) {
   static_assert(
       !std::is_trivially_destructible<T>::value,
       "Finalization of trivially destructible classes should not happen.");
-  HeapObjectHeader* header = HeapObjectHeader::FromPayload(pointer);
+  HeapObjectHeader* header = HeapObjectHeader::FromPayload(this);
   // Use the payload size as recorded by the heap to determine how many
   // elements to finalize.
   size_t length = header->PayloadSize() / sizeof(T);
-  char* payload = static_cast<char*>(pointer);
+  Address payload = header->Payload();
 #ifdef ANNOTATE_CONTIGUOUS_CONTAINER
   ANNOTATE_CHANGE_SIZE(payload, length * sizeof(T), 0, length * sizeof(T));
 #endif
@@ -62,7 +66,7 @@ void HeapVectorBacking<T, Traits>::Finalize(void* pointer) {
   // (which are already zeroed out).
   if (std::is_polymorphic<T>::value) {
     for (unsigned i = 0; i < length; ++i) {
-      char* element = payload + i * sizeof(T);
+      Address element = payload + i * sizeof(T);
       if (blink::VTableInitialized(element))
         reinterpret_cast<T*>(element)->~T();
     }
@@ -89,16 +93,6 @@ struct MakeGarbageCollectedTrait<HeapVectorBacking<T>> {
 };
 
 template <typename T, typename Traits>
-struct FinalizerTrait<HeapVectorBacking<T, Traits>> {
-  STATIC_ONLY(FinalizerTrait);
-  static const bool kNonTrivialFinalizer = Traits::kNeedsDestruction;
-  static void Finalize(void* obj) {
-    internal::FinalizerTraitImpl<HeapVectorBacking<T, Traits>,
-                                 kNonTrivialFinalizer>::Finalize(obj);
-  }
-};
-
-template <typename T, typename Traits>
 struct ThreadingTrait<HeapVectorBacking<T, Traits>> {
   STATIC_ONLY(ThreadingTrait);
   static const ThreadAffinity kAffinity = ThreadingTrait<T>::Affinity;
@@ -115,8 +109,10 @@ struct TraceTrait<HeapVectorBacking<T, Traits>> {
   }
 
   static void Trace(Visitor* visitor, const void* self) {
-    if (visitor->ConcurrentTracingBailOut({self, &Trace}))
-      return;
+    if (!Traits::kCanTraceConcurrently) {
+      if (visitor->DeferredTraceIfConcurrent({self, &Trace}))
+        return;
+    }
 
     static_assert(!WTF::IsWeak<T>::value,
                   "Weakness is not supported in HeapVector and HeapDeque");
@@ -138,7 +134,7 @@ template <typename T, typename Traits>
 struct TraceInCollectionTrait<kNoWeakHandling,
                               blink::HeapVectorBacking<T, Traits>,
                               void> {
-  static bool Trace(blink::Visitor* visitor, const void* self) {
+  static void Trace(blink::Visitor* visitor, const void* self) {
     // HeapVectorBacking does not know the exact size of the vector
     // and just knows the capacity of the vector. Due to the constraint,
     // HeapVectorBacking can support only the following objects:
@@ -194,7 +190,6 @@ struct TraceInCollectionTrait<kNoWeakHandling,
                                                                    array[i]);
       }
     }
-    return false;
   }
 };
 

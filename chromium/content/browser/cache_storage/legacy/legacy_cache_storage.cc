@@ -627,6 +627,11 @@ void LegacyCacheStorage::DropHandleRef() {
   }
 }
 
+void LegacyCacheStorage::Init() {
+  if (!initialized_)
+    LazyInit();
+}
+
 void LegacyCacheStorage::OpenCache(const std::string& cache_name,
                                    int64_t trace_id,
                                    CacheAndErrorCallback callback) {
@@ -1159,7 +1164,7 @@ void LegacyCacheStorage::DeleteCacheDidGetSize(
     LegacyCacheStorageCache* doomed_cache,
     int64_t cache_size) {
   quota_manager_proxy_->NotifyStorageModified(
-      CacheStorageQuotaClient::GetIDFromOwner(owner_), origin_,
+      CacheStorageQuotaClient::GetClientTypeFromOwner(owner_), origin_,
       StorageType::kTemporary, -1 * cache_size);
 
   cache_loader_->CleanUpDeletedCache(doomed_cache);

@@ -20,6 +20,7 @@ import androidx.fragment.app.FragmentManager;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.MediumTest;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -39,6 +40,7 @@ import org.chromium.components.signin.ProfileDataSource;
 import org.chromium.components.signin.test.util.AccountHolder;
 import org.chromium.components.signin.test.util.AccountManagerTestRule;
 import org.chromium.components.signin.test.util.FakeAccountManagerDelegate;
+import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.DummyUiActivityTestCase;
 
 import java.io.IOException;
@@ -87,6 +89,11 @@ import java.io.IOException;
         mDialog.show(fragmentManager, null);
     }
 
+    @After
+    public void tearDown() {
+        if (mDialog.getDialog() != null) mDialog.dismiss();
+    }
+
     @Test
     @MediumTest
     public void testTitle() {
@@ -122,6 +129,17 @@ import java.io.IOException;
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
         mRenderTestRule.render(
                 mDialog.getDialog().getWindow().getDecorView(), "account_picker_dialog_legacy");
+    }
+
+    @Test
+    @LargeTest
+    @Feature("RenderTest")
+    public void testUpdateSelectedAccountChangesSelectionMark() throws IOException {
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        TestThreadUtils.runOnUiThreadBlocking(() -> mDialog.updateSelectedAccount(mAccountName2));
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        mRenderTestRule.render(mDialog.getDialog().getWindow().getDecorView(),
+                "account_picker_dialog_update_selected_account");
     }
 
     @Test

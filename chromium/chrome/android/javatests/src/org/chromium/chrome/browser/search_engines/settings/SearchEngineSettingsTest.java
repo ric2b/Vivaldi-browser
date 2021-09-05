@@ -21,17 +21,18 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.settings.MainSettings;
 import org.chromium.chrome.browser.settings.SettingsActivity;
-import org.chromium.chrome.browser.settings.SettingsActivityTest;
-import org.chromium.chrome.browser.site_settings.ContentSettingValues;
-import org.chromium.chrome.browser.site_settings.PermissionInfo;
-import org.chromium.chrome.browser.site_settings.WebsitePreferenceBridgeJni;
+import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ActivityUtils;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
+import org.chromium.components.browser_ui.site_settings.PermissionInfo;
+import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridgeJni;
+import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.search_engines.TemplateUrlService.LoadListener;
@@ -51,6 +52,9 @@ import java.util.concurrent.ExecutionException;
 public class SearchEngineSettingsTest {
     @Rule
     public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
+    @Rule
+    public final SettingsActivityTestRule<SearchEngineSettings> mSettingsActivityTestRule =
+            new SettingsActivityTestRule<>(SearchEngineSettings.class);
 
     /**
      * Change search engine and make sure it works correctly.
@@ -63,12 +67,11 @@ public class SearchEngineSettingsTest {
     public void testSearchEnginePreference() throws Exception {
         ensureTemplateUrlServiceLoaded();
 
-        final SettingsActivity settingsActivity = SettingsActivityTest.startSettingsActivity(
-                InstrumentationRegistry.getInstrumentation(), SearchEngineSettings.class.getName());
+        mSettingsActivityTestRule.startSettingsActivity();
 
         // Set the second search engine as the default using TemplateUrlService.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            SearchEngineSettings pref = (SearchEngineSettings) settingsActivity.getMainFragment();
+            SearchEngineSettings pref = mSettingsActivityTestRule.getFragment();
             pref.setValueForTesting("1");
 
             // Ensure that the second search engine in the list is selected.
@@ -89,7 +92,7 @@ public class SearchEngineSettingsTest {
             String keyword3 = pref.getKeywordFromIndexForTesting(3);
             String url = templateUrlService.getSearchEngineUrlFromTemplateUrl(keyword3);
             WebsitePreferenceBridgeJni.get().setGeolocationSettingForOrigin(
-                    url, url, ContentSettingValues.BLOCK, false);
+                    Profile.getLastUsedRegularProfile(), url, url, ContentSettingValues.BLOCK);
             keyword3 = pref.setValueForTesting("3");
             Assert.assertEquals(keyword3,
                     TemplateUrlServiceFactory.get()
@@ -106,11 +109,11 @@ public class SearchEngineSettingsTest {
             // Otherwise the block setting will cause the content setting for search engine 2
             // to be reset when we switch to it.
             WebsitePreferenceBridgeJni.get().setGeolocationSettingForOrigin(
-                    url, url, ContentSettingValues.ALLOW, false);
+                    Profile.getLastUsedRegularProfile(), url, url, ContentSettingValues.ALLOW);
             keyword2 = pref.getKeywordFromIndexForTesting(2);
             url = templateUrlService.getSearchEngineUrlFromTemplateUrl(keyword2);
             WebsitePreferenceBridgeJni.get().setGeolocationSettingForOrigin(
-                    url, url, ContentSettingValues.ALLOW, false);
+                    Profile.getLastUsedRegularProfile(), url, url, ContentSettingValues.ALLOW);
             keyword2 = pref.setValueForTesting("2");
             Assert.assertEquals(keyword2,
                     TemplateUrlServiceFactory.get()
@@ -178,18 +181,17 @@ public class SearchEngineSettingsTest {
     public void testSearchEnginePreferenceHttp() throws Exception {
         ensureTemplateUrlServiceLoaded();
 
-        final SettingsActivity settingsActivity = SettingsActivityTest.startSettingsActivity(
-                InstrumentationRegistry.getInstrumentation(), SearchEngineSettings.class.getName());
+        mSettingsActivityTestRule.startSettingsActivity();
 
         // Set the first search engine as the default using TemplateUrlService.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            SearchEngineSettings pref = (SearchEngineSettings) settingsActivity.getMainFragment();
+            SearchEngineSettings pref = mSettingsActivityTestRule.getFragment();
             pref.setValueForTesting("0");
         });
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             // Ensure that the first search engine in the list is selected.
-            SearchEngineSettings pref = (SearchEngineSettings) settingsActivity.getMainFragment();
+            SearchEngineSettings pref = mSettingsActivityTestRule.getFragment();
             Assert.assertNotNull(pref);
             Assert.assertEquals("0", pref.getValueForTesting());
 
@@ -244,7 +246,8 @@ public class SearchEngineSettingsTest {
         PermissionInfo locationSettings =
                 new PermissionInfo(PermissionInfo.Type.GEOLOCATION, url, null, false);
         @ContentSettingValues
-        int locationPermission = locationSettings.getContentSetting();
+        int locationPermission =
+                locationSettings.getContentSetting(Profile.getLastUsedRegularProfile());
         return locationPermission;
     }
 

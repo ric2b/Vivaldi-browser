@@ -34,10 +34,9 @@ import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementModuleProvider;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
-import org.chromium.chrome.browser.toolbar.ToolbarManager;
-import org.chromium.chrome.browser.toolbar.bottom.BottomToolbarConfiguration;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.chrome.features.start_surface.StartSurface;
+import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 import java.util.List;
@@ -90,7 +89,8 @@ public class LayoutManagerChrome
 
         if (createOverviewLayout) {
             if (startSurface != null) {
-                assert TabUiFeatureUtilities.isGridTabSwitcherEnabled();
+                assert TabUiFeatureUtilities.isGridTabSwitcherEnabled()
+                        || StartSurfaceConfiguration.isStartSurfaceStackTabSwitcherEnabled();
                 TabManagementDelegate tabManagementDelegate =
                         TabManagementModuleProvider.getDelegate();
                 assert tabManagementDelegate != null;
@@ -174,16 +174,6 @@ public class LayoutManagerChrome
         }
     }
 
-    /**
-     * Set the toolbar manager for layouts that need draw to different toolbars.
-     * @param manager The {@link ToolbarManager} for accessing toolbar textures.
-     */
-    public void setToolbarManager(ToolbarManager manager) {
-        if (BottomToolbarConfiguration.isBottomToolbarEnabled()) {
-            manager.getBottomToolbarCoordinator().setToolbarSwipeLayout(mToolbarSwipeLayout);
-        }
-    }
-
     @Override
     public void destroy() {
         super.destroy();
@@ -193,7 +183,7 @@ public class LayoutManagerChrome
             mOverviewLayout.destroy();
             mOverviewLayout = null;
         }
-        if (mOverviewLayout != null) {
+        if (mOverviewListLayout != null) {
             mOverviewListLayout.destroy();
         }
         if (mToolbarSwipeLayout != null) {

@@ -3,14 +3,15 @@
 // found in the LICENSE file.
 
 // clang-format off
-// #import {CrSettingsPrefs} from 'chrome://settings/settings.js';
-// #import {LanguagesBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
-// #import {FakeSettingsPrivate} from 'chrome://test/settings/fake_settings_private.m.js';
-// #import {getFakeLanguagePrefs} from 'chrome://test/settings/fake_language_settings_private.m.js';
-// #import {TestLanguagesBrowserProxy} from 'chrome://test/settings/test_languages_browser_proxy.m.js';
-// #import {isChromeOS, isWindows} from 'chrome://resources/js/cr.m.js';
-// #import {fakeDataBind} from 'chrome://test/test_util.m.js';
-// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {isChromeOS, isWindows} from 'chrome://resources/js/cr.m.js';
+import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {LanguagesBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+import {CrSettingsPrefs} from 'chrome://settings/settings.js';
+import {getFakeLanguagePrefs} from 'chrome://test/settings/fake_language_settings_private.m.js';
+import {FakeSettingsPrivate} from 'chrome://test/settings/fake_settings_private.m.js';
+import {TestLanguagesBrowserProxy} from 'chrome://test/settings/test_languages_browser_proxy.m.js';
+import {fakeDataBind} from 'chrome://test/test_util.m.js';
+
 // clang-format on
 
 suite('settings-languages', function() {
@@ -25,7 +26,7 @@ suite('settings-languages', function() {
     }
   }
 
-  /** @type {?settings.LanguagesBrowserProxy} */
+  /** @type {?LanguagesBrowserProxy} */
   let browserProxy = null;
 
   let languageHelper;
@@ -37,14 +38,13 @@ suite('settings-languages', function() {
 
   setup(function() {
     const settingsPrefs = document.createElement('settings-prefs');
-    const settingsPrivate =
-        new settings.FakeSettingsPrivate(settings.getFakeLanguagePrefs());
+    const settingsPrivate = new FakeSettingsPrivate(getFakeLanguagePrefs());
     settingsPrefs.initialize(settingsPrivate);
     document.body.appendChild(settingsPrefs);
 
     // Setup test browser proxy.
-    browserProxy = new settings.TestLanguagesBrowserProxy();
-    settings.LanguagesBrowserProxyImpl.instance_ = browserProxy;
+    browserProxy = new TestLanguagesBrowserProxy();
+    LanguagesBrowserProxyImpl.instance_ = browserProxy;
 
     // Setup fake languageSettingsPrivate API.
     const languageSettingsPrivate = browserProxy.getLanguageSettingsPrivate();
@@ -53,11 +53,11 @@ suite('settings-languages', function() {
     languageHelper = document.createElement('settings-languages');
 
     // Prefs would normally be data-bound to settings-languages.
-    test_util.fakeDataBind(settingsPrefs, languageHelper, 'prefs');
+    fakeDataBind(settingsPrefs, languageHelper, 'prefs');
 
     document.body.appendChild(languageHelper);
     return languageHelper.whenReady().then(function() {
-      if (cr.isChromeOS || cr.isWindows) {
+      if (isChromeOS || isWindows) {
         return browserProxy.whenCalled('getProspectiveUILanguage');
       }
     });
@@ -134,7 +134,7 @@ suite('settings-languages', function() {
     assertLanguageOrder(expectedOrder);
   });
 
-  if (cr.isChromeOS) {
+  if (isChromeOS) {
     test('modifying input methods', function() {
       assertEquals(2, languageHelper.languages.inputMethods.enabled.length);
       const inputMethods = languageHelper.getInputMethodsForLanguage('en-US');
@@ -165,7 +165,7 @@ suite('settings-languages', function() {
       // English which is still enabled.
       assertTrue(languageHelper.languages.inputMethods.enabled.some(function(
           inputMethod) {
-        return inputMethod.id == swUS;
+        return inputMethod.id === swUS;
       }));
     });
   }

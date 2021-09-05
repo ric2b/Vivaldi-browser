@@ -56,13 +56,20 @@ constexpr int kTrustTokenPerIssuerTokenCapacity = 500;
 // tokens issued by a given issuer reveals one bit of identifying information).
 constexpr int kTrustTokenPerToplevelMaxNumberOfAssociatedIssuers = 2;
 
-// The default Trust Tokens batch size (i.e., number of tokens to request from
-// an issuer), used when issuers do not themselves provide batch sizes.
-constexpr int kDefaultTrustTokenIssuanceBatchSize = 100;
-
 // The maximum Trust Tokens batch size (i.e., number of tokens to request from
 // an issuer).
 constexpr int kMaximumTrustTokenIssuanceBatchSize = 100;
+
+// When executing Trust Tokens issuance and redemption,
+// use at most |kMaximumConcurrentlyValidTrustTokenVerificationKeys| many
+// soonest-to-expire-but-unexpired keys from the available key commitments.
+constexpr int kMaximumConcurrentlyValidTrustTokenVerificationKeys = 3;
+
+// When to expire a signed redemption record, assuming that the issuer declined
+// to specify the optional expiry timestamp. This value was chosen in absence of
+// a specific reason to pick anything shorter; it could be revisited.
+constexpr base::Time kTrustTokenDefaultRedemptionRecordExpiry =
+    base::Time::Max();
 
 }  // namespace network
 

@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Tastierë në gjermanisht</translation>
 <translation id="1972984168337863910">Zgjero panelet e komenteve të skedarëve</translation>
 <translation id="1984603991036629094">Tastierë fonetike armeniane</translation>
+<translation id="1995337122023280937">Shko te vendndodhja e skedarit</translation>
 <translation id="2001796770603320721">Menaxhoje te "Disku"</translation>
 <translation id="2009067268969781306">Formatimi i një disku do të fshijë të gjitha të dhënat e ruajtura në të. Ky veprim nuk mund të zhbëhet.</translation>
 <translation id="2028997212275086731">Arkiv RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">"Disku i Google" është i paarritshëm. <ph name="BEGIN_LINK" />Dil<ph name="END_LINK" /> dhe identifikohu përsëri.</translation>
 <translation id="2649120831653069427">Peshku</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">Vendndodhja e skedarit</translation>
 <translation id="2672394958563893062">Ndodhi një gabim. Kliko për të rinisur nga fillimi.</translation>
 <translation id="2676946222714718093">Po luan</translation>
 <translation id="2735698359135166290">Tastierë standarde në rumanisht</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> gabime.</translation>
 <translation id="3519867315646775981">Transliterim (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portugalisht</translation>
+<translation id="3524311639100184459">Kujdes! Këta skedarë janë të përkohshëm dhe mund të fshihen automatikisht për të liruar hapësirën në disk.  <ph name="BEGIN_LINK" />Mëso më shumë<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Dosje</translation>
 <translation id="3549797760399244642">Shko te drive.google.com...</translation>
 <translation id="357479282490346887">Lituanisht</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kivi</translation>
 <translation id="3966388904776714213">Lexuesi i audios</translation>
 <translation id="4002066346123236978">Titulli</translation>
+<translation id="4065397611279318371">Për të hapur skedarët me aplikacionet <ph name="APP_NAME" />, në fillim zhvendosi ato te dosja <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Metoda e hyrjes kantoneze</translation>
 <translation id="4072248638558688893">Tastierë në tamilisht (fonetike)</translation>
 <translation id="4124935795427217608">Njëbrirësh</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Rregullo automatikisht</translation>
 <translation id="4881695831933465202">Hap</translation>
 <translation id="4886021172213954916">Tastierë në tamilisht (Makinë shkrimi)</translation>
+<translation id="4892969127351273348">Nuk mund të hapet me <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Gati për të rezervuar <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Rregulluar</translation>
 <translation id="4935975195727477204">Lule Gazania</translation>
@@ -499,6 +504,7 @@
 <translation id="6806699711453372963">Menaxho ndarjen në Linux</translation>
 <translation id="6808193438228982088">Dhelpër</translation>
 <translation id="6820687829547641339">Arkivi i ngjeshur Gzip</translation>
+<translation id="6823166707458800069">Të gjithë skedarët e ruajtur në këtë dosje rezervohen automatikisht në linjë.</translation>
 <translation id="6825883775269213504">Rusisht</translation>
 <translation id="6827236167376090743">Kjo video do të vazhdojë të luhet për një kohë shumë të gjatë.</translation>
 <translation id="6847101934483209767"><ph name="ENTRY_NAME" /> u hoq nga zgjedhja.</translation>
@@ -555,6 +561,7 @@
 <translation id="7417705661718309329">Hartë e Google</translation>
 <translation id="7419631653042041064">Tastierë në katalanisht</translation>
 <translation id="7434823369735508263">Tastierë britanike Dvorak</translation>
+<translation id="7447678886297481665">Skedarët në këtë dosje janë vetëm për lexim. Disa aktivitete nuk mbështeten.</translation>
 <translation id="7460898608667578234">Ukrainisht</translation>
 <translation id="7474889694310679759">Tastierë në anglishte kanadeze</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> të gjetura

@@ -15,11 +15,12 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/optional.h"
 #include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
@@ -61,6 +62,7 @@
 #include "net/ssl/ssl_info.h"
 #include "services/network/public/cpp/http_raw_request_response_info.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/mojom/trust_tokens.mojom-shared.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/features.h"
@@ -304,7 +306,8 @@ bool IsBannedCrossSiteAuth(network::ResourceRequest* resource_request,
         extra_data->allow_cross_origin_auth_prompt();
   }
 
-  if (first_party.IsFirstParty(request_url)) {
+  if (first_party.IsFirstPartyWithSchemefulMode(
+          request_url, /*compute_schemefully=*/false)) {
     // If the first party is secure but the subresource is not, this is
     // mixed-content. Do not allow the image.
     if (!allow_cross_origin_auth_prompt &&
@@ -379,7 +382,8 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
 
   void OnUploadProgress(uint64_t position, uint64_t size);
   bool OnReceivedRedirect(const net::RedirectInfo& redirect_info,
-                          network::mojom::URLResponseHeadPtr head);
+                          network::mojom::URLResponseHeadPtr head,
+                          std::vector<std::string>* removed_headers);
   void OnReceivedResponse(network::mojom::URLResponseHeadPtr head);
   void OnStartLoadingResponseBody(mojo::ScopedDataPipeConsumerHandle body);
   void OnTransferSizeUpdated(int transfer_size_diff);
@@ -443,7 +447,8 @@ class WebURLLoaderImpl::RequestPeerImpl : public RequestPeer {
   // RequestPeer methods:
   void OnUploadProgress(uint64_t position, uint64_t size) override;
   bool OnReceivedRedirect(const net::RedirectInfo& redirect_info,
-                          network::mojom::URLResponseHeadPtr head) override;
+                          network::mojom::URLResponseHeadPtr head,
+                          std::vector<std::string>* removed_headers) override;
   void OnReceivedResponse(network::mojom::URLResponseHeadPtr head) override;
   void OnStartLoadingResponseBody(
       mojo::ScopedDataPipeConsumerHandle body) override;
@@ -472,7 +477,8 @@ class WebURLLoaderImpl::SinkPeer : public RequestPeer {
   // RequestPeer implementation:
   void OnUploadProgress(uint64_t position, uint64_t size) override {}
   bool OnReceivedRedirect(const net::RedirectInfo& redirect_info,
-                          network::mojom::URLResponseHeadPtr head) override {
+                          network::mojom::URLResponseHeadPtr head,
+                          std::vector<std::string>*) override {
     return true;
   }
   void OnReceivedResponse(network::mojom::URLResponseHeadPtr head) override {}
@@ -721,7 +727,8 @@ void WebURLLoaderImpl::Context::OnUploadProgress(uint64_t position,
 
 bool WebURLLoaderImpl::Context::OnReceivedRedirect(
     const net::RedirectInfo& redirect_info,
-    network::mojom::URLResponseHeadPtr head) {
+    network::mojom::URLResponseHeadPtr head,
+    std::vector<std::string>* removed_headers) {
   if (!client_)
     return false;
 
@@ -739,7 +746,7 @@ bool WebURLLoaderImpl::Context::OnReceivedRedirect(
       Referrer::NetReferrerPolicyToBlinkReferrerPolicy(
           redirect_info.new_referrer_policy),
       WebString::FromUTF8(redirect_info.new_method), response,
-      report_raw_headers_);
+      report_raw_headers_, removed_headers);
 }
 
 void WebURLLoaderImpl::Context::OnReceivedResponse(
@@ -772,6 +779,10 @@ void WebURLLoaderImpl::Context::OnStartLoadingResponseBody(
     mojo::ScopedDataPipeConsumerHandle body) {
   if (client_)
     client_->DidStartLoadingResponseBody(std::move(body));
+
+  TRACE_EVENT_WITH_FLOW0(
+      "loading", "WebURLLoaderImpl::Context::OnStartLoadingResponseBody", this,
+      TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
 }
 
 void WebURLLoaderImpl::Context::OnTransferSizeUpdated(int transfer_size_diff) {
@@ -840,8 +851,10 @@ void WebURLLoaderImpl::RequestPeerImpl::OnUploadProgress(uint64_t position,
 
 bool WebURLLoaderImpl::RequestPeerImpl::OnReceivedRedirect(
     const net::RedirectInfo& redirect_info,
-    network::mojom::URLResponseHeadPtr head) {
-  return context_->OnReceivedRedirect(redirect_info, std::move(head));
+    network::mojom::URLResponseHeadPtr head,
+    std::vector<std::string>* removed_headers) {
+  return context_->OnReceivedRedirect(redirect_info, std::move(head),
+                                      removed_headers);
 }
 
 void WebURLLoaderImpl::RequestPeerImpl::OnReceivedResponse(
@@ -1021,6 +1034,19 @@ WebURLError WebURLLoaderImpl::PopulateURLError(
     return WebURLError(*status.blocked_by_response_reason,
                        status.resolve_error_info, has_copy_in_cache, url);
   }
+
+  if (status.trust_token_operation_status !=
+      network::mojom::TrustTokenOperationStatus::kOk) {
+    DCHECK(status.error_code == net::ERR_TRUST_TOKEN_OPERATION_CACHE_HIT ||
+           status.error_code == net::ERR_TRUST_TOKEN_OPERATION_FAILED)
+        << "Unexpected error code on Trust Token operation failure (or cache "
+           "hit): "
+        << status.error_code;
+
+    return WebURLError(status.error_code, status.trust_token_operation_status,
+                       url);
+  }
+
   return WebURLError(status.error_code, status.extended_error_code,
                      status.resolve_error_info, has_copy_in_cache,
                      WebURLError::IsWebSecurityViolation::kFalse, url);

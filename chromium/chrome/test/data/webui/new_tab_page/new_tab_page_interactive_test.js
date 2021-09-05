@@ -5,6 +5,8 @@
 /** @fileoverview Test suite for the WebUI new tab page page. */
 
 GEN_INCLUDE(['//chrome/test/data/webui/polymer_interactive_ui_test.js']);
+
+GEN('#include "content/public/test/browser_test.h"');
 GEN('#include "services/network/public/cpp/features.h"');
 
 class NewTabPageInteractiveTest extends PolymerInteractiveUITest {
@@ -61,5 +63,18 @@ var NewTabPageGridFocusTest = class extends NewTabPageInteractiveTest {
 };
 
 TEST_F('NewTabPageGridFocusTest', 'All', function() {
+  mocha.run();
+});
+
+// eslint-disable-next-line no-var
+var NewTabPageDoodleShareDialogFocusTest =
+    class extends NewTabPageInteractiveTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/doodle_share_dialog_focus_test.js';
+  }
+};
+
+TEST_F('NewTabPageDoodleShareDialogFocusTest', 'All', function() {
   mocha.run();
 });

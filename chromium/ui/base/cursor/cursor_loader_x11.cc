@@ -6,14 +6,15 @@
 
 #include <float.h>
 
-#include "base/logging.h"
+#include "base/check.h"
+#include "base/notreached.h"
 #include "build/build_config.h"
 #include "skia/ext/image_operations.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/cursor_size.h"
 #include "ui/base/cursor/cursor_util.h"
 #include "ui/base/cursor/cursors_aura.h"
-#include "ui/base/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/display/display.h"
 #include "ui/gfx/geometry/point_conversions.h"
@@ -188,7 +189,7 @@ void CursorLoaderX11::LoadImageCursor(mojom::CursorType id,
   gfx::Point hotspot = hot;
 
   GetImageCursorBitmap(resource_id, scale(), rotation(), &hotspot, &bitmap);
-  XcursorImage* x_image = SkBitmapToXcursorImage(&bitmap, hotspot);
+  XcursorImage* x_image = SkBitmapToXcursorImage(bitmap, hotspot);
   image_cursors_[id] =
       std::make_unique<ImageCursor>(x_image, scale(), rotation());
 }
@@ -207,7 +208,7 @@ void CursorLoaderX11::LoadAnimatedCursor(mojom::CursorType id,
   x_images->nimage = bitmaps.size();
 
   for (unsigned int frame = 0; frame < bitmaps.size(); ++frame) {
-    XcursorImage* x_image = SkBitmapToXcursorImage(&bitmaps[frame], hotspot);
+    XcursorImage* x_image = SkBitmapToXcursorImage(bitmaps[frame], hotspot);
     x_image->delay = frame_delay_ms;
     x_images->images[frame] = x_image;
   }

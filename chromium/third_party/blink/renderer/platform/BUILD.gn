@@ -8,6 +8,8 @@ import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
 import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
+import("//media/media_options.gni")
+import("//skia/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 import("//third_party/blink/public/public_features.gni")
@@ -388,6 +390,8 @@ jumbo_component("platform") {
     "audio/vector_math_scalar.h",
     "bindings/active_script_wrappable_base.cc",
     "bindings/active_script_wrappable_base.h",
+    "bindings/active_script_wrappable_manager.cc",
+    "bindings/active_script_wrappable_manager.h",
     "bindings/binding_security_for_platform.cc",
     "bindings/binding_security_for_platform.h",
     "bindings/blink_isolate/blink_isolate.cc",
@@ -499,7 +503,6 @@ jumbo_component("platform") {
     "exported/web_audio_device.cc",
     "exported/web_blob_info.cc",
     "exported/web_cache.cc",
-    "exported/web_coalesced_input_event.cc",
     "exported/web_content_decryption_module.cc",
     "exported/web_content_decryption_module_access.cc",
     "exported/web_content_decryption_module_result.cc",
@@ -584,12 +587,15 @@ jumbo_component("platform") {
     "fonts/font_fallback_iterator.h",
     "fonts/font_fallback_list.cc",
     "fonts/font_fallback_list.h",
+    "fonts/font_fallback_map.cc",
+    "fonts/font_fallback_map.h",
     "fonts/font_fallback_priority.cc",
     "fonts/font_fallback_priority.h",
     "fonts/font_family.cc",
     "fonts/font_family.h",
     "fonts/font_global_context.cc",
     "fonts/font_global_context.h",
+    "fonts/font_invalidation_reason.h",
     "fonts/font_matching_metrics.cc",
     "fonts/font_matching_metrics.h",
     "fonts/font_metrics.cc",
@@ -999,6 +1005,8 @@ jumbo_component("platform") {
     "graphics/lab_color_space.h",
     "graphics/logging_canvas.cc",
     "graphics/logging_canvas.h",
+    "graphics/mailbox_texture_backing.cc",
+    "graphics/mailbox_texture_backing.h",
     "graphics/main_thread_mutator_client.cc",
     "graphics/main_thread_mutator_client.h",
     "graphics/memory_managed_paint_canvas.cc",
@@ -1040,6 +1048,8 @@ jumbo_component("platform") {
     "graphics/paint/graphics_layer_display_item.h",
     "graphics/paint/hit_test_data.cc",
     "graphics/paint/hit_test_data.h",
+    "graphics/paint/ignore_paint_timing_scope.cc",
+    "graphics/paint/ignore_paint_timing_scope.h",
     "graphics/paint/paint_artifact.cc",
     "graphics/paint/paint_artifact.h",
     "graphics/paint/paint_canvas.h",
@@ -1191,8 +1201,6 @@ jumbo_component("platform") {
     "media_capabilities/web_video_configuration.h",
     "mediastream/aec_dump_agent_impl.cc",
     "mediastream/aec_dump_agent_impl.h",
-    "mediastream/audio_service_audio_processor_proxy.cc",
-    "mediastream/audio_service_audio_processor_proxy.h",
     "mediastream/media_constraints.cc",
     "mediastream/media_constraints.h",
     "mediastream/media_stream_audio_deliverer.h",
@@ -1230,6 +1238,9 @@ jumbo_component("platform") {
     "mojo/bluetooth_mojom_traits.cc",
     "mojo/bluetooth_mojom_traits.h",
     "mojo/fetch_api_request_headers_mojom_traits.h",
+    "mojo/heap_mojo_associated_receiver.h",
+    "mojo/heap_mojo_associated_receiver_set.h",
+    "mojo/heap_mojo_associated_remote.h",
     "mojo/heap_mojo_receiver.h",
     "mojo/heap_mojo_receiver_set.h",
     "mojo/heap_mojo_remote.h",
@@ -1283,7 +1294,6 @@ jumbo_component("platform") {
     "peerconnection/rtc_offer_options_platform.h",
     "peerconnection/rtc_peer_connection_handler_client.cc",
     "peerconnection/rtc_peer_connection_handler_client.h",
-    "peerconnection/rtc_peer_connection_handler_platform.h",
     "peerconnection/rtc_rtp_receiver_platform.cc",
     "peerconnection/rtc_rtp_receiver_platform.h",
     "peerconnection/rtc_rtp_sender_platform.cc",
@@ -1394,7 +1404,6 @@ jumbo_component("platform") {
     "timer.h",
     "transforms/affine_transform.cc",
     "transforms/affine_transform.h",
-    "transforms/identity_transform_operation.h",
     "transforms/interpolated_transform_operation.cc",
     "transforms/interpolated_transform_operation.h",
     "transforms/matrix_3d_transform_operation.cc",
@@ -1449,8 +1458,48 @@ jumbo_component("platform") {
     "webrtc/webrtc_video_frame_adapter.h",
     "webrtc/webrtc_video_utils.cc",
     "webrtc/webrtc_video_utils.h",
+    "widget/compositing/layer_tree_view.cc",
+    "widget/compositing/layer_tree_view.h",
+    "widget/compositing/layer_tree_view_delegate.h",
     "widget/frame_widget.cc",
     "widget/frame_widget.h",
+    "widget/input/compositor_thread_event_queue.cc",
+    "widget/input/compositor_thread_event_queue.h",
+    "widget/input/elastic_overscroll_controller.cc",
+    "widget/input/event_with_callback.cc",
+    "widget/input/event_with_callback.h",
+    "widget/input/input_handler_proxy.cc",
+    "widget/input/input_scroll_elasticity_controller.cc",
+    "widget/input/input_scroll_elasticity_controller.h",
+    "widget/input/momentum_scroll_jank_tracker.cc",
+    "widget/input/momentum_scroll_jank_tracker.h",
+    "widget/input/overscroll_bounce_controller.cc",
+    "widget/input/overscroll_bounce_controller.h",
+    "widget/input/prediction/empty_filter.cc",
+    "widget/input/prediction/empty_filter.h",
+    "widget/input/prediction/empty_predictor.cc",
+    "widget/input/prediction/empty_predictor.h",
+    "widget/input/prediction/filter_factory.cc",
+    "widget/input/prediction/filter_factory.h",
+    "widget/input/prediction/input_filter.h",
+    "widget/input/prediction/input_predictor.h",
+    "widget/input/prediction/kalman_filter.cc",
+    "widget/input/prediction/kalman_filter.h",
+    "widget/input/prediction/kalman_predictor.cc",
+    "widget/input/prediction/kalman_predictor.h",
+    "widget/input/prediction/least_squares_predictor.cc",
+    "widget/input/prediction/least_squares_predictor.h",
+    "widget/input/prediction/linear_predictor.cc",
+    "widget/input/prediction/linear_predictor.h",
+    "widget/input/prediction/linear_resampling.cc",
+    "widget/input/prediction/linear_resampling.h",
+    "widget/input/prediction/one_euro_filter.cc",
+    "widget/input/prediction/one_euro_filter.h",
+    "widget/input/prediction/prediction_metrics_handler.cc",
+    "widget/input/prediction/prediction_metrics_handler.h",
+    "widget/input/prediction/predictor_factory.cc",
+    "widget/input/scroll_predictor.cc",
+    "widget/input/scroll_predictor.h",
     "widget/widget_base.cc",
     "widget/widget_base.h",
     "widget/widget_base_client.h",
@@ -1543,10 +1592,11 @@ jumbo_component("platform") {
     "//third_party/harfbuzz-ng:hb_scoped_util",
     "//third_party/icu",
     "//third_party/libyuv",
+    "//third_party/one_euro_filter",
     "//third_party/webrtc_overrides:webrtc_component",
     "//third_party/zlib/google:compression_utils",
     "//ui/base/cursor",
-    "//ui/base/mojom:cursor_type_blink",
+    "//ui/base/cursor/mojom:cursor_type_blink",
     "//ui/events/ipc",
     "//ui/gfx/geometry",
     "//ui/gfx/mojom",
@@ -1610,6 +1660,15 @@ jumbo_component("platform") {
     ]
   }
 
+  if (enable_av1_decoder) {
+    sources += [
+      "image-decoders/avif/avif_image_decoder.cc",
+      "image-decoders/avif/avif_image_decoder.h",
+    ]
+
+    deps += [ "//third_party/libavif" ]
+  }
+
   if (current_cpu == "x86" || current_cpu == "x64") {
     deps += [ ":blink_x86_avx" ]
   }
@@ -1621,6 +1680,10 @@ jumbo_component("platform") {
   if (use_webaudio_pffft) {
     include_dirs += [ "//third_party/pffft/src" ]
     deps += [ "//third_party/pffft" ]
+  }
+
+  if (skia_use_dawn) {
+    deps += [ "//third_party/dawn/src/dawn:dawncpp" ]
   }
 
   if (!is_debug && !optimize_for_size) {
@@ -1782,6 +1845,7 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "fonts/font_test_utilities.cc",
     "fonts/generic_font_family_settings_test.cc",
     "fonts/mac/font_matcher_mac_test.mm",
+    "fonts/mac/font_platform_data_mac_test.mm",
     "fonts/opentype/font_settings_test.cc",
     "fonts/opentype/open_type_math_support_test.cc",
     "fonts/opentype/open_type_vertical_data_test.cc",
@@ -1888,6 +1952,9 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "mediastream/webrtc_uma_histograms_test.cc",
     "mhtml/mhtml_parser_test.cc",
     "mojo/big_string_mojom_traits_test.cc",
+    "mojo/heap_mojo_associated_receiver_set_test.cc",
+    "mojo/heap_mojo_associated_receiver_test.cc",
+    "mojo/heap_mojo_associated_remote_test.cc",
     "mojo/heap_mojo_receiver_set_test.cc",
     "mojo/heap_mojo_receiver_test.cc",
     "mojo/heap_mojo_remote_test.cc",
@@ -1939,6 +2006,23 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "weborigin/security_origin_test.cc",
     "weborigin/security_policy_test.cc",
     "webrtc/webrtc_video_frame_adapter_test.cc",
+    "widget/compositing/layer_tree_view_unittest.cc",
+    "widget/compositing/test/stub_layer_tree_view_delegate.h",
+    "widget/input/input_handler_proxy_unittest.cc",
+    "widget/input/input_scroll_elasticity_controller_unittest.cc",
+    "widget/input/prediction/empty_filter_unittests.cc",
+    "widget/input/prediction/filter_factory_unittests.cc",
+    "widget/input/prediction/input_filter_unittest_helpers.cc",
+    "widget/input/prediction/input_filter_unittest_helpers.h",
+    "widget/input/prediction/input_predictor_unittest_helpers.cc",
+    "widget/input/prediction/input_predictor_unittest_helpers.h",
+    "widget/input/prediction/kalman_predictor_unittest.cc",
+    "widget/input/prediction/least_squares_predictor_unittest.cc",
+    "widget/input/prediction/linear_predictor_unittest.cc",
+    "widget/input/prediction/linear_resampling_unittest.cc",
+    "widget/input/prediction/one_euro_filter_unittests.cc",
+    "widget/input/prediction/prediction_metrics_handler_unittest.cc",
+    "widget/input/scroll_predictor_unittest.cc",
   ]
 
   if (is_win) {
@@ -1953,6 +2037,10 @@ jumbo_source_set("blink_platform_unittests_sources") {
     ]
   } else if (is_posix || is_fuchsia) {
     sources += [ "text/locale_icu_test.cc" ]
+  }
+
+  if (enable_av1_decoder) {
+    sources += [ "image-decoders/avif/avif_image_decoder_test.cc" ]
   }
 
   sources += [ "testing/run_all_tests.cc" ]
@@ -2246,7 +2334,6 @@ jumbo_source_set("unit_tests") {
     "graphics/graphics_layer_test.cc",
     "graphics/image_decoding_store_test.cc",
     "graphics/image_frame_generator_test.cc",
-    "graphics/image_layer_chromium_test.cc",
     "graphics/paint_worklet_paint_dispatcher_test.cc",
     "graphics/test/fake_canvas_resource_host.h",
     "graphics/test/fake_gles2_interface.h",

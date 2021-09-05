@@ -28,6 +28,7 @@
 #include "content/browser/appcache/appcache_entry.h"
 #include "content/browser/appcache/appcache_group.h"
 #include "content/browser/appcache/appcache_histograms.h"
+#include "content/browser/appcache/appcache_policy.h"
 #include "content/browser/appcache/appcache_quota_client.h"
 #include "content/browser/appcache/appcache_response_info.h"
 #include "content/browser/appcache/appcache_service_impl.h"
@@ -39,6 +40,7 @@
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/appcache/appcache_info.mojom.h"
 #include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
@@ -358,6 +360,9 @@ void AppCacheStorageImpl::GetAllInfoTask::Run() {
     for (const auto& group : groups) {
       AppCacheDatabase::CacheRecord cache_record;
       database_->FindCacheForGroup(group.group_id, &cache_record);
+      if (!database_->HasValidOriginTrialToken(&cache_record))
+        continue;
+
       blink::mojom::AppCacheInfo info;
       info.manifest_url = group.manifest_url;
       info.creation_time = group.creation_time;
@@ -365,8 +370,7 @@ void AppCacheStorageImpl::GetAllInfoTask::Run() {
       info.padding_sizes = cache_record.padding_size;
       info.last_access_time = group.last_access_time;
       info.last_update_time = cache_record.update_time;
-      // TODO(enne): should this be cache? group? both??
-      info.token_expires = group.token_expires;
+      info.token_expires = cache_record.token_expires;
       info.cache_id = cache_record.cache_id;
       info.group_id = group.group_id;
       info.is_complete = true;
@@ -509,10 +513,16 @@ class AppCacheStorageImpl::CacheLoadTask : public StoreOrLoadTask {
 };
 
 void AppCacheStorageImpl::CacheLoadTask::Run() {
-  success_ =
-      database_->FindCache(cache_id_, &cache_record_) &&
-      database_->FindGroup(cache_record_.group_id, &group_record_) &&
-      FindRelatedCacheRecords(cache_id_);
+  success_ = database_->FindCache(cache_id_, &cache_record_);
+  if (!success_)
+    return;
+  if (!database_->HasValidOriginTrialToken(&cache_record_)) {
+    success_ = false;
+    return;
+  }
+
+  success_ = database_->FindGroup(cache_record_.group_id, &group_record_) &&
+             FindRelatedCacheRecords(cache_id_);
 
   if (success_)
     database_->LazyUpdateLastAccessTime(group_record_.group_id,
@@ -557,8 +567,16 @@ class AppCacheStorageImpl::GroupLoadTask : public StoreOrLoadTask {
 void AppCacheStorageImpl::GroupLoadTask::Run() {
   success_ =
       database_->FindGroupForManifestUrl(manifest_url_, &group_record_) &&
-      database_->FindCacheForGroup(group_record_.group_id, &cache_record_) &&
-      FindRelatedCacheRecords(cache_record_.cache_id);
+      database_->FindCacheForGroup(group_record_.group_id, &cache_record_);
+
+  if (!success_)
+    return;
+  if (!database_->HasValidOriginTrialToken(&cache_record_)) {
+    success_ = false;
+    return;
+  }
+
+  success_ = FindRelatedCacheRecords(cache_record_.cache_id);
 
   if (success_) {
     database_->LazyUpdateLastAccessTime(group_record_.group_id,
@@ -637,7 +655,6 @@ AppCacheStorageImpl::StoreGroupAndCacheTask::StoreGroupAndCacheTask(
       group->last_full_update_check_time();
   group_record_.first_evictable_error_time =
       group->first_evictable_error_time();
-  group_record_.token_expires = group->token_expires();
   newest_cache->ToDatabaseRecords(
       group,
       &cache_record_, &entry_records_,
@@ -704,9 +721,9 @@ void AppCacheStorageImpl::StoreGroupAndCacheTask::Run() {
     database_->UpdateLastAccessTime(group_record_.group_id,
                                     base::Time::Now());
 
-    database_->UpdateEvictionTimesAndTokenExpires(
-        group_record_.group_id, group_record_.last_full_update_check_time,
-        group_record_.first_evictable_error_time, group_record_.token_expires);
+    database_->UpdateEvictionTimes(group_record_.group_id,
+                                   group_record_.last_full_update_check_time,
+                                   group_record_.first_evictable_error_time);
 
     AppCacheDatabase::CacheRecord cache;
     if (database_->FindCacheForGroup(group_record_.group_id, &cache)) {
@@ -734,8 +751,6 @@ void AppCacheStorageImpl::StoreGroupAndCacheTask::Run() {
       NOTREACHED() << "A existing group without a cache is unexpected";
     }
   }
-
-  cache_record_.token_expires = group_record_.token_expires;
 
   success_ =
       success_ &&
@@ -950,10 +965,11 @@ void AppCacheStorageImpl::FindMainResponseTask::Run() {
   if (!preferred_manifest_url_.is_empty()) {
     AppCacheDatabase::GroupRecord preferred_group;
     AppCacheDatabase::CacheRecord preferred_cache;
-    if (database_->FindGroupForManifestUrl(
-            preferred_manifest_url_, &preferred_group) &&
-        database_->FindCacheForGroup(
-            preferred_group.group_id, &preferred_cache)) {
+    if (database_->FindGroupForManifestUrl(preferred_manifest_url_,
+                                           &preferred_group) &&
+        database_->FindCacheForGroup(preferred_group.group_id,
+                                     &preferred_cache) &&
+        database_->HasValidOriginTrialToken(&preferred_cache)) {
       preferred_cache_id = preferred_cache.cache_id;
     }
   }
@@ -983,10 +999,14 @@ bool AppCacheStorageImpl::FindMainResponseTask::FindExactMatch(
     // Take the first with a valid, non-foreign entry.
     for (const auto& entry : entries) {
       AppCacheDatabase::GroupRecord group_record;
+      AppCacheDatabase::CacheRecord cache_record;
       if ((entry.flags & AppCacheEntry::FOREIGN) ||
-          !database_->FindGroupForCache(entry.cache_id, &group_record)) {
+          !database_->FindGroupForCache(entry.cache_id, &group_record) ||
+          !database_->FindCache(entry.cache_id, &cache_record) ||
+          !database_->HasValidOriginTrialToken(&cache_record)) {
         continue;
       }
+
       manifest_url_ = group_record.manifest_url;
       group_id_ = group_record.group_id;
       entry_ = AppCacheEntry(entry.flags, entry.response_id);
@@ -1070,8 +1090,14 @@ FindMainResponseTask::FindFirstValidNamespace(
                              namespace_record->namespace_.target_url,
                              &entry_record)) {
       AppCacheDatabase::GroupRecord group_record;
-      if ((entry_record.flags & AppCacheEntry::FOREIGN) ||
-          !database_->FindGroupForCache(entry_record.cache_id, &group_record)) {
+      AppCacheDatabase::CacheRecord cache_record;
+      if (entry_record.flags & AppCacheEntry::FOREIGN)
+        continue;
+      if (!database_->FindGroupForCache(entry_record.cache_id, &group_record))
+        continue;
+      if (!database_->FindCache(entry_record.cache_id, &cache_record))
+        continue;
+      if (!database_->HasValidOriginTrialToken(&cache_record)) {
         continue;
       }
       manifest_url_ = group_record.manifest_url;
@@ -1350,8 +1376,7 @@ class AppCacheStorageImpl::UpdateEvictionTimesTask
       : DatabaseTask(storage),
         group_id_(group->group_id()),
         last_full_update_check_time_(group->last_full_update_check_time()),
-        first_evictable_error_time_(group->first_evictable_error_time()),
-        token_expires_(group->token_expires()) {}
+        first_evictable_error_time_(group->first_evictable_error_time()) {}
 
   // DatabaseTask:
   void Run() override;
@@ -1363,13 +1388,11 @@ class AppCacheStorageImpl::UpdateEvictionTimesTask
   int64_t group_id_;
   base::Time last_full_update_check_time_;
   base::Time first_evictable_error_time_;
-  base::Time token_expires_;
 };
 
 void AppCacheStorageImpl::UpdateEvictionTimesTask::Run() {
-  database_->UpdateEvictionTimesAndTokenExpires(
-      group_id_, last_full_update_check_time_, first_evictable_error_time_,
-      token_expires_);
+  database_->UpdateEvictionTimes(group_id_, last_full_update_check_time_,
+                                 first_evictable_error_time_);
 }
 
 // AppCacheStorageImpl ---------------------------------------------------
@@ -1411,6 +1434,10 @@ void AppCacheStorageImpl::Initialize(
   if (!is_incognito_)
     db_file_path = cache_directory_.Append(kAppCacheDatabaseName);
   database_ = std::make_unique<AppCacheDatabase>(db_file_path);
+  DCHECK(service_);
+  DCHECK(service_->appcache_policy());
+  database_->SetOriginTrialRequired(
+      service_->appcache_policy()->IsOriginTrialRequiredForAppCache());
 
   db_task_runner_ = db_task_runner;
 

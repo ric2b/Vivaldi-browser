@@ -9,8 +9,9 @@
 #include <string>
 #include <utility>
 
+#include "base/check_op.h"
 #include "base/feature_list.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/rand_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
@@ -100,15 +101,15 @@ void RecordFeatureUsage(content::RenderFrameHost* rfh,
 }
 
 std::string GetHeavyAdReportMessage(const FrameData& frame_data,
-                                    bool reporting_only) {
+                                    bool will_unload_adframe) {
   const char kChromeStatusMessage[] =
       "See https://www.chromestatus.com/feature/4800491902992384";
   const char kReportingOnlyMessage[] =
-      "A future version of Chrome will remove this ad";
+      "A future version of Chrome may remove this ad";
   const char kInterventionMessage[] = "Ad was removed";
 
   base::StringPiece intervention_mode =
-      reporting_only ? kReportingOnlyMessage : kInterventionMessage;
+      will_unload_adframe ? kInterventionMessage : kReportingOnlyMessage;
 
   switch (frame_data.heavy_ad_status()) {
     case FrameData::HeavyAdStatus::kNetwork:
@@ -116,9 +117,12 @@ std::string GetHeavyAdReportMessage(const FrameData& frame_data,
                            " because its network usage exceeded the limit. ",
                            kChromeStatusMessage});
     case FrameData::HeavyAdStatus::kTotalCpu:
+      return base::StrCat({intervention_mode,
+                           " because its total CPU usage exceeded the limit. ",
+                           kChromeStatusMessage});
     case FrameData::HeavyAdStatus::kPeakCpu:
       return base::StrCat({intervention_mode,
-                           " because its CPU usage exceeded the limit. ",
+                           " because its peak CPU usage exceeded the limit. ",
                            kChromeStatusMessage});
     case FrameData::HeavyAdStatus::kNone:
       NOTREACHED();
@@ -1068,10 +1072,14 @@ void AdsPageLoadMetricsObserver::MaybeTriggerHeavyAdIntervention(
   if (!frame_data->MaybeTriggerHeavyAdIntervention())
     return;
 
-  // Don't trigger the heavy ad intervention on reloads.
-  UMA_HISTOGRAM_BOOLEAN(kIgnoredByReloadHistogramName, page_load_is_reload_);
-  if (page_load_is_reload_)
-    return;
+  // Don't trigger the heavy ad intervention on reloads. Gate this behind the
+  // privacy mitigations flag to help developers debug (otherwise they need to
+  // trigger new navigations to the site to test it).
+  if (heavy_ad_privacy_mitigations_enabled_) {
+    UMA_HISTOGRAM_BOOLEAN(kIgnoredByReloadHistogramName, page_load_is_reload_);
+    if (page_load_is_reload_)
+      return;
+  }
 
   // Check to see if we are allowed to activate on this host.
   if (IsBlocklisted())
@@ -1099,21 +1107,15 @@ void AdsPageLoadMetricsObserver::MaybeTriggerHeavyAdIntervention(
 
   // We already have a heavy ad at this point so we can query the field trial
   // params safely.
-  if (!heavy_ad_reporting_enabled_) {
-    heavy_ad_reporting_enabled_ = base::GetFieldTrialParamByFeatureAsBool(
-        features::kHeavyAdIntervention, kHeavyAdReportingEnabledParamName,
-        true);
-  }
+  bool will_report_adframe =
+      base::FeatureList::IsEnabled(features::kHeavyAdInterventionWarning);
+  bool will_unload_adframe =
+      base::FeatureList::IsEnabled(features::kHeavyAdIntervention);
 
-  if (!heavy_ad_send_reports_only_) {
-    heavy_ad_send_reports_only_ = base::GetFieldTrialParamByFeatureAsBool(
-        features::kHeavyAdIntervention, kHeavyAdReportingOnlyParamName, false);
-  }
-
-  if (*heavy_ad_reporting_enabled_) {
+  if (will_report_adframe) {
     const char kReportId[] = "HeavyAdIntervention";
     std::string report_message =
-        GetHeavyAdReportMessage(*frame_data, *heavy_ad_send_reports_only_);
+        GetHeavyAdReportMessage(*frame_data, will_unload_adframe);
 
     // Report to all child frames that will be unloaded. Once all reports are
     // queued, the frame will be unloaded. Because the IPC messages are ordered
@@ -1147,7 +1149,7 @@ void AdsPageLoadMetricsObserver::MaybeTriggerHeavyAdIntervention(
                 frame_data->visibility(),
                 frame_data->heavy_ad_status_with_noise());
 
-  if (*heavy_ad_send_reports_only_)
+  if (!will_unload_adframe)
     return;
 
   // Record heavy ad network size only when an ad is unloaded as a result of

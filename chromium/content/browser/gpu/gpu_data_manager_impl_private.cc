@@ -642,7 +642,7 @@ void GpuDataManagerImplPrivate::RequestDxDiagNodeData() {
     }
 
     manager->UpdateDxDiagNodeRequestStatus(true);
-    host->gpu_service()->RequestCompleteGpuInfo(
+    host->info_collection_gpu_service()->RequestDxDiagNodeInfo(
         base::BindOnce([](const gpu::DxDiagNode& dx_diagnostics) {
           GpuDataManagerImpl* manager = GpuDataManagerImpl::GetInstance();
           manager->UpdateDxDiagNode(dx_diagnostics);
@@ -699,8 +699,8 @@ void GpuDataManagerImplPrivate::RequestGpuSupportedRuntimeVersion(
         }
 
         manager->UpdateDx12VulkanRequestStatus(true);
-        host->gpu_service()->GetGpuSupportedRuntimeVersionAndDevicePerfInfo(
-            base::BindOnce(
+        host->info_collection_gpu_service()
+            ->GetGpuSupportedRuntimeVersionAndDevicePerfInfo(base::BindOnce(
                 [](const gpu::Dx12VulkanVersionInfo& dx12_vulkan_info,
                    const gpu::DevicePerfInfo& device_perf_info) {
                   GpuDataManagerImpl* manager =
@@ -1318,6 +1318,10 @@ void GpuDataManagerImplPrivate::NotifyGpuInfoUpdate() {
 bool GpuDataManagerImplPrivate::IsGpuProcessUsingHardwareGpu() const {
   if (base::StartsWith(gpu_info_.gl_renderer, "Google SwiftShader",
                        base::CompareCase::SENSITIVE))
+    return false;
+  if (base::StartsWith(gpu_info_.gl_renderer, "ANGLE",
+                       base::CompareCase::SENSITIVE) &&
+      gpu_info_.gl_renderer.find("SwiftShader Device") != std::string::npos)
     return false;
   if (gpu_info_.gl_renderer == "Disabled")
     return false;

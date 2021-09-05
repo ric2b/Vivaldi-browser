@@ -33,6 +33,7 @@
 
 #include "third_party/blink/public/common/prerender/prerender_rel_type.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/loader/importance_attribute.h"
@@ -223,10 +224,9 @@ void LinkLoader::LoadStylesheet(const LinkLoadParameters& params,
     // context document for getting origin and ResourceFetcher to use the main
     // Document's origin, while using element document for CompleteURL() to use
     // imported Documents' base URLs.
-    document_for_origin = document.ContextDocument();
+    document_for_origin =
+        To<LocalDOMWindow>(document.GetExecutionContext())->document();
   }
-  if (!document_for_origin)
-    return;
 
   ResourceRequest resource_request(document.CompleteURL(params.href));
   resource_request.SetReferrerPolicy(params.referrer_policy);
@@ -257,7 +257,7 @@ void LinkLoader::LoadStylesheet(const LinkLoadParameters& params,
     IntegrityMetadataSet metadata_set;
     SubresourceIntegrity::ParseIntegrityAttribute(
         integrity_attr,
-        SubresourceIntegrityHelper::GetFeatures(document.ToExecutionContext()),
+        SubresourceIntegrityHelper::GetFeatures(document.GetExecutionContext()),
         metadata_set);
     link_fetch_params.SetIntegrityMetadata(metadata_set);
     link_fetch_params.MutableResourceRequest().SetFetchIntegrity(

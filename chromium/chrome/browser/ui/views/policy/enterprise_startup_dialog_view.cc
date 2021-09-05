@@ -92,16 +92,16 @@ std::unique_ptr<views::View> CreateLogoView() {
 EnterpriseStartupDialogView::EnterpriseStartupDialogView(
     EnterpriseStartupDialog::DialogResultCallback callback)
     : callback_(std::move(callback)) {
-  DialogDelegate::set_draggable(true);
-  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_OK);
-  DialogDelegate::SetExtraView(CreateLogoView());
-  DialogDelegate::SetAcceptCallback(
+  set_draggable(true);
+  SetButtons(ui::DIALOG_BUTTON_OK);
+  SetExtraView(CreateLogoView());
+  SetAcceptCallback(
       base::BindOnce(&EnterpriseStartupDialogView::RunDialogCallback,
                      base::Unretained(this), true));
-  DialogDelegate::SetCancelCallback(
+  SetCancelCallback(
       base::BindOnce(&EnterpriseStartupDialogView::RunDialogCallback,
                      base::Unretained(this), false));
-  DialogDelegate::SetCloseCallback(
+  SetCloseCallback(
       base::BindOnce(&EnterpriseStartupDialogView::RunDialogCallback,
                      base::Unretained(this), false));
   SetBorder(views::CreateEmptyBorder(GetDialogInsets()));
@@ -140,7 +140,7 @@ void EnterpriseStartupDialogView::DisplayErrorMessage(
                                 ui::NativeTheme::kColorId_AlertSeverityHigh)));
 
   if (accept_button) {
-    // TODO(ellyjones): This should use DialogDelegate::SetButtonLabel()
+    // TODO(ellyjones): This should use SetButtonLabel()
     // instead of changing the button text directly - this might break the
     // dialog's layout.
     GetOkButton()->SetText(*accept_button);
@@ -219,11 +219,11 @@ void EnterpriseStartupDialogView::SetupLayout(
   columnset->AddPaddingColumn(1.0, 0);
   columnset->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
                        views::GridLayout::kFixedSize,
-                       views::GridLayout::USE_PREF, 0, 0);
+                       views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   columnset->AddPaddingColumn(views::GridLayout::kFixedSize, text_padding);
   columnset->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
                        views::GridLayout::kFixedSize,
-                       views::GridLayout::USE_PREF, 0, 0);
+                       views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   columnset->AddPaddingColumn(1.0, 0);
 
   layout->AddPaddingRow(1.0, 0);

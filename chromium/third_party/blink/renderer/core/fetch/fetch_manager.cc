@@ -12,10 +12,12 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/request_mode.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
+#include "services/network/public/mojom/trust_tokens.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_response_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -25,6 +27,7 @@
 #include "third_party/blink/renderer/core/fetch/form_data_bytes_consumer.h"
 #include "third_party/blink/renderer/core/fetch/place_holder_bytes_consumer.h"
 #include "third_party/blink/renderer/core/fetch/response.h"
+#include "third_party/blink/renderer/core/fetch/trust_token_to_mojom.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
@@ -226,7 +229,9 @@ class FetchManager::Loader final
   void PerformNetworkError(const String& message);
   void PerformHTTPFetch(ExceptionState&);
   void PerformDataFetch();
-  void Failed(const String& message);
+  // If |dom_exception| is provided, throws the specified DOMException instead
+  // of the usual "Failed to fetch" TypeError.
+  void Failed(const String& message, DOMException* dom_exception);
   void NotifyFinished();
   ExecutionContext* GetExecutionContext() { return execution_context_; }
 
@@ -405,47 +410,9 @@ void FetchManager::Loader::DidReceiveResponse(
   place_holder_body_ = MakeGarbageCollected<PlaceHolderBytesConsumer>();
   FetchResponseData* response_data = FetchResponseData::CreateWithBuffer(
       BodyStreamBuffer::Create(script_state, place_holder_body_, signal_));
-  response_data->SetStatus(response.HttpStatusCode());
-  if (response.CurrentRequestUrl().ProtocolIsAbout() ||
-      response.CurrentRequestUrl().ProtocolIsData() ||
-      response.CurrentRequestUrl().ProtocolIs("blob")) {
-    response_data->SetStatusMessage("OK");
-  } else {
-    response_data->SetStatusMessage(response.HttpStatusText());
-  }
 
-  for (auto& it : response.HttpHeaderFields())
-    response_data->HeaderList()->Append(it.key, it.value);
-
-  // Corresponds to https://fetch.spec.whatwg.org/#main-fetch step:
-  // "If |internalResponse|’s URL list is empty, then set it to a clone of
-  // |request|’s URL list."
-  if (response.UrlListViaServiceWorker().IsEmpty()) {
-    // Note: |UrlListViaServiceWorker()| is empty, unless the response came from
-    // a service worker, in which case it will only be empty if it was created
-    // through new Response().
-    response_data->SetURLList(url_list_);
-  } else {
-    DCHECK(response.WasFetchedViaServiceWorker());
-    response_data->SetURLList(response.UrlListViaServiceWorker());
-  }
-
-  response_data->SetMimeType(response.MimeType());
-  response_data->SetResponseTime(response.ResponseTime());
-
-  if (response.WasCached()) {
-    response_data->SetResponseSource(
-        network::mojom::FetchResponseSource::kHttpCache);
-  } else if (!response.WasFetchedViaServiceWorker()) {
-    response_data->SetResponseSource(
-        network::mojom::FetchResponseSource::kNetwork);
-  }
-
-  // Note if the response was loaded with credentials enabled.
-  response_data->SetLoadedWithCredentials(
-      fetch_request_data_->Credentials() == CredentialsMode::kInclude ||
-      (fetch_request_data_->Credentials() == CredentialsMode::kSameOrigin &&
-       tainting == FetchRequestData::kBasicTainting));
+  response_data->InitFromResourceResponse(
+      url_list_, fetch_request_data_->Credentials(), tainting, response);
 
   FetchResponseData* tainted_response = nullptr;
 
@@ -530,11 +497,18 @@ void FetchManager::Loader::DidFinishLoading(uint64_t) {
 }
 
 void FetchManager::Loader::DidFail(const ResourceError& error) {
-  Failed(String());
+  if (error.TrustTokenOperationError() !=
+      network::mojom::blink::TrustTokenOperationStatus::kOk) {
+    Failed(String(),
+           TrustTokenErrorToDOMException(error.TrustTokenOperationError()));
+    return;
+  }
+
+  Failed(String(), nullptr);
 }
 
 void FetchManager::Loader::DidFailRedirectCheck() {
-  Failed(String());
+  Failed(String(), nullptr);
 }
 
 void FetchManager::Loader::Start(ExceptionState& exception_state) {
@@ -690,7 +664,7 @@ void FetchManager::Loader::PerformSchemeFetch(ExceptionState& exception_state) {
 }
 
 void FetchManager::Loader::PerformNetworkError(const String& message) {
-  Failed(message);
+  Failed(message, nullptr);
 }
 
 void FetchManager::Loader::PerformHTTPFetch(ExceptionState& exception_state) {
@@ -801,7 +775,7 @@ void FetchManager::Loader::PerformHTTPFetch(ExceptionState& exception_state) {
 
   threadable_loader_ = MakeGarbageCollected<ThreadableLoader>(
       *execution_context_, this, resource_loader_options);
-  threadable_loader_->Start(request);
+  threadable_loader_->Start(std::move(request));
 }
 
 // performDataFetch() is almost the same as performHTTPFetch(), except for:
@@ -829,10 +803,11 @@ void FetchManager::Loader::PerformDataFetch() {
 
   threadable_loader_ = MakeGarbageCollected<ThreadableLoader>(
       *execution_context_, this, resource_loader_options);
-  threadable_loader_->Start(request);
+  threadable_loader_->Start(std::move(request));
 }
 
-void FetchManager::Loader::Failed(const String& message) {
+void FetchManager::Loader::Failed(const String& message,
+                                  DOMException* dom_exception) {
   if (failed_ || finished_)
     return;
   failed_ = true;
@@ -846,8 +821,12 @@ void FetchManager::Loader::Failed(const String& message) {
   if (resolver_) {
     ScriptState* state = resolver_->GetScriptState();
     ScriptState::Scope scope(state);
-    resolver_->Reject(V8ThrowException::CreateTypeError(state->GetIsolate(),
-                                                        "Failed to fetch"));
+    if (dom_exception) {
+      resolver_->Reject(dom_exception);
+    } else {
+      resolver_->Reject(V8ThrowException::CreateTypeError(state->GetIsolate(),
+                                                          "Failed to fetch"));
+    }
   }
   NotifyFinished();
 }

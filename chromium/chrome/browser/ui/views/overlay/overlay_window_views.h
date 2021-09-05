@@ -16,11 +16,7 @@
 #include "ash/public/cpp/rounded_corner_decorator.h"
 #endif
 
-#include "ui/views/vivaldi_video_observer.h"
-
-namespace vivaldi {
-class VideoProgress;
-}
+#include "ui/views/video_pip_controller.h"
 
 namespace views {
 class BackToTabImageButton;
@@ -110,6 +106,10 @@ class OverlayWindowViews : public content::OverlayWindow,
   // only used for testing.
   gfx::Size UpdateMaxSize(const gfx::Rect& work_area,
                           const gfx::Size& window_size);
+
+  // Vivaldi
+  bool IsPointInVivaldiControl(const gfx::Point& point);
+  // Vivaldi end
 
  private:
   explicit OverlayWindowViews(
@@ -254,6 +254,7 @@ class OverlayWindowViews : public content::OverlayWindow,
 
   // Vivaldi
   vivaldi::VideoProgress* progress_view_ = nullptr;
+  vivaldi::MuteButton* mute_button_ = nullptr;
   bool show_progress_view_ = false;
 
   void CreateVivaldiVideoControls();
@@ -261,8 +262,11 @@ class OverlayWindowViews : public content::OverlayWindow,
   void UpdateVivaldiControlsBounds(int primary_control_y, int margin);
   void CreateVivaldiVideoObserver();
   void HandleVivaldiKeyboardEvents(ui::KeyEvent* event);
+  void HandleVivaldiButtonPressed(views::Button* sender);
+  void HandleVivaldiGestureEvent(ui::GestureEvent* event);
 
-  std::unique_ptr<vivaldi::VideoProgressObserver> video_progress_observer_;
+  std::unique_ptr<vivaldi::VideoPIPController> video_pip_controller_;
+  std::unique_ptr<vivaldi::VideoPIPController::Delegate> video_pip_delegate_;
   // Vivaldi end
 
   DISALLOW_COPY_AND_ASSIGN(OverlayWindowViews);

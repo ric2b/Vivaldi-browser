@@ -61,6 +61,7 @@ EventRow::EventRow() {
   is_recurring_ = false;
   task_ = false;
   complete_ = false;
+  is_template_ = false;
 }
 
 EventRow::EventRow(EventID id,
@@ -153,6 +154,7 @@ void EventRow::Swap(EventRow* other) {
   std::swap(organizer_, other->organizer_);
   std::swap(notifications_to_create_, other->notifications_to_create_);
   std::swap(timezone_, other->timezone_);
+  std::swap(is_template_, other->is_template_);
 }
 
 EventRow::EventRow(const EventRow& other) = default;
@@ -190,7 +192,8 @@ EventRow::EventRow(const EventRow&& other) noexcept
       organizer_(other.organizer_),
       notifications_to_create_(other.notifications_to_create_),
       invites_to_create_(other.invites_to_create_),
-      timezone_(other.timezone_) {}
+      timezone_(other.timezone_),
+      is_template_(other.is_template_) {}
 
 EventResult::EventResult() {}
 

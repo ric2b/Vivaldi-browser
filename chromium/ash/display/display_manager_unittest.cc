@@ -386,8 +386,8 @@ TEST_F(DisplayManagerTest, UpdateThreeDisplaysWithDefaultLayout) {
 
 TEST_F(DisplayManagerTest, LayoutMorethanThreeDisplaysTest) {
   int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
-  display::DisplayIdList list = display::test::CreateDisplayIdListN(
-      3, primary_id, primary_id + 1, primary_id + 2);
+  display::DisplayIdList list =
+      display::test::CreateDisplayIdListN(primary_id, 3);
   {
     // Layout: [2]
     //         [1][P]
@@ -461,9 +461,7 @@ TEST_F(DisplayManagerTest, LayoutMorethanThreeDisplaysTest) {
   }
 
   {
-    list = display::test::CreateDisplayIdListN(5, primary_id, primary_id + 1,
-                                               primary_id + 2, primary_id + 3,
-                                               primary_id + 4);
+    list = display::test::CreateDisplayIdListN(primary_id, 5);
     // Layout: [P][2]
     //      [3][4]
     //      [1]
@@ -523,9 +521,8 @@ TEST_F(DisplayManagerTest, NoOverlappedDisplays) {
     //                 |        | |        |
     //                 +--------+ +--------+
 
-    display::DisplayIdList list = display::test::CreateDisplayIdListN(
-        8, primary_id, primary_id + 1, primary_id + 2, primary_id + 3,
-        primary_id + 4, primary_id + 5, primary_id + 6, primary_id + 7);
+    display::DisplayIdList list =
+        display::test::CreateDisplayIdListN(primary_id, 8);
     display::DisplayLayoutBuilder builder(primary_id);
     builder.AddDisplayPlacement(list[1], primary_id,
                                 display::DisplayPlacement::BOTTOM, 50);
@@ -633,8 +630,8 @@ TEST_F(DisplayManagerTest, NoOverlappedDisplays) {
     // +------+--+----+
     //
 
-    display::DisplayIdList list = display::test::CreateDisplayIdListN(
-        4, primary_id, primary_id + 1, primary_id + 2, primary_id + 3);
+    display::DisplayIdList list =
+        display::test::CreateDisplayIdListN(primary_id, 4);
     display::DisplayLayoutBuilder builder(primary_id);
     builder.AddDisplayPlacement(list[1], primary_id,
                                 display::DisplayPlacement::BOTTOM, 0);
@@ -702,8 +699,8 @@ TEST_F(DisplayManagerTest, NoOverlappedDisplays) {
     // |         |
     // +---------+
 
-    display::DisplayIdList list = display::test::CreateDisplayIdListN(
-        3, primary_id, primary_id + 1, primary_id + 2);
+    display::DisplayIdList list =
+        display::test::CreateDisplayIdListN(primary_id, 3);
     display::DisplayLayoutBuilder builder(primary_id);
     builder.AddDisplayPlacement(list[1], primary_id,
                                 display::DisplayPlacement::LEFT, 0);
@@ -753,8 +750,8 @@ TEST_F(DisplayManagerTest, NoOverlappedDisplays) {
     //           +---------+
     //
 
-    display::DisplayIdList list = display::test::CreateDisplayIdListN(
-        3, primary_id, primary_id + 1, primary_id + 2);
+    display::DisplayIdList list =
+        display::test::CreateDisplayIdListN(primary_id, 3);
     display::DisplayLayoutBuilder builder(primary_id);
     builder.AddDisplayPlacement(list[1], primary_id,
                                 display::DisplayPlacement::TOP, 0);
@@ -804,8 +801,8 @@ TEST_F(DisplayManagerTest, NoOverlappedDisplaysNotFitBetweenTwo) {
   //
 
   int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
-  display::DisplayIdList list = display::test::CreateDisplayIdListN(
-      4, primary_id, primary_id + 1, primary_id + 2, primary_id + 3);
+  display::DisplayIdList list =
+      display::test::CreateDisplayIdListN(primary_id, 4);
   display::DisplayLayoutBuilder builder(primary_id);
   builder.AddDisplayPlacement(list[1], primary_id,
                               display::DisplayPlacement::TOP, -110);
@@ -866,9 +863,8 @@ TEST_F(DisplayManagerTest, NoOverlappedDisplaysAfterResolutionChange) {
   //
 
   int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
-  display::DisplayIdList list = display::test::CreateDisplayIdListN(
-      5, primary_id, primary_id + 1, primary_id + 2, primary_id + 3,
-      primary_id + 4);
+  display::DisplayIdList list =
+      display::test::CreateDisplayIdListN(primary_id, 5);
   display::DisplayLayoutBuilder builder(primary_id);
   builder.AddDisplayPlacement(list[1], primary_id,
                               display::DisplayPlacement::TOP, -250);
@@ -949,9 +945,8 @@ TEST_F(DisplayManagerTest, NoOverlappedDisplaysWithDetachedDisplays) {
   //
 
   int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
-  display::DisplayIdList list = display::test::CreateDisplayIdListN(
-      6, primary_id, primary_id + 1, primary_id + 2, primary_id + 3,
-      primary_id + 4, primary_id + 5);
+  display::DisplayIdList list =
+      display::test::CreateDisplayIdListN(primary_id, 6);
   display::DisplayLayoutBuilder builder(primary_id);
   builder.AddDisplayPlacement(list[1], primary_id,
                               display::DisplayPlacement::TOP, -250);
@@ -1173,14 +1168,12 @@ TEST_F(DisplayManagerTest, TouchCalibrationTest) {
   const ui::TouchscreenDevice touchdevice(
       11, ui::InputDeviceType::INPUT_DEVICE_USB,
       std::string("test touch device"), gfx::Size(123, 456), 1);
-  const display::TouchDeviceIdentifier touch_device_identifier_2 =
-      display::TouchDeviceIdentifier::FromDevice(touchdevice);
 
   ASSERT_EQ(2u, display_manager()->GetNumDisplays());
   const display::ManagedDisplayInfo display_info1 = GetDisplayInfoAt(0);
   const display::ManagedDisplayInfo display_info2 = GetDisplayInfoAt(1);
 
-  EXPECT_FALSE(tdm_test_api.GetTouchDeviceCount(display_info2));
+  EXPECT_FALSE(tdm_test_api.AreAssociated(display_info2, touchdevice));
 
   const display::TouchCalibrationData::CalibrationPointPairQuad
       point_pair_quad = {
@@ -1194,15 +1187,14 @@ TEST_F(DisplayManagerTest, TouchCalibrationTest) {
 
   // Set the touch calibration data for the secondary display.
   display_manager()->SetTouchCalibrationData(
-      display_info2.id(), point_pair_quad, bounds_at_calibration,
-      touch_device_identifier_2);
+      display_info2.id(), point_pair_quad, bounds_at_calibration, touchdevice);
 
-  EXPECT_TRUE(tdm_test_api.GetTouchDeviceCount(display_info2));
+  EXPECT_TRUE(tdm_test_api.AreAssociated(display_info2, touchdevice));
   EXPECT_EQ(touch_data, touch_device_manager->GetCalibrationData(
                             touchdevice, display_info2.id()));
 
   // Clearing touch calibration data from the secondary display.
-  touch_device_manager->ClearTouchCalibrationData(touch_device_identifier_2,
+  touch_device_manager->ClearTouchCalibrationData(touchdevice,
                                                   GetDisplayInfoAt(1).id());
 
   EXPECT_TRUE(touch_device_manager
@@ -1218,7 +1210,7 @@ TEST_F(DisplayManagerTest, TouchCalibrationTest) {
                                              bounds_at_calibration);
   display_manager()->SetTouchCalibrationData(
       display_info2.id(), point_pair_quad_2, bounds_at_calibration,
-      touch_device_identifier_2);
+      touchdevice);
 
   EXPECT_EQ(touch_data_2, touch_device_manager->GetCalibrationData(
                               touchdevice, GetDisplayInfoAt(1).id()));
@@ -1239,8 +1231,7 @@ TEST_F(DisplayManagerTest, TouchCalibrationTest) {
 
   // Make sure multiple touch devices works.
   display_manager()->SetTouchCalibrationData(
-      display_info2.id(), point_pair_quad, bounds_at_calibration,
-      touch_device_identifier_2);
+      display_info2.id(), point_pair_quad, bounds_at_calibration, touchdevice);
 
   EXPECT_EQ(touch_data, touch_device_manager->GetCalibrationData(
                             touchdevice, GetDisplayInfoAt(1).id()));
@@ -1248,12 +1239,10 @@ TEST_F(DisplayManagerTest, TouchCalibrationTest) {
   const ui::TouchscreenDevice touchdevice_2(
       12, ui::InputDeviceType::INPUT_DEVICE_USB,
       std::string("test touch device 2"), gfx::Size(234, 567), 1);
-  display::TouchDeviceIdentifier touch_device_identifier_2_2 =
-      display::TouchDeviceIdentifier::FromDevice(touchdevice_2);
 
   display_manager()->SetTouchCalibrationData(
       display_info2.id(), point_pair_quad_2, bounds_at_calibration,
-      touch_device_identifier_2_2);
+      touchdevice_2);
   EXPECT_EQ(touch_data_2, touch_device_manager->GetCalibrationData(
                               touchdevice_2, GetDisplayInfoAt(1).id()));
   EXPECT_EQ(touch_data, touch_device_manager->GetCalibrationData(
@@ -1670,7 +1659,7 @@ TEST_F(DisplayManagerTest, DisplayAddRemoveAtTheSameTime) {
       display_manager()->GetDisplayInfo(secondary_id);
 
   // An id which is different from primary and secondary.
-  const int64_t third_id = secondary_id + 1;
+  const int64_t third_id = display::GetNextSynthesizedDisplayId(secondary_id);
 
   display::ManagedDisplayInfo third_info =
       display::CreateDisplayInfo(third_id, gfx::Rect(0, 0, 600, 600));
@@ -2452,11 +2441,11 @@ TEST_F(DisplayManagerTest, UnifiedDesktopBasic) {
   display::test::DisplayManagerTestApi display_manager_test(display_manager());
   EXPECT_EQ(gfx::Size(400, 500),
             display_manager_test.GetSecondaryDisplay().size());
-  EXPECT_EQ(
-      gfx::Size(500, 300),
-      display_manager()
-          ->GetDisplayForId(display_manager_test.GetSecondaryDisplay().id() + 1)
-          .size());
+  EXPECT_EQ(gfx::Size(500, 300),
+            display_manager()
+                ->GetDisplayForId(display::GetNextSynthesizedDisplayId(
+                    display_manager_test.GetSecondaryDisplay().id()))
+                .size());
 }
 
 TEST_F(DisplayManagerTest, UnifiedDesktopWithHardwareMirroring) {

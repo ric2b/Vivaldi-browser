@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/strings/stringprintf.h"
-#include "components/version_info/version_info.h"
+#include "components/version_info/channel.h"
 #include "extensions/browser/api/declarative_net_request/constants.h"
 #include "extensions/browser/api/declarative_net_request/request_action.h"
 #include "extensions/browser/api/declarative_net_request/request_params.h"
@@ -34,16 +34,7 @@ using ActionInfo = CompositeMatcher::ActionInfo;
 
 namespace dnr_api = api::declarative_net_request;
 
-class CompositeMatcherTest : public ::testing::Test {
- public:
-  CompositeMatcherTest() : channel_(::version_info::Channel::UNKNOWN) {}
-
- private:
-  // Run this on the trunk channel to ensure the API is available.
-  ScopedCurrentChannel channel_;
-
-  DISALLOW_COPY_AND_ASSIGN(CompositeMatcherTest);
-};
+using CompositeMatcherTest = ::testing::Test;
 
 // Ensure that the rules in a CompositeMatcher are in the same priority space.
 TEST_F(CompositeMatcherTest, SamePrioritySpace) {
@@ -54,8 +45,9 @@ TEST_F(CompositeMatcherTest, SamePrioritySpace) {
   allow_rule.action->type = std::string("allow");
   allow_rule.priority = 1;
   std::unique_ptr<RulesetMatcher> allow_matcher;
+  RulesetID ruleset_id_one(1);
   ASSERT_TRUE(CreateVerifiedMatcher(
-      {allow_rule}, CreateTemporarySource(/*id*/ 1), &allow_matcher));
+      {allow_rule}, CreateTemporarySource(ruleset_id_one), &allow_matcher));
 
   // Now create the second matcher. It blocks requests to google.com, with
   // higher priority than the allow rule.
@@ -63,8 +55,9 @@ TEST_F(CompositeMatcherTest, SamePrioritySpace) {
   block_rule.action->type = std::string("block");
   block_rule.priority = 2;
   std::unique_ptr<RulesetMatcher> block_matcher;
+  RulesetID ruleset_id_two(2);
   ASSERT_TRUE(CreateVerifiedMatcher(
-      {block_rule}, CreateTemporarySource(/*id*/ 2), &block_matcher));
+      {block_rule}, CreateTemporarySource(ruleset_id_two), &block_matcher));
 
   // Create a composite matcher with both rulesets.
   std::vector<std::unique_ptr<RulesetMatcher>> matchers;
@@ -88,9 +81,9 @@ TEST_F(CompositeMatcherTest, SamePrioritySpace) {
   allow_rule.priority = 2;
   block_rule.priority = 1;
   ASSERT_TRUE(CreateVerifiedMatcher(
-      {allow_rule}, CreateTemporarySource(/*id*/ 1), &allow_matcher));
+      {allow_rule}, CreateTemporarySource(ruleset_id_one), &allow_matcher));
   ASSERT_TRUE(CreateVerifiedMatcher(
-      {block_rule}, CreateTemporarySource(/*id*/ 2), &block_matcher));
+      {block_rule}, CreateTemporarySource(ruleset_id_two), &block_matcher));
   matchers.clear();
   matchers.push_back(std::move(allow_matcher));
   matchers.push_back(std::move(block_matcher));
@@ -103,47 +96,47 @@ TEST_F(CompositeMatcherTest, SamePrioritySpace) {
   EXPECT_EQ(action_info.action->type, RequestAction::Type::ALLOW);
 }
 
-// Tests that header masks are correctly attributed to rules for multiple
-// matchers in a CompositeMatcher.
-TEST_F(CompositeMatcherTest, HeadersMaskForRules) {
-  auto create_remove_headers_rule =
-      [](int id, const std::string& url_filter,
-         const std::vector<std::string>& remove_headers_list) {
+// Tests the GetModifyHeadersActions method.
+TEST_F(CompositeMatcherTest, GetModifyHeadersActions) {
+  // TODO(crbug.com/947591): Remove the channel override once implementation of
+  // modifyHeaders action is complete.
+  ScopedCurrentChannel channel(::version_info::Channel::UNKNOWN);
+
+  auto create_modify_headers_rule =
+      [](int id, int priority, const std::string& url_filter,
+         std::vector<TestHeaderInfo> request_headers_list) {
         TestRule rule = CreateGenericRule();
         rule.id = id;
+        rule.priority = priority;
         rule.condition->url_filter = url_filter;
-        rule.action->type = std::string("removeHeaders");
-        rule.action->remove_headers_list = remove_headers_list;
-
+        rule.action->type = std::string("modifyHeaders");
+        rule.action->request_headers = std::move(request_headers_list);
         return rule;
       };
 
-  TestRule static_rule_1 = create_remove_headers_rule(
-      kMinValidID, "google.com", std::vector<std::string>({"cookie"}));
+  TestRule rule_1 = create_modify_headers_rule(
+      kMinValidID, kMinValidPriority, "google.com",
+      std::vector<TestHeaderInfo>({TestHeaderInfo("header1", "remove"),
+                                   TestHeaderInfo("header2", "remove")}));
 
-  TestRule dynamic_rule_1 = create_remove_headers_rule(
-      kMinValidID, "/path", std::vector<std::string>({"referer"}));
+  TestRule rule_2 = create_modify_headers_rule(
+      kMinValidID, kMinValidPriority + 1, "/path",
+      std::vector<TestHeaderInfo>({TestHeaderInfo("header1", "remove"),
+                                   TestHeaderInfo("header3", "remove")}));
 
-  TestRule dynamic_rule_2 = create_remove_headers_rule(
-      kMinValidID + 1, "/path", std::vector<std::string>({"setCookie"}));
-
-  // Create the first ruleset matcher, which matches all requests with "g" in
-  // their URL.
-  const size_t kSource1ID = 1;
-  std::unique_ptr<RulesetMatcher> matcher_1;
-  ASSERT_TRUE(CreateVerifiedMatcher(
-      {static_rule_1},
-      CreateTemporarySource(kSource1ID, dnr_api::SOURCE_TYPE_MANIFEST),
-      &matcher_1));
-
-  // Create a second ruleset matcher, which matches all requests from
+  // Create the first ruleset matcher, which matches all requests from
   // |google.com|.
-  const size_t kSource2ID = 2;
+  const RulesetID kSource1ID(1);
+  std::unique_ptr<RulesetMatcher> matcher_1;
+  ASSERT_TRUE(CreateVerifiedMatcher({rule_1}, CreateTemporarySource(kSource1ID),
+                                    &matcher_1));
+
+  // Create a second ruleset matcher, which matches all requests with |/path| in
+  // their URL.
+  const RulesetID kSource2ID(2);
   std::unique_ptr<RulesetMatcher> matcher_2;
-  ASSERT_TRUE(CreateVerifiedMatcher(
-      {dynamic_rule_1, dynamic_rule_2},
-      CreateTemporarySource(kSource2ID, dnr_api::SOURCE_TYPE_DYNAMIC),
-      &matcher_2));
+  ASSERT_TRUE(CreateVerifiedMatcher({rule_2}, CreateTemporarySource(kSource2ID),
+                                    &matcher_2));
 
   // Create a composite matcher with the two rulesets.
   std::vector<std::unique_ptr<RulesetMatcher>> matchers;
@@ -158,38 +151,76 @@ TEST_F(CompositeMatcherTest, HeadersMaskForRules) {
   google_params.element_type = url_pattern_index::flat::ElementType_SUBDOCUMENT;
   google_params.is_third_party = false;
 
-  const uint8_t expected_mask = flat::RemoveHeaderType_referer |
-                                flat::RemoveHeaderType_cookie |
-                                flat::RemoveHeaderType_set_cookie;
+  // Call GetBeforeRequestAction first to ensure that test and production code
+  // paths are consistent.
+  composite_matcher->GetBeforeRequestAction(google_params,
+                                            PageAccess::kAllowed);
 
-  std::vector<RequestAction> actions;
-  EXPECT_EQ(expected_mask, composite_matcher->GetRemoveHeadersMask(
-                               google_params, 0u, &actions));
+  std::vector<RequestAction> actions =
+      composite_matcher->GetModifyHeadersActions(google_params);
 
   // Construct expected request actions to be taken for a request to google.com.
-  // Static actions are attributed to |matcher_1| and dynamic actions are
-  // attributed to |matcher_2|.
-  RequestAction static_action_1 = CreateRequestActionForTesting(
-      RequestAction::Type::REMOVE_HEADERS, *static_rule_1.id, kDefaultPriority,
-      dnr_api::SOURCE_TYPE_MANIFEST);
-  static_action_1.request_headers_to_remove.push_back(
-      net::HttpRequestHeaders::kCookie);
+  RequestAction action_1 =
+      CreateRequestActionForTesting(RequestAction::Type::MODIFY_HEADERS,
+                                    *rule_1.id, *rule_1.priority, kSource1ID);
+  action_1.request_headers_to_modify = {
+      RequestAction::HeaderInfo("header1", dnr_api::HEADER_OPERATION_REMOVE),
+      RequestAction::HeaderInfo("header2", dnr_api::HEADER_OPERATION_REMOVE)};
 
-  RequestAction dynamic_action_1 = CreateRequestActionForTesting(
-      RequestAction::Type::REMOVE_HEADERS, *dynamic_rule_1.id, kDefaultPriority,
-      dnr_api::SOURCE_TYPE_DYNAMIC);
-  dynamic_action_1.request_headers_to_remove.push_back(
-      net::HttpRequestHeaders::kReferer);
+  RequestAction action_2 =
+      CreateRequestActionForTesting(RequestAction::Type::MODIFY_HEADERS,
+                                    *rule_2.id, *rule_2.priority, kSource2ID);
+  action_2.request_headers_to_modify = {
+      RequestAction::HeaderInfo("header1", dnr_api::HEADER_OPERATION_REMOVE),
+      RequestAction::HeaderInfo("header3", dnr_api::HEADER_OPERATION_REMOVE)};
 
-  RequestAction dynamic_action_2 = CreateRequestActionForTesting(
-      RequestAction::Type::REMOVE_HEADERS, *dynamic_rule_2.id, kDefaultPriority,
-      dnr_api::SOURCE_TYPE_DYNAMIC);
-  dynamic_action_2.response_headers_to_remove.push_back("set-cookie");
+  // |action_2| should be before |action_1| because |rule_2|
+  // has a higher priority.
+  EXPECT_THAT(actions, ::testing::ElementsAre(
+                           ::testing::Eq(::testing::ByRef(action_2)),
+                           ::testing::Eq(::testing::ByRef(action_1))));
 
-  EXPECT_THAT(actions, ::testing::UnorderedElementsAre(
-                           ::testing::Eq(::testing::ByRef(static_action_1)),
-                           ::testing::Eq(::testing::ByRef(dynamic_action_1)),
-                           ::testing::Eq(::testing::ByRef(dynamic_action_2))));
+  // Now swap the priority of the rules, which requires re-creating the ruleset
+  // matchers and composite matcher.
+  rule_1.priority = kMinValidPriority + 1;
+  rule_2.priority = kMinValidPriority;
+  ASSERT_TRUE(CreateVerifiedMatcher({rule_1}, CreateTemporarySource(kSource1ID),
+                                    &matcher_1));
+  ASSERT_TRUE(CreateVerifiedMatcher({rule_2}, CreateTemporarySource(kSource2ID),
+                                    &matcher_2));
+
+  matchers.clear();
+  matchers.push_back(std::move(matcher_1));
+  matchers.push_back(std::move(matcher_2));
+  composite_matcher = std::make_unique<CompositeMatcher>(std::move(matchers));
+
+  // Call GetBeforeRequestAction first to ensure that test and production code
+  // paths are consistent.
+  composite_matcher->GetBeforeRequestAction(google_params,
+                                            PageAccess::kAllowed);
+
+  // Re-create |action_1| and |action_2| with the updated rule
+  // priorities. The headers removed by each action should not change.
+  actions = composite_matcher->GetModifyHeadersActions(google_params);
+  action_1 =
+      CreateRequestActionForTesting(RequestAction::Type::MODIFY_HEADERS,
+                                    *rule_1.id, *rule_1.priority, kSource1ID);
+  action_1.request_headers_to_modify = {
+      RequestAction::HeaderInfo("header1", dnr_api::HEADER_OPERATION_REMOVE),
+      RequestAction::HeaderInfo("header2", dnr_api::HEADER_OPERATION_REMOVE)};
+
+  action_2 =
+      CreateRequestActionForTesting(RequestAction::Type::MODIFY_HEADERS,
+                                    *rule_2.id, *rule_2.priority, kSource2ID);
+  action_2.request_headers_to_modify = {
+      RequestAction::HeaderInfo("header1", dnr_api::HEADER_OPERATION_REMOVE),
+      RequestAction::HeaderInfo("header3", dnr_api::HEADER_OPERATION_REMOVE)};
+
+  // |action_1| should now be before |action_2| after their
+  // priorities have been reversed.
+  EXPECT_THAT(actions, ::testing::ElementsAre(
+                           ::testing::Eq(::testing::ByRef(action_1)),
+                           ::testing::Eq(::testing::ByRef(action_2))));
 }
 
 // Ensure CompositeMatcher detects requests to be notified based on the rule

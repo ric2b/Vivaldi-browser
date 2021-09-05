@@ -35,6 +35,7 @@ class SafeBrowsingNetworkContext;
 }  // namespace safe_browsing
 
 namespace weblayer {
+class UrlCheckerDelegateImpl;
 
 // Class for managing safebrowsing related functionality. In particular this
 // class owns both the safebrowsing database and UI managers and provides
@@ -53,6 +54,8 @@ class SafeBrowsingService {
   CreateSafeBrowsingNavigationThrottle(content::NavigationHandle* handle);
   void AddInterface(service_manager::BinderRegistry* registry,
                     content::RenderProcessHost* render_process_host);
+  void StopDBManager();
+  void SetSafeBrowsingDisabled(bool disabled);
 
  private:
   SafeBrowsingUIManager* GetSafeBrowsingUIManager();
@@ -68,6 +71,8 @@ class SafeBrowsingService {
   GetURLLoaderFactoryOnIOThread();
   void CreateURLLoaderFactoryForIO(
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver);
+  void StopDBManagerOnIOThread();
+  void SetSafeBrowsingDisabledOnIOThread(bool disabled);
 
   // The UI manager handles showing interstitials. Accessed on both UI and IO
   // thread.
@@ -86,13 +91,14 @@ class SafeBrowsingService {
   scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
       shared_url_loader_factory_on_io_;
 
-  scoped_refptr<safe_browsing::UrlCheckerDelegate>
-      safe_browsing_url_checker_delegate_;
+  scoped_refptr<UrlCheckerDelegateImpl> safe_browsing_url_checker_delegate_;
 
   std::unique_ptr<safe_browsing::SafeBrowsingApiHandler>
       safe_browsing_api_handler_;
 
   std::string user_agent_;
+
+  bool safe_browsing_disabled_;
 
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingService);
 };

@@ -28,6 +28,7 @@
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
@@ -397,7 +398,7 @@ IN_PROC_BROWSER_TEST_P(PendingAppManagerImplBrowserTest, CannotFetchManifest) {
 IN_PROC_BROWSER_TEST_P(PendingAppManagerImplBrowserTest, RegistrationTimeout) {
   ASSERT_TRUE(embedded_test_server()->Start());
   PendingAppRegistrationTask::SetTimeoutForTesting(0);
-  GURL url(embedded_test_server()->GetURL("/banners/manifest_test_page.html"));
+  GURL url(embedded_test_server()->GetURL("/web_apps/no_service_worker.html"));
   CheckServiceWorkerStatus(url,
                            content::ServiceWorkerCapability::NO_SERVICE_WORKER);
 

@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/strings/string16.h"
@@ -34,6 +35,13 @@ AX_BASE_EXPORT bool IsNodeIdIntListAttribute(ax::mojom::IntListAttribute attr);
 // single accessible object, in a form that can be serialized and sent from
 // one process to another.
 struct AX_BASE_EXPORT AXNodeData {
+  // Defines the type used for AXNode IDs.
+  using AXID = int32_t;
+
+  // If a node is not yet or no longer valid, its ID should have a value of
+  // kInvalidAXID.
+  static constexpr AXID kInvalidAXID = 0;
+
   AXNodeData();
   virtual ~AXNodeData();
 
@@ -190,6 +198,14 @@ struct AX_BASE_EXPORT AXNodeData {
   ax::mojom::ImageAnnotationStatus GetImageAnnotationStatus() const;
   void SetImageAnnotationStatus(ax::mojom::ImageAnnotationStatus status);
 
+  // Helper to determine if the data belongs to a node that gains focus when
+  // clicked, such as a text field or a native HTML list box.
+  bool IsActivatable() const;
+
+  // Helper to determine if the data belongs to a node that is a native button
+  // or ARIA role="button" in a pressed state.
+  bool IsButtonPressed() const;
+
   // Helper to determine if the data belongs to a node that can respond to
   // clicks.
   bool IsClickable() const;
@@ -197,12 +213,38 @@ struct AX_BASE_EXPORT AXNodeData {
   // Helper to determine if the data has the ignored state or ignored role.
   bool IsIgnored() const;
 
+  // Helper to determine if the data has the ignored state, the invisible state
+  // or the ignored role.
+  bool IsInvisibleOrIgnored() const;
+
   // Helper to determine if the data belongs to a node that is invocable.
   bool IsInvocable() const;
 
-  // Helper to determine if the data belongs to a node that is a plain
-  // textfield.
+  // Helper to determine if the data belongs to a node that is a menu button.
+  bool IsMenuButton() const;
+
+  // This data belongs to a text field. This is any widget in which the user
+  // should be able to enter and edit text.
+  //
+  // Examples include <input type="text">, <input type="password">, <textarea>,
+  // <div contenteditable="true">, <div role="textbox">, <div role="searchbox">
+  // and <div role="combobox">. Note that when an ARIA role that indicates that
+  // the widget is editable is used, such as "role=textbox", the element doesn't
+  // need to be contenteditable for this method to return true, as in theory
+  // JavaScript could be used to implement editing functionality. In practice,
+  // this situation should be rare.
+  bool IsTextField() const;
+
+  // This data belongs to a text field that is used for entering passwords.
+  bool IsPasswordField() const;
+
+  // This data belongs to a text field that doesn't accept rich text content,
+  // such as text with special formatting or styling.
   bool IsPlainTextField() const;
+
+  // This data belongs to a text field that accepts rich text content, such as
+  // text with special formatting or styling.
+  bool IsRichTextField() const;
 
   // Helper to determine if |GetRestriction| is either ReadOnly or Disabled.
   // By default, all nodes that can't be edited are readonly.

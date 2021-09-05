@@ -222,7 +222,7 @@ void WebMediaPlayerMSCompositorTraits::Destruct(
 
 void WebMediaPlayerMSCompositor::InitializeSubmitter() {
   DCHECK(video_frame_compositor_task_runner_->BelongsToCurrentThread());
-  submitter_->Initialize(this);
+  submitter_->Initialize(this, /* is_media_stream = */ true);
 }
 
 void WebMediaPlayerMSCompositor::SetIsSurfaceVisible(bool state) {
@@ -252,6 +252,21 @@ void WebMediaPlayerMSCompositor::EnableSubmission(
 
   if (!stopped_)
     video_frame_provider_client_->StartRendering();
+}
+
+void WebMediaPlayerMSCompositor::SetForceBeginFrames(bool enable) {
+  if (!submitter_)
+    return;
+
+  if (!video_frame_compositor_task_runner_->BelongsToCurrentThread()) {
+    PostCrossThreadTask(
+        *video_frame_compositor_task_runner_, FROM_HERE,
+        CrossThreadBindOnce(&WebMediaPlayerMSCompositor::SetForceBeginFrames,
+                            weak_ptr_factory_.GetWeakPtr(), enable));
+    return;
+  }
+
+  submitter_->SetForceBeginFrames(enable);
 }
 
 void WebMediaPlayerMSCompositor::SetForceSubmit(bool force_submit) {
@@ -595,6 +610,7 @@ void WebMediaPlayerMSCompositor::SetCurrentFrame(
   base::TimeTicks now = base::TimeTicks::Now();
   last_presentation_time_ = now;
   last_expected_display_time_ = expected_display_time.value_or(now);
+  last_preferred_render_interval_ = GetPreferredRenderInterval();
   ++presented_frames_;
 
   OnNewFramePresentedCB presented_frame_cb;
@@ -747,7 +763,7 @@ WebMediaPlayerMSCompositor::GetLastPresentedFrameMetadata() {
     frame_metadata->expected_display_time = last_expected_display_time_;
     frame_metadata->presented_frames = static_cast<uint32_t>(presented_frames_);
 
-    frame_metadata->average_frame_duration = GetPreferredRenderInterval();
+    frame_metadata->average_frame_duration = last_preferred_render_interval_;
     frame_metadata->rendering_interval = last_render_length_;
   }
 

@@ -5,7 +5,6 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -18,6 +17,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/sessions/content/session_tab_helper.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
@@ -187,7 +187,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, FileURLs) {
 
   ExtensionTestMessageListener background_page_ready("ready",
                                                      false /*will_reply*/);
-  const Extension* extension =
+  scoped_refptr<const Extension> extension =
       LoadExtension(test_data_dir_.AppendASCII("active_tab_file_urls"));
   ASSERT_TRUE(extension);
   const std::string extension_id = extension->id();
@@ -334,7 +334,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, FileURLs) {
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ExtensionActionRunner::GetForWebContents(web_contents)
-      ->RunAction(extension, false /*grant_tab_permissions*/);
+      ->RunAction(extension.get(), false /*grant_tab_permissions*/);
   EXPECT_FALSE(can_xhr_file_urls());
   EXPECT_FALSE(can_script_tab(active_tab_id));
   EXPECT_FALSE(can_script_tab(inactive_tab_id));
@@ -344,7 +344,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, FileURLs) {
   // script the active tab and embed file iframes. It should still not be able
   // to script the background tab.
   ExtensionActionRunner::GetForWebContents(web_contents)
-      ->RunAction(extension, true /*grant_tab_permissions*/);
+      ->RunAction(extension.get(), true /*grant_tab_permissions*/);
   EXPECT_TRUE(can_xhr_file_urls());
   EXPECT_TRUE(can_script_tab(active_tab_id));
   EXPECT_TRUE(can_load_file_iframe());
@@ -367,7 +367,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, FileURLs) {
   // still can't xhr file urls, script the active tab or embed file iframes
   // (since it does not have file access).
   ExtensionActionRunner::GetForWebContents(web_contents)
-      ->RunAction(extension, true /*grant_tab_permissions*/);
+      ->RunAction(extension.get(), true /*grant_tab_permissions*/);
   EXPECT_FALSE(can_xhr_file_urls());
   EXPECT_FALSE(can_script_tab(active_tab_id));
   EXPECT_FALSE(can_script_tab(inactive_tab_id));

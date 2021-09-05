@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/metrics/user_metrics.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/buildflags.h"
@@ -76,11 +75,10 @@ void ChromeWebViewPermissionHelperDelegate::BlockedUnauthorizedPlugin(
   info.SetString(std::string(kPluginName), name);
   info.SetString(std::string(kPluginIdentifier), identifier);
   web_view_permission_helper()->RequestPermission(
-      WEB_VIEW_PERMISSION_TYPE_LOAD_PLUGIN,
-      info,
-      base::Bind(&ChromeWebViewPermissionHelperDelegate::OnPermissionResponse,
-                 weak_factory_.GetWeakPtr(),
-                 identifier),
+      WEB_VIEW_PERMISSION_TYPE_LOAD_PLUGIN, info,
+      base::BindOnce(
+          &ChromeWebViewPermissionHelperDelegate::OnPermissionResponse,
+          weak_factory_.GetWeakPtr(), identifier),
       true /* allowed_by_default */);
   base::RecordAction(
       base::UserMetricsAction("WebView.Guest.PluginLoadRequest"));

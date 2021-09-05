@@ -128,14 +128,15 @@ class CORE_EXPORT StyleResolverState {
   void SetIsAnimatingCustomProperties(bool value) {
     is_animating_custom_properties_ = value;
   }
+  bool IsAnimatingRevert() const { return is_animating_revert_; }
+  void SetIsAnimatingRevert(bool value) { is_animating_revert_ = value; }
 
   // Normally, we apply all active animation effects on top of the style created
   // by regular CSS declarations. However, !important declarations have a
-  // higher priority than animation effects [1]. If StyleCascade skipped
-  // application of some interpolation, it means something else in the cascade
-  // had a higher priority (i.e. it was !important). In this case, we can't
-  // use the base-computed-style optimization, since that code path is unable
-  // to skip any animation effects at all.
+  // higher priority than animation effects [1]. If we're currently animating
+  // (not transitioning) a property which was declared !important in the base
+  // style, this flag is set such that we can disable the base computed style
+  // optimization.
   //
   // [1] https://drafts.csswg.org/css-cascade-4/#cascade-origin
   bool HasImportantOverrides() const { return has_important_overrides_; }
@@ -216,6 +217,13 @@ class CORE_EXPORT StyleResolverState {
 
   CSSParserMode GetParserMode() const;
 
+  // If the input CSSValue is a CSSLightDarkValuePair, return the light or dark
+  // CSSValue based on the UsedColorScheme. For all other values, just return a
+  // reference to the passed value. If the property is a non-inherited one, mark
+  // the ComputedStyle as having such a pair since that will make sure its not
+  // stored in the MatchedPropertiesCache.
+  const CSSValue& ResolveLightDarkPair(const CSSProperty&, const CSSValue&);
+
  private:
   enum class AnimatingElementType { kElement, kPseudoElement };
 
@@ -248,6 +256,10 @@ class CORE_EXPORT StyleResolverState {
   CSSAnimationUpdate animation_update_;
   bool is_animation_interpolation_map_ready_;
   bool is_animating_custom_properties_;
+  // We can't use the base computed style optimization when 'revert' appears
+  // in a keyframe. (We need to build the cascade to know what to revert to).
+  // TODO(crbug.com/1068515): Refactor caching to remove these flags.
+  bool is_animating_revert_ = false;
   bool has_important_overrides_ = false;
   bool has_font_affecting_animation_ = false;
 

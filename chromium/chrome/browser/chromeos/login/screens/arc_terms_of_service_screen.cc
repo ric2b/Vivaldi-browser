@@ -6,18 +6,22 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/chromeos/login/arc_terms_of_service_screen_handler.h"
+#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
+#include "components/arc/arc_prefs.h"
 #include "components/prefs/pref_service.h"
 
 namespace {
 
+constexpr char kUserActionAccepted[] = "accepted";
 constexpr char kUserActionBack[] = "go-back";
 
 }  // namespace
@@ -29,10 +33,10 @@ std::string ArcTermsOfServiceScreen::GetResultString(Result result) {
   switch (result) {
     case Result::ACCEPTED:
       return "Accepted";
-    case Result::SKIPPED:
-      return "Skipped";
     case Result::BACK:
       return "Back";
+    case Result::NOT_APPLICABLE:
+      return BaseScreen::kNotApplicable;
   }
 }
 
@@ -44,7 +48,7 @@ void ArcTermsOfServiceScreen::MaybeLaunchArcSettings(Profile* profile) {
     // settings and sync settings - currently the Settings window will only
     // show one settings page. See crbug.com/901184#c4 for details.
     chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
-        profile, chrome::kAndroidAppsDetailsSubPage);
+        profile, chromeos::settings::mojom::kGooglePlayStoreSubpagePath);
   }
 }
 
@@ -69,10 +73,20 @@ ArcTermsOfServiceScreen::~ArcTermsOfServiceScreen() {
   }
 }
 
+bool ArcTermsOfServiceScreen::MaybeSkip() {
+  if (!arc::IsArcTermsOfServiceOobeNegotiationNeeded()) {
+    exit_callback_.Run(Result::NOT_APPLICABLE);
+    return true;
+  }
+  return false;
+}
+
 void ArcTermsOfServiceScreen::ShowImpl() {
   if (!view_)
     return;
 
+  ProfileManager::GetActiveUserProfile()->GetPrefs()->SetBoolean(
+      arc::prefs::kArcTermsShownInOobe, true);
   // Show the screen.
   view_->Show();
 }
@@ -83,18 +97,18 @@ void ArcTermsOfServiceScreen::HideImpl() {
 }
 
 void ArcTermsOfServiceScreen::OnUserAction(const std::string& action_id) {
-  if (action_id == kUserActionBack) {
+  if (action_id == kUserActionAccepted) {
+    exit_callback_.Run(Result::ACCEPTED);
+  } else if (action_id == kUserActionBack) {
     exit_callback_.Run(Result::BACK);
   } else {
     BaseScreen::OnUserAction(action_id);
   }
 }
 
-void ArcTermsOfServiceScreen::OnSkip() {
-  exit_callback_.Run(Result::SKIPPED);
-}
-
 void ArcTermsOfServiceScreen::OnAccept(bool review_arc_settings) {
+  if (is_hidden())
+    return;
   base::UmaHistogramBoolean("OOBE.ArcTermsOfServiceScreen.ReviewFollowingSetup",
                             review_arc_settings);
   if (review_arc_settings) {
@@ -103,7 +117,7 @@ void ArcTermsOfServiceScreen::OnAccept(bool review_arc_settings) {
     profile->GetPrefs()->SetBoolean(prefs::kShowArcSettingsOnSessionStart,
                                     true);
   }
-  exit_callback_.Run(Result::ACCEPTED);
+  HandleUserAction(kUserActionAccepted);
 }
 
 void ArcTermsOfServiceScreen::OnViewDestroyed(

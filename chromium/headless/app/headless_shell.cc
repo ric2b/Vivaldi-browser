@@ -28,13 +28,14 @@
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
-#include "components/os_crypt/os_crypt_switches.h"
 #include "components/viz/common/switches.h"
 #include "content/public/app/content_main.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "headless/app/headless_shell.h"
 #include "headless/app/headless_shell_switches.h"
+#include "headless/lib/browser/headless_browser_impl.h"
+#include "headless/lib/browser/headless_devtools.h"
 #include "headless/lib/headless_content_main_delegate.h"
 #include "headless/public/headless_devtools_target.h"
 #include "net/base/filename_util.h"
@@ -54,9 +55,8 @@
 #include "sandbox/win/src/sandbox_types.h"
 #endif
 
-#if !defined(CHROME_MULTIPLE_DLL_CHILD)
-#include "headless/lib/browser/headless_browser_impl.h"
-#include "headless/lib/browser/headless_devtools.h"
+#if defined(OS_MACOSX)
+#include "components/os_crypt/os_crypt_switches.h"
 #endif
 
 namespace headless {
@@ -102,7 +102,6 @@ bool ParseFontRenderHinting(
   return true;
 }
 
-#if !defined(CHROME_MULTIPLE_DLL_CHILD)
 GURL ConvertArgumentToURL(const base::CommandLine::StringType& arg) {
   GURL url(arg);
   if (url.is_valid() && url.has_scheme())
@@ -143,8 +142,6 @@ base::FilePath GetSSLKeyLogFile(const base::CommandLine* command_line) {
 #endif
 }
 
-#endif  // !defined(CHROME_MULTIPLE_DLL_CHILD)
-
 int RunContentMain(
     HeadlessBrowser::Options options,
     base::OnceCallback<void(HeadlessBrowser*)> on_browser_start_callback) {
@@ -162,13 +159,9 @@ int RunContentMain(
   // TODO(skyostil): Implement custom message pumps.
   DCHECK(!options.message_pump);
 
-#if defined(CHROME_MULTIPLE_DLL_CHILD)
-  HeadlessContentMainDelegate delegate(std::move(options));
-#else
   auto browser = std::make_unique<HeadlessBrowserImpl>(
       std::move(on_browser_start_callback), std::move(options));
   HeadlessContentMainDelegate delegate(std::move(browser));
-#endif
   params.delegate = &delegate;
   return content::ContentMain(params);
 }
@@ -225,7 +218,6 @@ HeadlessShell::HeadlessShell() = default;
 
 HeadlessShell::~HeadlessShell() = default;
 
-#if !defined(CHROME_MULTIPLE_DLL_CHILD)
 void HeadlessShell::OnStart(HeadlessBrowser* browser) {
   browser_ = browser;
   devtools_client_ = HeadlessDevToolsClient::Create();
@@ -386,7 +378,6 @@ void HeadlessShell::HeadlessWebContentsDestroyed() {
       FROM_HERE,
       base::BindOnce(&HeadlessShell::Shutdown, weak_factory_.GetWeakPtr()));
 }
-#endif  // !defined(CHROME_MULTIPLE_DLL_CHILD)
 
 void HeadlessShell::FetchTimeout() {
   LOG(INFO) << "Timeout.";
@@ -547,9 +538,13 @@ void HeadlessShell::OnScreenshotCaptured(
 
 void HeadlessShell::PrintToPDF() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  bool display_header_footer =
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kPrintToPDFNoHeader);
   devtools_client_->GetPage()->GetExperimental()->PrintToPDF(
       page::PrintToPDFParams::Builder()
-          .SetDisplayHeaderFooter(true)
+          .SetDisplayHeaderFooter(display_header_footer)
           .SetPrintBackground(true)
           .SetPreferCSSPageSize(true)
           .Build(),

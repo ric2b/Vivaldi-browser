@@ -2,11 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://new-tab-page/customize_backgrounds.js';
-
-import {BrowserProxy} from 'chrome://new-tab-page/browser_proxy.js';
+import {BackgroundSelectionType, BrowserProxy} from 'chrome://new-tab-page/new_tab_page.js';
 import {assertNotStyle, assertStyle, createTestProxy} from 'chrome://test/new_tab_page/test_support.js';
-import {flushTasks, isVisible} from 'chrome://test/test_util.m.js';
+import {eventToPromise, flushTasks, isVisible} from 'chrome://test/test_util.m.js';
 
 function createCollection(id = 0, label = '', url = '') {
   return {id: id, label: label, previewImageUrl: {url: url}};
@@ -19,6 +17,7 @@ suite('NewTabPageCustomizeBackgroundsTest', () => {
   async function createCustomizeBackgrounds() {
     const customizeBackgrounds =
         document.createElement('ntp-customize-backgrounds');
+    customizeBackgrounds.theme = {};
     document.body.appendChild(customizeBackgrounds);
     await handler.whenCalled('getBackgroundCollections');
     await flushTasks();
@@ -54,10 +53,11 @@ suite('NewTabPageCustomizeBackgroundsTest', () => {
     assertStyle(customizeBackgrounds.$.images, 'display', 'none');
     const tiles =
         customizeBackgrounds.shadowRoot.querySelectorAll('#collections .tile');
-    assertEquals(tiles.length, 1);
-    assertEquals(tiles[0].getAttribute('title'), 'col_0');
+    assertEquals(3, tiles.length);
+    assertEquals('col_0', tiles[2].getAttribute('title'));
     assertEquals(
-        tiles[0].querySelector('.image').path, 'image?https://col_0.jpg');
+        'background_image?https://col_0.jpg',
+        tiles[2].querySelector('.image').path);
   });
 
   test('clicking collection selects collection', async function() {
@@ -69,10 +69,12 @@ suite('NewTabPageCustomizeBackgroundsTest', () => {
     const customizeBackgrounds = await createCustomizeBackgrounds();
 
     // Act.
-    customizeBackgrounds.shadowRoot.querySelector('#collections .tile').click();
+    customizeBackgrounds.shadowRoot
+        .querySelector('#collections .tile:nth-child(3)')
+        .click();
 
     // Assert.
-    assertDeepEquals(customizeBackgrounds.selectedCollection, collection);
+    assertDeepEquals(collection, customizeBackgrounds.selectedCollection);
   });
 
   test('setting collection requests images', async function() {
@@ -90,7 +92,8 @@ suite('NewTabPageCustomizeBackgroundsTest', () => {
   test('Loading images shows image tiles', async function() {
     // Arrange.
     const image = {
-      label: 'image_0',
+      attribution1: 'image_0',
+      imageUrl: {url: 'https://example.com/image.png'},
       previewImageUrl: {url: 'https://example.com/image.png'},
     };
     handler.setResultFor('getBackgroundImages', Promise.resolve({
@@ -112,13 +115,14 @@ suite('NewTabPageCustomizeBackgroundsTest', () => {
     assertEquals(tiles.length, 1);
     assertEquals(
         tiles[0].querySelector('.image').path,
-        'image?https://example.com/image.png');
+        'background_image?https://example.com/image.png');
   });
 
   test('Going back shows collections', async function() {
     // Arrange.
     const image = {
-      label: 'image_0',
+      attribution1: 'image_0',
+      imageUrl: {url: 'https://example.com/image.png'},
       previewImageUrl: {url: 'https://example.com/image.png'},
     };
     const customizeBackgrounds = await createCustomizeBackgrounds();
@@ -135,5 +139,150 @@ suite('NewTabPageCustomizeBackgroundsTest', () => {
     // Assert.
     assertNotStyle(customizeBackgrounds.$.collections, 'display', 'none');
     assertStyle(customizeBackgrounds.$.images, 'display', 'none');
+  });
+
+  test('select image', async () => {
+    const image = {
+      attribution1: 'image_0',
+      imageUrl: {url: 'https://example.com/image.png'},
+      previewImageUrl: {url: 'https://example.com/image.png'},
+    };
+    const customizeBackgrounds = await createCustomizeBackgrounds();
+    handler.setResultFor('getBackgroundImages', Promise.resolve({
+      images: [image],
+    }));
+    customizeBackgrounds.selectedCollection = createCollection(0);
+    await flushTasks();
+    const element =
+        customizeBackgrounds.shadowRoot.querySelector('#images .tile');
+    const item = customizeBackgrounds.$.imagesRepeat.itemForElement(element);
+    assertEquals(image.attribution1, item.attribution1);
+    assertEquals(
+        BackgroundSelectionType.NO_SELECTION,
+        customizeBackgrounds.backgroundSelection.type);
+    assertFalse(element.classList.contains('selected'));
+    element.click();
+    assertEquals(
+        BackgroundSelectionType.IMAGE,
+        customizeBackgrounds.backgroundSelection.type);
+    assertDeepEquals(image, customizeBackgrounds.backgroundSelection.image);
+    assertTrue(element.classList.contains('selected'));
+  });
+
+  test('image selected by current theme', async () => {
+    const image = {
+      attribution1: 'image_0',
+      imageUrl: {url: 'https://example.com/image.png'},
+      previewImageUrl: {url: 'https://example.com/image.png'},
+    };
+    const customizeBackgrounds = await createCustomizeBackgrounds();
+    customizeBackgrounds.theme.backgroundImage = {
+      url: {url: 'https://example.com/image.png'}
+    };
+    handler.setResultFor('getBackgroundImages', Promise.resolve({
+      images: [image],
+    }));
+    customizeBackgrounds.selectedCollection = createCollection(0);
+    await flushTasks();
+    const element =
+        customizeBackgrounds.shadowRoot.querySelector('#images .tile');
+    assertTrue(element.classList.contains('selected'));
+  });
+
+  test('deselected when background selection is not an image', async () => {
+    const image = {
+      attribution1: 'image_0',
+      imageUrl: {url: 'https://example.com/image.png'},
+      previewImageUrl: {url: 'https://example.com/image.png'},
+    };
+    const customizeBackgrounds = await createCustomizeBackgrounds();
+    handler.setResultFor('getBackgroundImages', Promise.resolve({
+      images: [image],
+    }));
+    customizeBackgrounds.selectedCollection = createCollection(0);
+    await flushTasks();
+    const element =
+        customizeBackgrounds.shadowRoot.querySelector('#images .tile');
+    element.click();
+    assertTrue(element.classList.contains('selected'));
+    customizeBackgrounds.backgroundSelection = {
+      type: BackgroundSelectionType.NO_BACKGROUND
+    };
+    assertFalse(element.classList.contains('selected'));
+  });
+
+  test('choosing local dispatches cancel', async () => {
+    const customizeBackgrounds = await createCustomizeBackgrounds();
+    handler.setResultFor(
+        'chooseLocalCustomBackground', Promise.resolve({success: true}));
+    const waitForClose = eventToPromise('close', customizeBackgrounds);
+    customizeBackgrounds.$.uploadFromDevice.click();
+    await handler.whenCalled('chooseLocalCustomBackground');
+    await waitForClose;
+  });
+
+  suite('no background', () => {
+    let customizeBackgrounds;
+
+    setup(async () => {
+      customizeBackgrounds = await createCustomizeBackgrounds();
+    });
+
+    function assertNotSelected() {
+      assertFalse(
+          !!customizeBackgrounds.$.noBackground.querySelector('.selected'));
+    }
+
+    function assertSelected() {
+      assertTrue(
+          !!customizeBackgrounds.$.noBackground.querySelector('.selected'));
+    }
+
+    test('no background selected by default', () => {
+      assertSelected();
+    });
+
+    test('no background selected when clicked', () => {
+      customizeBackgrounds.theme = {backgroundImage: {url: {url: 'http://a'}}};
+      customizeBackgrounds.backgroundSelection = {
+        type: BackgroundSelectionType.NO_SELECTION
+      };
+      assertNotSelected();
+      customizeBackgrounds.$.noBackground.click();
+      assertSelected();
+    });
+
+    test('not selected when refresh collection set', () => {
+      customizeBackgrounds.backgroundSelection = {
+        type: BackgroundSelectionType.NO_SELECTION
+      };
+      customizeBackgrounds.theme = {};
+      assertSelected();
+      customizeBackgrounds.theme = {dailyRefreshCollectionId: 'landscape'};
+      assertNotSelected();
+    });
+
+    test('not selected when refresh collection set', () => {
+      customizeBackgrounds.backgroundSelection = {
+        type: BackgroundSelectionType.NO_SELECTION
+      };
+      customizeBackgrounds.theme = {};
+      assertSelected();
+      customizeBackgrounds.theme = {backgroundImage: {url: {url: 'http://a'}}};
+      assertNotSelected();
+    });
+
+    test('not selected when refresh toggle changed', () => {
+      customizeBackgrounds.backgroundSelection = {
+        type: BackgroundSelectionType.NO_SELECTION
+      };
+      customizeBackgrounds.theme = {};
+      assertSelected();
+      customizeBackgrounds.backgroundSelection = {
+        type: BackgroundSelectionType.DAILY_REFRESH,
+        dailyRefreshCollectionId: 'landscape',
+      };
+      assertNotSelected();
+    });
   });
 });

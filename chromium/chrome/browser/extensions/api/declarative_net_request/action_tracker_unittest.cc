@@ -14,7 +14,6 @@
 #include "extensions/browser/api/web_request/web_request_info.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_util.h"
-#include "extensions/common/api/declarative_net_request.h"
 #include "extensions/common/api/declarative_net_request/constants.h"
 #include "extensions/common/api/declarative_net_request/test_utils.h"
 #include "extensions/common/constants.h"
@@ -25,11 +24,7 @@
 namespace extensions {
 namespace declarative_net_request {
 
-namespace dnr_api = api::declarative_net_request;
-
 namespace {
-
-constexpr char kJSONRulesFilename[] = "rules_file.json";
 
 constexpr int64_t kNavigationId = 1;
 
@@ -55,7 +50,9 @@ class ActionTrackerTest : public DNRTestBase {
 
     // Create extension directory.
     ASSERT_TRUE(base::CreateDirectory(extension_dir));
-    TestRulesetInfo info = {kJSONRulesFilename, base::ListValue()};
+    constexpr char kRulesetID[] = "id";
+    constexpr char kJSONRulesFilename[] = "rules_file.json";
+    TestRulesetInfo info(kRulesetID, kJSONRulesFilename, base::ListValue());
     WriteManifestAndRuleset(
         extension_dir, info,
         std::vector<std::string>({URLPattern::kAllUrlsPattern}), flags);
@@ -71,7 +68,7 @@ class ActionTrackerTest : public DNRTestBase {
   // Helper to create a RequestAction for the given |extension_id|.
   RequestAction CreateRequestAction(const ExtensionId& extension_id) {
     return RequestAction(RequestActionType::BLOCK, kMinValidID,
-                         kDefaultPriority, dnr_api::SOURCE_TYPE_MANIFEST,
+                         kDefaultPriority, kMinValidStaticRulesetID,
                          extension_id);
   }
 

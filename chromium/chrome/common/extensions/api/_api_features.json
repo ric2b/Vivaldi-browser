@@ -773,8 +773,8 @@
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   }],
-  // chrome.terminalPrivate allowed for crosh/nassh extensions,
-  // and chrome-untrusted://terminal.
+  // chrome.terminalPrivate allowed for nassh extensions,
+  // chrome-untrusted://crosh, and chrome-untrusted://terminal.
   "terminalPrivate": [{
     "dependencies": ["permission:terminalPrivate"],
     "contexts": ["blessed_extension"],
@@ -784,15 +784,23 @@
     "channel": "stable",
     "contexts": ["webui_untrusted"],
     "matches": [
+      "chrome-untrusted://crosh/*",
       "chrome-untrusted://terminal/*"
     ],
     "platforms": ["chromeos"]
   }],
-  // terminalPrivate.openTerminalProcess only allowed for
-  // crosh/nassh extensions.
-  "terminalPrivate.openTerminalProcess": {
+  // terminalPrivate.openTerminalProcess allowed for nassh extensions,
+  // and chrome-untrusted://crosh, but NOT for chrome-untrusted://terminal.
+  "terminalPrivate.openTerminalProcess": [{
     "contexts": ["blessed_extension"]
-  },
+  }, {
+    "dependencies": [],
+    "channel": "stable",
+    "contexts": ["webui_untrusted"],
+    "matches": [
+      "chrome-untrusted://crosh/*"
+    ]
+  }],
   "topSites": {
     "dependencies": ["permission:topSites"],
     "contexts": ["blessed_extension"]

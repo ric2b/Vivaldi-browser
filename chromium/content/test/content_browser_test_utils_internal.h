@@ -27,7 +27,9 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
+#include "third_party/blink/public/mojom/choosers/popup_menu.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -39,8 +41,9 @@ class SiteInstance;
 class ToRenderFrameHost;
 
 // Navigates the frame represented by |node| to |url|, blocking until the
-// navigation finishes.
-void NavigateFrameToURL(FrameTreeNode* node, const GURL& url);
+// navigation finishes. Returns true if the navigation succeedd and the final
+// URL matches |url|.
+bool NavigateFrameToURL(FrameTreeNode* node, const GURL& url);
 
 // Sets the DialogManager to proceed by default or not when showing a
 // BeforeUnload dialog, and if it proceeds, what value to return.
@@ -199,10 +202,23 @@ class RenderProcessHostBadIpcMessageWaiter {
   DISALLOW_COPY_AND_ASSIGN(RenderProcessHostBadIpcMessageWaiter);
 };
 
-class ShowWidgetMessageFilter : public content::BrowserMessageFilter {
+class ShowWidgetMessageFilter : public BrowserMessageFilter,
+                                public WebContentsObserver {
  public:
-  ShowWidgetMessageFilter();
+  explicit ShowWidgetMessageFilter(WebContents* web_contents);
 
+  // This must be called on the UI thread when this filter is not required
+  // anymore.
+  // Background: The ShowWidgetMessageFilter observes the |web_contents| passed
+  // to the constructor. It will remove itself as observer in the destructor,
+  // but as BrowserMessageFilter subclasses (such as this one) are ref-counted
+  // and a reference is potentially held by the IPC channel, it is not obvious
+  // when this class will be destroyed, and this may be well after a
+  // browsertest's body (which has instantiated this and called AddFilter with
+  // it) exits.
+  void Shutdown();
+
+  // BrowserMessageFilter:
   bool OnMessageReceived(const IPC::Message& message) override;
 
   gfx::Rect last_initial_rect() const { return initial_rect_; }
@@ -218,15 +234,26 @@ class ShowWidgetMessageFilter : public content::BrowserMessageFilter {
 
   void OnShowWidget(int route_id, const gfx::Rect& initial_rect);
 
+  // WebContentsObserver:
 #if defined(OS_MACOSX) || defined(OS_ANDROID)
-  void OnShowPopup(const FrameHostMsg_ShowPopup_Params& params);
+  bool ShowPopupMenu(
+      RenderFrameHost* render_frame_host,
+      mojo::PendingRemote<blink::mojom::PopupMenuClient>* popup_client,
+      const gfx::Rect& bounds,
+      int32_t item_height,
+      double font_size,
+      int32_t selected_item,
+      std::vector<blink::mojom::MenuItemPtr>* menu_items,
+      bool right_aligned,
+      bool allow_multiple_selection) override;
 #endif
 
   void OnShowWidgetOnUI(int route_id, const gfx::Rect& initial_rect);
 
-  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
+  std::unique_ptr<base::RunLoop> run_loop_;
   gfx::Rect initial_rect_;
   int routing_id_ = MSG_ROUTING_NONE;
+  bool is_shut_down_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ShowWidgetMessageFilter);
 };

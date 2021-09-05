@@ -95,6 +95,7 @@
       <output filename="vivaldi_native_strings_or.pak" type="data_package" lang="or" />
       <output filename="vivaldi_native_strings_pa.pak" type="data_package" lang="pa" />
       <output filename="vivaldi_native_strings_si.pak" type="data_package" lang="si" />
+      <output filename="vivaldi_native_strings_sr-Latn.pak" type="data_package" lang="sr-Latn" />
       <output filename="vivaldi_native_strings_ur.pak" type="data_package" lang="ur" />
       <output filename="vivaldi_native_strings_uz.pak" type="data_package" lang="uz" />
       <output filename="vivaldi_native_strings_zh-HK.pak" type="data_package" lang="zh-HK" />
@@ -222,6 +223,9 @@
         <message name="IDS_WINDOW_CLOSE_CONFIRMATION_WARNING" desc="The contents of the window close confirmation dialog">
           Do you really want to close this window?
         </message>
+        <message name="IDS_PICTURE_IN_PICTURE_MUTE_TAB_CONTROL_TEXT" desc="The tooltip for the PIP mute tab button.">
+          Mute tab
+        </message>
       </if>
 
       <if expr="use_titlecase">
@@ -248,6 +252,9 @@
         </message>
         <message name="IDS_WINDOW_CLOSE_CONFIRMATION_WARNING" desc="In Title Case: The contents of the window close confirmation dialog">
           Do You Really Want To Close This Window?
+        </message>
+        <message name="IDS_PICTURE_IN_PICTURE_MUTE_TAB_CONTROL_TEXT" desc="The tooltip for the PIP mute tab button.">
+          Mute Tab
         </message>
       </if>
       <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_1" desc="The default name given to a newly created profile with the Landscape 1 avatar.">

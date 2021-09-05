@@ -44,6 +44,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/components/proximity_auth/screenlock_bridge.h"
 #include "chromeos/components/proximity_auth/smart_lock_metrics_recorder.h"
+#include "chromeos/constants/chromeos_pref_names.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/cryptohome/cryptohome_client.h"
@@ -55,6 +56,7 @@
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/user_activity/user_activity_detector.h"
@@ -63,6 +65,8 @@
 namespace chromeos {
 
 namespace {
+
+bool g_skip_force_online_signin_for_testing = false;
 
 // User dictionary keys.
 const char kKeyUsername[] = "username";
@@ -307,8 +311,8 @@ class UserSelectionScreen::DircryptoMigrationChecker {
     }
 
     CryptohomeClient::Get()->WaitForServiceToBeAvailable(
-        base::Bind(&DircryptoMigrationChecker::RunCryptohomeCheck,
-                   weak_ptr_factory_.GetWeakPtr(), account_id));
+        base::BindOnce(&DircryptoMigrationChecker::RunCryptohomeCheck,
+                       weak_ptr_factory_.GetWeakPtr(), account_id));
   }
 
  private:
@@ -373,7 +377,16 @@ class UserSelectionScreen::DircryptoMigrationChecker {
 
 UserSelectionScreen::UserSelectionScreen(const std::string& display_type)
     : BaseScreen(UserBoardView::kScreenId, OobeScreenPriority::DEFAULT),
-      display_type_(display_type) {}
+      display_type_(display_type) {
+  if (display_type_ != OobeUI::kLoginDisplay)
+    return;
+  allowed_input_methods_subscription_ =
+      CrosSettings::Get()->AddSettingsObserver(
+          kDeviceLoginScreenInputMethods,
+          base::Bind(&UserSelectionScreen::OnAllowedInputMethodsChanged,
+                     base::Unretained(this)));
+  OnAllowedInputMethodsChanged();
+}
 
 UserSelectionScreen::~UserSelectionScreen() {
   proximity_auth::ScreenlockBridge::Get()->SetLockHandler(nullptr);
@@ -441,8 +454,16 @@ void UserSelectionScreen::FillMultiProfileUserPrefs(
 }
 
 // static
+void UserSelectionScreen::SetSkipForceOnlineSigninForTesting(bool skip) {
+  g_skip_force_online_signin_for_testing = skip;
+}
+
+// static
 bool UserSelectionScreen::ShouldForceOnlineSignIn(
     const user_manager::User* user) {
+  if (g_skip_force_online_signin_for_testing)
+    return false;
+
   // Public sessions are always allowed to log in offline.
   // Supervised users are always allowed to log in offline.
   // For all other users, force online sign in if:
@@ -651,8 +672,12 @@ void UserSelectionScreen::CheckUserStatus(const AccountId& account_id) {
 
   if (token_handle_util_->HasToken(account_id)) {
     token_handle_util_->CheckToken(
-        account_id, base::Bind(&UserSelectionScreen::OnUserStatusChecked,
-                               weak_factory_.GetWeakPtr()));
+        account_id,
+        chromeos::ProfileHelper::Get()
+            ->GetSigninProfile()
+            ->GetURLLoaderFactory(),
+        base::Bind(&UserSelectionScreen::OnUserStatusChecked,
+                   weak_factory_.GetWeakPtr()));
   }
 
   // Run dircrypto migration check only on the login screen when necessary.
@@ -671,13 +696,14 @@ void UserSelectionScreen::HandleFocusPod(const AccountId& account_id) {
   if (focused_pod_account_id_ == account_id)
     return;
   CheckUserStatus(account_id);
-  lock_screen_utils::SetUserInputMethod(account_id.GetUserEmail(),
-                                        ime_state_.get());
+  lock_screen_utils::SetUserInputMethod(
+      account_id, ime_state_.get(),
+      display_type_ == OobeUI::kLoginDisplay /* honor_device_policy */);
   lock_screen_utils::SetKeyboardSettings(account_id);
 
   bool use_24hour_clock = false;
   if (user_manager::known_user::GetBooleanPref(
-          account_id, prefs::kUse24HourClock, &use_24hour_clock)) {
+          account_id, ::prefs::kUse24HourClock, &use_24hour_clock)) {
     g_browser_process->platform_part()
         ->GetSystemClock()
         ->SetLastFocusedPodHourClockType(use_24hour_clock ? base::k24HourClock
@@ -688,16 +714,18 @@ void UserSelectionScreen::HandleFocusPod(const AccountId& account_id) {
 
 void UserSelectionScreen::HandleNoPodFocused() {
   focused_pod_account_id_ = EmptyAccountId();
-  lock_screen_utils::EnforcePolicyInputMethods(std::string());
+  if (display_type_ == OobeUI::kLoginDisplay)
+    lock_screen_utils::EnforceDevicePolicyInputMethods(std::string());
 }
 
 void UserSelectionScreen::OnAllowedInputMethodsChanged() {
+  DCHECK_EQ(display_type_, OobeUI::kLoginDisplay);
   if (focused_pod_account_id_.is_valid()) {
-    std::string user_input_method = lock_screen_utils::GetUserLastInputMethod(
-        focused_pod_account_id_.GetUserEmail());
-    lock_screen_utils::EnforcePolicyInputMethods(user_input_method);
+    std::string user_input_method =
+        lock_screen_utils::GetUserLastInputMethod(focused_pod_account_id_);
+    lock_screen_utils::EnforceDevicePolicyInputMethods(user_input_method);
   } else {
-    lock_screen_utils::EnforcePolicyInputMethods(std::string());
+    lock_screen_utils::EnforceDevicePolicyInputMethods(std::string());
   }
 }
 
@@ -903,9 +931,19 @@ UserSelectionScreen::UpdateAndReturnUserListForAsh() {
     user_info.can_remove = CanRemoveUser(user);
     user_info.fingerprint_state = GetInitialFingerprintState(user);
     user_info.show_pin_pad_for_password = false;
+    if (user_manager::known_user::GetIsEnterpriseManaged(
+            user->GetAccountId()) &&
+        user->GetType() != user_manager::USER_TYPE_PUBLIC_ACCOUNT) {
+      user_info.user_enterprise_domain =
+          gaia::ExtractDomainName(user->display_email());
+    }
     chromeos::CrosSettings::Get()->GetBoolean(
         chromeos::kDeviceShowNumericKeyboardForPassword,
         &user_info.show_pin_pad_for_password);
+    user_manager::known_user::GetBooleanPref(
+        user->GetAccountId(),
+        chromeos::prefs::kLoginDisplayPasswordButtonEnabled,
+        &user_info.show_display_password_button);
 
     // Fill multi-profile data.
     if (!is_signin_to_add) {
@@ -920,7 +958,7 @@ UserSelectionScreen::UpdateAndReturnUserListForAsh() {
       std::string domain;
       user_info.public_account_info.emplace();
       if (GetEnterpriseDomain(&domain))
-        user_info.public_account_info->enterprise_domain = domain;
+        user_info.public_account_info->device_enterprise_domain = domain;
 
       user_info.public_account_info->using_saml = user->using_saml();
 

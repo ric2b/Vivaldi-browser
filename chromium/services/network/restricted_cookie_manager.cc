@@ -25,6 +25,7 @@
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_util.h"
 #include "services/network/cookie_settings.h"
+#include "services/network/public/mojom/cookie_access_observer.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "url/gurl.h"
@@ -39,20 +40,20 @@ net::CookieOptions MakeOptionsForSet(
     const net::SiteForCookies& site_for_cookies,
     const CookieSettings* cookie_settings) {
   net::CookieOptions options;
-  bool attach_same_site_cookies =
+  bool force_ignore_site_for_cookies =
       cookie_settings->ShouldIgnoreSameSiteRestrictions(
           url, site_for_cookies.RepresentativeUrl());
   if (role == mojom::RestrictedCookieManagerRole::SCRIPT) {
     options.set_exclude_httponly();  // Default, but make it explicit here.
     options.set_same_site_cookie_context(
         net::cookie_util::ComputeSameSiteContextForScriptSet(
-            url, site_for_cookies, attach_same_site_cookies));
+            url, site_for_cookies, force_ignore_site_for_cookies));
   } else {
     // mojom::RestrictedCookieManagerRole::NETWORK
     options.set_include_httponly();
     options.set_same_site_cookie_context(
         net::cookie_util::ComputeSameSiteContextForSubresource(
-            url, site_for_cookies, attach_same_site_cookies));
+            url, site_for_cookies, force_ignore_site_for_cookies));
   }
   return options;
 }
@@ -64,7 +65,7 @@ net::CookieOptions MakeOptionsForGet(
     const CookieSettings* cookie_settings) {
   // TODO(https://crbug.com/925311): Wire initiator here.
   net::CookieOptions options;
-  bool attach_same_site_cookies =
+  bool force_ignore_site_for_cookies =
       cookie_settings->ShouldIgnoreSameSiteRestrictions(
           url, site_for_cookies.RepresentativeUrl());
   if (role == mojom::RestrictedCookieManagerRole::SCRIPT) {
@@ -72,13 +73,13 @@ net::CookieOptions MakeOptionsForGet(
     options.set_same_site_cookie_context(
         net::cookie_util::ComputeSameSiteContextForScriptGet(
             url, site_for_cookies, base::nullopt /*initiator*/,
-            attach_same_site_cookies));
+            force_ignore_site_for_cookies));
   } else {
     // mojom::RestrictedCookieManagerRole::NETWORK
     options.set_include_httponly();
     options.set_same_site_cookie_context(
         net::cookie_util::ComputeSameSiteContextForSubresource(
-            url, site_for_cookies, attach_same_site_cookies));
+            url, site_for_cookies, force_ignore_site_for_cookies));
   }
   return options;
 }
@@ -178,20 +179,14 @@ RestrictedCookieManager::RestrictedCookieManager(
     const url::Origin& origin,
     const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin,
-    mojom::NetworkContextClient* network_context_client,
-    bool is_service_worker,
-    int32_t process_id,
-    int32_t frame_id)
+    mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer)
     : role_(role),
       cookie_store_(cookie_store),
       cookie_settings_(cookie_settings),
       origin_(origin),
       site_for_cookies_(site_for_cookies),
       top_frame_origin_(top_frame_origin),
-      network_context_client_(network_context_client),
-      is_service_worker_(is_service_worker),
-      process_id_(process_id),
-      frame_id_(frame_id) {
+      cookie_observer_(std::move(cookie_observer)) {
   DCHECK(cookie_store);
 }
 
@@ -293,10 +288,10 @@ void RestrictedCookieManager::CookieListToGetAllForUrlCallback(
     result_with_status.push_back({cookie, status});
   }
 
-  if (network_context_client_) {
-    network_context_client_->OnCookiesRead(is_service_worker_, process_id_,
-                                           frame_id_, url, site_for_cookies,
-                                           result_with_status);
+  if (cookie_observer_) {
+    cookie_observer_->OnCookiesAccessed(mojom::CookieAccessDetails::New(
+        mojom::CookieAccessDetails::Type::kRead, url, site_for_cookies,
+        result_with_status, base::nullopt));
   }
 
   if (blocked) {
@@ -344,12 +339,12 @@ void RestrictedCookieManager::SetCanonicalCookie(
       domain_match);
 
   if (!status.IsInclude()) {
-    if (network_context_client_) {
+    if (cookie_observer_) {
       std::vector<net::CookieWithStatus> result_with_status = {
           {cookie, status}};
-      network_context_client_->OnCookiesChanged(
-          is_service_worker_, process_id_, frame_id_, url, site_for_cookies,
-          result_with_status);
+      cookie_observer_->OnCookiesAccessed(mojom::CookieAccessDetails::New(
+          mojom::CookieAccessDetails::Type::kChange, url, site_for_cookies,
+          result_with_status, base::nullopt));
     }
     std::move(callback).Run(false);
     return;
@@ -372,8 +367,12 @@ void RestrictedCookieManager::SetCanonicalCookie(
 
   net::CookieOptions options =
       MakeOptionsForSet(role_, url, site_for_cookies, cookie_settings());
+  // TODO(chlily): |url| is validated to be the same origin as |origin_|, but
+  // the path is not checked. If we ever decide to enforce the path constraint
+  // for setting a cookie, we would need to validate the path of |url| somehow
+  // and pass |url| instead of |origin_.GetURL()|.
   cookie_store_->SetCanonicalCookieAsync(
-      std::move(sanitized_cookie), origin_.scheme(), options,
+      std::move(sanitized_cookie), origin_.GetURL(), options,
       base::BindOnce(&RestrictedCookieManager::SetCanonicalCookieResult,
                      weak_ptr_factory_.GetWeakPtr(), url, site_for_cookies,
                      cookie_copy, options, std::move(callback)));
@@ -392,12 +391,12 @@ void RestrictedCookieManager::SetCanonicalCookieResult(
   DCHECK(!status.HasExclusionReason(
       CookieInclusionStatus::EXCLUDE_USER_PREFERENCES));
 
-  if (network_context_client_) {
-    if (status.IsInclude() || status.ShouldWarn()) {
+  if (status.IsInclude() || status.ShouldWarn()) {
+    if (cookie_observer_) {
       notify.push_back({cookie, status});
-      network_context_client_->OnCookiesChanged(
-          is_service_worker_, process_id_, frame_id_, url, site_for_cookies,
-          std::move(notify));
+      cookie_observer_->OnCookiesAccessed(mojom::CookieAccessDetails::New(
+          mojom::CookieAccessDetails::Type::kChange, url, site_for_cookies,
+          notify, base::nullopt));
     }
   }
   std::move(user_callback).Run(status.IsInclude());
@@ -506,8 +505,12 @@ bool RestrictedCookieManager::ValidateAccessToCookiesAt(
     const GURL& url,
     const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin) {
-  bool site_for_cookies_ok = site_for_cookies_.IsEquivalent(site_for_cookies);
+  if (origin_.opaque()) {
+    mojo::ReportBadMessage("Access is denied in this context");
+    return false;
+  }
 
+  bool site_for_cookies_ok = site_for_cookies_.IsEquivalent(site_for_cookies);
   DCHECK(site_for_cookies_ok)
       << "site_for_cookies from renderer='" << site_for_cookies.ToDebugString()
       << "' from browser='" << site_for_cookies_.ToDebugString() << "';";

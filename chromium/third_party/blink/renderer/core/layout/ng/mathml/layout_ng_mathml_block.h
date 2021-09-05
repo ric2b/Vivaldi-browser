@@ -6,13 +6,12 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_MATHML_LAYOUT_NG_MATHML_BLOCK_H_
 
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_mixin.h"
-#include "third_party/blink/renderer/core/mathml/mathml_element.h"
 
 namespace blink {
 
 class LayoutNGMathMLBlock : public LayoutNGMixin<LayoutBlock> {
  public:
-  explicit LayoutNGMathMLBlock(MathMLElement*);
+  explicit LayoutNGMathMLBlock(Element*);
 
   const char* GetName() const override { return "LayoutNGMathMLBlock"; }
 

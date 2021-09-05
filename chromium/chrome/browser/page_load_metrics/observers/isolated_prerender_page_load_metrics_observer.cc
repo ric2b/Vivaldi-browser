@@ -100,7 +100,7 @@ IsolatedPrerenderPageLoadMetricsObserver::OnCommit(
           navigation_handle->GetWebContents());
   if (!tab_helper)
     return STOP_OBSERVING;
-  prefetch_usage_ = tab_helper->prefetch_usage();
+  after_srp_metrics_ = tab_helper->after_srp_metrics();
 
   data_saver_enabled_at_commit_ = data_reduction_proxy::
       DataReductionProxySettings::IsDataSaverEnabledByUser(
@@ -141,7 +141,7 @@ void IsolatedPrerenderPageLoadMetricsObserver::GetPrefetchMetrics() {
   if (!tab_helper)
     return;
 
-  prefetch_metrics_ = tab_helper->page_->metrics_;
+  srp_metrics_ = tab_helper->page_->srp_metrics_;
 }
 
 void IsolatedPrerenderPageLoadMetricsObserver::OnOriginLastVisitResult(
@@ -262,6 +262,11 @@ void IsolatedPrerenderPageLoadMetricsObserver::RecordMetrics() {
   if (!data_saver_enabled_at_commit_)
     return;
 
+  RecordPrefetchProxyEvent();
+  RecordAfterSRPEvent();
+}
+
+void IsolatedPrerenderPageLoadMetricsObserver::RecordPrefetchProxyEvent() {
   ukm::builders::PrefetchProxy builder(GetDelegate().GetSourceId());
 
   if (min_days_since_last_visit_to_origin_.has_value()) {
@@ -292,19 +297,42 @@ void IsolatedPrerenderPageLoadMetricsObserver::RecordMetrics() {
   builder.Setcount_css_js_loaded_network_before_fcp(
       ukm_loaded_css_js_from_network_before_fcp);
 
-  if (prefetch_metrics_ && prefetch_metrics_->prefetch_eligible_count_ > 0) {
+  if (srp_metrics_ && srp_metrics_->predicted_urls_count_ > 0) {
     builder.Setordered_eligible_pages_bitmask(
-        prefetch_metrics_->ordered_eligible_pages_bitmask_);
-    builder.Setprefetch_eligible_count(
-        prefetch_metrics_->prefetch_eligible_count_);
+        srp_metrics_->ordered_eligible_pages_bitmask_);
+    builder.Setprefetch_eligible_count(srp_metrics_->prefetch_eligible_count_);
     builder.Setprefetch_attempted_count(
-        prefetch_metrics_->prefetch_attempted_count_);
+        srp_metrics_->prefetch_attempted_count_);
     builder.Setprefetch_successful_count(
-        prefetch_metrics_->prefetch_successful_count_);
+        srp_metrics_->prefetch_successful_count_);
+  }
+  builder.Record(ukm::UkmRecorder::Get());
+}
+
+void IsolatedPrerenderPageLoadMetricsObserver::RecordAfterSRPEvent() {
+  if (!after_srp_metrics_)
+    return;
+
+  const IsolatedPrerenderTabHelper::AfterSRPMetrics& metrics =
+      *after_srp_metrics_;
+
+  ukm::builders::PrefetchProxy_AfterSRPClick builder(
+      GetDelegate().GetSourceId());
+
+  builder.SetSRPPrefetchEligibleCount(metrics.prefetch_eligible_count_);
+
+  if (metrics.prefetch_status_) {
+    builder.SetSRPClickPrefetchStatus(
+        static_cast<int>(metrics.prefetch_status_.value()));
   }
 
-  if (prefetch_usage_) {
-    builder.Setprefetch_usage(static_cast<int>(*prefetch_usage_));
+  if (metrics.clicked_link_srp_position_) {
+    builder.SetClickedLinkSRPPosition(
+        metrics.clicked_link_srp_position_.value());
+  }
+
+  if (metrics.probe_latency_) {
+    builder.SetProbeLatencyMs(metrics.probe_latency_.value().InMilliseconds());
   }
 
   builder.Record(ukm::UkmRecorder::Get());

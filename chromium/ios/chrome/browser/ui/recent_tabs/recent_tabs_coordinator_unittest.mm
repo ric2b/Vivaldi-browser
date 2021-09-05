@@ -71,7 +71,6 @@ class SessionSyncServiceMockForRecentTabsTableCoordinator
   MOCK_METHOD0(ScheduleGarbageCollection, void());
   MOCK_METHOD0(GetControllerDelegate,
                base::WeakPtr<syncer::ModelTypeControllerDelegate>());
-  MOCK_METHOD0(GetFaviconCache, sync_sessions::FaviconCache*());
   MOCK_METHOD1(ProxyTabsStateChanged,
                void(syncer::DataTypeController::State state));
   MOCK_METHOD1(SetSyncSessionsGUID, void(const std::string& guid));
@@ -89,11 +88,6 @@ class OpenTabsUIDelegateMock : public sync_sessions::OpenTabsUIDelegate {
   OpenTabsUIDelegateMock() {}
   ~OpenTabsUIDelegateMock() override {}
 
-  MOCK_METHOD1(GetIconUrlForPageUrl, GURL(const GURL& page_url));
-
-  MOCK_CONST_METHOD1(
-      GetSyncedFaviconForPageURL,
-      favicon_base::FaviconRawBitmapResult(const GURL& page_url));
   MOCK_METHOD1(
       GetAllForeignSessions,
       bool(std::vector<const sync_sessions::SyncedSession*>* sessions));

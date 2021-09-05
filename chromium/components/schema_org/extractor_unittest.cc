@@ -8,9 +8,13 @@
 #include <utility>
 #include <vector>
 
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/bind_test_util.h"
+#include "base/test/task_environment.h"
 #include "components/schema_org/common/improved_metadata.mojom.h"
 #include "components/schema_org/schema_org_entity_names.h"
+#include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace schema_org {
@@ -28,7 +32,16 @@ class SchemaOrgExtractorTest : public testing::Test {
 
  protected:
   EntityPtr Extract(const std::string& text) {
-    return extractor_.Extract(text);
+    base::RunLoop run_loop;
+    EntityPtr out;
+
+    extractor_.Extract(text, base::BindLambdaForTesting([&](EntityPtr entity) {
+                         out = std::move(entity);
+                         run_loop.Quit();
+                       }));
+
+    run_loop.Run();
+    return out;
   }
 
   PropertyPtr CreateStringProperty(const std::string& name,
@@ -50,8 +63,11 @@ class SchemaOrgExtractorTest : public testing::Test {
 
   PropertyPtr CreateEntityProperty(const std::string& name, EntityPtr value);
 
+  base::test::TaskEnvironment task_environment_;
+
  private:
   Extractor extractor_;
+  data_decoder::test::InProcessDataDecoder data_decoder_;
 };
 
 PropertyPtr SchemaOrgExtractorTest::CreateStringProperty(
@@ -200,6 +216,19 @@ TEST_F(SchemaOrgExtractorTest, DoubleValue) {
   EXPECT_EQ(expected, extracted);
 }
 
+TEST_F(SchemaOrgExtractorTest, StringValueRepresentingLong) {
+  EntityPtr extracted =
+      Extract("{\"@type\": \"VideoObject\",\"copyrightYear\": \"1999\"}");
+
+  ASSERT_FALSE(extracted.is_null());
+
+  EntityPtr expected = Entity::New();
+  expected->type = "VideoObject";
+  expected->properties.push_back(CreateLongProperty("copyrightYear", 1999));
+
+  EXPECT_EQ(expected, extracted);
+}
+
 TEST_F(SchemaOrgExtractorTest, StringValueRepresentingDouble) {
   EntityPtr extracted =
       Extract("{\"@type\": \"VideoObject\",\"copyrightYear\": \"1999.5\"}");
@@ -223,6 +252,37 @@ TEST_F(SchemaOrgExtractorTest, StringValueRepresentingTime) {
   expected->type = "VideoObject";
   expected->properties.push_back(CreateTimeProperty(
       "startTime", base::TimeDelta::FromMinutes(60 * 5 + 30)));
+
+  EXPECT_EQ(expected, extracted);
+}
+
+TEST_F(SchemaOrgExtractorTest, StringValueRepresentingDuration) {
+  EntityPtr extracted =
+      Extract("{\"@type\": \"VideoObject\",\"duration\": \"PT2H0M55S\"}");
+
+  ASSERT_FALSE(extracted.is_null());
+
+  EntityPtr expected = Entity::New();
+  expected->type = "VideoObject";
+  expected->properties.push_back(CreateTimeProperty(
+      "duration",
+      base::TimeDelta::FromHours(2) + base::TimeDelta::FromSeconds(55)));
+
+  EXPECT_EQ(expected, extracted);
+}
+
+TEST_F(SchemaOrgExtractorTest, StringValueRepresentingLongDuration) {
+  EntityPtr extracted = Extract(
+      "{\"@type\": \"VideoObject\",\"duration\": \"PT1234H5678M1234S\"}");
+
+  ASSERT_FALSE(extracted.is_null());
+
+  EntityPtr expected = Entity::New();
+  expected->type = "VideoObject";
+  expected->properties.push_back(
+      CreateTimeProperty("duration", base::TimeDelta::FromHours(1234) +
+                                         base::TimeDelta::FromMinutes(5678) +
+                                         base::TimeDelta::FromSeconds(1234)));
 
   EXPECT_EQ(expected, extracted);
 }
@@ -277,6 +337,22 @@ TEST_F(SchemaOrgExtractorTest, StringValueRepresentingEnum) {
       "actionStatus", GURL("http://schema.org/ActiveActionStatus")));
   expected->properties.push_back(
       CreateEntityProperty("potentialAction", std::move(action)));
+
+  EXPECT_EQ(expected, extracted);
+}
+
+// The extractor should accept a string value for a property that has an
+// expected entity type. https://schema.org/docs/gs.html#schemaorg_expected
+TEST_F(SchemaOrgExtractorTest, StringValueForThingType) {
+  EntityPtr extracted = Extract(
+      "{\"@type\": \"VideoObject\",\"author\": \"Google Chrome Developers\"}");
+
+  ASSERT_FALSE(extracted.is_null());
+
+  EntityPtr expected = Entity::New();
+  expected->type = "VideoObject";
+  expected->properties.push_back(
+      CreateStringProperty("author", "Google Chrome Developers"));
 
   EXPECT_EQ(expected, extracted);
 }
@@ -538,7 +614,17 @@ TEST_F(SchemaOrgExtractorTest, EnforceMaxNestingDepth) {
       "    \"addressCountry\": {"
       "      \"containedInPlace\": {"
       "        \"containedInPlace\": {"
-      "          \"name\": \"matroska\""
+      "          \"containedInPlace\": {"
+      "            \"containedInPlace\": {"
+      "              \"containedInPlace\": {"
+      "                \"containedInPlace\": {"
+      "                  \"containedInPlace\": {"
+      "                    \"name\": \"matroska\""
+      "                  }"
+      "                }"
+      "              }"
+      "            }"
+      "          }"
       "        }"
       "      }"
       "    }"
@@ -558,7 +644,27 @@ TEST_F(SchemaOrgExtractorTest, EnforceMaxNestingDepth) {
   entity3->type = "Thing";
   EntityPtr entity4 = Entity::New();
   entity4->type = "Thing";
+  EntityPtr entity5 = Entity::New();
+  entity5->type = "Thing";
+  EntityPtr entity6 = Entity::New();
+  entity6->type = "Thing";
+  EntityPtr entity7 = Entity::New();
+  entity7->type = "Thing";
+  EntityPtr entity8 = Entity::New();
+  entity8->type = "Thing";
+  EntityPtr entity9 = Entity::New();
+  entity9->type = "Thing";
 
+  entity8->properties.push_back(
+      CreateEntityProperty("containedInPlace", std::move(entity9)));
+  entity7->properties.push_back(
+      CreateEntityProperty("containedInPlace", std::move(entity8)));
+  entity6->properties.push_back(
+      CreateEntityProperty("containedInPlace", std::move(entity7)));
+  entity5->properties.push_back(
+      CreateEntityProperty("containedInPlace", std::move(entity6)));
+  entity4->properties.push_back(
+      CreateEntityProperty("containedInPlace", std::move(entity5)));
   entity3->properties.push_back(
       CreateEntityProperty("containedInPlace", std::move(entity4)));
   entity2->properties.push_back(
@@ -579,11 +685,21 @@ TEST_F(SchemaOrgExtractorTest, MaxNestingDepthWithTerminalProperty) {
       "  \"address\": {"
       "    \"addressCountry\": {"
       "      \"containedInPlace\": {"
-      "        \"name\": \"matroska\""
-      "         }"
+      "        \"containedInPlace\": {"
+      "          \"containedInPlace\": {"
+      "            \"containedInPlace\": {"
+      "              \"containedInPlace\": {"
+      "                \"containedInPlace\": {"
+      "                   \"name\": \"matroska\""
+      "                }"
+      "              }"
+      "            }"
+      "          }"
+      "        }"
       "      }"
       "    }"
       "  }"
+      "}"
       "}");
   ASSERT_FALSE(extracted.is_null());
 
@@ -598,15 +714,34 @@ TEST_F(SchemaOrgExtractorTest, MaxNestingDepthWithTerminalProperty) {
   entity3->type = "Thing";
   EntityPtr entity4 = Entity::New();
   entity4->type = "Thing";
+  EntityPtr entity5 = Entity::New();
+  entity5->type = "Thing";
+  EntityPtr entity6 = Entity::New();
+  entity6->type = "Thing";
+  EntityPtr entity7 = Entity::New();
+  entity7->type = "Thing";
+  EntityPtr entity8 = Entity::New();
+  entity8->type = "Thing";
+  EntityPtr entity9 = Entity::New();
+  entity9->type = "Thing";
 
-  entity4->properties.push_back(CreateStringProperty("name", "matroska"));
+  entity9->properties.push_back(CreateStringProperty("name", "matroska"));
+  entity8->properties.push_back(
+      CreateEntityProperty("containedInPlace", std::move(entity9)));
+  entity7->properties.push_back(
+      CreateEntityProperty("containedInPlace", std::move(entity8)));
+  entity6->properties.push_back(
+      CreateEntityProperty("containedInPlace", std::move(entity7)));
+  entity5->properties.push_back(
+      CreateEntityProperty("containedInPlace", std::move(entity6)));
+  entity4->properties.push_back(
+      CreateEntityProperty("containedInPlace", std::move(entity5)));
   entity3->properties.push_back(
       CreateEntityProperty("containedInPlace", std::move(entity4)));
   entity2->properties.push_back(
       CreateEntityProperty("addressCountry", std::move(entity3)));
   entity1->properties.push_back(
       CreateEntityProperty("address", std::move(entity2)));
-
   expected->properties.push_back(
       CreateEntityProperty("actor", std::move(entity1)));
   expected->properties.push_back(CreateStringProperty("name", "a video!"));

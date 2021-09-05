@@ -103,6 +103,44 @@ void SmbFsShare::Remount(const MountOptions& options,
   Mount(std::move(callback));
 }
 
+void SmbFsShare::DeleteRecursively(
+    const base::FilePath& path,
+    SmbFsShare::DeleteRecursivelyCallback callback) {
+  if (!host_) {
+    std::move(callback).Run(base::File::FILE_ERROR_FAILED);
+    return;
+  }
+
+  // Only one recursive delete operation can be outstanding at any time.
+  if (delete_recursively_callback_) {
+    LOG(WARNING) << "A recursive delete operation is already in progress";
+    std::move(callback).Run(base::File::FILE_ERROR_FAILED);
+    return;
+  }
+
+  // smbfs should have no visibility into the full path of the file (which
+  // includes the FUSE mount point): it sees a filesystem rooted at the base of
+  // the mount point path.
+  base::FilePath transformed_path("/");
+  bool success = mount_path().AppendRelativePath(path, &transformed_path);
+  if (!success) {
+    LOG(ERROR)
+        << "Could not construct absolute path for recursive delete operation";
+    std::move(callback).Run(base::File::FILE_ERROR_FAILED);
+    return;
+  }
+
+  delete_recursively_callback_ = std::move(callback);
+  host_->DeleteRecursively(std::move(transformed_path),
+                           base::BindOnce(&SmbFsShare::OnDeleteRecursivelyDone,
+                                          base::Unretained(this)));
+}
+
+void SmbFsShare::OnDeleteRecursivelyDone(base::File::Error error) {
+  DCHECK(delete_recursively_callback_);
+  std::move(delete_recursively_callback_).Run(error);
+}
+
 void SmbFsShare::Unmount(SmbFsShare::UnmountCallback callback) {
   if (unmount_pending_) {
     LOG(WARNING) << "Cannot unmount a shared that is being unmounted";
@@ -179,6 +217,19 @@ void SmbFsShare::OnMountDone(MountCallback callback,
 
 void SmbFsShare::OnDisconnected() {
   Unmount(base::DoNothing());
+
+  // At this point, we won't receive any more callbacks from the Mojo host, so
+  // run any pending callbacks.
+  if (remove_credentials_callback_) {
+    LOG(WARNING) << "Mojo disconnected while removing credentials";
+    std::move(remove_credentials_callback_).Run(false /* success */);
+  }
+
+  if (delete_recursively_callback_) {
+    LOG(WARNING)
+        << "Mojo disconnected while recursively deleting a path on the share";
+    std::move(delete_recursively_callback_).Run(base::File::FILE_ERROR_FAILED);
+  }
 }
 
 void SmbFsShare::AllowCredentialsRequest() {
@@ -200,25 +251,53 @@ void SmbFsShare::RequestCredentials(RequestCredentialsCallback callback) {
 
   smb_dialog::SmbCredentialsDialog::Show(
       mount_id_, share_url_.ToString(),
-      base::BindOnce(
-          [](RequestCredentialsCallback callback, bool canceled,
-             const std::string& username, const std::string& password) {
-            if (canceled) {
-              std::move(callback).Run(true /* cancel */, "" /* username */,
-                                      "" /* workgroup */, "" /* password */);
-              return;
-            }
-
-            std::string parsed_username = username;
-            std::string workgroup;
-            ParseUserName(username, &parsed_username, &workgroup);
-            std::move(callback).Run(false /* cancel */, parsed_username,
-                                    workgroup, password);
-          },
-          std::move(callback)));
+      base::BindOnce(&SmbFsShare::OnSmbCredentialsDialogShowDone,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
   // Reset the allow dialog state to prevent showing another dialog to the user
   // immediately after they've dismissed one.
   allow_credential_request_ = false;
+}
+
+void SmbFsShare::OnSmbCredentialsDialogShowDone(
+    RequestCredentialsCallback callback,
+    bool canceled,
+    const std::string& username,
+    const std::string& password) {
+  if (canceled) {
+    std::move(callback).Run(true /* cancel */, "" /* username */,
+                            "" /* workgroup */, "" /* password */);
+    return;
+  }
+
+  std::string parsed_username = username;
+  std::string workgroup;
+  ParseUserName(username, &parsed_username, &workgroup);
+
+  // Save updated credentials for future suspend/resume.
+  options_.username = parsed_username;
+  options_.workgroup = workgroup;
+  options_.password = password;
+
+  std::move(callback).Run(false /* cancel */, parsed_username, workgroup,
+                          password);
+}
+
+void SmbFsShare::RemoveSavedCredentials(RemoveCredentialsCallback callback) {
+  DCHECK(!remove_credentials_callback_);
+
+  if (!host_) {
+    std::move(callback).Run(false /* success */);
+    return;
+  }
+
+  remove_credentials_callback_ = std::move(callback);
+  host_->RemoveSavedCredentials(base::BindOnce(
+      &SmbFsShare::OnRemoveSavedCredentialsDone, base::Unretained(this)));
+}
+
+void SmbFsShare::OnRemoveSavedCredentialsDone(bool success) {
+  DCHECK(remove_credentials_callback_);
+  std::move(remove_credentials_callback_).Run(success);
 }
 
 void SmbFsShare::SetMounterCreationCallbackForTest(

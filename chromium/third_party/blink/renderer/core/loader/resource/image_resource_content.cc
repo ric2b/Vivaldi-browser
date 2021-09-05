@@ -16,7 +16,6 @@
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
 #include "third_party/blink/renderer/platform/geometry/int_size.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
-#include "third_party/blink/renderer/platform/graphics/placeholder_image.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
@@ -42,14 +41,8 @@ class NullImageResourceInfo final
  private:
   const KURL& Url() const override { return url_; }
   base::TimeTicks LoadResponseEnd() const override { return base::TimeTicks(); }
-  bool IsSchedulingReload() const override { return false; }
   const ResourceResponse& GetResponse() const override { return response_; }
-  bool ShouldShowPlaceholder() const override { return false; }
-  bool ShouldShowLazyImagePlaceholder() const override { return false; }
   bool IsCacheValidator() const override { return false; }
-  bool SchedulingReloadOrShouldReloadBrokenPlaceholder() const override {
-    return false;
-  }
   bool IsAccessAllowed(
       DoesCurrentFrameHaveSingleSecurityOrigin) const override {
     return true;
@@ -75,31 +68,6 @@ class NullImageResourceInfo final
   const ResourceResponse response_;
 };
 
-int64_t EstimateOriginalImageSizeForPlaceholder(
-    const ResourceResponse& response) {
-  if (response.HttpHeaderField("chrome-proxy-content-transform") ==
-      "empty-image") {
-    const String& str = response.HttpHeaderField("chrome-proxy");
-    wtf_size_t index = str.Find("ofcl=");
-    if (index != kNotFound) {
-      bool ok = false;
-      int bytes = str.Substring(index + (sizeof("ofcl=") - 1)).ToInt(&ok);
-      if (ok && bytes >= 0)
-        return bytes;
-    }
-  }
-
-  int64_t first = -1, last = -1, length = -1;
-  if (response.HttpStatusCode() == 206 &&
-      ParseContentRangeHeaderFor206(response.HttpHeaderField("content-range"),
-                                    &first, &last, &length) &&
-      length >= 0) {
-    return length;
-  }
-
-  return response.EncodedBodyLength();
-}
-
 }  // namespace
 
 ImageResourceContent::ImageResourceContent(scoped_refptr<blink::Image> image)
@@ -118,14 +86,6 @@ ImageResourceContent* ImageResourceContent::CreateLoaded(
   ImageResourceContent* content =
       MakeGarbageCollected<ImageResourceContent>(std::move(image));
   content->content_status_ = ResourceStatus::kCached;
-  return content;
-}
-
-ImageResourceContent* ImageResourceContent::CreateLazyImagePlaceholder() {
-  ImageResourceContent* content = MakeGarbageCollected<ImageResourceContent>();
-  content->content_status_ = ResourceStatus::kCached;
-  content->image_ =
-      PlaceholderImage::CreateForLazyImages(content, IntSize(1, 1));
   return content;
 }
 
@@ -150,8 +110,6 @@ void ImageResourceContent::Trace(Visitor* visitor) {
 
 void ImageResourceContent::HandleObserverFinished(
     ImageResourceObserver* observer) {
-  if (info_->SchedulingReloadOrShouldReloadBrokenPlaceholder())
-    return;
   {
     ProhibitAddRemoveObserverInScope prohibit_add_remove_observer_in_scope(
         this);
@@ -448,22 +406,6 @@ ImageResourceContent::UpdateImageResult ImageResourceContent::UpdateImage(
       // causes observers to repaint, which will force that chunk to decode.
       if (size_available_ == Image::kSizeUnavailable && !all_data_received)
         return UpdateImageResult::kNoDecodeError;
-
-      if ((info_->ShouldShowPlaceholder() ||
-           info_->ShouldShowLazyImagePlaceholder()) &&
-          all_data_received) {
-        if (image_ && !image_->IsNull()) {
-          IntSize dimensions = image_->Size();
-          ClearImage();
-          if (info_->ShouldShowLazyImagePlaceholder()) {
-            image_ = PlaceholderImage::CreateForLazyImages(this, dimensions);
-          } else {
-            image_ = PlaceholderImage::Create(
-                this, dimensions,
-                EstimateOriginalImageSizeForPlaceholder(info_->GetResponse()));
-          }
-        }
-      }
 
       // As per spec, zero intrinsic size SVG is a valid image so do not
       // consider such an image as DecodeError.

@@ -17,8 +17,10 @@ ch-ua-full-version
 ch-ua-mobile
 ch-ua-model
 ch-ua-platform
+ch-ua-platform-version
 ch-viewport-width
 ch-width
+conversion-measurement
 document-domain
 document-write
 downloads
@@ -32,7 +34,6 @@ geolocation
 gyroscope
 hid
 idle-detection
-layout-animations
 lazyload
 loading-frame-default-eager
 magnetometer
@@ -45,6 +46,7 @@ picture-in-picture
 pointer-lock
 popups
 presentation
+publickey-credentials-get
 screen-wake-lock
 scripts
 serial

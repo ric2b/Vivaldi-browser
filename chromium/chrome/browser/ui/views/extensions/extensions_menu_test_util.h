@@ -36,12 +36,12 @@ class ExtensionsMenuTestUtil : public ExtensionActionTestHelper {
   gfx::NativeView GetPopupNativeView() override;
   bool HasPopup() override;
   bool HidePopup() override;
-  bool ActionButtonWantsToRun(size_t index) override;
   void SetWidth(int width) override;
   ToolbarActionsBar* GetToolbarActionsBar() override;
   ExtensionsContainer* GetExtensionsContainer() override;
   std::unique_ptr<ExtensionActionTestHelper> CreateOverflowBar(
       Browser* browser) override;
+  void LayoutForOverflowBar() override;
   // TODO(devlin): Some of these popup methods have a common implementation
   // between this and ExtensionActionTestHelperViews. It would make sense to
   // extract them (since they aren't dependent on the extension action UI
@@ -49,7 +49,6 @@ class ExtensionsMenuTestUtil : public ExtensionActionTestHelper {
   gfx::Size GetMinPopupSize() override;
   gfx::Size GetMaxPopupSize() override;
   gfx::Size GetToolbarActionSize() override;
-  bool CanBeResized() override;
 
  private:
   class Wrapper;

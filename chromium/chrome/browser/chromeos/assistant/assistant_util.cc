@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/strings/string_util.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
@@ -21,7 +22,7 @@
 
 namespace {
 
-using ash::mojom::AssistantAllowedState;
+using chromeos::assistant::AssistantAllowedState;
 
 bool g_override_is_google_device = false;
 
@@ -133,8 +134,7 @@ bool HasDedicatedAssistantKey() {
 
 namespace assistant {
 
-ash::mojom::AssistantAllowedState IsAssistantAllowedForProfile(
-    const Profile* profile) {
+AssistantAllowedState IsAssistantAllowedForProfile(const Profile* profile) {
   // Primary account might be missing during unittests.
   if (!HasPrimaryAccount(profile))
     return AssistantAllowedState::DISALLOWED_BY_NONPRIMARY_USER;

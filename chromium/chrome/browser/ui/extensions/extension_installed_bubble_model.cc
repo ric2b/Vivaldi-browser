@@ -9,12 +9,12 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/sync/sync_promo_ui.h"
-#include "chrome/common/extensions/api/extension_action/action_info.h"
 #include "chrome/common/extensions/api/omnibox/omnibox_handler.h"
 #include "chrome/common/extensions/command.h"
 #include "chrome/common/extensions/sync_helper.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/extension.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -24,7 +24,7 @@ namespace {
 base::Optional<extensions::Command> CommandForExtensionAction(
     const extensions::Extension* extension,
     Profile* profile) {
-  const auto* info = extensions::ActionInfo::GetAnyActionInfo(extension);
+  const auto* info = extensions::ActionInfo::GetExtensionActionInfo(extension);
 
   if (!info)
     return base::nullopt;
@@ -32,18 +32,12 @@ base::Optional<extensions::Command> CommandForExtensionAction(
   auto* service = extensions::CommandService::Get(profile);
   extensions::Command command;
 
-  if (info->type == extensions::ActionInfo::TYPE_BROWSER &&
-      service->GetBrowserActionCommand(extension->id(),
-                                       extensions::CommandService::ACTIVE,
-                                       &command, nullptr)) {
+  if (service->GetExtensionActionCommand(extension->id(), info->type,
+                                         extensions::CommandService::ACTIVE,
+                                         &command, nullptr)) {
     return command;
   }
-  if (info->type == extensions::ActionInfo::TYPE_PAGE &&
-      service->GetPageActionCommand(extension->id(),
-                                    extensions::CommandService::ACTIVE,
-                                    &command, nullptr)) {
-    return command;
-  }
+
   return base::nullopt;
 }
 
@@ -88,7 +82,8 @@ ExtensionInstalledBubbleModel::ExtensionInstalledBubbleModel(
   const std::string& keyword = extensions::OmniboxInfo::GetKeyword(extension);
   base::Optional<extensions::Command> command =
       CommandForExtensionAction(extension, profile);
-  const auto* action_info = extensions::ActionInfo::GetAnyActionInfo(extension);
+  const auto* action_info =
+      extensions::ActionInfo::GetExtensionActionInfo(extension);
 
   // TODO(ellyjones): There is no logical reason why TYPE_ACTION should be
   // different here, but the existing bubble behaves this way.

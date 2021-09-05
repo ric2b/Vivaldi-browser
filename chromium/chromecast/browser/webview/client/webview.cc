@@ -13,6 +13,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "chromecast/browser/webview/proto/webview.pb.h"
 #include "third_party/grpc/src/include/grpcpp/grpcpp.h"
 #include "third_party/skia/include/gpu/GrContext.h"
@@ -25,8 +26,10 @@ namespace {
 
 constexpr int kGrpcMaxReconnectBackoffMs = 1000;
 
+constexpr char kBackCommand[] = "back";
 constexpr char kCreateCommand[] = "create";
 constexpr char kDestroyCommand[] = "destroy";
+constexpr char kForwardCommand[] = "forward";
 constexpr char kListCommand[] = "list";
 constexpr char kNavigateCommand[] = "navigate";
 constexpr char kResizeCommand[] = "resize";
@@ -47,6 +50,8 @@ void BufferReleaseCallback(void* data, wl_buffer* /* buffer */) {
 
 }  // namespace
 
+using chromecast::webview::InputEvent;
+using chromecast::webview::TouchInput;
 using chromecast::webview::WebviewRequest;
 using chromecast::webview::WebviewResponse;
 
@@ -182,6 +187,34 @@ void WebviewClient::DestroyWebview(const std::vector<std::string>& tokens) {
   webviews_.erase(id);
 }
 
+void WebviewClient::HandleDown(void* data,
+                               struct wl_touch* wl_touch,
+                               uint32_t serial,
+                               uint32_t time,
+                               struct wl_surface* surface,
+                               int32_t id,
+                               wl_fixed_t x,
+                               wl_fixed_t y) {
+  gfx::Point touch_point(wl_fixed_to_int(x), wl_fixed_to_int(y));
+
+  auto iter = std::find_if(
+      webviews_.begin(), webviews_.end(),
+      [surface](const std::pair<const int, std::unique_ptr<Webview>>& pair) {
+        const auto& webview = pair.second;
+        return webview->surface.get() == surface;
+      });
+  if (iter == webviews_.end()) {
+    focused_webview_ = nullptr;
+    return;
+  }
+
+  const Webview* webview = iter->second.get();
+  focused_webview_ = webview;
+  SendTouchInput(focused_webview_, touch_point.x(), touch_point.y(),
+                 ui::ET_TOUCH_PRESSED, time, id);
+  points_[id] = touch_point;
+}
+
 void WebviewClient::HandleMode(void* data,
                                struct wl_output* wl_output,
                                uint32_t flags,
@@ -220,6 +253,34 @@ void WebviewClient::HandleMode(void* data,
   wl_surface_set_input_region(surface_.get(), opaque_region.get());
 }
 
+void WebviewClient::HandleMotion(void* data,
+                                 struct wl_touch* wl_touch,
+                                 uint32_t time,
+                                 int32_t id,
+                                 wl_fixed_t x,
+                                 wl_fixed_t y) {
+  if (!focused_webview_)
+    return;
+  gfx::Point& touch_point = points_[id];
+  touch_point.set_x(wl_fixed_to_int(x));
+  touch_point.set_y(wl_fixed_to_int(y));
+  SendTouchInput(focused_webview_, touch_point.x(), touch_point.y(),
+                 ui::ET_TOUCH_MOVED, time, id);
+}
+
+void WebviewClient::HandleUp(void* data,
+                             struct wl_touch* wl_touch,
+                             uint32_t serial,
+                             uint32_t time,
+                             int32_t id) {
+  if (!focused_webview_)
+    return;
+  const gfx::Point& touch_point = points_[id];
+  SendTouchInput(focused_webview_, touch_point.x(), touch_point.y(),
+                 ui::ET_TOUCH_RELEASED, time, id);
+  points_.erase(id);
+}
+
 void WebviewClient::InputCallback() {
   std::string request;
   getline(std::cin, request);
@@ -247,6 +308,10 @@ void WebviewClient::InputCallback() {
     SendResizeRequest(tokens);
   else if (tokens[1] == kPositionCommand)
     SetPosition(tokens);
+  else if (tokens[1] == kBackCommand)
+    SendBackRequest(tokens);
+  else if (tokens[1] == kForwardCommand)
+    SendForwardRequest(tokens);
 
   std::cout << "Enter command: ";
   std::cout.flush();
@@ -298,6 +363,38 @@ void WebviewClient::SchedulePaint() {
       FROM_HERE, base::BindOnce(&WebviewClient::Paint, base::Unretained(this)));
 }
 
+void WebviewClient::SendBackRequest(const std::vector<std::string>& tokens) {
+  int id;
+  if (tokens.size() != 2 || !base::StringToInt(tokens[0], &id) ||
+      webviews_.find(id) == webviews_.end()) {
+    LOG(ERROR) << "Usage: [ID] back";
+    return;
+  }
+
+  const auto& webview = webviews_[id];
+  WebviewRequest back_request;
+  back_request.mutable_go_back();
+  if (!webview->client->Write(back_request)) {
+    LOG(ERROR) << ("Back request send failed");
+  }
+}
+
+void WebviewClient::SendForwardRequest(const std::vector<std::string>& tokens) {
+  int id;
+  if (tokens.size() != 2 || !base::StringToInt(tokens[0], &id) ||
+      webviews_.find(id) == webviews_.end()) {
+    LOG(ERROR) << "Usage: [ID] forward";
+    return;
+  }
+
+  const auto& webview = webviews_[id];
+  WebviewRequest forward_request;
+  forward_request.mutable_go_forward();
+  if (!webview->client->Write(forward_request)) {
+    LOG(ERROR) << ("Forward request send failed");
+  }
+}
+
 void WebviewClient::SendNavigationRequest(
     const std::vector<std::string>& tokens) {
   int id;
@@ -335,6 +432,31 @@ void WebviewClient::SendResizeRequest(const std::vector<std::string>& tokens) {
   }
   webview->buffer =
       CreateBuffer(gfx::Size(width, height), drm_format_, bo_usage_);
+}
+
+void WebviewClient::SendTouchInput(const Webview* webview,
+                                   int x,
+                                   int y,
+                                   ui::EventType event_type,
+                                   uint32_t time,
+                                   int32_t id) {
+  auto touch_input = std::make_unique<TouchInput>();
+  touch_input->set_x(x);
+  touch_input->set_y(y);
+  touch_input->set_root_x(x);
+  touch_input->set_root_y(y);
+  touch_input->set_pointer_type(static_cast<int>(ui::EventPointerType::kTouch));
+  touch_input->set_pointer_id(id);
+
+  auto input_event = std::make_unique<InputEvent>();
+  input_event->set_event_type(event_type);
+  input_event->set_timestamp(time * base::Time::kMicrosecondsPerMillisecond);
+  input_event->set_allocated_touch(touch_input.release());
+
+  WebviewRequest input_request;
+  input_request.set_allocated_input(input_event.release());
+  if (!webview->client->Write(input_request))
+    LOG(ERROR) << "Input request failed";
 }
 
 void WebviewClient::SetPosition(const std::vector<std::string>& tokens) {

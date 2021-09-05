@@ -84,8 +84,13 @@ enum class WebSchedulerTrackedFeature {
   kOutstandingNetworkRequestFetch = 40,
   kOutstandingNetworkRequestXHR = 41,
 
+  kAppBanner = 42,
+  kPrinting = 43,
+  kWebDatabase = 44,
+  kPictureInPicture = 45,
+
   // NB: This enum is used in a bitmask, so kMaxValue must be less than 64.
-  kMaxValue = kOutstandingNetworkRequestXHR,
+  kMaxValue = kPictureInPicture
 };
 
 static_assert(static_cast<uint32_t>(WebSchedulerTrackedFeature::kMaxValue) < 64,

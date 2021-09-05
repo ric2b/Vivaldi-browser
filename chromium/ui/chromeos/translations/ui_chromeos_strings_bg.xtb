@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Немска клавиатура</translation>
 <translation id="1972984168337863910">Разгъване на панелите с информация за файловете</translation>
 <translation id="1984603991036629094">Арменска фонетична клавиатура</translation>
+<translation id="1995337122023280937">Към местоположението на файла</translation>
 <translation id="2001796770603320721">Управление в Диск</translation>
 <translation id="2009067268969781306">При форматирането на устройство ще бъдат изтрити всички съхранявани на него данни. Това действие не може да бъде отменено.</translation>
 <translation id="2028997212275086731">RAR архив</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Не можа да се установи връзка с Google Диск. Моля, <ph name="BEGIN_LINK" />излезте от профила си<ph name="END_LINK" /> и влезте отново.</translation>
 <translation id="2649120831653069427">Риба дъга</translation>
 <translation id="2661146741306740526">16 x 9</translation>
+<translation id="2664412712123763093">Местоположение на файла</translation>
 <translation id="2672394958563893062">Възникна грешка. Кликнете, за да започнете отначало.</translation>
 <translation id="2676946222714718093">Възпроизвежда се на</translation>
 <translation id="2735698359135166290">Румънска стандартна клавиатура</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> грешки.</translation>
 <translation id="3519867315646775981">Транслитерация (shalom ← שלום)</translation>
 <translation id="3522708245912499433">португалски</translation>
+<translation id="3524311639100184459">Внимание: Тези файлове са временни и може да бъдат изтрити автоматично, за да се освободи място на диска.  <ph name="BEGIN_LINK" />Научете повече<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Папка</translation>
 <translation id="3549797760399244642">Към drive.google.com...</translation>
 <translation id="357479282490346887">литовски</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Киви</translation>
 <translation id="3966388904776714213">Аудиоплейър</translation>
 <translation id="4002066346123236978">Заглавие</translation>
+<translation id="4065397611279318371">За да отваряте файлове с приложения за <ph name="APP_NAME" />, първо ги преместете в папката <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Метод на въвеждане за кантонски</translation>
 <translation id="4072248638558688893">Тамилска клавиатура (фонетична)</translation>
 <translation id="4124935795427217608">Еднорог</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Автокоригиране</translation>
 <translation id="4881695831933465202">Отваряне</translation>
 <translation id="4886021172213954916">Тамилска клавиатура (пишеща машина)</translation>
+<translation id="4892969127351273348">Отварянето чрез <ph name="APP_NAME" /> не е възможно</translation>
 <translation id="4905417359854579806">Готови сме да създадем резервно копие на <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Коригирано</translation>
 <translation id="4935975195727477204">Газания</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Управление на споделянето с Linux</translation>
 <translation id="6808193438228982088">Лисица</translation>
 <translation id="6820687829547641339">Tar архив, компресиран във формат Gzip</translation>
+<translation id="6823166707458800069">За всички файлове, запазени в тази папка, автоматично се създават резервни копия онлайн.</translation>
 <translation id="6825883775269213504">руски</translation>
 <translation id="6827236167376090743">Видеоклипът ще продължи да се възпроизвежда до края на света.</translation>
 <translation id="6847101934483209767">Премахнахте <ph name="ENTRY_NAME" /> от избраните.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Карта на Google</translation>
 <translation id="7419631653042041064">Каталонска клавиатура</translation>
 <translation id="7434823369735508263">Британска (Дворак) клавиатура</translation>
+<translation id="7447678886297481665">Файловете в тази папка са само за четене. Някои действия не се поддържат.</translation>
 <translation id="7460898608667578234">украински</translation>
 <translation id="7474889694310679759">Канадска (английски) клавиатура</translation>
 <translation id="7489215562877293245">Намерихме <ph name="FILE_COUNT" />

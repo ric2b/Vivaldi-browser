@@ -261,7 +261,8 @@ class PasswordProtectionServiceTest : public ::testing::TestWithParam<bool> {
     content_setting_map_ = new HostContentSettingsMap(
         &test_pref_service_, false /* is_off_the_record */,
         false /* store_last_modified */,
-        false /* migrate_requesting_and_top_level_origin_settings */);
+        false /* migrate_requesting_and_top_level_origin_settings */,
+        false /* restore_session*/);
     database_manager_ = new MockSafeBrowsingDatabaseManager();
     password_protection_service_ =
         std::make_unique<TestPasswordProtectionService>(
@@ -1165,20 +1166,10 @@ TEST_P(PasswordProtectionServiceTest, VerifyShouldShowModalWarning) {
 
   reused_password_account_type.set_account_type(
       ReusedPasswordAccountType::SAVED_PASSWORD);
-// kPasswordProtectionForSignedInUsers is disabled by default on Android.
-#if defined(OS_ANDROID)
-  EXPECT_FALSE(password_protection_service_->ShouldShowModalWarning(
-#else
   EXPECT_TRUE(password_protection_service_->ShouldShowModalWarning(
-#endif
       LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
       reused_password_account_type, LoginReputationClientResponse::PHISHING));
-// kPasswordProtectionForSignedInUsers is disabled by default on Android.
-#if defined(OS_ANDROID)
-  EXPECT_FALSE(password_protection_service_->ShouldShowModalWarning(
-#else
   EXPECT_TRUE(password_protection_service_->ShouldShowModalWarning(
-#endif
       LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
       reused_password_account_type,
       LoginReputationClientResponse::LOW_REPUTATION));

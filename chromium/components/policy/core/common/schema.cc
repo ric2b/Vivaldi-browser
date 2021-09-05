@@ -13,12 +13,13 @@
 #include <memory>
 #include <utility>
 
+#include "base/check_op.h"
 #include "base/compiler_specific.h"
 #include "base/containers/flat_set.h"
 #include "base/json/json_reader.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "components/policy/core/common/json_schema_constants.h"
@@ -1423,7 +1424,7 @@ base::Optional<base::Value> Schema::ParseToDictAndValidate(
           schema, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS);
   *error = value_with_error.error_message;
 
-  if (value_with_error.error_code != base::JSONReader::JSON_NO_ERROR)
+  if (!value_with_error.value)
     return base::nullopt;
   base::Value json = std::move(value_with_error.value.value());
   if (!json.is_dict()) {

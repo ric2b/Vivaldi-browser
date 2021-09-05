@@ -4,7 +4,6 @@
 
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 
-#include <bitset>
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
@@ -14,6 +13,7 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/deprecation_report_body.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/report.h"
@@ -26,7 +26,7 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/date_math.h"
 
-using blink::WebFeature;
+namespace blink {
 
 namespace {
 
@@ -63,6 +63,7 @@ enum Milestone {
   kM82 = 82,
   kM83 = 83,
   kM84 = 84,
+  kM85 = 85,
 };
 
 // Returns estimated milestone dates as milliseconds since January 1, 1970.
@@ -110,7 +111,11 @@ base::Time::Exploded MilestoneDate(Milestone milestone) {
     case kM84:
       // This release is not yet scheduled, so this date is a guess.
       // https://groups.google.com/a/chromium.org/d/msg/chromium-dev/N1NxbSVOZas/ySlEKDKkBgAJ
-      return {2020, 6, 0, 29, 4};
+      return {2020, 7, 0, 14, 4};
+    case kM85:
+      // This release is not yet scheduled, so this date is a guess.
+      // https://groups.google.com/a/chromium.org/d/msg/chromium-dev/N1NxbSVOZas/ySlEKDKkBgAJ
+      return {2020, 8, 0, 25, 4};
   }
 
   NOTREACHED();
@@ -302,12 +307,12 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
 
     case WebFeature::kApplicationCacheAPISecureOrigin:
       return {
-          "ApplicationCacheAPISecureOrigin", kM82,
-          WillBeRemoved("Application Cache API use", kM82, "6192449487634432")};
+          "ApplicationCacheAPISecureOrigin", kM85,
+          WillBeRemoved("Application Cache API use", kM85, "6192449487634432")};
 
     case WebFeature::kApplicationCacheManifestSelectSecureOrigin:
-      return {"ApplicationCacheAPISecureOrigin", kM82,
-              WillBeRemoved("Application Cache API manifest selection", kM82,
+      return {"ApplicationCacheAPISecureOrigin", kM85,
+              WillBeRemoved("Application Cache API manifest selection", kM85,
                             "6192449487634432")};
 
     case WebFeature::kNotificationInsecureOrigin:
@@ -527,18 +532,69 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
               "details.",
               MilestoneString(kM84).Ascii().c_str())};
 
+    case WebFeature::kV8RTCRtpSender_CreateEncodedAudioStreams_Method:
+      return {"V8RTCRtpSender_CreateEncodedAudioStreams_Method", kM85,
+              ReplacedWillBeRemoved("RTCRtpSender.createEncodedAudioStreams",
+                                    "RTCRtpSender.createEncodedStreams", kM85,
+                                    "6321945865879552")};
+
+    case WebFeature::kV8RTCRtpSender_CreateEncodedVideoStreams_Method:
+      return {"V8RTCRtpSender_CreateEncodedVideoStreams_Method", kM85,
+              ReplacedWillBeRemoved("RTCRtpSender.createEncodedVideoStreams",
+                                    "RTCRtpSender.createEncodedStreams", kM85,
+                                    "6321945865879552")};
+
+    case WebFeature::kV8RTCRtpReceiver_CreateEncodedAudioStreams_Method:
+      return {"V8RTCRtpReceiver_CreateEncodedAudioStreams_Method", kM85,
+              ReplacedWillBeRemoved("RTCRtpReceiver.createEncodedAudioStreams",
+                                    "RTCRtpReceiver.createEncodedStreams", kM85,
+                                    "6321945865879552")};
+
+    case WebFeature::kV8RTCRtpReceiver_CreateEncodedVideoStreams_Method:
+      return {"V8RTCRtpReceiver_CreateEncodedVideoStreams_Method", kM85,
+              ReplacedWillBeRemoved("RTCRtpReceiver.createEncodedVideoStreams",
+                                    "RTCRtpReceiver.createEncodedStreams", kM85,
+                                    "6321945865879552")};
+
+    case WebFeature::kForceEncodedAudioInsertableStreams:
+      return {"ForceEncodedAudioInsertableStreams", kM85,
+              ReplacedWillBeRemoved(
+                  "RTCConfiguration.forceEncodedAudioInsertableStreams",
+                  "RTCConfiguration.encodedInsertableStreams", kM85,
+                  "6321945865879552")};
+
+    case WebFeature::kForceEncodedVideoInsertableStreams:
+      return {"ForceEncodedVideoInsertableStreams", kM85,
+              ReplacedWillBeRemoved(
+                  "RTCConfiguration.forceEncodedVideoInsertableStreams",
+                  "RTCConfiguration.encodedInsertableStreams", kM85,
+                  "6321945865879552")};
+
     // Features that aren't deprecated don't have a deprecation message.
     default:
       return {"NotDeprecated", kUnknown, ""};
   }
 }
 
+Report* CreateReportInternal(const KURL& context_url,
+                             const DeprecationInfo& info) {
+  base::Optional<base::Time> optional_removal_date;
+  if (info.anticipated_removal != kUnknown) {
+    base::Time removal_date;
+    bool result = base::Time::FromUTCExploded(
+        MilestoneDate(info.anticipated_removal), &removal_date);
+    DCHECK(result);
+    optional_removal_date = removal_date;
+  }
+  DeprecationReportBody* body = MakeGarbageCollected<DeprecationReportBody>(
+      info.id, optional_removal_date, info.message);
+  return MakeGarbageCollected<Report>(ReportType::kDeprecation, context_url,
+                                      body);
+}
+
 }  // anonymous namespace
 
-namespace blink {
-
-Deprecation::Deprecation() : mute_count_(0) {
-}
+Deprecation::Deprecation() : mute_count_(0) {}
 
 void Deprecation::ClearSuppression() {
   css_property_deprecation_bits_.reset();
@@ -614,7 +670,7 @@ void Deprecation::CountDeprecation(Document* document, WebFeature feature) {
   if (!document)
     return;
 
-  Deprecation::CountDeprecation(document->ToExecutionContext(), feature);
+  Deprecation::CountDeprecation(document->GetExecutionContext(), feature);
 }
 
 void Deprecation::CountDeprecation(DocumentLoader* loader, WebFeature feature) {
@@ -661,7 +717,10 @@ void Deprecation::CountDeprecationCrossOriginIframe(const Document& document,
 }
 
 void Deprecation::GenerateReport(const LocalFrame* frame, WebFeature feature) {
-  DeprecationInfo info = GetDeprecationInfo(feature);
+  if (!frame || !frame->Client())
+    return;
+
+  const DeprecationInfo info = GetDeprecationInfo(feature);
 
   // Send the deprecation message to the console as a warning.
   DCHECK(!info.message.IsEmpty());
@@ -670,28 +729,17 @@ void Deprecation::GenerateReport(const LocalFrame* frame, WebFeature feature) {
       mojom::ConsoleMessageLevel::kWarning, info.message);
   frame->Console().AddMessage(console_message);
 
-  if (!frame || !frame->Client())
-    return;
-
-  Document* document = frame->GetDocument();
-
-  // Construct the deprecation report.
-  base::Optional<base::Time> optional_removal_date;
-  if (info.anticipated_removal != kUnknown) {
-    base::Time removal_date;
-    bool result = base::Time::FromUTCExploded(
-        MilestoneDate(info.anticipated_removal), &removal_date);
-    DCHECK(result);
-    optional_removal_date = removal_date;
-  }
-  DeprecationReportBody* body = MakeGarbageCollected<DeprecationReportBody>(
-      info.id, optional_removal_date, info.message);
-  Report* report = MakeGarbageCollected<Report>(
-      ReportType::kDeprecation, document->Url().GetString(), body);
+  auto* window = frame->DomWindow();
+  Report* report = CreateReportInternal(window->Url(), info);
 
   // Send the deprecation report to the Reporting API and any
   // ReportingObservers.
-  ReportingContext::From(document->ToExecutionContext())->QueueReport(report);
+  ReportingContext::From(window)->QueueReport(report);
+}
+
+// static
+Report* Deprecation::CreateReport(const KURL& context_url, WebFeature feature) {
+  return CreateReportInternal(context_url, GetDeprecationInfo(feature));
 }
 
 // static

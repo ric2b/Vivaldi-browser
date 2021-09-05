@@ -61,14 +61,6 @@ class WebAppFileHandlerRegistrationWinTest : public testing::Test {
         registry_override_.OverrideRegistry(HKEY_LOCAL_MACHINE));
     ASSERT_NO_FATAL_FAILURE(
         registry_override_.OverrideRegistry(HKEY_CURRENT_USER));
-
-    // Create a mock chrome_pwa_launcher.exe in a mock Chrome version directory,
-    // where the file-registration code expects it to be.
-    const base::FilePath pwa_launcher_path = GetChromePwaLauncherPath();
-    ASSERT_TRUE(temp_version_dir_.Set(pwa_launcher_path.DirName()));
-    ASSERT_TRUE(
-        base::File(pwa_launcher_path, base::File::FLAG_CREATE).IsValid());
-
     testing_profile_manager_ = std::make_unique<TestingProfileManager>(
         TestingBrowserProcess::GetGlobal());
     ASSERT_TRUE(testing_profile_manager_->SetUp());
@@ -115,8 +107,7 @@ class WebAppFileHandlerRegistrationWinTest : public testing::Test {
     std::string sanitized_app_name(app_name);
     sanitized_app_name.append(app_name_extension);
     base::FilePath expected_app_launcher_path =
-        CreateDataDirectoryAndGetLauncherPathForApp(profile, app_id(),
-                                                    sanitized_app_name);
+        GetLauncherPathForApp(profile, app_id(), sanitized_app_name);
     apps::FileHandlers file_handlers =
         GetFileHandlersWithFileExtensions({".txt", ".doc"});
 
@@ -145,18 +136,13 @@ class WebAppFileHandlerRegistrationWinTest : public testing::Test {
     return app_specific_launcher_filepath;
   }
 
-  // Creates a "Web Applications" directory containing a subdirectory for
-  // |app_id| inside |profile|'s data directory, then returns the expected app-
-  // launcher path inside the subdirectory for |app_id|.
-  base::FilePath CreateDataDirectoryAndGetLauncherPathForApp(
-      Profile* profile,
-      const AppId app_id,
-      const std::string& sanitized_app_name) {
+  // Returns the expected app launcher path inside the subdirectory for
+  // |app_id|.
+  base::FilePath GetLauncherPathForApp(Profile* profile,
+                                       const AppId app_id,
+                                       const std::string& sanitized_app_name) {
     base::FilePath web_app_dir(GetOsIntegrationResourcesDirectoryForApp(
         profile->GetPath(), app_id, GURL()));
-    // Make sure web app dir exists. Normally installing an extension would
-    // handle this.
-    EXPECT_TRUE(base::CreateDirectory(web_app_dir));
     base::FilePath app_specific_launcher_filepath =
         GetAppSpecificLauncherFilePath(sanitized_app_name);
 
@@ -368,8 +354,7 @@ TEST_F(WebAppFileHandlerRegistrationWinTest, AppNameWithInvalidChars) {
   // with '_'.
   std::string app_name("app*name");
   base::FilePath app_specific_launcher_path =
-      CreateDataDirectoryAndGetLauncherPathForApp(profile(), app_id(),
-                                                  "app_name");
+      GetLauncherPathForApp(profile(), app_id(), "app_name");
   apps::FileHandlers file_handlers =
       GetFileHandlersWithFileExtensions({".txt"});
 
@@ -389,7 +374,7 @@ TEST_F(WebAppFileHandlerRegistrationWinTest, AppNameIsReservedFilename) {
   // "con" is a reserved filename on Windows, so it should have '_' prepended.
   std::string app_name("con");
   base::FilePath app_specific_launcher_path =
-      CreateDataDirectoryAndGetLauncherPathForApp(profile(), app_id(), "_con");
+      GetLauncherPathForApp(profile(), app_id(), "_con");
   apps::FileHandlers file_handlers =
       GetFileHandlersWithFileExtensions({".txt"});
 
@@ -408,11 +393,10 @@ TEST_F(WebAppFileHandlerRegistrationWinTest, AppNameIsReservedFilename) {
 TEST_F(WebAppFileHandlerRegistrationWinTest, AppNameContainsDot) {
   // "some.app.name" should become "some_app_name" on Windows 7.
   std::string app_name("some.app.name");
-  base::FilePath app_specific_launcher_path =
-      CreateDataDirectoryAndGetLauncherPathForApp(
-          profile(), app_id(),
-          base::win::GetVersion() > base::win::Version::WIN7 ? "some.app.name"
-                                                             : "some_app_name");
+  base::FilePath app_specific_launcher_path = GetLauncherPathForApp(
+      profile(), app_id(),
+      base::win::GetVersion() > base::win::Version::WIN7 ? "some.app.name"
+                                                         : "some_app_name");
   apps::FileHandlers file_handlers =
       GetFileHandlersWithFileExtensions({".txt"});
 

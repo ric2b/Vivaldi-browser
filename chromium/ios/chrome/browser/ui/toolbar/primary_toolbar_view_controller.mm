@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view_controller.h"
 
-#include "base/logging.h"
+#include "base/check.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
@@ -164,9 +164,17 @@
     return;
   [super setIsNTP:isNTP];
   _isNTP = isNTP;
-  if (!isNTP && !IsSplitToolbarMode(self)) {
+  if (IsSplitToolbarMode(self) || !self.shouldHideOmniboxOnNTP)
+    return;
+
+  // This is hiding/showing and positionning the omnibox. This is only needed
+  // if the omnibox should be hidden when there is only one toolbar.
+  if (!isNTP) {
     // Reset any location bar view updates when not an NTP.
     [self setScrollProgressForTabletOmnibox:1];
+  } else {
+    // Hides the omnibox.
+    [self setScrollProgressForTabletOmnibox:0];
   }
 }
 

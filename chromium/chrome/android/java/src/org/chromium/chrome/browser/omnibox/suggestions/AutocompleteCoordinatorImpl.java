@@ -5,18 +5,19 @@
 package org.chromium.chrome.browser.omnibox.suggestions;
 
 import android.content.Context;
+import android.os.Handler;
+import android.util.Pair;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewStub;
-import android.widget.ListView;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.view.ViewCompat;
 
 import org.chromium.base.Callback;
-import org.chromium.base.StrictModeContext;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
@@ -30,15 +31,20 @@ import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewViewB
 import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestionProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.entity.EntitySuggestionViewBinder;
+import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderView;
+import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.util.KeyNavigationUtil;
+import org.chromium.components.query_tiles.QueryTile;
 import org.chromium.ui.ViewProvider;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.LazyConstructionPropertyMcp;
+import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -50,9 +56,10 @@ import java.util.List;
  */
 public class AutocompleteCoordinatorImpl implements AutocompleteCoordinator {
     private final ViewGroup mParent;
+    private OmniboxQueryTileCoordinator mQueryTileCoordinator;
     private AutocompleteMediator mMediator;
 
-    private ListView mListView;
+    private OmniboxSuggestionsDropdown mDropdown;
 
     /**
      * See {@link AutocompleteCoordinatorFactory#createAutocompleteCoordinator}.
@@ -61,25 +68,27 @@ public class AutocompleteCoordinatorImpl implements AutocompleteCoordinator {
      */
     @VisibleForTesting
     protected AutocompleteCoordinatorImpl(ViewGroup parent, AutocompleteDelegate delegate,
-            OmniboxSuggestionListEmbedder listEmbedder,
+            OmniboxSuggestionsDropdown.Embedder dropdownEmbedder,
             UrlBarEditingTextStateProvider urlBarEditingTextProvider) {
         mParent = parent;
         Context context = parent.getContext();
 
         PropertyModel listModel = new PropertyModel(SuggestionListProperties.ALL_KEYS);
-        ModelList listItems = new ModelList();
+        MVCListAdapter.ModelList listItems = new MVCListAdapter.ModelList();
+        mQueryTileCoordinator = new OmniboxQueryTileCoordinator(context, this::onTileSelected);
         mMediator = new AutocompleteMediator(context, delegate, urlBarEditingTextProvider,
-                new AutocompleteController(), listModel);
+                new AutocompleteController(), mQueryTileCoordinator::setTiles, listModel,
+                new Handler());
         mMediator.initDefaultProcessors();
 
-        listModel.set(SuggestionListProperties.EMBEDDER, listEmbedder);
+        listModel.set(SuggestionListProperties.EMBEDDER, dropdownEmbedder);
         listModel.set(SuggestionListProperties.VISIBLE, false);
         listModel.set(SuggestionListProperties.OBSERVER, mMediator);
         listModel.set(SuggestionListProperties.SUGGESTION_MODELS, listItems);
 
         ViewProvider<SuggestionListViewHolder> viewProvider =
                 createViewProvider(context, listItems);
-        viewProvider.whenLoaded((holder) -> { mListView = holder.listView; });
+        viewProvider.whenLoaded((holder) -> { mDropdown = holder.dropdown; });
         LazyConstructionPropertyMcp.create(listModel, SuggestionListProperties.VISIBLE,
                 viewProvider, SuggestionListViewBinder::bind);
 
@@ -89,12 +98,14 @@ public class AutocompleteCoordinatorImpl implements AutocompleteCoordinator {
 
     @Override
     public void destroy() {
+        mQueryTileCoordinator.destroy();
+        mQueryTileCoordinator = null;
         mMediator.destroy();
         mMediator = null;
     }
 
     private ViewProvider<SuggestionListViewHolder> createViewProvider(
-            Context context, ModelList modelList) {
+            Context context, MVCListAdapter.ModelList modelList) {
         return new ViewProvider<SuggestionListViewHolder>() {
             private List<Callback<SuggestionListViewHolder>> mCallbacks = new ArrayList<>();
             private SuggestionListViewHolder mHolder;
@@ -104,18 +115,17 @@ public class AutocompleteCoordinatorImpl implements AutocompleteCoordinator {
                 ViewGroup container = (ViewGroup) ((ViewStub) mParent.getRootView().findViewById(
                                                            R.id.omnibox_results_container_stub))
                                               .inflate();
-                OmniboxSuggestionsList list;
-                try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
-                    list = new OmniboxSuggestionsList(context);
-                }
+                Pair<OmniboxSuggestionsDropdown, MVCListAdapter> dropdownAndAdapter =
+                        OmniboxSuggestionsDropdownFactory.provideDropdownAndAdapter(
+                                context, modelList);
+
+                OmniboxSuggestionsDropdown dropdown = dropdownAndAdapter.first;
+                MVCListAdapter adapter = dropdownAndAdapter.second;
 
                 // Start with visibility GONE to ensure that show() is called.
                 // http://crbug.com/517438
-                list.setVisibility(View.GONE);
-                OmniboxSuggestionsListAdapter adapter =
-                        new OmniboxSuggestionsListAdapter(modelList);
-                list.setAdapter(adapter);
-                list.setClipToPadding(false);
+                dropdown.getViewGroup().setVisibility(View.GONE);
+                dropdown.getViewGroup().setClipToPadding(false);
 
                 // Register a view type for a default omnibox suggestion.
                 // Note: clang-format does a bad job formatting lambdas so we turn it off here.
@@ -155,9 +165,19 @@ public class AutocompleteCoordinatorImpl implements AutocompleteCoordinator {
                         parent -> new BaseSuggestionView<View>(
                                 parent.getContext(), R.layout.omnibox_basic_suggestion),
                         new BaseSuggestionViewBinder<View>(SuggestionViewViewBinder::bind));
+
+                adapter.registerType(
+                        OmniboxSuggestionUiType.TILE_SUGGESTION,
+                        parent -> mQueryTileCoordinator.createView(parent.getContext()),
+                        mQueryTileCoordinator::bind);
+
+                adapter.registerType(
+                        OmniboxSuggestionUiType.HEADER,
+                        parent -> new HeaderView(parent.getContext()),
+                        HeaderViewBinder::bind);
                 // clang-format on
 
-                mHolder = new SuggestionListViewHolder(container, list);
+                mHolder = new SuggestionListViewHolder(container, dropdown);
 
                 for (int i = 0; i < mCallbacks.size(); i++) {
                     mCallbacks.get(i).onResult(mHolder);
@@ -212,6 +232,11 @@ public class AutocompleteCoordinatorImpl implements AutocompleteCoordinator {
     }
 
     @Override
+    public void setShareDelegateSupplier(Supplier<ShareDelegate> shareDelegateSupplier) {
+        mMediator.setShareDelegateSupplier(shareDelegateSupplier);
+    }
+
+    @Override
     public void setShouldPreventOmniboxAutocomplete(boolean prevent) {
         mMediator.setShouldPreventOmniboxAutocomplete(prevent);
     }
@@ -258,15 +283,17 @@ public class AutocompleteCoordinatorImpl implements AutocompleteCoordinator {
 
     @Override
     public boolean handleKeyEvent(int keyCode, KeyEvent event) {
-        boolean isShowingList = mListView != null && mListView.isShown();
+        boolean isShowingList = mDropdown != null && mDropdown.getViewGroup().isShown();
 
         boolean isUpOrDown = KeyNavigationUtil.isGoUpOrDown(event);
         if (isShowingList && mMediator.getSuggestionCount() > 0 && isUpOrDown) {
             mMediator.allowPendingItemSelection();
         }
         boolean isValidListKey = isUpOrDown || KeyNavigationUtil.isGoRight(event)
-                || KeyNavigationUtil.isEnter(event);
-        if (isShowingList && isValidListKey && mListView.onKeyDown(keyCode, event)) return true;
+                || KeyNavigationUtil.isGoLeft(event) || KeyNavigationUtil.isEnter(event);
+        if (isShowingList && isValidListKey && mDropdown.getViewGroup().onKeyDown(keyCode, event)) {
+            return true;
+        }
         if (KeyNavigationUtil.isEnter(event) && mParent.getVisibility() == View.VISIBLE) {
             mMediator.loadTypedOmniboxText(event.getEventTime());
             return true;
@@ -295,8 +322,8 @@ public class AutocompleteCoordinatorImpl implements AutocompleteCoordinator {
     }
 
     @VisibleForTesting
-    ListView getSuggestionList() {
-        return mListView;
+    OmniboxSuggestionsDropdown getSuggestionsDropdown() {
+        return mDropdown;
     }
 
     @VisibleForTesting
@@ -307,5 +334,14 @@ public class AutocompleteCoordinatorImpl implements AutocompleteCoordinator {
     @VisibleForTesting
     OnSuggestionsReceivedListener getSuggestionsReceivedListenerForTest() {
         return mMediator;
+    }
+
+    @VisibleForTesting
+    ModelList getSuggestionModelList() {
+        return mMediator.getSuggestionModelList();
+    }
+
+    private void onTileSelected(QueryTile queryTile) {
+        mMediator.onQueryTileSelected(queryTile);
     }
 }

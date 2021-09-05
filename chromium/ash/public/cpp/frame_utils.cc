@@ -66,9 +66,31 @@ int FrameBorderNonClientHitTest(views::NonClientFrameView* view,
 
 void ResolveInferredOpacity(views::Widget::InitParams* params) {
   DCHECK_EQ(params->opacity, WindowOpacity::kInferred);
-  params->init_properties_container.SetProperty(
-      ash::kWindowManagerManagesOpacityKey, true);
-  params->opacity = WindowOpacity::kTranslucent;
+  if (params->type == views::Widget::InitParams::TYPE_WINDOW &&
+      params->layer_type == ui::LAYER_TEXTURED) {
+    // A framed window may have a rounded corner which requires the
+    // window to be transparent. WindowManager controls the actual
+    // opaque-ness of the window depending on its window state.
+    params->init_properties_container.SetProperty(
+        ash::kWindowManagerManagesOpacityKey, true);
+    params->opacity = WindowOpacity::kTranslucent;
+  } else {
+    params->opacity = WindowOpacity::kOpaque;
+  }
+}
+
+bool ShouldUseRestoreFrame(const views::Widget* widget) {
+  aura::Window* window = widget->GetNativeWindow();
+  // This is true when dragging a maximized window in ash. During this phase,
+  // the window should look as if it was restored, but keep its maximized state.
+  if (window->GetProperty(kFrameRestoreLookKey))
+    return true;
+
+  // Maximized and fullscreen windows should use the maximized frame.
+  if (widget->IsMaximized() || widget->IsFullscreen())
+    return false;
+
+  return true;
 }
 
 }  // namespace ash

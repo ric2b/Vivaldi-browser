@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Tastiera tedesca</translation>
 <translation id="1972984168337863910">Espandi i riquadri di feedback dei file</translation>
 <translation id="1984603991036629094">Tastiera fonetica Armeno</translation>
+<translation id="1995337122023280937">Vai a posizione file</translation>
 <translation id="2001796770603320721">Gestisci in Drive</translation>
 <translation id="2009067268969781306">Se formatti un'unità vengono eliminati tutti i dati in essa memorizzati. L'azione non può essere annullata.</translation>
 <translation id="2028997212275086731">Archivio RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Impossibile raggiungere Google Drive. <ph name="BEGIN_LINK" />Esci<ph name="END_LINK" /> e accedi di nuovo.</translation>
 <translation id="2649120831653069427">Pesce arcobaleno</translation>
 <translation id="2661146741306740526">16 x 9</translation>
+<translation id="2664412712123763093">Posizione file</translation>
 <translation id="2672394958563893062">Si è verificato un errore. Fai clic per ricominciare dall'inizio.</translation>
 <translation id="2676946222714718093">In riproduzione su:</translation>
 <translation id="2735698359135166290">Tastiera Rumeno standard</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> errori.</translation>
 <translation id="3519867315646775981">Traslitterazione (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portoghese</translation>
+<translation id="3524311639100184459">Attenzione: questi file sono temporanei e potrebbero essere eliminati automaticamente per liberare spazio su disco.  <ph name="BEGIN_LINK" />Ulteriori informazioni<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Cartella</translation>
 <translation id="3549797760399244642">Vai all'indirizzo drive.google.com...</translation>
 <translation id="357479282490346887">Lituano</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Lettore audio</translation>
 <translation id="4002066346123236978">Titolo</translation>
+<translation id="4065397611279318371">Per aprire file con le app <ph name="APP_NAME" />, devi prima spostarli nella cartella <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Metodo di immissione Cantonese</translation>
 <translation id="4072248638558688893">Tastiera Tamil (fonetica)</translation>
 <translation id="4124935795427217608">Unicorno</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Correzione automatica</translation>
 <translation id="4881695831933465202">Apri</translation>
 <translation id="4886021172213954916">Tastiera Tamil (macchina da scrivere)</translation>
+<translation id="4892969127351273348">Impossibile aprire con <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Pronto per il backup di <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Corretta</translation>
 <translation id="4935975195727477204">Gazania</translation>
@@ -499,6 +504,7 @@
 <translation id="6806699711453372963">Gestisci condivisione con Linux</translation>
 <translation id="6808193438228982088">Volpe</translation>
 <translation id="6820687829547641339">Archivio tar compresso con gzip</translation>
+<translation id="6823166707458800069">Viene effettuato automaticamente il backup online di tutti i file salvati in questa cartella.</translation>
 <translation id="6825883775269213504">Russo</translation>
 <translation id="6827236167376090743">La riproduzione di questo video continuerà indefinitamente.</translation>
 <translation id="6847101934483209767">L'elemento <ph name="ENTRY_NAME" /> è stato rimosso dalla selezione.</translation>
@@ -555,6 +561,7 @@
 <translation id="7417705661718309329">Mappa Google</translation>
 <translation id="7419631653042041064">Tastiera catalana</translation>
 <translation id="7434823369735508263">Tastiera Dvorak britannica</translation>
+<translation id="7447678886297481665">I file in questa cartella sono di sola lettura. Alcune attività non sono supportate.</translation>
 <translation id="7460898608667578234">Ucraino</translation>
 <translation id="7474889694310679759">Tastiera inglese canadese</translation>
 <translation id="7489215562877293245">Elementi trovati: <ph name="FILE_COUNT" />

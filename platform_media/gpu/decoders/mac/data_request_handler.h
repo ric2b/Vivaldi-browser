@@ -14,12 +14,15 @@
 #include "platform_media/gpu/data_source/ipc_data_source.h"
 
 #include "base/callback.h"
+#include "base/mac/scoped_dispatch_object.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/ref_counted.h"
 #include "media/base/data_source.h"
 #include "media/base/media_export.h"
 
 #import <AVFoundation/AVFoundation.h>
+
+@class DataSourceLoader;
 
 namespace media {
 
@@ -36,43 +39,32 @@ class MEDIA_EXPORT DataRequestHandler
   enum class Status {
     kSuccess,
 
-    // Renderer reported end-of-stream.
-    kEOS,
+    // Unsupported or invalid request
+    kBadRequest,
 
-    // Renderer reported read error.
+    // Renderer reported a read error.
     kError,
 
     // The request was aborted due to Stop() or Suspend() calls or due to errors
     // with earlier requests.
     kAborted,
 
-    // The request was cancelled with the explicit Cancel call.
+    // The request was cancelled by the caller.
     kCancelled,
   };
 
-  using RespondWithDataCB = base::RepeatingCallback<
-      void(id request_handle, const uint8_t* data, int size)>;
-  using FinishLoadingCB =
-      base::RepeatingCallback<void(id request_handle, Status status)>;
-
-  enum { kMaxReadChunkSize = 64 * 1024 };
-  static_assert(
-      kMaxReadChunkSize >= kMinimalSharedMemorySize,
-      "read limit should at least be the minimal size of shared memory");
-
   DataRequestHandler();
 
-  void InitSourceReader(ipc_data_source::Reader source_reader);
+  void Init(ipc_data_source::Info source_info, dispatch_queue_t ipc_queue);
 
-  void InitCallbacks(RespondWithDataCB respond_with_data_cb,
-                     FinishLoadingCB finish_loading_cb);
+  dispatch_queue_t GetIPCQueue();
+  AVURLAsset* GetAsset();
 
-  void HandleDataRequest(id request_handle, int64_t offset, int64_t length);
+  void Load(AVAssetResourceLoadingRequest* request);
 
-  // Cancels a data request being handled.  As this must be called on the
-  // serial dispatch queue, it only affects the chunks of the original data
-  // request that haven't been processed yet.
-  void CancelDataRequest(id request_handle);
+  void FillContentInformation(AVAssetResourceLoadingContentInformationRequest*);
+
+  void CancelRequest(AVAssetResourceLoadingRequest* request);
 
   // Forces all pending data requests to finish with an error.
   void Stop();
@@ -80,6 +72,7 @@ class MEDIA_EXPORT DataRequestHandler
 
   void Suspend();
   void Resume();
+  bool IsSuspended() const;
 
   // Return true when HandleDataRequest() can be called to submit requests
   // for further processing.
@@ -88,76 +81,38 @@ class MEDIA_EXPORT DataRequestHandler
   // Return true if we have requests that we have not yet replied.
   bool IsHandlingDataRequests() const;
 
-  int64_t stream_position() const { return stream_position_; }
-
  private:
   friend class base::RefCountedThreadSafe<DataRequestHandler>;
-
-  // Move-only holder of the request and its offset and length.
-  struct Request {
-    Request();
-    Request(id request_handle, int64_t offset, int64_t length);
-    Request(Request&&);
-    ~Request();
-    Request& operator=(Request&&);
-
-    // Remember to update the above assignment operator implementation when
-    // adding new members.
-
-    // The handle must be reset before the destructor to indicate that the
-    // finish request was called or cancelled.
-    base::scoped_nsobject<id> handle;
-    int64_t offset = 0;
-    int64_t length = -1;
-
-    DISALLOW_COPY_AND_ASSIGN(Request);
-  };
-
-  // A container for Requests uniquely identified by handles, but ordered by
-  // requested offset.
-  class OrderedRequests {
-  public:
-    OrderedRequests();
-    ~OrderedRequests();
-
-    void Add(Request* request);
-    Request Remove(id handle);
-    Request Pop();
-
-    bool is_empty() const { return requests_.empty(); }
-    size_t size() const { return requests_.size(); }
-
-  private:
-    using Container = std::vector<Request>;
-
-    Container::iterator Find(id handle);
-
-    Container requests_;
-  };
 
   ~DataRequestHandler();
 
   void AbortAllDataRequests();
-  void DispatchRead(Request* request);
-  void DidReadNextChunk(int read_size, const uint8_t* data);
-  void FinishLoading(Request* request, Status status);
+  void DispatchRead(AVAssetResourceLoadingRequest* request,
+                    int64_t offset,
+                    int64_t length);
+  void DidReadNextChunk(ipc_data_source::Buffer source_buffer);
+  void CloseRequest(AVAssetResourceLoadingRequest* request, Status status);
 
-  ipc_data_source::Reader source_reader_;
-  RespondWithDataCB respond_with_data_cb_;
-  FinishLoadingCB finish_loading_cb_;
+  // source_buffer_ is null when we are waiting for the media data reply.
+  ipc_data_source::Buffer source_buffer_;
+  base::ScopedDispatchObject<dispatch_queue_t> ipc_queue_;
+  base::scoped_nsobject<NSString> content_type_;
+  base::scoped_nsobject<AVURLAsset> url_asset_;
+  base::scoped_nsobject<DataSourceLoader> data_source_loader_;
 
+  int64_t data_size_ = -1;
+  bool is_streaming_ = false;
+  bool can_read_ = false;
   bool suspended_ = false;
-  bool waiting_for_reply_ = false;
-
-  int64_t stream_position_ = -1;
+  bool before_first_read_ = true;
 
   // The request we are waiting a reply for. When cancelled or aborted its
   // handler is reset to prevent further calls to callbacks, but the
   // waiting_for_reply_ flag remain active until we get a reply from the source.
-  Request active_request_;
+  AVAssetResourceLoadingRequest* active_request_ = nil;
 
-  // Other requests besides the active ordered by the offset.
-  OrderedRequests pending_requests_;
+  // Other requests besides the active.
+  std::vector<AVAssetResourceLoadingRequest*> pending_requests_;
 
   DISALLOW_COPY_AND_ASSIGN(DataRequestHandler);
 };

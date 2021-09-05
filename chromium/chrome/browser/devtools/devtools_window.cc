@@ -298,11 +298,11 @@ bool DevToolsEventForwarder::ForwardEvent(
     const content::NativeWebKeyboardEvent& event) {
   std::string event_type;
   switch (event.GetType()) {
-    case WebInputEvent::kKeyDown:
-    case WebInputEvent::kRawKeyDown:
+    case WebInputEvent::Type::kKeyDown:
+    case WebInputEvent::Type::kRawKeyDown:
       event_type = kKeyDownEventName;
       break;
-    case WebInputEvent::kKeyUp:
+    case WebInputEvent::Type::kKeyUp:
       event_type = kKeyUpEventName;
       break;
     default:
@@ -697,7 +697,7 @@ void DevToolsWindow::ToggleDevToolsWindow(
     Profile* profile = Profile::FromBrowserContext(
         inspected_web_contents->GetBrowserContext());
     base::RecordAction(base::UserMetricsAction("DevTools_InspectRenderer"));
-    std::string panel = "";
+    std::string panel;
     switch (action.type()) {
       case DevToolsToggleAction::kInspect:
       case DevToolsToggleAction::kShowElementsPanel:
@@ -1256,6 +1256,7 @@ void DevToolsWindow::ActivateContents(WebContents* contents) {
 
 void DevToolsWindow::AddNewContents(WebContents* source,
                                     std::unique_ptr<WebContents> new_contents,
+                                    const GURL& target_url,
                                     WindowOpenDisposition disposition,
                                     const gfx::Rect& initial_rect,
                                     bool user_gesture,
@@ -1280,7 +1281,7 @@ void DevToolsWindow::AddNewContents(WebContents* source,
   WebContents* inspected_web_contents = GetInspectedWebContents();
   if (inspected_web_contents) {
     inspected_web_contents->GetDelegate()->AddNewContents(
-        source, std::move(new_contents), disposition, initial_rect,
+        source, std::move(new_contents), target_url, disposition, initial_rect,
         user_gesture, was_blocked);
   }
 }

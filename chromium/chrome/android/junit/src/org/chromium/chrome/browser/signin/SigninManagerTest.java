@@ -26,10 +26,10 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.stubbing.Answer;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.DisableNativeTestRule;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.components.signin.AccountTrackerService;
@@ -50,8 +50,6 @@ public class SigninManagerTest {
     @Rule
     public final JniMocker mocker = new JniMocker();
 
-    @Rule
-    public final DisableNativeTestRule mDisableNative = new DisableNativeTestRule();
 
     @Mock
     SigninManager.Natives mNativeMock;
@@ -83,7 +81,7 @@ public class SigninManagerTest {
         // Pretend Google Play services are available as it is required for the sign-in
         doReturn(false).when(externalAuthUtils).isGooglePlayServicesMissing(any());
 
-        doReturn(null).when(mIdentityManager).getPrimaryAccountInfo();
+        doReturn(null).when(mIdentityManager).getPrimaryAccountInfo(anyInt());
         mSigninManager =
                 new SigninManager(0 /* nativeSigninManagerAndroid */, mAccountTrackerService,
                         mIdentityManager, mIdentityMutator, androidSyncSettings, externalAuthUtils);
@@ -242,10 +240,13 @@ public class SigninManagerTest {
         doReturn(account)
                 .when(mIdentityManager)
                 .findExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(any());
-        // TODO(https://crbug.com/1054780): Mock getPrimaryAccountInfo instead.
-        doReturn(false).when(mIdentityManager).hasPrimaryAccount();
-        doReturn(true).when(mIdentityMutator).setPrimaryAccount(any());
-        doReturn(account).when(mIdentityManager).getPrimaryAccountInfo();
+        doReturn(null).when(mIdentityManager).getPrimaryAccountInfo(anyInt());
+        Answer<Boolean> setPrimaryAccountAnswer = invocation -> {
+            // From now on getPrimaryAccountInfo should return account.
+            doReturn(account).when(mIdentityManager).getPrimaryAccountInfo(anyInt());
+            return true;
+        };
+        doAnswer(setPrimaryAccountAnswer).when(mIdentityMutator).setPrimaryAccount(account.getId());
         doNothing().when(mIdentityMutator).reloadAllAccountsFromSystemWithPrimaryAccount(any());
 
         mSigninManager.onFirstRunCheckDone(); // Allow sign-in.

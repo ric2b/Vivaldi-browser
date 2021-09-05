@@ -24,6 +24,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "content/public/test/browser_test.h"
 #include "net/http/http_status_code.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_constants.h"
@@ -122,9 +123,8 @@ class RemoteCopyBrowserTestBase : public InProcessBrowserTest {
 
   std::vector<base::string16> GetAvailableClipboardTypes() {
     std::vector<base::string16> types;
-    bool contains_filenames;
     ui::Clipboard::GetForCurrentThread()->ReadAvailableTypes(
-        ui::ClipboardBuffer::kCopyPaste, &types, &contains_filenames);
+        ui::ClipboardBuffer::kCopyPaste, &types);
     return types;
   }
 

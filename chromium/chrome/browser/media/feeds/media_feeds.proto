@@ -87,6 +87,13 @@ message Action {
   int64 start_time_secs = 2;
 }
 
+// Details specific to live content.
+// https://wicg.github.io/media-feeds/#media-item-live-metadata
+message LiveDetails {
+  int64 start_time_secs = 1;
+  int64 end_time_secs = 2;
+}
+
 // The content that should be suggested to play next if the user has finished
 // watching the current content.
 message PlayNextCandidate {
@@ -105,6 +112,9 @@ message PlayNextCandidate {
 
   // The identifiers for the content. We will store up to one of each type.
   repeated Identifier identifier = 6;
+
+  // Images for this episode.
+  repeated Image image = 7;
 }
 
 // https://schema.org/TVEpisode
@@ -118,6 +128,15 @@ message TVEpisode {
 
   // The identifiers for the episode. We will store up to one of each type.
   repeated Identifier identifier = 4;
+
+  // The duration of the content in seconds.
+  int64 duration_secs = 5;
+
+  // Images for this episode.
+  repeated Image image = 6;
+
+  // Details specific to live content.
+  LiveDetails live_details = 7;
 }
 
 // A reference to an image along with the width and height in px. Only stores
@@ -127,6 +146,26 @@ message Image {
   string url = 1;
   int64 width = 2;
   int64 height = 3;
+
+  // Content attributes describe the image's type and defines its suggested
+  // usages.
+  enum ContentAttribute {
+    CONTENT_ATTRIBUTE_UNSPECIFIED = 0;
+    ICONIC = 1;
+    SCENE_STILL = 2;
+    POSTER = 3;
+    BACKGROUND = 4;
+    FOR_DARK_BACKGROUND = 5;
+    FOR_LIGHT_BACKGROUND = 6;
+    CENTERED = 7;
+    RIGHT_CENTERED = 8;
+    LEFT_CENTERED = 9;
+    HAS_TRANSPARENT_BACKGROUND = 10;
+    HAS_TITLE = 11;
+    NO_TITLE = 12;
+  };
+
+  repeated ContentAttribute content_attribute = 4;
 }
 
 // Stores up to 5 images of different sizes.
@@ -134,4 +173,24 @@ message Image {
 // https://wicg.github.io/media-feeds/index.html#media-feed-item
 message ImageSet {
   repeated Image image = 1;
+}
+
+// The //base/unguessable_token.h converted to a protobuf.
+message FeedResetToken {
+  uint64 high = 1;
+  uint64 low = 2;
+}
+
+// This is returned by the Media Feed so the user can see which account
+// and/or profile they are currently signed into.
+// https://wicg.github.io/media-feeds/#dfn-currently-logged-in-user
+message UserIdentifier {
+  // The name of the user’s account.
+  string name = 1;
+
+  // The email address of the users’ account.
+  string email = 2;
+
+  // The image of the user’s account.
+  Image image = 3;
 }

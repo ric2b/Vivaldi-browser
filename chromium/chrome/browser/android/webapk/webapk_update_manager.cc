@@ -159,7 +159,8 @@ static void JNI_WebApkUpdateManager_StoreWebApkUpdateRequestToFile(
   SkBitmap splash_icon;
   if (!java_splash_icon_bitmap.is_null()) {
     gfx::JavaBitmap java_splash_icon_bitmap_lock(java_splash_icon_bitmap);
-    gfx::CreateSkBitmapFromJavaBitmap(java_splash_icon_bitmap_lock);
+    splash_icon =
+        gfx::CreateSkBitmapFromJavaBitmap(java_splash_icon_bitmap_lock);
     splash_icon.setImmutable();
   }
 
@@ -171,21 +172,24 @@ static void JNI_WebApkUpdateManager_StoreWebApkUpdateRequestToFile(
                                                    &shortcuts);
 
   for (const auto& shortcut_data : shortcuts) {
-    DCHECK_EQ(shortcut_data.size(), 5u);
+    DCHECK_EQ(shortcut_data.size(), 6u);
     blink::Manifest::ShortcutItem shortcut_item;
     shortcut_item.name = shortcut_data[0];
     shortcut_item.short_name = base::NullableString16(shortcut_data[1]);
     shortcut_item.url = GURL(base::UTF16ToUTF8(shortcut_data[2]));
 
     blink::Manifest::ImageResource icon;
-    icon.src = GURL(base::UTF16ToUTF8(shortcut_data[3]));
+    GURL icon_src(base::UTF16ToUTF8(shortcut_data[3]));
+    icon.src = icon_src;
     icon.purpose.push_back(blink::Manifest::ImageResource::Purpose::ANY);
+    shortcut_item.icons.push_back(std::move(icon));
 
-    if (icon.src.is_valid()) {
-      icon_url_to_murmur2_hash[icon.src.spec()] = WebApkIconHasher::Icon{
-          /* data= */ "", /* hash= */ base::UTF16ToUTF8(shortcut_data[4])};
+    if (icon_src.is_valid()) {
+      icon_url_to_murmur2_hash[icon_src.spec()] = WebApkIconHasher::Icon{
+          /* data= */ base::UTF16ToUTF8(shortcut_data[5]),
+          /* hash= */ base::UTF16ToUTF8(shortcut_data[4])};
     }
-    info.best_shortcut_icon_urls.push_back(icon.src);
+    info.best_shortcut_icon_urls.push_back(std::move(icon_src));
     info.shortcut_items.push_back(std::move(shortcut_item));
   }
 
@@ -224,5 +228,5 @@ static void JNI_WebApkUpdateManager_UpdateWebApkFromFile(
       ConvertJavaStringToUTF8(env, java_update_request_path);
   WebApkInstallService::Get(profile)->UpdateAsync(
       base::FilePath(update_request_path),
-      base::Bind(&OnUpdated, callback_ref));
+      base::BindOnce(&OnUpdated, callback_ref));
 }

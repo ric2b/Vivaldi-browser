@@ -27,6 +27,7 @@ class PluginVmInstallerView : public views::BubbleDialogDelegateView,
   static PluginVmInstallerView* GetActiveViewForTesting();
 
   // views::BubbleDialogDelegateView implementation.
+  bool ShouldShowCloseButton() const override;
   bool ShouldShowWindowTitle() const override;
   bool Accept() override;
   bool Cancel() override;
@@ -34,6 +35,7 @@ class PluginVmInstallerView : public views::BubbleDialogDelegateView,
 
   // plugin_vm::PluginVmImageDownload::Observer implementation.
   void OnProgressUpdated(double fraction_complete) override;
+  void OnLicenseChecked() override;
   void OnCheckedDiskSpace(bool low_disk_space) override;
   void OnDlcDownloadCompleted() override;
   void OnExistingVmCheckCompleted(bool has_vm) override;
@@ -55,7 +57,8 @@ class PluginVmInstallerView : public views::BubbleDialogDelegateView,
  private:
   // TODO(crbug.com/1063748): Re-use PluginVmInstaller::InstallingState.
   enum class State {
-    STARTING,  // View was just created, installation hasn't yet started
+    CONFIRM_INSTALL,      // Waiting for user to start installation.
+    CHECKING_LICENSE,     // Ensuring the user license is valid.
     CHECKING_DISK_SPACE,  // Checking there is available free disk space.
     LOW_DISK_SPACE,   // Prompt user to continue or abort due to low disk space.
     DOWNLOADING_DLC,  // PluginVm DLC downloading and installing in progress.
@@ -85,6 +88,7 @@ class PluginVmInstallerView : public views::BubbleDialogDelegateView,
   void StartInstallation();
 
   Profile* profile_ = nullptr;
+  base::string16 app_name_;
   plugin_vm::PluginVmInstaller* plugin_vm_installer_ = nullptr;
   views::Label* big_message_label_ = nullptr;
   views::Label* message_label_ = nullptr;
@@ -93,7 +97,7 @@ class PluginVmInstallerView : public views::BubbleDialogDelegateView,
   views::ImageView* big_image_ = nullptr;
   base::TimeTicks setup_start_tick_;
 
-  State state_ = State::STARTING;
+  State state_ = State::CONFIRM_INSTALL;
   base::Optional<plugin_vm::PluginVmInstaller::FailureReason> reason_;
 
   base::OnceCallback<void(bool success)> finished_callback_for_testing_;

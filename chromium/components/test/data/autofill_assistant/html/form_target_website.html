@@ -20,6 +20,17 @@
         on.style.display = "none";
       }
     }
+
+    function onDropdown() {
+      document.getElementById("js_dropdown_options").style.display = "block";
+    }
+
+    function onOption(value) {
+      const el = document.getElementById("js_dropdown_value");
+      el.innerHTML = value;
+      el.value = value;
+      document.getElementById("js_dropdown_options").style.display = "none";
+    }
   </script>
   <body>
     <h3>Form filling</h3>
@@ -28,7 +39,7 @@
     <div id="terms" class="terms">
       <button id="button" onclick="onClick()"> Button </button>
       <div id="toggle_on" style="display: none"> Toggle on </div>
-  </div>
+    </div>
 
     <h4>Credit card</h4>
     <div>
@@ -58,6 +69,15 @@
           <option value="2023">2023</option>
           <option value="2050">2050</option>
         </select>
+        Fallback: <input type="text" id="fallback_entry" name="fallback_entry"/><br/>
+        Created Dropdown: <div id="js_dropdown_value" onclick="onDropdown()">Click me</div>
+        <ul id="js_dropdown_options" style="display: none;">
+          <li onclick="onOption('2020')">2020</li>
+          <li onclick="onOption('2021')">2021</li>
+          <li onclick="onOption('2022')">2022</li>
+          <li onclick="onOption('2023')">2023</li>
+          <li onclick="onOption('2050')">2050</li>
+        </ul>
       </form>
     </div>
 
@@ -79,5 +99,7 @@
       </form>
     </div>
 
+    <iframe id="iframe" name="test_iframe" width="100%" height="500" src=
+        "autofill_assistant_target_website_iframe_one.html"></iframe>
   </body>
 </html>

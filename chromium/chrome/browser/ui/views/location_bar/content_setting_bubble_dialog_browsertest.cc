@@ -8,7 +8,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings.h"
+#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
 #include "chrome/browser/download/download_request_limiter.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
@@ -24,10 +24,12 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/content_settings/browser/tab_specific_content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/permissions/notification_permission_ui_selector.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/permissions/test/mock_permission_request.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
@@ -54,7 +56,8 @@ class TestQuietNotificationPermissionUiSelector
   // permissions::NotificationPermissionUiSelector:
   void SelectUiToUse(permissions::PermissionRequest* request,
                      DecisionMadeCallback callback) override {
-    std::move(callback).Run(UiToUse::kQuietUi, simulated_reason_for_quiet_ui_);
+    std::move(callback).Run(
+        Decision(simulated_reason_for_quiet_ui_, base::nullopt));
   }
 
  private:
@@ -95,11 +98,15 @@ void ContentSettingBubbleDialogTest::ApplyMediastreamSettings(
     bool mic_accessed,
     bool camera_accessed) {
   const int mic_setting =
-      mic_accessed ? TabSpecificContentSettings::MICROPHONE_ACCESSED : 0;
+      mic_accessed
+          ? content_settings::TabSpecificContentSettings::MICROPHONE_ACCESSED
+          : 0;
   const int camera_setting =
-      camera_accessed ? TabSpecificContentSettings::CAMERA_ACCESSED : 0;
-  TabSpecificContentSettings* content_settings =
-      TabSpecificContentSettings::FromWebContents(
+      camera_accessed
+          ? content_settings::TabSpecificContentSettings::CAMERA_ACCESSED
+          : 0;
+  content_settings::TabSpecificContentSettings* content_settings =
+      content_settings::TabSpecificContentSettings::FromWebContents(
           browser()->tab_strip_model()->GetActiveWebContents());
   content_settings->OnMediaStreamPermissionSet(
       GURL("https://example.com/"), mic_setting | camera_setting, std::string(),
@@ -110,8 +117,9 @@ void ContentSettingBubbleDialogTest::ApplyContentSettingsForType(
     ContentSettingsType content_type) {
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  TabSpecificContentSettings* content_settings =
-      TabSpecificContentSettings::FromWebContents(web_contents);
+  content_settings::TabSpecificContentSettings* content_settings =
+      content_settings::TabSpecificContentSettings::FromWebContents(
+          web_contents);
   switch (content_type) {
     case ContentSettingsType::AUTOMATIC_DOWNLOADS: {
       // Automatic downloads are handled by DownloadRequestLimiter.
@@ -142,9 +150,9 @@ void ContentSettingBubbleDialogTest::ApplyContentSettingsForType(
       break;
     }
     case ContentSettingsType::PROTOCOL_HANDLERS:
-      content_settings->set_pending_protocol_handler(
-          ProtocolHandler::CreateProtocolHandler("mailto",
-                                                 GURL("https://example.com/")));
+      chrome::TabSpecificContentSettingsDelegate::FromWebContents(web_contents)
+          ->set_pending_protocol_handler(ProtocolHandler::CreateProtocolHandler(
+              "mailto", GURL("https://example.com/")));
       break;
 
     default:
@@ -200,10 +208,12 @@ void ContentSettingBubbleDialogTest::ShowUi(const std::string& name) {
 
   if (base::StartsWith(name, "notifications_quiet",
                        base::CompareCase::SENSITIVE)) {
-    TriggerQuietNotificationPermissionRequest(
-        name == "notifications_quiet_crowd_deny"
-            ? QuietUiReason::kTriggeredByCrowdDeny
-            : QuietUiReason::kEnabledInPrefs);
+    QuietUiReason reason = QuietUiReason::kEnabledInPrefs;
+    if (name == "notifications_quiet_crowd_deny")
+      reason = QuietUiReason::kTriggeredByCrowdDeny;
+    else if (name == "notifications_quiet_abusive")
+      reason = QuietUiReason::kTriggeredDueToAbusiveRequests;
+    TriggerQuietNotificationPermissionRequest(reason);
     ShowDialogBubble(ImageType::NOTIFICATIONS_QUIET_PROMPT);
     return;
   }
@@ -313,5 +323,10 @@ IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest,
 
 IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest,
                        InvokeUi_notifications_quiet_crowd_deny) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest,
+                       InvokeUi_notifications_quiet_abusive) {
   ShowAndVerifyUi();
 }

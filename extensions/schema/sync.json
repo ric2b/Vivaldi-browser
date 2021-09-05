@@ -49,19 +49,12 @@
           "user_choice", "unrecoverable_error", "flag" ]
       },
       {
-        "id": "SyncerError",
-        "description": "Error occuring as part of the sync cycle. This should be kept in sync with syncer::SyncerError (chromium/components/sync/base/syncer_error.h)",
+        "id": "CycleStatus",
+        "description": "Error occuring as part of the sync cycle. This should be kept in sync with VivaldiSyncUIHelper::CycleStatus (sync/vivaldi_sync_ui_helper.h)",
         "type": "string",
-        "enum": [ "unset", "cannot_do_work", "network_connection_unavailable",
-          "network_io_error", "sync_server_error", "sync_auth_error",
-          "server_return_invalid_credential", "server_return_unknown_error",
-          "server_return_throttled", "server_return_transient_error",
-          "server_return_migration_done", "server_return_clear_pending",
-          "server_return_not_my_birthday", "server_return_conflict",
-          "server_response_validation_failed",
-          "server_return_disabled_by_admin", "server_return_user_rollback",
-          "server_return_partial_failure", "server_return_client_data_obsolete",
-          "datatype_triggered_retry", "server_more_to_download", "syncer_ok" ]
+        "enum": [ "not_synced", "success", "in_progress", "auth_error",
+          "server_error", "network_error", "client_error", "conflict",
+          "throttled", "other_error" ]
       },
       {
         "id": "ProtocolErrorType",
@@ -69,7 +62,8 @@
         "type": "string",
         "enum" : [ "success", "not_my_birthday", "throttled", "clear_pending",
           "transient_error", "migration_done", "disabled_by_admin",
-          "partial_failure", "client_data_obsolete", "unknown" ]
+          "partial_failure", "client_data_obsolete", "encryption_obsolete",
+          "unknown" ]
       },
       {
         "id": "ClientAction",
@@ -165,25 +159,17 @@
         "type": "object",
         "description": "Contains information about the last sync cycle.",
         "properties":{
-          "lastSyncTime": {
+          "cycleStartTime": {
             "type": "number",
-            "description": "The last time a sync cycle started"
+            "description": "The last time a sync cycle started."
           },
-          "lastDownloadUpdatesResult": {
-            "$ref": "SyncerError",
+          "downloadUpdatesStatus": {
+            "$ref": "CycleStatus",
             "description": "Whether the download updates part of the last sync cycle was successful"
           },
-          "lastCommitResult": {
-            "$ref": "SyncerError",
+          "commitStatus": {
+            "$ref": "CycleStatus",
             "description": "Whether the commit part of the last sync cycle was successful"
-          },
-          "hasRemainingLocalChanges": {
-            "type": "boolean",
-            "description": "Whether there are items left to commit after the last cycle"
-          },
-          "hasSynced": {
-            "type": "boolean",
-            "description": "Whether the first sync cycle has been completed"
           },
           "nextRetryTime": {
             "type": "number",

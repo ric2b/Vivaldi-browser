@@ -15,19 +15,30 @@
       + 1px);
     display: flex;
     flex-wrap: wrap;
+    height: calc(var(--row-count) * 128px);
     justify-content: center;
+    opacity: 0;
     overflow: hidden;
+    padding-top: 3px;
     transition: opacity 300ms ease-in-out;
     width: calc(var(--content-width) + 12px);
   }
 
-  #addShortCutIcon {
+  :host([visible_]) #container {
+    opacity: 1;
+  }
+
+  #addShortcutIcon {
     -webkit-mask-image: url(chrome://resources/images/add.svg);
     -webkit-mask-repeat: no-repeat;
     -webkit-mask-size: 100%;
-    background-color: var(--ntp-theme-text-color);
+    background-color: var(--google-grey-900);
     height: 24px;
     width: 24px;
+  }
+
+  :host([use-white-add-icon]) #addShortcutIcon {
+    background-color: white;
   }
 
   .tile,
@@ -42,6 +53,7 @@
     height: var(--tile-size);
     margin-bottom: var(--tile-margin);
     opacity: 1;
+    outline: none;
     padding-top: var(--tile-margin);
     position: relative;
     text-decoration: none;
@@ -52,9 +64,16 @@
     width: var(--tile-size);
   }
 
-  :host-context(html:not(.focus-outline-visible)) .tile,
-  :host-context(html:not(.focus-outline-visible)) #addShortcut {
-    outline: none;
+  :host-context(.focus-outline-visible) .tile:focus,
+  :host-context(.focus-outline-visible) #addShortcut:focus {
+    box-shadow: var(--ntp-focus-shadow);
+  }
+
+  #addShortcut {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
   }
 
   :host(:not([reordering_])) .tile:hover,
@@ -74,19 +93,38 @@
   }
 
   .tile-icon img {
-    height: 32px;
-    width: 32px;
+    height: 24px;
+    width: 24px;
   }
 
   .tile-title {
+    align-items: center;
+    border-radius: 12px;
     color: var(--ntp-theme-text-color);
-    margin-top:  16px;
+    display: flex;
+    height: 24px;
+    margin-top: 7px;
+    padding: 0 8px;
+    width: 88px;
+  }
+
+  :host([use-title-pill]) .tile-title {
+    background-color: white;
+    color: var(--google-grey-800);
+  }
+
+  .tile-title span {
+    font-weight: 400;
     overflow: hidden;
     text-align: center;
     text-overflow: ellipsis;
     text-shadow: var(--ntp-theme-text-shadow);
     white-space: nowrap;
-    width: 88px;
+    width: 100%;
+  }
+
+  :host([use-title-pill]) .tile-title span {
+    text-shadow: none;
   }
 
   .title-rtl {
@@ -111,7 +149,7 @@
     position: absolute;
     right: 0;
     top: 0;
-    transition-property: opacity;
+    transition: opacity 100ms ease-in-out;
   }
 
   :host-context([dir=rtl]) cr-icon-button {
@@ -122,7 +160,7 @@
   :host(:not([reordering_])) .tile:hover cr-icon-button,
   .force-hover cr-icon-button {
     opacity: 1;
-    transition-delay: 500ms;
+    transition-delay: 400ms;
   }
 
   :host(:not([reordering_])) cr-icon-button:active,
@@ -133,47 +171,45 @@
     opacity: 1;
     transition-delay: 0s;
   }
-
-  @media (prefers-color-scheme: dark) {
-    :host {
-      --icon-button-color: var(--google-grey-400);
-      --icon-button-color-active: var(--google-grey-200);
-      --tile-hover-color: rgba(255, 255, 255, .1);
-    }
-  }
 </style>
-<div id="container" style="--column-count: [[columnCount_]];">
-  <dom-repeat id="tiles" items="[[tiles_]]">
+<div id="container"
+    style="--column-count: [[columnCount_]]; --row-count: [[rowCount_]];">
+  <dom-repeat id="tiles" items="[[tiles_]]" on-dom-change="onTilesRendered_">
     <template>
       <a class="tile" draggable="true" href$="[[item.url.url]]"
           title$="[[item.title]]" on-dragstart="onDragStart_"
           on-touchstart="onTouchStart_"
           hidden$="[[isHidden_(index, columnCount_)]]"
-          on-keydown="onTileKeyDown_">
-        <cr-icon-button class$="[[getTileIconButtonIcon_(customLinksEnabled_)]]"
-            on-click="onTileIconButtonClick_" tabindex="0"></cr-icon-button>
+          on-click="onTileClick_" on-keydown="onTileKeyDown_">
+        <cr-icon-button id="actionMenuButton" class="icon-more-vert"
+            title="$i18n{moreActions}" on-click="onTileActionButtonClick_"
+            tabindex="0" hidden$="[[!customLinksEnabled_]]"></cr-icon-button>
+        <cr-icon-button id="removeButton" class="icon-clear"
+            title="$i18n{linkRemove}" on-click="onTileRemoveButtonClick_"
+            tabindex="0" hidden$="[[customLinksEnabled_]]"></cr-icon-button>
         <div class="tile-icon">
           <img src$="[[getFaviconUrl_(item.url)]]" draggable="false"></img>
         </div>
         <div class$="tile-title [[getTileTitleDirectionClass_(item)]]">
-          [[item.title]]
+          <span>[[item.title]]</span>
         </div>
       </a>
     </template>
   </dom-repeat>
-  <a id="addShortcut" tabindex="0" on-click="onAdd_" hidden$="[[!showAdd_]]"
-      title="$i18n{addLinkTitle}" on-keydown="onAddShortcutKeyDown_">
+  <cr-button id="addShortcut" tabindex="0" on-click="onAdd_"
+      hidden$="[[!showAdd_]]" on-keydown="onAddShortcutKeyDown_" noink>
     <div class="tile-icon">
-      <div id="addShortCutIcon" draggable="false"></div>
+      <div id="addShortcutIcon" draggable="false"></div>
     </div>
-    <div class="tile-title">$i18n{addLinkTitle}</div>
-  </a>
+    <div class="tile-title">
+      <span>$i18n{addLinkTitle}</span>
+    </div>
+  </cr-button>
   <cr-dialog id="dialog" on-close="onDialogClose_">
     <div slot="title">[[dialogTitle_]]</div>
     <div slot="body">
-      <cr-input id="dialogInputName" class$="[[dialogTileTitleDirectionClass_]]"
-          label="$i18n{nameField}" value="{{dialogTileTitle_}}"
-          spellcheck="false" autofocus></cr-input>
+      <cr-input id="dialogInputName" label="$i18n{nameField}"
+          value="{{dialogTileTitle_}}" spellcheck="false" autofocus></cr-input>
       <cr-input id="dialogInputUrl" label="$i18n{urlField}"
           value="{{dialogTileUrl_}}" invalid="[[dialogTileUrlInvalid_]]"
           error-message="$i18n{invalidUrl}" spellcheck="false" type="url">

@@ -75,10 +75,8 @@ constexpr SkColor kSearchRatingStarColor = gfx::kGoogleGrey700;
 
 SearchResultTileItemView::SearchResultTileItemView(
     AppListViewDelegate* view_delegate,
-    PaginationModel* pagination_model,
     bool show_in_apps_page)
     : view_delegate_(view_delegate),
-      pagination_model_(pagination_model),
       is_play_store_app_search_enabled_(
           app_list_features::IsPlayStoreAppSearchEnabled()),
       is_app_reinstall_recommendation_enabled_(
@@ -300,23 +298,6 @@ bool SearchResultTileItemView::OnKeyPressed(const ui::KeyEvent& event) {
   return false;
 }
 
-void SearchResultTileItemView::OnFocus() {
-  if (pagination_model_ && IsSuggestedAppTile() &&
-      view_delegate_->GetModel()->state() == AppListState::kStateApps) {
-    // Go back to first page when app in suggestions container is focused.
-    pagination_model_->SelectPage(0, false);
-  } else {
-    ScrollRectToVisible(GetLocalBounds());
-  }
-  SetSelected(true, base::nullopt);
-  UpdateBackgroundColor();
-}
-
-void SearchResultTileItemView::OnBlur() {
-  SetSelected(false, base::nullopt);
-  UpdateBackgroundColor();
-}
-
 void SearchResultTileItemView::StateChanged(ButtonState old_state) {
   UpdateBackgroundColor();
 }
@@ -432,8 +413,6 @@ void SearchResultTileItemView::ActivateResult(int event_flags,
                                    AppListLaunchedFrom::kLaunchedFromSearchBox,
                                    AppListLaunchType::kAppSearchResult,
                                    index_in_container(), launch_as_default);
-  view_delegate_->LogResultLaunchHistogram(
-      SearchResultLaunchLocation::kTileList, index_in_container());
 }
 
 void SearchResultTileItemView::SetIcon(const gfx::ImageSkia& icon) {

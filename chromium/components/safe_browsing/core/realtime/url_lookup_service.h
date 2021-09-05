@@ -16,6 +16,7 @@
 #include "base/timer/timer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/core/proto/csd.pb.h"
 #include "components/safe_browsing/core/proto/realtimeapi.pb.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "url/gurl.h"
@@ -38,7 +39,7 @@ class PrefService;
 namespace safe_browsing {
 
 using RTLookupRequestCallback =
-    base::OnceCallback<void(std::unique_ptr<RTLookupRequest>)>;
+    base::OnceCallback<void(std::unique_ptr<RTLookupRequest>, std::string)>;
 
 using RTLookupResponseCallback =
     base::OnceCallback<void(bool, std::unique_ptr<RTLookupResponse>)>;
@@ -52,12 +53,17 @@ class SafeBrowsingTokenFetcher;
 // TODO(crbug.com/1050859): Add RTLookupService check flow.
 class RealTimeUrlLookupService : public KeyedService {
  public:
+  // |cache_manager|, |identity_manager|, |sync_service| and |pref_service| may
+  // be null in tests.
   RealTimeUrlLookupService(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       VerdictCacheManager* cache_manager,
       signin::IdentityManager* identity_manager,
       syncer::SyncService* sync_service,
       PrefService* pref_service,
+      const ChromeUserPopulation::ProfileManagementStatus&
+          profile_management_status,
+      bool is_under_advanced_protection,
       bool is_off_the_record);
   ~RealTimeUrlLookupService() override;
 
@@ -85,9 +91,10 @@ class RealTimeUrlLookupService : public KeyedService {
   // when response is received.
   // Note that |request_callback| is not called if there's a valid entry in the
   // cache for |url|.
-  void StartLookup(const GURL& url,
-                   RTLookupRequestCallback request_callback,
-                   RTLookupResponseCallback response_callback);
+  // This function is overridden in unit tests.
+  virtual void StartLookup(const GURL& url,
+                           RTLookupRequestCallback request_callback,
+                           RTLookupResponseCallback response_callback);
 
   // KeyedService:
   // Called before the actual deletion of the object.
@@ -134,6 +141,8 @@ class RealTimeUrlLookupService : public KeyedService {
   // Called to post a task to store the response keyed by the |url| in
   // |cache_manager|.
   void MayBeCacheRealTimeUrlVerdict(const GURL& url, RTLookupResponse response);
+
+  bool IsHistorySyncEnabled();
 
   // Returns the duration of the next backoff. Starts at
   // |kMinBackOffResetDurationInSeconds| and increases exponentially until it
@@ -200,6 +209,12 @@ class RealTimeUrlLookupService : public KeyedService {
 
   // Unowned object used for getting preference settings.
   PrefService* pref_service_;
+
+  const ChromeUserPopulation::ProfileManagementStatus
+      profile_management_status_;
+
+  // Whether the profile is enrolled in  advanced protection.
+  bool is_under_advanced_protection_;
 
   // The token fetcher used for getting access token.
   std::unique_ptr<SafeBrowsingTokenFetcher> token_fetcher_;

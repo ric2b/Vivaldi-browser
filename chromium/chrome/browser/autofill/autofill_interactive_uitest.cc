@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
+// Disable all tests in this file on Mac for flake (crbug.com/1079249)
+#if !defined(OS_MACOSX)
+
 #include <string>
 #include <tuple>
 #include <utility>
@@ -65,6 +69,7 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_mock_cert_verifier.h"
 #include "content/public/test/test_renderer_host.h"
@@ -901,13 +906,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, ModifySelectFieldAndFill) {
 }
 
 // Test that autofill works when the website prefills the form.
-#if defined(OS_MACOSX)
-// Flaky on Mac https://crbug.com/1045545
-#define MAYBE_PrefillFormAndFill DISABLED_PrefillFormAndFill
-#else
-#define MAYBE_PrefillFormAndFill PrefillFormAndFill
-#endif
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_PrefillFormAndFill) {
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, PrefillFormAndFill) {
   const char kPrefillScript[] =
       "<script>"
       "document.getElementById('firstname').value = 'Seb';"
@@ -1036,9 +1035,11 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
   TryClearForm();
 }
 
+// TODO(crbug.com/967588): Disabled due to flakiness
 // Test that multiple autofillings work.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
-                       FillChangeSecondFieldRefillSecondFieldClearFirst) {
+IN_PROC_BROWSER_TEST_F(
+    AutofillInteractiveTest,
+    DISABLED_FillChangeSecondFieldRefillSecondFieldClearFirst) {
   CreateTestProfile();
 
   // Load the test page.
@@ -1968,7 +1969,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillAfterTranslate) {
       "利";
 
   // Set up an observer to be able to wait for the bubble to be shown.
-  translate::TranslateWaiter language_waiter(
+  auto language_waiter = translate::CreateTranslateWaiter(
       GetWebContents(),
       translate::TranslateWaiter::WaitEvent::kLanguageDetermined);
 
@@ -1976,7 +1977,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillAfterTranslate) {
   ASSERT_NO_FATAL_FAILURE(
       ui_test_utils::NavigateToURL(browser(), GetTestUrl()));
 
-  language_waiter.Wait();
+  language_waiter->Wait();
 
   // Verify current translate step.
   const TranslateBubbleModel* model =
@@ -1988,14 +1989,14 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_AutofillAfterTranslate) {
   translate::test_utils::PressTranslate(browser());
 
   // Wait for translation.
-  translate::TranslateWaiter translate_waiter(
+  auto translate_waiter = translate::CreateTranslateWaiter(
       GetWebContents(), translate::TranslateWaiter::WaitEvent::kPageTranslated);
 
   // Simulate the translate script being retrieved.
   // Pass fake google.translate lib as the translate script.
   SimulateURLFetch();
 
-  translate_waiter.Wait();
+  translate_waiter->Wait();
 
   TryBasicFormFill();
 }
@@ -3511,3 +3512,5 @@ INSTANTIATE_TEST_SUITE_P(All,
                          AutofillRestrictUnownedFieldsTest,
                          testing::Combine(testing::Bool(), testing::Bool()));
 }  // namespace autofill
+
+#endif  // !defined(OS_MACOSX)

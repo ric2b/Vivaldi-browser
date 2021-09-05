@@ -106,6 +106,7 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kTextFragmentAnchorMatchFound,
           WebFeature::kCookieNoSameSite,
           WebFeature::kCookieInsecureAndSameSiteNone,
+          WebFeature::kCookieStoreAPI,
           WebFeature::kDeviceOrientationSecureOrigin,
           WebFeature::kDeviceOrientationAbsoluteSecureOrigin,
           WebFeature::kDeviceMotionSecureOrigin,
@@ -152,7 +153,6 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kV8MediaSession_Metadata_AttributeSetter,
           WebFeature::kV8MediaSession_SetActionHandler_Method,
           WebFeature::kLargeStickyAd,
-          WebFeature::kOverlayInterstitialAd,
           WebFeature::
               kElementWithLeftwardOrUpwardOverflowDirection_ScrollLeftOrTopSetPositive,
           WebFeature::kThirdPartyFileSystem,
@@ -160,6 +160,15 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kThirdPartyCacheStorage,
           WebFeature::kThirdPartyLocalStorage,
           WebFeature::kThirdPartySessionStorage,
+          WebFeature::kOverlayPopupAd,
+          WebFeature::kTrustTokenXhr,
+          WebFeature::kTrustTokenFetch,
+          WebFeature::kTrustTokenIframe,
+          WebFeature::kV8Document_HasTrustToken_Method,
+          WebFeature::kV8HTMLVideoElement_RequestVideoFrameCallback_Method,
+          WebFeature::kV8HTMLVideoElement_CancelVideoFrameCallback_Method,
+          WebFeature::kSchemefulSameSiteContextDowngrade,
+          WebFeature::kIdleDetectionStart,
       }));
   return *opt_in_features;
 }

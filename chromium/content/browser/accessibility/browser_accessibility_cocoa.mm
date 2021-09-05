@@ -29,6 +29,7 @@
 #include "content/browser/accessibility/browser_accessibility_position.h"
 #include "content/browser/accessibility/one_shot_accessibility_tree_search.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_enum_util.h"
@@ -55,6 +56,7 @@ using content::BrowserAccessibilityDelegate;
 using content::BrowserAccessibilityManager;
 using content::BrowserAccessibilityManagerMac;
 using content::ContentClient;
+using content::IsUseZoomForDSFEnabled;
 using content::OneShotAccessibilityTreeSearch;
 using ui::AXNodeData;
 using ui::AXTreeIDRegistry;
@@ -340,11 +342,6 @@ AXPlatformRange CreateRangeFromTextMarkerRange(id marker_range) {
 BrowserAccessibilityPositionInstance CreateTreePosition(
     const BrowserAccessibility& object,
     int offset) {
-  // A tree position is one for which the |offset| argument refers to a child
-  // index instead of a character offset inside a text object.
-  if (!object.instance_active())
-    return BrowserAccessibilityPosition::CreateNullPosition();
-
   const BrowserAccessibilityManager* manager = object.manager();
   DCHECK(manager);
   return BrowserAccessibilityPosition::CreateTreePosition(
@@ -355,12 +352,6 @@ BrowserAccessibilityPositionInstance CreateTextPosition(
     const BrowserAccessibility& object,
     int offset,
     ax::mojom::TextAffinity affinity) {
-  // A text position is one for which the |offset| argument refers to a
-  // character offset inside a text object. As such, text positions are only
-  // valid on platform leaf objects, e.g. static text nodes and text fields.
-  if (!object.instance_active())
-    return BrowserAccessibilityPosition::CreateNullPosition();
-
   const BrowserAccessibilityManager* manager = object.manager();
   DCHECK(manager);
   return BrowserAccessibilityPosition::CreateTextPosition(
@@ -1747,9 +1738,10 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
   if (ui::IsLink(_owner->GetRole()))
     return true;
 
-  // VoiceOver will not read the label of a fieldset or radiogroup unless it is
+  // VoiceOver will not read the label of these roles unless it is
   // exposed in the description instead of the title.
   switch (_owner->GetRole()) {
+    case ax::mojom::Role::kGenericContainer:
     case ax::mojom::Role::kGroup:
     case ax::mojom::Role::kRadioGroup:
       return true;
@@ -1836,7 +1828,7 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
 }
 
 - (BOOL)instanceActive {
-  return _owner && _owner->instance_active();
+  return _owner != nullptr;
 }
 
 // internal
@@ -3692,7 +3684,13 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
   screen_point +=
       manager->GetViewBoundsInScreenCoordinates().OffsetFromOrigin();
 
-  BrowserAccessibility* hit = manager->CachingAsyncHitTest(screen_point);
+  gfx::Point physical_pixel_point =
+      content::IsUseZoomForDSFEnabled()
+          ? screen_point
+          : ScaleToRoundedPoint(screen_point, manager->device_scale_factor());
+
+  BrowserAccessibility* hit =
+      manager->CachingAsyncHitTest(physical_pixel_point);
   if (!hit)
     return nil;
 

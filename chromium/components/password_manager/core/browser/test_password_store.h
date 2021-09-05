@@ -116,12 +116,19 @@ class TestPasswordStore : public PasswordStore {
   std::vector<InteractionsStats> GetAllSiteStatsImpl() override;
   bool AddCompromisedCredentialsImpl(
       const CompromisedCredentials& compromised_credentials) override;
+  bool RemoveCompromisedCredentialsByCompromiseTypeImpl(
+      const std::string& signon_realm,
+      const base::string16& username,
+      const CompromiseType& compromise_type,
+      RemoveCompromisedCredentialsReason reason) override;
   bool RemoveCompromisedCredentialsImpl(
       const std::string& signon_realm,
       const base::string16& username,
       RemoveCompromisedCredentialsReason reason) override;
   std::vector<CompromisedCredentials> GetAllCompromisedCredentialsImpl()
       override;
+  std::vector<CompromisedCredentials> GetMatchingCompromisedCredentialsImpl(
+      const std::string& signon_realm) override;
   bool RemoveCompromisedCredentialsByUrlAndTimeImpl(
       const base::RepeatingCallback<bool(const GURL&)>& url_filter,
       base::Time remove_begin,

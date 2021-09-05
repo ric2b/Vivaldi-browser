@@ -57,18 +57,19 @@ extern const base::Feature kAvatarToolbarButton{
 const base::Feature kBluetoothAggressiveAppearanceFilter{
     "BluetoothAggressiveAppearanceFilter", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables or disables the usage of fixed Bluetooth A2DP packet size to improve
+// audio performance in noisy environment.
+const base::Feature kBluetoothFixA2dpPacketSize{
+    "BluetoothFixA2dpPacketSize", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables or disables more filtering out of phones from the Bluetooth UI.
 const base::Feature kBluetoothPhoneFilter{"BluetoothPhoneFilter",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables or disables using the kernel suspend notifier instead of powerd.
-const base::Feature kBluetoothKernelSuspendNotifier{
-    "BluetoothKernelSuspendNotifier", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // If enabled, browser will notify Chrome OS audio server to register HFP 1.7
 // to BlueZ, which includes wideband speech feature.
 const base::Feature kBluetoothNextHandsfreeProfile{
-    "BluetoothNextHandsfreeProfile", base::FEATURE_DISABLED_BY_DEFAULT};
+    "BluetoothNextHandsfreeProfile", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable or disables running the Camera App as a System Web App.
 const base::Feature kCameraSystemWebApp{"CameraSystemWebApp",
@@ -80,7 +81,7 @@ const base::Feature kCrostiniPortForwarding{"CrostiniPortForwarding",
 
 // Enables or disables Crostini Disk Resizing.
 const base::Feature kCrostiniDiskResizing{"CrostiniDiskResizing",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables Crostini using Buster container images.
 const base::Feature kCrostiniUseBusterImage{"CrostiniUseBusterImage",
@@ -92,7 +93,7 @@ const base::Feature kCrostiniUsername{"CrostiniUsername",
 
 // Enables the option to share the mic with Crostini or not
 const base::Feature kCrostiniShowMicSetting{"CrostiniShowMicSetting",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables Crostini GPU support.
 const base::Feature kCrostiniGpuSupport{"CrostiniGpuSupport",
@@ -118,7 +119,7 @@ const base::Feature kCryptAuthV2DeviceSync{"CryptAuthV2DeviceSync",
 
 // Enables or disables the CryptAuth v2 Enrollment flow.
 const base::Feature kCryptAuthV2Enrollment{"CryptAuthV2Enrollment",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Disables the CryptAuth v1 DeviceSync flow. Note: During the first phase
 // of the v2 DeviceSync rollout, v1 and v2 DeviceSync run in parallel. This flag
@@ -145,6 +146,10 @@ const base::Feature kDriveFs{"DriveFS", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kDriveFsMirroring{"DriveFsMirroring",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables the DLC Settings subpage in Device section of OS Settings.
+const base::Feature kDlcSettingsUi{"DlcSettingsUi",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
+
 // If enabled, allows Unicorn users to add secondary EDU accounts.
 const base::Feature kEduCoexistence{"EduCoexistence",
                                     base::FEATURE_ENABLED_BY_DEFAULT};
@@ -166,7 +171,12 @@ const base::Feature kExoPointerLock{"ExoPointerLock",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the next generation file manager.
-const base::Feature kFilesNG{"FilesNG", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kFilesNG{"FilesNG", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables new ZIP archive handling in Files App.
+// https://crbug.com/912236
+const base::Feature kFilesZipNoNaCl{"FilesZipNoNaCl",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the use of Mojo by Chrome-process code to communicate with Power
 // Manager. In order to use mojo, this feature must be turned on and a callsite
@@ -189,10 +199,10 @@ const base::Feature kGesturePropertiesDBusService{
 
 // Enable primary/secondary action buttons on Gaia login screen.
 const base::Feature kGaiaActionButtons{"GaiaActionButtons",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // The new ChromeOS Help App. https://crbug.com/1012578.
-const base::Feature kHelpAppV2{"HelpAppV2", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kHelpAppV2{"HelpAppV2", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable or disable Unified Input Logic for HMM decoder in the IME extension
 // on Chrome OS.
@@ -222,12 +232,27 @@ const base::Feature kVirtualKeyboardFloatingDefault{
 const base::Feature kInstantTethering{"InstantTethering",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables "Linux and Chrome OS" support. Allows a Linux version of Chrome
+// ("lacros-chrome") to run as a Wayland client with this instance of Chrome
+// ("ash-chrome") acting as the Wayland server and window manager.
+const base::Feature kLacrosSupport{"LacrosSupport",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables or disables the display password button on login / lock screen.
+const base::Feature kLoginDisplayPasswordButton{
+    "LoginDisplayPasswordButton", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // ChromeOS Media App. https://crbug.com/996088.
 const base::Feature kMediaApp{"MediaApp", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable or disable native typing for rule-based input methods.
 const base::Feature kNativeRuleBasedTyping{"NativeRuleBasedTyping",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Controls whether to use screen priorities to decide if transition from one
+// Oobe screen to another is allowed.
+const base::Feature kOobeScreensPriority{"OobeScreensPriority",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether to enable OS Settings fuzzy search, and disable search using
 // exact string matching.
@@ -262,6 +287,10 @@ const base::Feature kQuickAnswersRichUi{"QuickAnswersRichUi",
 const base::Feature kQuickAnswersDogfood{"QuickAnswersDogfood",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Controls whether to enable quick answers text annotator.
+const base::Feature kQuickAnswersTextAnnotator{
+    "QuickAnswersTextAnnotator", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // ChromeOS Files App mounts RAR archives via rar2fs instead of avfs.
 // https://crbug.com/996549
 const base::Feature kRar2Fs{"Rar2Fs", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -271,8 +300,8 @@ const base::Feature kReleaseNotes{"ReleaseNotes",
                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables Release Notes notifications on Chrome OS.
-const base::Feature kReleaseNotesNotification{
-    "ReleaseNotesNotification", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kReleaseNotesNotification{"ReleaseNotesNotification",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables an experimental scanning UI on Chrome OS.
 const base::Feature kScanningUI{"ScanningUI",
@@ -334,6 +363,11 @@ const base::Feature kSplitSettingsSync{"SplitSettingsSync",
 const base::Feature kSplitSyncConsent{"SplitSyncConsent",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables a settings UI toggle that controls Suggested Content status. Also
+// enables a corresponding notice in the Launcher about Suggested Content.
+const base::Feature kSuggestedContentToggle{"SuggestedContentToggle",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables unified media view in Files app to browse recently-modified media
 // files from local local, Google Drive, and Android.
 const base::Feature kUnifiedMediaView{"UnifiedMediaView",
@@ -370,7 +404,7 @@ const base::Feature kVirtualKeyboardBorderedKey{
 
 // Enable or disable resizable floating virtual keyboard on Chrome OS.
 const base::Feature kVirtualKeyboardFloatingResizable{
-    "VirtualKeyboardFloatingResizable", base::FEATURE_DISABLED_BY_DEFAULT};
+    "VirtualKeyboardFloatingResizable", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable or disable MOZC IME to use protobuf as interactive message format.
 const base::Feature kImeMozcProto{"ImeMozcProto",
@@ -395,6 +429,18 @@ bool IsInstantTetheringBackgroundAdvertisingSupported() {
       kInstantTetheringBackgroundAdvertisementSupport);
 }
 
+bool IsLacrosSupportEnabled() {
+  return base::FeatureList::IsEnabled(kLacrosSupport);
+}
+
+bool IsLoginDisplayPasswordButtonEnabled() {
+  return base::FeatureList::IsEnabled(kLoginDisplayPasswordButton);
+}
+
+bool IsOobeScreensPriorityEnabled() {
+  return base::FeatureList::IsEnabled(kOobeScreensPriority);
+}
+
 bool IsParentalControlsSettingsEnabled() {
   return base::FeatureList::IsEnabled(kParentalControlsSettings);
 }
@@ -409,6 +455,14 @@ bool IsQuickAnswersEnabled() {
 
 bool IsQuickAnswersRichUiEnabled() {
   return base::FeatureList::IsEnabled(kQuickAnswersRichUi);
+}
+
+bool IsQuickAnswersSettingToggleEnabled() {
+  return IsQuickAnswersEnabled() && IsQuickAnswersRichUiEnabled();
+}
+
+bool IsQuickAnswersTextAnnotatorEnabled() {
+  return base::FeatureList::IsEnabled(kQuickAnswersTextAnnotator);
 }
 
 bool IsSplitSettingsSyncEnabled() {

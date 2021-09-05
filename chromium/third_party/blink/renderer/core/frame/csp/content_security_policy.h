@@ -30,6 +30,7 @@
 #include <utility>
 
 #include "services/network/public/mojom/content_security_policy.mojom-blink.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/web_content_security_policy_struct.h"
@@ -73,7 +74,6 @@ class SecurityPolicyViolationEventInit;
 class SourceLocation;
 enum class ResourceType : uint8_t;
 
-using SandboxFlags = mojom::blink::WebSandboxFlags;
 typedef HeapVector<Member<CSPDirectiveList>> CSPDirectiveListVector;
 typedef HeapVector<Member<ConsoleMessage>> ConsoleMessageVector;
 typedef std::pair<String, network::mojom::ContentSecurityPolicyType>
@@ -89,10 +89,6 @@ class CORE_EXPORT ContentSecurityPolicyDelegate : public GarbageCollectedMixin {
   // See https://w3c.github.io/webappsec-csp/#policy-self-origin.
   virtual const SecurityOrigin* GetSecurityOrigin() = 0;
 
-  // Returns the SecureContextMode for the context to which the delegate is
-  // bound.
-  virtual SecureContextMode GetSecureContextMode() = 0;
-
   // Returns the URL this content security policy is bound to.
   // Used for https://w3c.github.io/webappsec-csp/#violation-url and so.
   // Note: Url() is used for several purposes that are specced slightly
@@ -101,7 +97,7 @@ class CORE_EXPORT ContentSecurityPolicyDelegate : public GarbageCollectedMixin {
   virtual const KURL& Url() const = 0;
 
   // Directives support.
-  virtual void SetSandboxFlags(SandboxFlags) = 0;
+  virtual void SetSandboxFlags(network::mojom::blink::WebSandboxFlags) = 0;
   virtual void SetRequireTrustedTypes() = 0;
   virtual void AddInsecureRequestPolicy(
       mojom::blink::InsecureRequestPolicy) = 0;
@@ -332,14 +328,20 @@ class CORE_EXPORT ContentSecurityPolicy final
       ReportingDisposition = ReportingDisposition::kReport) const;
   bool IsFrameAncestorsEnforced() const;
 
+  // TODO(crbug.com/889751): Remove "mojom::RequestContextType" once
+  // all the code migrates.
   bool AllowRequestWithoutIntegrity(
       mojom::RequestContextType,
+      network::mojom::RequestDestination,
       const KURL&,
       RedirectStatus = RedirectStatus::kNoRedirect,
       ReportingDisposition = ReportingDisposition::kReport,
       CheckHeaderType = CheckHeaderType::kCheckAll) const;
 
+  // TODO(crbug.com/889751): Remove "mojom::RequestContextType" once
+  // all the code migrates.
   bool AllowRequest(mojom::RequestContextType,
+                    network::mojom::RequestDestination,
                     const KURL&,
                     const String& nonce,
                     const IntegrityMetadataSet&,
@@ -382,7 +384,7 @@ class CORE_EXPORT ContentSecurityPolicy final
   void ReportInvalidSandboxFlags(const String&);
   void ReportInvalidSourceExpression(const String& directive_name,
                                      const String& source);
-  void ReportMissingReportURI(const String&);
+  void ReportMultipleReportToEndpoints();
   void ReportUnsupportedDirective(const String&);
   void ReportInvalidInReportOnly(const String&);
   void ReportInvalidDirectiveInMeta(const String& directive_name);
@@ -390,7 +392,7 @@ class CORE_EXPORT ContentSecurityPolicy final
   void ReportMetaOutsideHead(const String&);
   void ReportValueForEmptyDirective(const String& directive_name,
                                     const String& value);
-  void ReportNonsecureTrustedTypes();
+  void ReportMixedContentReportURI(const String& endpoint);
 
   // If a frame is passed in, the report will be sent using it as a context. If
   // no frame is passed in, the report will be sent via this object's
@@ -425,7 +427,7 @@ class CORE_EXPORT ContentSecurityPolicy final
   // Used as <object>'s URL when there is no `src` attribute.
   const KURL FallbackUrlForPlugin() const;
 
-  void EnforceSandboxFlags(SandboxFlags);
+  void EnforceSandboxFlags(network::mojom::blink::WebSandboxFlags);
   void RequireTrustedTypes();
   bool IsRequireTrustedTypes() const { return require_trusted_types_; }
   String EvalDisabledErrorMessage() const;
@@ -474,6 +476,7 @@ class CORE_EXPORT ContentSecurityPolicy final
 
   // Returns the 'wasm-eval' source is supported.
   bool SupportsWasmEval() const { return supports_wasm_eval_; }
+  void SetSupportsWasmEval(bool value) { supports_wasm_eval_ = value; }
 
   // Sometimes we don't know the initiator or it might be destroyed already
   // for certain navigational checks. We create a string version of the relevant
@@ -486,7 +489,9 @@ class CORE_EXPORT ContentSecurityPolicy final
   // context will be used for all sandbox checks but there are situations
   // (before installing the document that this CSP will bind to) when
   // there is no execution context to enforce the sandbox flags.
-  SandboxFlags GetSandboxMask() const { return sandbox_mask_; }
+  network::mojom::blink::WebSandboxFlags GetSandboxMask() const {
+    return sandbox_mask_;
+  }
 
   bool HasPolicyFromSource(network::mojom::ContentSecurityPolicySource) const;
 
@@ -577,7 +582,7 @@ class CORE_EXPORT ContentSecurityPolicy final
   uint8_t style_hash_algorithms_used_;
 
   // State flags used to configure the environment after parsing a policy.
-  SandboxFlags sandbox_mask_;
+  network::mojom::blink::WebSandboxFlags sandbox_mask_;
   bool require_trusted_types_;
   String disable_eval_error_message_;
   mojom::blink::InsecureRequestPolicy insecure_request_policy_;

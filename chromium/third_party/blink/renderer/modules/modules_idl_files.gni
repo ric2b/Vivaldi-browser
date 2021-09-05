@@ -6,7 +6,7 @@ import("//third_party/blink/renderer/bindings/bindings.gni")
 import("//third_party/blink/renderer/config.gni")
 
 # The paths in this file are absolute since this file is imported and the
-# file lists must be valid from multple "current directories".
+# file lists must be valid from multiple "current directories".
 
 # IDL files for a module are defined by idls.gni in the module's corresponding
 # directory. idls.gni can define certain variables to add additional IDL files
@@ -64,6 +64,7 @@ _idl_imports = [
   "//third_party/blink/renderer/modules/credentialmanager/idls.gni",
   "//third_party/blink/renderer/modules/crypto/idls.gni",
   "//third_party/blink/renderer/modules/csspaint/idls.gni",
+  "//third_party/blink/renderer/modules/delegated_ink/idls.gni",
   "//third_party/blink/renderer/modules/device_orientation/idls.gni",
   "//third_party/blink/renderer/modules/donottrack/idls.gni",
   "//third_party/blink/renderer/modules/encoding/idls.gni",
@@ -114,6 +115,7 @@ _idl_imports = [
   "//third_party/blink/renderer/modules/storage/idls.gni",
   "//third_party/blink/renderer/modules/vibration/idls.gni",
   "//third_party/blink/renderer/modules/video_rvfc/idls.gni",
+  "//third_party/blink/renderer/modules/virtualkeyboard/idls.gni",
   "//third_party/blink/renderer/modules/wake_lock/idls.gni",
   "//third_party/blink/renderer/modules/webaudio/idls.gni",
   "//third_party/blink/renderer/modules/webcodecs/idls.gni",

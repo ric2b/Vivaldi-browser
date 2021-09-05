@@ -411,7 +411,13 @@ id<GREYMatcher> OpenInNewIncognitoTabButton() {
 
 // Tests display and selection of 'Copy URL' in a context menu on a history
 // entry.
-- (void)testContextMenuCopy {
+// TODO(crbug.com/1067812): Test won't pass on devices.
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_testContextMenuCopy testContextMenuCopy
+#else
+#define MAYBE_testContextMenuCopy DISABLED_testContextMenuCopy
+#endif
+- (void)MAYBE_testContextMenuCopy {
   ProceduralBlock clearPasteboard = ^{
     [[UIPasteboard generalPasteboard] setURLs:nil];
   };
@@ -467,6 +473,13 @@ id<GREYMatcher> OpenInNewIncognitoTabButton() {
 
 // Tests that the VC can be dismissed by swiping down while its searching.
 - (void)testSwipeDownDismissWhileSearching {
+// TODO(crbug.com/1078165): Test fails on iOS 13+ iPad devices.
+#if !TARGET_IPHONE_SIMULATOR
+  if ([ChromeEarlGrey isIPadIdiom] && base::ios::IsRunningOnIOS13OrLater()) {
+    EARL_GREY_TEST_DISABLED(@"This test fails on iOS 13+ iPad device.");
+  }
+#endif
+
   if (!base::ios::IsRunningOnOrLater(13, 0, 0)) {
     EARL_GREY_TEST_SKIPPED(@"Test disabled on iOS 12 and lower.");
   }

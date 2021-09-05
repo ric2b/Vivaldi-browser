@@ -8,8 +8,9 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
 #include "device/bluetooth/bluetooth_adapter.h"
@@ -523,7 +524,7 @@ BluetoothTestBase::GetReentrantStartNotifySessionSuccessCallback(
     BluetoothRemoteGattCharacteristic* characteristic) {
   if (expected == Call::EXPECTED)
     ++expected_success_callback_calls_;
-  return base::Bind(
+  return base::BindOnce(
       &BluetoothTestBase::ReentrantStartNotifySessionSuccessCallback,
       weak_factory_.GetWeakPtr(), expected, characteristic);
 }

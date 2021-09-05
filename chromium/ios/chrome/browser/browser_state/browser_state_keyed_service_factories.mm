@@ -10,11 +10,13 @@
 #include "ios/chrome/browser/autocomplete/shortcuts_backend_factory.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "ios/chrome/browser/bookmarks/startup_task_runner_service_factory.h"
 #include "ios/chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "ios/chrome/browser/content_settings/cookie_settings_factory.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_keyed_service_factory.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_persistent_storage_keyed_service_factory.h"
+#include "ios/chrome/browser/credential_provider/credential_provider_service_factory.h"
 #import "ios/chrome/browser/device_sharing/device_sharing_manager_factory.h"
 #include "ios/chrome/browser/dom_distiller/dom_distiller_service_factory.h"
 #include "ios/chrome/browser/download/browser_download_service_factory.h"
@@ -34,9 +36,10 @@
 #import "ios/chrome/browser/metrics/ios_profile_session_durations_service_factory.h"
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
+#import "ios/chrome/browser/policy/policy_features.h"
+#include "ios/chrome/browser/policy_url_blocking/policy_url_blocking_service.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
-#include "ios/chrome/browser/send_tab_to_self/send_tab_to_self_client_service_factory.h"
 #include "ios/chrome/browser/signin/about_signin_internals_factory.h"
 #include "ios/chrome/browser/signin/account_consistency_service_factory.h"
 #include "ios/chrome/browser/signin/account_reconcilor_factory.h"
@@ -101,6 +104,7 @@ void EnsureBrowserStateKeyedServiceFactoriesBuilt() {
   BrowserDownloadServiceFactory::GetInstance();
   BrowsingDataRemoverFactory::GetInstance();
   ConsentAuditorFactory::GetInstance();
+  CredentialProviderServiceFactory::GetInstance();
   DeviceSharingManagerFactory::GetInstance();
   GoogleLogoServiceFactory::GetInstance();
   IdentityManagerFactory::GetInstance();
@@ -114,10 +118,10 @@ void EnsureBrowserStateKeyedServiceFactoriesBuilt() {
   IOSProfileSessionDurationsServiceFactory::GetInstance();
   IOSUserEventServiceFactory::GetInstance();
   LanguageModelManagerFactory::GetInstance();
+  ManagedBookmarkServiceFactory::GetInstance();
   ModelTypeStoreServiceFactory::GetInstance();
   ProfileSyncServiceFactory::GetInstance();
   ReadingListModelFactory::GetInstance();
-  send_tab_to_self::SendTabToSelfClientServiceFactory::GetInstance();
   SigninBrowserStateInfoUpdaterFactory::GetInstance();
   SigninClientFactory::GetInstance();
   SnapshotCacheFactory::GetInstance();
@@ -126,4 +130,8 @@ void EnsureBrowserStateKeyedServiceFactoriesBuilt() {
   TranslateAcceptLanguagesFactory::GetInstance();
   UnifiedConsentServiceFactory::GetInstance();
   UrlLanguageHistogramFactory::GetInstance();
+
+  if (IsURLBlocklistEnabled()) {
+    PolicyBlocklistServiceFactory::GetInstance();
+  }
 }

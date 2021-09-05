@@ -58,6 +58,15 @@ export const BackgroundGraphicsModeRestriction = {
  *   cssBackground: ({
  *     allowedMode: (BackgroundGraphicsModeRestriction | undefined),
  *     defaultMode: (BackgroundGraphicsModeRestriction | undefined),
+ *   } | undefined),
+ *   mediaSize: ({
+ *     defaultMode: ({
+ *       width: (number | undefined),
+ *       height: (number | undefined),
+ *     } | undefined),
+ *   } | undefined),
+ *   sheets: ({
+ *     value: (number | undefined),
  *   } | undefined)
  * }}
  */
@@ -256,12 +265,7 @@ export class NativeLayer {
    *  printing settings in the Settings App.
    */
   openSettingsPrintPage() {
-    // <if expr="chromeos">
     chrome.send('openPrinterSettings');
-    // </if>
-    // <if expr="not chromeos">
-    window.open('chrome://settings/printing');
-    // </if>
   }
 
   /**

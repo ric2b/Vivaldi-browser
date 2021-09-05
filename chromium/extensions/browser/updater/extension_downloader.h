@@ -48,6 +48,8 @@ struct ResourceRequest;
 
 namespace extensions {
 
+using ManifestInvalidErrorList =
+    std::vector<std::pair<ExtensionId, ManifestInvalidError>>;
 struct UpdateDetails {
   UpdateDetails(const std::string& id, const base::Version& version);
   ~UpdateDetails();
@@ -263,21 +265,22 @@ class ExtensionDownloader {
   // If |results| is null, it means something went wrong when parsing it.
   void HandleManifestResults(std::unique_ptr<ManifestFetchData> fetch_data,
                              std::unique_ptr<UpdateManifestResults> results,
-                             const base::Optional<std::string>& error);
+                             const base::Optional<ManifestParseFailure>& error);
 
   // This function partition extension IDs stored in |fetch_data| into 3 sets:
-  // update/no update/error using the update infromation from
+  // update/no update/error using the update information from
   // |possible_updates| and the extension system. When the function returns:
   // - |to_update| stores entries from |possible_updates| that will be updated.
   // - |no_updates| stores the set of extension IDs that will not be updated.
-  // - |errors| stores the set of extension IDs that have error in the process
+  // - |errors| stores the entries of extension IDs along with the error that
+  // occurred in the process
   //   determining updates. For example, a common error is |possible_updates|
   //   doesn't have any update information for some extensions in |fetch_data|.
   void DetermineUpdates(const ManifestFetchData& fetch_data,
                         const UpdateManifestResults& possible_updates,
                         std::vector<UpdateManifestResult*>* to_update,
                         std::set<std::string>* no_updates,
-                        std::set<std::string>* errors);
+                        ManifestInvalidErrorList* errors);
 
   // Checks whether extension is presented in cache. If yes, return path to its
   // cached CRX, base::nullopt otherwise.
@@ -293,6 +296,13 @@ class ExtensionDownloader {
 
   // Handles the result of a crx fetch.
   void OnExtensionLoadComplete(base::FilePath crx_path);
+
+  void NotifyExtensionManifestUpdateCheckStatus(
+      std::vector<UpdateManifestResult> results);
+
+  void NotifyExtensionsManifestInvalidFailure(
+      const ManifestInvalidErrorList& errors,
+      const std::set<int>& request_ids);
 
   // Invokes OnExtensionDownloadStageChanged() on the |delegate_| for each
   // extension in the set, with |stage| as the current stage. Make a copy of

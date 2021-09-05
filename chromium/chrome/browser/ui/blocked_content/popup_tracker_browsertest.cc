@@ -11,7 +11,6 @@
 #include "base/supports_user_data.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_database_helper.h"
 #include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
@@ -22,10 +21,12 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/content_settings/browser/tab_specific_content_settings.h"
 #include "components/safe_browsing/core/db/v4_embedded_test_server_util.h"
 #include "components/safe_browsing/core/db/v4_test_util.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -289,7 +290,8 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, WhitelistedPopup_HasTracker) {
 
   // Is blocked by the popup blocker.
   ui_test_utils::NavigateToURL(browser(), url);
-  EXPECT_TRUE(TabSpecificContentSettings::FromWebContents(web_contents)
+  EXPECT_TRUE(content_settings::TabSpecificContentSettings::FromWebContents(
+                  web_contents)
                   ->IsContentBlocked(ContentSettingsType::POPUPS));
 
   // Click through to open the popup.

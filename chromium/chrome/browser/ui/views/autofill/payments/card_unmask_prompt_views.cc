@@ -54,12 +54,12 @@ static views::GridLayout* ResetOverlayLayout(views::View* overlay) {
   views::ColumnSet* columns = overlay_layout->AddColumnSet(0);
   // The throbber's checkmark is 18dp.
   columns->AddColumn(views::GridLayout::TRAILING, views::GridLayout::CENTER,
-                     0.5, views::GridLayout::FIXED, 18, 0);
+                     0.5, views::GridLayout::ColumnSize::kFixed, 18, 0);
   columns->AddPaddingColumn(views::GridLayout::kFixedSize,
                             ChromeLayoutProvider::Get()->GetDistanceMetric(
                                 views::DISTANCE_RELATED_LABEL_HORIZONTAL));
   columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER, 0.5,
-                     views::GridLayout::USE_PREF, 0, 0);
+                     views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   overlay_layout->StartRow(1.0, 0);
   return overlay_layout;
 }
@@ -85,7 +85,7 @@ CardUnmaskPromptViews::CardUnmaskPromptViews(
     : controller_(controller), web_contents_(web_contents) {
   chrome::RecordDialogCreation(chrome::DialogIdentifier::CARD_UNMASK);
   if (controller_->CanStoreLocally()) {
-    storage_checkbox_ = DialogDelegate::SetFootnoteView(
+    storage_checkbox_ = SetFootnoteView(
         CreateSaveCheckbox(controller_->GetStoreLocallyStartState()));
   }
 
@@ -215,7 +215,6 @@ void CardUnmaskPromptViews::ShowNewCardLink() {
 
   auto new_card_link = std::make_unique<views::Link>(
       l10n_util::GetStringUTF16(IDS_AUTOFILL_CARD_UNMASK_NEW_CARD_LINK));
-  new_card_link->SetUnderline(false);
   new_card_link->set_callback(base::BindRepeating(
       &CardUnmaskPromptViews::LinkClicked, base::Unretained(this)));
   new_card_link_ = input_row_->AddChildView(std::move(new_card_link));
@@ -469,11 +468,9 @@ void CardUnmaskPromptViews::UpdateButtons() {
       controller_->GetVerificationResult();
   bool has_ok = result != AutofillClient::PERMANENT_FAILURE &&
                 result != AutofillClient::NETWORK_ERROR;
-  DialogDelegate::SetButtons(has_ok ? ui::DIALOG_BUTTON_OK |
-                                           ui::DIALOG_BUTTON_CANCEL
-                                     : ui::DIALOG_BUTTON_CANCEL);
-  DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_OK,
-                                   controller_->GetOkButtonLabel());
+  SetButtons(has_ok ? ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL
+                    : ui::DIALOG_BUTTON_CANCEL);
+  SetButtonLabel(ui::DIALOG_BUTTON_OK, controller_->GetOkButtonLabel());
 }
 
 void CardUnmaskPromptViews::LinkClicked() {

@@ -173,9 +173,6 @@ void RecordSearchLaunchIndexAndQueryLength(
     UMA_HISTOGRAM_EXACT_LINEAR(kAppListResultLaunchIndexAndQueryLength,
                                logged_value, kMaxLoggedHistogramValue);
     UMA_HISTOGRAM_BOOLEAN(kAppListResultLaunchIsEmptyQuery, query_length == 0);
-  } else if (launch_location == SearchResultLaunchLocation::kTileList) {
-    UMA_HISTOGRAM_EXACT_LINEAR(kAppListTileLaunchIndexAndQueryLength,
-                               logged_value, kMaxLoggedHistogramValue);
   }
 }
 
@@ -303,7 +300,7 @@ bool IsCommandIdAnAppLaunch(int command_id_number) {
     case CommandId::USE_LAUNCH_TYPE_WINDOW:
     case CommandId::USE_LAUNCH_TYPE_TABBED_WINDOW:
     case CommandId::USE_LAUNCH_TYPE_COMMAND_END:
-    case CommandId::STOP_APP:
+    case CommandId::SHUTDOWN_GUEST_OS:
     case CommandId::EXTENSIONS_CONTEXT_CUSTOM_FIRST:
     case CommandId::EXTENSIONS_CONTEXT_CUSTOM_LAST:
     case CommandId::COMMAND_ID_COUNT:

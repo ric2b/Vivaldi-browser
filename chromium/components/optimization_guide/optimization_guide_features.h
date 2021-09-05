@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/containers/flat_set.h"
 #include "base/feature_list.h"
 #include "base/optional.h"
 #include "base/time/time.h"
@@ -31,6 +32,9 @@ extern const base::Feature kOptimizationTargetPrediction;
 // engaged hosts in a user's history before DataSaver being enabled from being
 // requested until the user navigates to the host again.
 size_t MaxHintsFetcherTopHostBlacklistSize();
+
+// Whether hints for top hosts should be batch updated.
+bool ShouldBatchUpdateHintsForTopHosts();
 
 // The maximum number of hosts allowed to be requested by the client to the
 // remote Optimzation Guide Service.
@@ -136,6 +140,10 @@ int PredictionModelFetchRandomMinDelaySecs();
 // Returns the maximum number of seconds to randomly delay before starting to
 // fetch for prediction models and host model features.
 int PredictionModelFetchRandomMaxDelaySecs();
+
+// Returns a set of external Android app packages whose predictions have been
+// approved for fetching from the remote Optimization Guide Service.
+base::flat_set<std::string> ExternalAppPackageNamesApprovedForFetch();
 
 }  // namespace features
 }  // namespace optimization_guide

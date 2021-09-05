@@ -23,7 +23,7 @@
 #include "media/base/video_frame.h"
 #include "net/base/mime_util.h"
 
-#import "platform_media/gpu/decoders/mac/data_source_loader.h"
+#include "platform_media/gpu/decoders/mac/data_request_handler.h"
 #include "platform_media/gpu/decoders/mac/avf_audio_tap.h"
 #include "platform_media/common/mac/framework_type_conversions.h"
 #include "platform_media/common/mac/platform_media_pipeline_types_mac.h"
@@ -315,18 +315,16 @@ AVFMediaDecoder::~AVFMediaDecoder() {
                  forKeyPath:[status_observer_ keyPath]];
   }
 
-  [data_source_loader_ stop];
+  data_request_handler_->Stop();
 }
 
-void AVFMediaDecoder::Initialize(ipc_data_source::Reader source_reader,
-                                 ipc_data_source::Info source_info,
+void AVFMediaDecoder::Initialize(ipc_data_source::Info source_info,
                                  ResultCB initialize_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  data_source_loader_.reset([[DataSourceLoader alloc]
-      initWithDataSource:std::move(source_reader)
-          withSourceInfo:std::move(source_info)
-       withDispatchQueue:dispatch_get_main_queue()]);
+  data_request_handler_ = base::MakeRefCounted<media::DataRequestHandler>();
+  data_request_handler_->Init(std::move(source_info),
+                              dispatch_get_main_queue());
 
   base::scoped_nsobject<NSArray> asset_keys_to_load_and_test(
       [[NSArray arrayWithObjects:@"playable",
@@ -340,7 +338,7 @@ void AVFMediaDecoder::Initialize(ipc_data_source::Reader source_reader,
                                           std::move(initialize_cb),
                                           asset_keys_to_load_and_test));
 
-  [[data_source_loader_ asset]
+  [data_request_handler_->GetAsset()
       loadValuesAsynchronouslyForKeys:asset_keys_to_load_and_test
                     completionHandler:^{
                       asset_keys_loaded_cb.Run();
@@ -418,7 +416,7 @@ void AVFMediaDecoder::AssetKeysLoaded(const ResultCB& initialize_cb,
   // First test whether the values of each of the keys we need have been
   // successfully loaded.
 
-  AVAsset* asset = [data_source_loader_ asset];
+  AVAsset* asset = data_request_handler_->GetAsset();
   for (NSString* key in keys.get()) {
     NSError* error = nil;
     if ([asset statusOfValueForKey:key error:&error] !=

@@ -157,6 +157,12 @@ id<GREYMatcher> SearchCopiedTextButton() {
 #define MAYBE_testXClientData testXClientData
 #endif
 - (void)MAYBE_testXClientData {
+// TODO(crbug.com/1067815): Test doesn't pass on iPad device.
+#if !TARGET_IPHONE_SIMULATOR
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"testXClientData doesn't pass on iPad device.");
+  }
+#endif
   // Rewrite the google URL to localhost URL.
   [OmniboxAppInterface rewriteGoogleURLToLocalhost];
 
@@ -462,10 +468,15 @@ id<GREYMatcher> SearchCopiedTextButton() {
 // it should be displayed. Select & SelectAll buttons should be hidden when the
 // omnibox is empty.
 - (void)testEmptyOmnibox {
+  // TODO(crbug.com/1078784): This is flaky on iOS 13 iPad, probably linked to
+  // Apple help on the keyboard.
+  if ([ChromeEarlGrey isIPadIdiom] && base::ios::IsRunningOnOrLater(13, 0, 0)) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iPad, iOS 13 and later.");
+  }
+
 // TODO(crbug.com/1046787): Test is failing for EG1.
 #if defined(CHROME_EARL_GREY_1)
-  if (![ChromeEarlGrey isIPadIdiom] &&
-      base::ios::IsRunningOnOrLater(13, 3, 0)) {
+  if (![ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Test skipped on Earl Grey 1.");
   }
 #endif
@@ -615,7 +626,13 @@ id<GREYMatcher> SearchCopiedTextButton() {
       assertWithMatcher:grey_nil()];
 }
 
-- (void)testNoDefaultMatch {
+// TODO(crbug.com/1067815): Test can't pass on devices.
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_testNoDefaultMatch testNoDefaultMatch
+#else
+#define MAYBE_testNoDefaultMatch DISABLED_testNoDefaultMatch
+#endif
+- (void)MAYBE_testNoDefaultMatch {
   NSString* copiedText = @"test no default match1";
 
   // Put some text in pasteboard.

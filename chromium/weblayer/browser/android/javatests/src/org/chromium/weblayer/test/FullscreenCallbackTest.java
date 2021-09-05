@@ -69,4 +69,23 @@ public class FullscreenCallbackTest {
         mDelegate.waitForExitFullscreen();
         Assert.assertEquals(1, mDelegate.mExitFullscreenCount);
     }
+
+    @Test
+    @SmallTest
+    public void testExitFullscreenWhenTabDestroyed() {
+        // Destroying the tab should exit fullscreen.
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { mActivity.getTab().getBrowser().destroyTab(mActivity.getTab()); });
+        mDelegate.waitForExitFullscreen();
+        Assert.assertEquals(1, mDelegate.mExitFullscreenCount);
+    }
+
+    /**
+     * Verifies there are no crashes when destroying the fragment in fullscreen.
+     */
+    @Test
+    @SmallTest
+    public void testDestroyFragmentWhileFullscreen() {
+        TestThreadUtils.runOnUiThreadBlocking(() -> { mActivity.destroyFragment(); });
+    }
 }

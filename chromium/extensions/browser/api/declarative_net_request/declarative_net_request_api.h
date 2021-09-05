@@ -27,13 +27,10 @@ class DeclarativeNetRequestUpdateDynamicRulesFunction
   ~DeclarativeNetRequestUpdateDynamicRulesFunction() override;
 
   // ExtensionFunction override:
-  bool PreRunValidation(std::string* error) override;
   ExtensionFunction::ResponseAction Run() override;
 
  private:
   void OnDynamicRulesUpdated(base::Optional<std::string> error);
-
-  DISALLOW_COPY_AND_ASSIGN(DeclarativeNetRequestUpdateDynamicRulesFunction);
 };
 
 class DeclarativeNetRequestGetDynamicRulesFunction : public ExtensionFunction {
@@ -46,14 +43,43 @@ class DeclarativeNetRequestGetDynamicRulesFunction : public ExtensionFunction {
   ~DeclarativeNetRequestGetDynamicRulesFunction() override;
 
   // ExtensionFunction override:
-  bool PreRunValidation(std::string* error) override;
   ExtensionFunction::ResponseAction Run() override;
 
  private:
   void OnDynamicRulesFetched(
       declarative_net_request::ReadJSONRulesResult read_json_result);
+};
 
-  DISALLOW_COPY_AND_ASSIGN(DeclarativeNetRequestGetDynamicRulesFunction);
+class DeclarativeNetRequestUpdateEnabledRulesetsFunction
+    : public ExtensionFunction {
+ public:
+  DeclarativeNetRequestUpdateEnabledRulesetsFunction();
+  DECLARE_EXTENSION_FUNCTION("declarativeNetRequest.updateEnabledRulesets",
+                             DECLARATIVENETREQUEST_UPDATEENABLEDRULESETS)
+
+ protected:
+  ~DeclarativeNetRequestUpdateEnabledRulesetsFunction() override;
+
+ private:
+  void OnEnabledStaticRulesetsUpdated(base::Optional<std::string> error);
+
+  // ExtensionFunction override:
+  ExtensionFunction::ResponseAction Run() override;
+};
+
+class DeclarativeNetRequestGetEnabledRulesetsFunction
+    : public ExtensionFunction {
+ public:
+  DeclarativeNetRequestGetEnabledRulesetsFunction();
+  DECLARE_EXTENSION_FUNCTION("declarativeNetRequest.getEnabledRulesets",
+                             DECLARATIVENETREQUEST_GETENABLEDRULESETS)
+
+ protected:
+  ~DeclarativeNetRequestGetEnabledRulesetsFunction() override;
+
+ private:
+  // ExtensionFunction override:
+  ExtensionFunction::ResponseAction Run() override;
 };
 
 class DeclarativeNetRequestGetMatchedRulesFunction : public ExtensionFunction {
@@ -77,8 +103,6 @@ class DeclarativeNetRequestGetMatchedRulesFunction : public ExtensionFunction {
 
  private:
   static bool disable_throttling_for_test_;
-
-  DISALLOW_COPY_AND_ASSIGN(DeclarativeNetRequestGetMatchedRulesFunction);
 };
 
 class DeclarativeNetRequestSetActionCountAsBadgeTextFunction
@@ -92,10 +116,6 @@ class DeclarativeNetRequestSetActionCountAsBadgeTextFunction
   ~DeclarativeNetRequestSetActionCountAsBadgeTextFunction() override;
 
   ExtensionFunction::ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(
-      DeclarativeNetRequestSetActionCountAsBadgeTextFunction);
 };
 
 }  // namespace extensions

@@ -121,9 +121,9 @@ bool CanCloseTabsToRight(const Browser* browser);
 bool CanCloseOtherTabs(const Browser* browser);
 content::WebContents* DuplicateTabAt(Browser* browser, int index);
 bool CanDuplicateTabAt(const Browser* browser, int index);
-void MoveToExistingWindow(Browser* source,
-                          Browser* target,
-                          const std::vector<int>& tab_indices);
+void MoveTabsToExistingWindow(Browser* source,
+                              Browser* target,
+                              const std::vector<int>& tab_indices);
 void MuteSite(Browser* browser);
 void PinTab(Browser* browser);
 void GroupTab(Browser* browser);
@@ -147,6 +147,7 @@ void CloseSaveLocalCardSignInPromo(Browser* browser);
 void Translate(Browser* browser);
 void ManagePasswordsForPage(Browser* browser);
 void SendTabToSelfFromPageAction(Browser* browser);
+void GenerateQRCodeFromPageAction(Browser* browser);
 void SavePage(Browser* browser);
 bool CanSavePage(const Browser* browser);
 void Print(Browser* browser);

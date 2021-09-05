@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "chromeos/components/sync_wifi/network_identifier.h"
 #include "components/sync/protocol/wifi_configuration_specifics.pb.h"
@@ -33,7 +34,7 @@ sync_pb::WifiConfigurationSpecifics GenerateTestWifiSpecifics(
     NOTREACHED();
   }
   specifics.set_passphrase(passphrase);
-  specifics.set_last_update_timestamp(timestamp);
+  specifics.set_last_connected_timestamp(timestamp);
   specifics.set_automatically_connect(
       sync_pb::WifiConfigurationSpecifics::AUTOMATICALLY_CONNECT_ENABLED);
   specifics.set_is_preferred(

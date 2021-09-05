@@ -93,15 +93,10 @@ CanvasRenderingContextHost::GetOrCreateCanvasResourceProviderImpl(
     AccelerationHint hint) {
   if (!ResourceProvider() && !did_fail_to_create_resource_provider_) {
     if (IsValidImageSize(Size())) {
-      base::WeakPtr<CanvasResourceDispatcher> dispatcher =
-          GetOrCreateResourceDispatcher()
-              ? GetOrCreateResourceDispatcher()->GetWeakPtr()
-              : nullptr;
-
       if (Is3d()) {
-        CreateCanvasResourceProvider3D(hint, dispatcher);
+        CreateCanvasResourceProvider3D(hint);
       } else {
-        CreateCanvasResourceProvider2D(hint, dispatcher);
+        CreateCanvasResourceProvider2D(hint);
       }
     }
     if (!ResourceProvider())
@@ -111,8 +106,7 @@ CanvasRenderingContextHost::GetOrCreateCanvasResourceProviderImpl(
 }
 
 void CanvasRenderingContextHost::CreateCanvasResourceProvider3D(
-    AccelerationHint hint,
-    base::WeakPtr<CanvasResourceDispatcher> dispatcher) {
+    AccelerationHint hint) {
   DCHECK(Is3d());
 
   uint8_t presentation_mode = CanvasResourceProvider::kDefaultPresentationMode;
@@ -127,9 +121,13 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider3D(
     presentation_mode |=
         CanvasResourceProvider::kAllowSwapChainPresentationMode;
   }
-  CanvasResourceProvider::ResourceUsage usage;
-
+  std::unique_ptr<CanvasResourceProvider> provider;
+  base::WeakPtr<CanvasResourceDispatcher> dispatcher =
+      GetOrCreateResourceDispatcher()
+          ? GetOrCreateResourceDispatcher()->GetWeakPtr()
+          : nullptr;
   if (SharedGpuContext::IsGpuCompositingEnabled()) {
+    CanvasResourceProvider::ResourceUsage usage;
     if (LowLatencyEnabled() && RenderingContext()) {
       // Allow swap chain presentation only if 3d context is using a swap
       // chain since we'll be importing it as a passthrough texture.
@@ -139,17 +137,27 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider3D(
       usage = CanvasResourceProvider::ResourceUsage::
           kAcceleratedCompositedResourceUsage;
     }
+    provider = CanvasResourceProvider::Create(
+        Size(), usage, SharedGpuContext::ContextProviderWrapper(),
+        0 /* msaa_sample_count */, FilterQuality(), ColorParams(),
+        presentation_mode, std::move(dispatcher),
+        RenderingContext()->IsOriginTopLeft());
   } else {
-    usage =
-        CanvasResourceProvider::ResourceUsage::kSoftwareCompositedResourceUsage;
+    // Here it should try a SoftwareCompositedResourceUsage, but as
+    // SharedGpuCOntext::IsGpuCompositingEnabled() is false and that being true
+    // is a requirement  to try and create a SharedImageProvider if
+    // SoftwareCompositeResourceUsage is used, it will go straight ahead to a
+    // fallback SharedBitmap and then to a Bitmap provider
+    provider = CanvasResourceProvider::CreateSharedBitmapProvider(
+        Size(), SharedGpuContext::ContextProviderWrapper(), FilterQuality(),
+        ColorParams(), std::move(dispatcher));
+    if (!provider) {
+      provider = CanvasResourceProvider::CreateBitmapProvider(
+          Size(), FilterQuality(), ColorParams());
+    }
   }
 
-  base::UmaHistogramEnumeration("Blink.Canvas.ResourceProviderUsage", usage);
-  ReplaceResourceProvider(CanvasResourceProvider::Create(
-      Size(), usage, SharedGpuContext::ContextProviderWrapper(),
-      0 /* msaa_sample_count */, FilterQuality(), ColorParams(),
-      presentation_mode, std::move(dispatcher),
-      RenderingContext()->IsOriginTopLeft()));
+  ReplaceResourceProvider(std::move(provider));
   if (ResourceProvider() && ResourceProvider()->IsValid()) {
     base::UmaHistogramBoolean("Blink.Canvas.ResourceProviderIsAccelerated",
                               ResourceProvider()->IsAccelerated());
@@ -159,13 +167,17 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider3D(
 }
 
 void CanvasRenderingContextHost::CreateCanvasResourceProvider2D(
-    AccelerationHint hint,
-    base::WeakPtr<CanvasResourceDispatcher> dispatcher) {
+    AccelerationHint hint) {
   DCHECK(Is2d());
   const bool want_acceleration =
       hint == kPreferAcceleration && ShouldAccelerate2dContext();
 
+  base::WeakPtr<CanvasResourceDispatcher> dispatcher =
+      GetOrCreateResourceDispatcher()
+          ? GetOrCreateResourceDispatcher()->GetWeakPtr()
+          : nullptr;
   uint8_t presentation_mode = CanvasResourceProvider::kDefaultPresentationMode;
+  bool composited_mode = false;
   // Allow GMB image resources if the runtime feature is enabled or if
   // we want to use it for low latency mode.
   if (RuntimeEnabledFeatures::Canvas2dImageChromiumEnabled() ||
@@ -174,12 +186,15 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider2D(
        LowLatencyEnabled() && want_acceleration)) {
     presentation_mode |=
         CanvasResourceProvider::kAllowImageChromiumPresentationMode;
+    composited_mode = true;
   }
   if (base::FeatureList::IsEnabled(features::kLowLatencyCanvas2dSwapChain) &&
       LowLatencyEnabled() && want_acceleration) {
     presentation_mode |=
         CanvasResourceProvider::kAllowSwapChainPresentationMode;
   }
+
+  bool try_swap_chain = false;
 
   CanvasResourceProvider::ResourceUsage usage;
   if (want_acceleration) {
@@ -188,6 +203,7 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider2D(
       // in low latency mode too.
       usage = CanvasResourceProvider::ResourceUsage::
           kAcceleratedDirect2DResourceUsage;
+      try_swap_chain = true;
     } else {
       usage = CanvasResourceProvider::ResourceUsage::
           kAcceleratedCompositedResourceUsage;
@@ -197,17 +213,54 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider2D(
         CanvasResourceProvider::ResourceUsage::kSoftwareCompositedResourceUsage;
   }
 
+  std::unique_ptr<CanvasResourceProvider> provider;
   // It is important to not use the context's IsOriginTopLeft() here
   // because that denotes the current state and could change after the
   // new resource provider is created e.g. due to switching between
   // unaccelerated and accelerated modes during tab switching.
   const bool is_origin_top_left = !want_acceleration || LowLatencyEnabled();
 
-  base::UmaHistogramEnumeration("Blink.Canvas.ResourceProviderUsage", usage);
-  ReplaceResourceProvider(CanvasResourceProvider::Create(
-      Size(), usage, SharedGpuContext::ContextProviderWrapper(),
-      GetMSAASampleCountFor2dContext(), FilterQuality(), ColorParams(),
-      presentation_mode, std::move(dispatcher), is_origin_top_left));
+  // First try to be optimized for displaying on screen. In the case we are
+  // hardware compositing, we also try to enable the usage of the image as
+  // scanout buffer (overlay)
+  uint32_t shared_image_usage_flags = gpu::SHARED_IMAGE_USAGE_DISPLAY;
+  if (composited_mode)
+    shared_image_usage_flags |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
+
+  if (try_swap_chain) {
+    // Swap Chain is used for low latency.
+    provider = CanvasResourceProvider::Create(
+        Size(), usage, SharedGpuContext::ContextProviderWrapper(),
+        GetMSAASampleCountFor2dContext(), FilterQuality(), ColorParams(),
+        presentation_mode, std::move(dispatcher), is_origin_top_left);
+  } else if (want_acceleration) {
+    provider = CanvasResourceProvider::CreateSharedImageProvider(
+        Size(), SharedGpuContext::ContextProviderWrapper(), FilterQuality(),
+        ColorParams(), is_origin_top_left,
+        CanvasResourceProvider::RasterMode::kGPU, shared_image_usage_flags);
+  } else if (composited_mode) {
+    provider = CanvasResourceProvider::CreateSharedImageProvider(
+        Size(), SharedGpuContext::ContextProviderWrapper(), FilterQuality(),
+        ColorParams(), is_origin_top_left,
+        CanvasResourceProvider::RasterMode::kCPU, shared_image_usage_flags);
+  }
+
+  if (!provider && !try_swap_chain) {
+    // If the sharedImage Provider creation above failed, we try a
+    // SharedBitmap Provider before falling back to a Bitmap Provider
+    provider = CanvasResourceProvider::CreateSharedBitmapProvider(
+        Size(), SharedGpuContext::ContextProviderWrapper(), FilterQuality(),
+        ColorParams(), std::move(dispatcher));
+  }
+
+  if (!provider && !try_swap_chain) {
+    // If any of the above Create was able to create a valid provider, a
+    // BitmapProvider will be created here.
+    provider = CanvasResourceProvider::CreateBitmapProvider(
+        Size(), FilterQuality(), ColorParams());
+  }
+
+  ReplaceResourceProvider(std::move(provider));
 
   if (ResourceProvider()) {
     if (ResourceProvider()->IsValid()) {

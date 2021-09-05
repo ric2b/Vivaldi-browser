@@ -157,9 +157,61 @@ bool SupportsOOPRaster(const gl::GLVersionInfo& gl_info) {
 
 namespace gpu {
 
+bool CollectGraphicsDeviceInfoFromCommandLine(
+    const base::CommandLine* command_line,
+    GPUInfo* gpu_info) {
+  GPUInfo::GPUDevice& gpu = gpu_info->gpu;
+
+  if (command_line->HasSwitch(switches::kGpuVendorId)) {
+    const std::string vendor_id_str =
+        command_line->GetSwitchValueASCII(switches::kGpuVendorId);
+    base::StringToUint(vendor_id_str, &gpu.vendor_id);
+  }
+
+  if (command_line->HasSwitch(switches::kGpuDeviceId)) {
+    const std::string device_id_str =
+        command_line->GetSwitchValueASCII(switches::kGpuDeviceId);
+    base::StringToUint(device_id_str, &gpu.device_id);
+  }
+
+#if defined(OS_WIN)
+  if (command_line->HasSwitch(switches::kGpuSubSystemId)) {
+    const std::string syb_system_id_str =
+        command_line->GetSwitchValueASCII(switches::kGpuSubSystemId);
+    base::StringToUint(syb_system_id_str, &gpu.sub_sys_id);
+  }
+
+  if (command_line->HasSwitch(switches::kGpuRevision)) {
+    const std::string revision_str =
+        command_line->GetSwitchValueASCII(switches::kGpuRevision);
+    base::StringToUint(revision_str, &gpu.revision);
+  }
+#endif
+
+  if (command_line->HasSwitch(switches::kGpuDriverVersion)) {
+    gpu.driver_version =
+        command_line->GetSwitchValueASCII(switches::kGpuDriverVersion);
+  }
+
+  bool info_updated = gpu.vendor_id || gpu.device_id ||
+#if defined(OS_WIN)
+                      gpu.sub_sys_id || gpu.revision ||
+#endif
+                      !gpu.driver_version.empty();
+
+  return info_updated;
+}
+
 bool CollectBasicGraphicsInfo(const base::CommandLine* command_line,
                               GPUInfo* gpu_info) {
+  // In the info-collection GPU process on Windows, we get the device info from
+  // the browser.
+  if (CollectGraphicsDeviceInfoFromCommandLine(command_line, gpu_info))
+    return true;
+
   std::string use_gl = command_line->GetSwitchValueASCII(switches::kUseGL);
+  std::string use_angle =
+      command_line->GetSwitchValueASCII(switches::kUseANGLE);
 
   // If GL is disabled then we don't need GPUInfo.
   if (use_gl == gl::kGLImplementationDisabledName) {
@@ -186,6 +238,19 @@ bool CollectBasicGraphicsInfo(const base::CommandLine* command_line,
     // specify exceptions based on driver_vendor==<software GL> for some
     // blacklist rules.
     gpu_info->gpu.driver_vendor = software_gl_impl_name.as_string();
+
+    return true;
+  } else if (use_gl == gl::kGLImplementationANGLEName &&
+             use_angle == gl::kANGLEImplementationSwiftShaderName) {
+    // Similarly to the above, use fake vendor and device ids
+    // to make sure they never gets blacklisted for SwANGLE as well.
+    gpu_info->gpu.vendor_id = 0xffff;
+    gpu_info->gpu.device_id = 0xffff;
+
+    // Also declare the driver_vendor to be <SwANGLE> to be able to
+    // specify exceptions based on driver_vendor==<SwANGLE> for some
+    // blacklist rules.
+    gpu_info->gpu.driver_vendor = "SwANGLE";
 
     return true;
   }

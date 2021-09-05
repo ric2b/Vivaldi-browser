@@ -16,7 +16,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
-#include "chrome/browser/enterprise/connectors/enterprise_connectors_policy_handler.h"
+#include "chrome/browser/enterprise/connectors/common.h"
+#include "chrome/browser/enterprise/connectors/connectors_manager.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
@@ -77,13 +78,16 @@ class DeepScanningDialogDelegate {
     bool do_malware_scan = false;
 
     // URL of the page that is to receive sensitive data.
-    std::string url;
+    GURL url;
 
     // Text data to scan, such as plain text, URLs, HTML content, etc.
     std::vector<base::string16> text;
 
     // List of files to scan.
     std::vector<base::FilePath> paths;
+
+    // The settings to use for the analysis of the data in this struct.
+    enterprise_connectors::AnalysisSettings settings;
   };
 
   // Result of deep scanning.  Each Result contains the verdicts of deep scans
@@ -171,9 +175,6 @@ class DeepScanningDialogDelegate {
           Data,
           CompletionCallback)>;
 
-  using AnalyzeCallback = base::OnceCallback<void(
-      const safe_browsing::ArchiveAnalyzerResults& results)>;
-
   DeepScanningDialogDelegate(const DeepScanningDialogDelegate&) = delete;
   DeepScanningDialogDelegate& operator=(const DeepScanningDialogDelegate&) =
       delete;
@@ -196,7 +197,10 @@ class DeepScanningDialogDelegate {
   // The |do_dlp_scan| and |do_malware_scan| members of |data| are filled in
   // as needed.  If either is true, the function returns true, otherwise it
   // returns false.
-  static bool IsEnabled(Profile* profile, GURL url, Data* data);
+  static bool IsEnabled(Profile* profile,
+                        GURL url,
+                        Data* data,
+                        enterprise_connectors::AnalysisConnector connector);
 
   // Entry point for starting a deep scan, with the callback being called once
   // all results are available.  When the UI is enabled, a tab-modal dialog
@@ -221,7 +225,9 @@ class DeepScanningDialogDelegate {
 
   // Determines if a request result should be used to allow a data use or to
   // block it.
-  static bool ResultShouldAllowDataUse(BinaryUploadService::Result result);
+  static bool ResultShouldAllowDataUse(
+      BinaryUploadService::Result result,
+      const enterprise_connectors::AnalysisSettings& settings);
 
  protected:
   DeepScanningDialogDelegate(content::WebContents* web_contents,
@@ -249,12 +255,7 @@ class DeepScanningDialogDelegate {
   // Prepares an upload request for the file at |path|.  If the file
   // cannot be uploaded it will have a failure verdict added to |result_|.
   // Virtual so that it can be overridden in tests.
-  virtual void PrepareFileRequest(base::FilePath path,
-                                  AnalyzeCallback callback);
-
-  // Prepares an upload request for the given file.
-  void AnalyzerCallback(int index,
-                        const safe_browsing::ArchiveAnalyzerResults& results);
+  void PrepareFileRequest(const base::FilePath& path);
 
   // Adds required fields to |request| before sending it to the binary upload
   // service.
@@ -324,9 +325,10 @@ class DeepScanningDialogDelegate {
 
   // Set to true if the full text got a DLP warning verdict.
   bool text_warning_ = false;
+  DeepScanningClientResponse text_response_;
 
-  // Indexes of files that got DLP warning verdicts.
-  std::set<size_t> file_warnings_;
+  // Scanning responses of files that got DLP warning verdicts.
+  std::map<size_t, DeepScanningClientResponse> file_warnings_;
 
   // Set to true once the scan of text has completed.  If the scan request has
   // no text requiring deep scanning, this is set to true immediately.
@@ -350,12 +352,6 @@ class DeepScanningDialogDelegate {
   DeepScanningFinalResult final_result_ = DeepScanningFinalResult::SUCCESS;
 
   base::TimeTicks upload_start_time_;
-
-  // TODO(domfc): This is added here so EnterpriseConnectorsPolicyHandler's
-  // tests work. The issue is that a new string used by the handler is being
-  // removed from certain tests because it's unused in prod code for now, so
-  // |handler_| can be removed once that's no longer the case.
-  enterprise_connectors::EnterpriseConnectorsPolicyHandler handler_;
 
   base::WeakPtrFactory<DeepScanningDialogDelegate> weak_ptr_factory_{this};
 };

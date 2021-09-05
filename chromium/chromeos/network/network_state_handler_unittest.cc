@@ -109,7 +109,7 @@ class TestObserver final : public chromeos::NetworkStateHandlerObserver {
   }
 
   void DefaultNetworkChanged(const NetworkState* network) override {
-    EXPECT_TRUE(!network || network->IsConnectedState());
+    EXPECT_TRUE(!network || network->IsActive());
     ++default_network_change_count_;
     default_network_ = network ? network->path() : "";
     default_network_connection_state_ =
@@ -323,9 +323,9 @@ class NetworkStateHandlerTest : public testing::Test {
   void SetServiceProperty(const std::string& service_path,
                           const std::string& key,
                           const base::Value& value) {
-    ShillServiceClient::Get()->SetProperty(dbus::ObjectPath(service_path), key,
-                                           value, base::DoNothing(),
-                                           base::Bind(&ErrorCallbackFunction));
+    ShillServiceClient::Get()->SetProperty(
+        dbus::ObjectPath(service_path), key, value, base::DoNothing(),
+        base::BindOnce(&ErrorCallbackFunction));
   }
 
   void SetProperties(NetworkState* network, const base::Value& properties) {
@@ -1998,11 +1998,12 @@ TEST_F(NetworkStateHandlerTest, UpdateGuid) {
   // No service matching kShillManagerClientStubCellular.
   EXPECT_FALSE(
       network_state_handler_->GetNetworkState(kShillManagerClientStubCellular));
-  // The default cellular network should have the same guid as before.
+  // The default cellular network will have a unique assigned guid.
   cellular = network_state_handler_->FirstNetworkByType(
       NetworkTypePattern::Cellular());
   ASSERT_TRUE(cellular);
-  EXPECT_EQ("cellular1_guid", cellular->guid());
+  EXPECT_FALSE(cellular->guid().empty());
+  EXPECT_NE("cellular1_guid", cellular->guid());
 }
 
 TEST_F(NetworkStateHandlerTest, DefaultCellularNetwork) {

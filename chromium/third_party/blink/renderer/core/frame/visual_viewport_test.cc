@@ -13,9 +13,9 @@
 #include "cc/trees/transform_node.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
-#include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/public/web/web_ax_context.h"
 #include "third_party/blink/public/web/web_context_menu_data.h"
@@ -1135,7 +1135,7 @@ TEST_P(VisualViewportTest, TestContextMenuShownInCorrectLocation) {
   RegisterMockedHttpURLLoad("200-by-300.html");
   NavigateTo(base_url_ + "200-by-300.html");
 
-  WebMouseEvent mouse_down_event(WebInputEvent::kMouseDown,
+  WebMouseEvent mouse_down_event(WebInputEvent::Type::kMouseDown,
                                  WebInputEvent::kNoModifiers,
                                  WebInputEvent::GetStaticTimeStampForTests());
   mouse_down_event.SetPositionInWidget(10, 10);
@@ -1145,7 +1145,7 @@ TEST_P(VisualViewportTest, TestContextMenuShownInCorrectLocation) {
 
   // Corresponding release event (Windows shows context menu on release).
   WebMouseEvent mouse_up_event(mouse_down_event);
-  mouse_up_event.SetType(WebInputEvent::kMouseUp);
+  mouse_up_event.SetType(WebInputEvent::Type::kMouseUp);
 
   WebLocalFrameClient* old_client = WebView()->MainFrameImpl()->Client();
   VisualViewportMockWebFrameClient mock_web_frame_client;
@@ -1157,14 +1157,14 @@ TEST_P(VisualViewportTest, TestContextMenuShownInCorrectLocation) {
   // Do a sanity check with no scale applied.
   WebView()->MainFrameImpl()->SetClient(&mock_web_frame_client);
   WebView()->MainFrameWidget()->HandleInputEvent(
-      WebCoalescedInputEvent(mouse_down_event));
+      WebCoalescedInputEvent(mouse_down_event, ui::LatencyInfo()));
   WebView()->MainFrameWidget()->HandleInputEvent(
-      WebCoalescedInputEvent(mouse_up_event));
+      WebCoalescedInputEvent(mouse_up_event, ui::LatencyInfo()));
 
   Mock::VerifyAndClearExpectations(&mock_web_frame_client);
   mouse_down_event.button = WebMouseEvent::Button::kLeft;
   WebView()->MainFrameWidget()->HandleInputEvent(
-      WebCoalescedInputEvent(mouse_down_event));
+      WebCoalescedInputEvent(mouse_down_event, ui::LatencyInfo()));
 
   // Now pinch zoom into the page and move the visual viewport. The context menu
   // should still appear at the location of the event, relative to the WebView.
@@ -1179,9 +1179,9 @@ TEST_P(VisualViewportTest, TestContextMenuShownInCorrectLocation) {
 
   mouse_down_event.button = WebMouseEvent::Button::kRight;
   WebView()->MainFrameWidget()->HandleInputEvent(
-      WebCoalescedInputEvent(mouse_down_event));
+      WebCoalescedInputEvent(mouse_down_event, ui::LatencyInfo()));
   WebView()->MainFrameWidget()->HandleInputEvent(
-      WebCoalescedInputEvent(mouse_up_event));
+      WebCoalescedInputEvent(mouse_up_event, ui::LatencyInfo()));
 
   // Reset the old client so destruction can occur naturally.
   WebView()->MainFrameImpl()->SetClient(old_client);
@@ -1899,7 +1899,7 @@ TEST_P(VisualViewportTest, SlowScrollAfterImplScroll) {
 
   // Send a scroll event on the main thread path.
   WebGestureEvent gsb(
-      WebInputEvent::kGestureScrollBegin, WebInputEvent::kNoModifiers,
+      WebInputEvent::Type::kGestureScrollBegin, WebInputEvent::kNoModifiers,
       WebInputEvent::GetStaticTimeStampForTests(), WebGestureDevice::kTouchpad);
   gsb.SetFrameScale(1);
   gsb.data.scroll_begin.delta_x_hint = -50;
@@ -1909,7 +1909,7 @@ TEST_P(VisualViewportTest, SlowScrollAfterImplScroll) {
   GetFrame()->GetEventHandler().HandleGestureEvent(gsb);
 
   WebGestureEvent gsu(
-      WebInputEvent::kGestureScrollUpdate, WebInputEvent::kNoModifiers,
+      WebInputEvent::Type::kGestureScrollUpdate, WebInputEvent::kNoModifiers,
       WebInputEvent::GetStaticTimeStampForTests(), WebGestureDevice::kTouchpad);
   gsu.SetFrameScale(1);
   gsu.data.scroll_update.delta_x = -50;
@@ -2654,7 +2654,7 @@ TEST_P(VisualViewportTest, PaintScrollbar) {
   auto check_scrollbar = [](const cc::Layer* scrollbar, float scale) {
     EXPECT_TRUE(scrollbar->DrawsContent());
     EXPECT_FALSE(scrollbar->HitTestable());
-    EXPECT_TRUE(scrollbar->is_scrollbar());
+    EXPECT_TRUE(scrollbar->IsScrollbarLayerForTesting());
     EXPECT_EQ(
         cc::VERTICAL,
         static_cast<const cc::ScrollbarLayerBase*>(scrollbar)->orientation());

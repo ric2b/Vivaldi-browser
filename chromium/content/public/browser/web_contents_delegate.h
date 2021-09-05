@@ -18,6 +18,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/bluetooth_chooser.h"
 #include "content/public/browser/bluetooth_scanning_prompt.h"
+#include "content/public/browser/eye_dropper.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/media_stream_request.h"
 #include "content/public/browser/serial_chooser.h"
@@ -56,6 +57,7 @@ class FileChooserParams;
 
 namespace content {
 class ColorChooser;
+class EyeDropperListener;
 class FileSelectListener;
 class JavaScriptDialogManager;
 class RenderFrameHost;
@@ -152,14 +154,16 @@ class CONTENT_EXPORT WebContentsDelegate {
   // security state changed and that security UI should be updated.
   virtual void VisibleSecurityStateChanged(WebContents* source) {}
 
-  // Creates a new tab with the already-created WebContents 'new_contents'.
+  // Creates a new tab with the already-created WebContents |new_contents|.
   // The window for the added contents should be reparented correctly when this
-  // method returns.  If |disposition| is NEW_POPUP, |initial_rect| should hold
-  // the initial position and size. If |was_blocked| is non-nullptr, then
-  // |*was_blocked| will be set to true if the popup gets blocked, and left
+  // method returns. |target_url| is set to the value provided when
+  // |new_contents| was created. If |disposition| is NEW_POPUP, |initial_rect|
+  // should hold the initial position and size. If |was_blocked| is non-nullptr,
+  // then |*was_blocked| will be set to true if the popup gets blocked, and left
   // unchanged otherwise.
   virtual void AddNewContents(WebContents* source,
                               std::unique_ptr<WebContents> new_contents,
+                              const GURL& target_url,
                               WindowOpenDisposition disposition,
                               const gfx::Rect& initial_rect,
                               bool user_gesture,
@@ -414,6 +418,14 @@ class CONTENT_EXPORT WebContentsDelegate {
       WebContents* web_contents,
       SkColor color,
       const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions);
+
+  // Called when an eye dropper should open. Returns the eye dropper window.
+  // The eye dropper is responsible for calling listener->ColorSelected() or
+  // listener->ColorSelectionCanceled().
+  // The ownership of the returned pointer is transferred to the caller.
+  virtual std::unique_ptr<EyeDropper> OpenEyeDropper(
+      RenderFrameHost* frame,
+      EyeDropperListener* listener);
 
   // Called when a file selection is to be done.
   // This function is responsible for calling listener->FileSelected() or

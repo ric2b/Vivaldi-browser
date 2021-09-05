@@ -30,6 +30,9 @@ const char kAndroidMobile[] =
 
 }  // namespace frozen_user_agent_strings
 
+enum class IncludeAndroidBuildNumber { Include, Exclude };
+enum class IncludeAndroidModel { Include, Exclude };
+
 // Returns the WebKit version, in the form "major.minor (branch@revision)".
 CONTENT_EXPORT std::string GetWebKitVersion();
 
@@ -39,14 +42,29 @@ CONTENT_EXPORT std::string GetWebKitRevision();
 // otherwise).
 CONTENT_EXPORT std::string BuildCpuInfo();
 
-// Builds a User-agent compatible string that describes the OS and CPU type.
-// On Android, the string will only include the build number if true is passed
-// as an argument.
-CONTENT_EXPORT std::string BuildOSCpuInfo(bool include_android_build_number);
+// Takes the cpu info (see BuildCpuInfo()) and extracts the architecture for
+// most common cases.
+CONTENT_EXPORT std::string GetLowEntropyCpuArchitecture();
 
-// Returns the OS version. On Android, the string will only include the build
-// number if true is passed as an argument.
-CONTENT_EXPORT std::string GetOSVersion(bool include_android_build_number);
+// Builds a User-agent compatible string that describes the OS and CPU type.
+// On Android, the string will only include the build number and model if
+// relevant enums indicate they should be included.
+CONTENT_EXPORT std::string BuildOSCpuInfo(
+    IncludeAndroidBuildNumber include_android_build_number,
+    IncludeAndroidModel include_android_model);
+// We may also build the same User-agent compatible string describing OS and CPU
+// type by providing our own |os_version| and |cpu_type|. This is primarily
+// useful in testing.
+CONTENT_EXPORT std::string BuildOSCpuInfoFromOSVersionAndCpuType(
+    const std::string& os_version,
+    const std::string& cpu_type);
+
+// Returns the OS version.
+// On Android, the string will only include the build number and model if
+// relevant enums indicate they should be included.
+CONTENT_EXPORT std::string GetOSVersion(
+    IncludeAndroidBuildNumber include_android_build_number,
+    IncludeAndroidModel include_android_model);
 
 // Returns the frozen User-agent string for
 // https://github.com/WICG/ua-client-hints.
@@ -69,10 +87,12 @@ CONTENT_EXPORT std::string BuildModelInfo();
 CONTENT_EXPORT std::string BuildUserAgentFromProductAndExtraOSInfo(
     const std::string& product,
     const std::string& extra_os_info,
-    bool include_android_build_number);
+    IncludeAndroidBuildNumber include_android_build_number);
 
 // Helper function to generate just the OS info.
-CONTENT_EXPORT std::string GetAndroidOSInfo(bool include_android_build_number);
+CONTENT_EXPORT std::string GetAndroidOSInfo(
+    IncludeAndroidBuildNumber include_android_build_number,
+    IncludeAndroidModel include_android_model);
 #endif
 
 // Builds a full user agent string given a string describing the OS and a

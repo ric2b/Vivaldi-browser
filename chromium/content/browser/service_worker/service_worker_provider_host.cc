@@ -31,12 +31,6 @@ namespace content {
 
 namespace {
 
-// This function provides the next ServiceWorkerProviderHost ID.
-int NextProviderId() {
-  static int g_next_provider_id = 0;
-  return g_next_provider_id++;
-}
-
 void CreateQuicTransportConnectorImpl(
     int process_id,
     const url::Origin& origin,
@@ -46,10 +40,10 @@ void CreateQuicTransportConnectorImpl(
   if (!process)
     return;
 
-  mojo::MakeSelfOwnedReceiver(
-      std::make_unique<QuicTransportConnectorImpl>(
-          process_id, origin, net::NetworkIsolationKey(origin, origin)),
-      std::move(receiver));
+  mojo::MakeSelfOwnedReceiver(std::make_unique<QuicTransportConnectorImpl>(
+                                  process_id, /*frame=*/nullptr, origin,
+                                  net::NetworkIsolationKey(origin, origin)),
+                              std::move(receiver));
 }
 
 }  // anonymous namespace
@@ -59,17 +53,13 @@ ServiceWorkerProviderHost::ServiceWorkerProviderHost(
         host_receiver,
     ServiceWorkerVersion* running_hosted_version,
     base::WeakPtr<ServiceWorkerContextCore> context)
-    : provider_id_(NextProviderId()),
-      running_hosted_version_(running_hosted_version),
+    : running_hosted_version_(running_hosted_version),
       container_host_(std::make_unique<content::ServiceWorkerContainerHost>(
-          blink::mojom::ServiceWorkerContainerType::kForServiceWorker,
-          /*is_parent_frame_secure=*/true,
-          FrameTreeNode::kFrameTreeNodeInvalidId,
-          std::move(host_receiver),
-          mojo::NullAssociatedRemote(),
-          context)) {
+          std::move(context))),
+      host_receiver_(container_host_.get(), std::move(host_receiver)) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   DCHECK(running_hosted_version_);
+
   container_host_->set_service_worker_host(this);
   container_host_->UpdateUrls(
       running_hosted_version_->script_url(),

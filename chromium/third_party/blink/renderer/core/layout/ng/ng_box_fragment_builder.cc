@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_positioned_float.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
@@ -77,8 +78,9 @@ void GatherInlineContainerFragmentsFromLinebox(
   }
 }
 
+template <class Items>
 void GatherInlineContainerFragmentsFromItems(
-    const Vector<std::unique_ptr<NGFragmentItem>>& items,
+    const Items& items,
     const PhysicalOffset& box_offset,
     NGBoxFragmentBuilder::InlineContainingBlockMap* inline_containing_block_map,
     HashMap<const LayoutObject*, LineBoxPair>* containing_linebox_map) {
@@ -176,8 +178,7 @@ void NGBoxFragmentBuilder::AddBreakBeforeChild(
 }
 
 void NGBoxFragmentBuilder::AddResult(const NGLayoutResult& child_layout_result,
-                                     const LogicalOffset offset,
-                                     const LayoutInline* inline_container) {
+                                     const LogicalOffset offset) {
   const auto& fragment = child_layout_result.PhysicalFragment();
   if (items_builder_) {
     if (const NGPhysicalLineBoxFragment* line =
@@ -187,7 +188,7 @@ void NGBoxFragmentBuilder::AddResult(const NGLayoutResult& child_layout_result,
       // maybe OOF objects. Investigate how to handle them.
     }
   }
-  AddChild(fragment, offset, inline_container);
+  AddChild(fragment, offset);
   if (fragment.IsBox())
     PropagateBreak(child_layout_result);
 }
@@ -449,6 +450,20 @@ void NGBoxFragmentBuilder::ComputeInlineContainerGeometry(
                                             inline_containing_block_map,
                                             &containing_linebox_map);
   }
+}
+
+void NGBoxFragmentBuilder::SetLastBaselineToBlockEndMarginEdgeIfNeeded() {
+  if (ConstraintSpace()->BaselineAlgorithmType() !=
+      NGBaselineAlgorithmType::kInlineBlock)
+    return;
+
+  if (!node_.UseBlockEndMarginEdgeForInlineBlockBaseline())
+    return;
+
+  // When overflow is present (within an atomic-inline baseline context) we
+  // should always use the block-end margin edge as the baseline.
+  NGBoxStrut margins = ComputeMarginsForSelf(*ConstraintSpace(), Style());
+  SetLastBaseline(BlockSize() + margins.block_end);
 }
 
 #if DCHECK_IS_ON()

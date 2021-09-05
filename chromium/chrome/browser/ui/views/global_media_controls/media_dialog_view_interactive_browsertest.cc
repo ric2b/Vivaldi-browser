@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/global_media_controls/media_dialog_view_observer.h"
 #include "chrome/browser/ui/views/global_media_controls/media_notification_container_impl_view.h"
+#include "chrome/browser/ui/views/global_media_controls/media_notification_list_view.h"
 #include "chrome/browser/ui/views/global_media_controls/media_toolbar_button_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -23,6 +24,7 @@
 #include "components/media_message_center/media_notification_view_impl.h"
 #include "content/public/browser/presentation_request.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/media_start_stop_observer.h"
 #include "media/base/media_switches.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
@@ -54,6 +56,10 @@ class MediaToolbarButtonWatcher : public MediaToolbarButtonObserver,
   void OnMediaSessionHidden() override {}
 
   void OnMediaSessionMetadataUpdated() override { CheckDialogForText(); }
+
+  void OnMediaSessionActionsChanged() override {
+    CheckPictureInPictureButton();
+  }
 
   // MediaToolbarButtonObserver implementation.
   void OnMediaDialogOpened() override {
@@ -106,6 +112,17 @@ class MediaToolbarButtonWatcher : public MediaToolbarButtonObserver,
     Wait();
   }
 
+  void WaitForPictureInPictureButtonVisibility(bool visible) {
+    if (CheckPictureInPictureButtonVisibility(visible))
+      return;
+
+    waiting_for_pip_visibility_changed_ = true;
+    expected_pip_visibility_ = visible;
+    observed_dialog_ = MediaDialogView::GetDialogViewForTesting();
+    observed_dialog_->AddObserver(this);
+    Wait();
+  }
+
  private:
   void CheckDialogForText() {
     if (!waiting_for_dialog_to_contain_text_)
@@ -129,13 +146,25 @@ class MediaToolbarButtonWatcher : public MediaToolbarButtonObserver,
     MaybeStopWaiting();
   }
 
+  void CheckPictureInPictureButton() {
+    if (!waiting_for_pip_visibility_changed_)
+      return;
+
+    if (!CheckPictureInPictureButtonVisibility(expected_pip_visibility_))
+      return;
+
+    waiting_for_pip_visibility_changed_ = false;
+    MaybeStopWaiting();
+  }
+
   void MaybeStopWaiting() {
     if (!run_loop_)
       return;
 
     if (!waiting_for_dialog_opened_ && !waiting_for_button_shown_ &&
         !waiting_for_dialog_to_contain_text_ &&
-        !waiting_for_notification_count_) {
+        !waiting_for_notification_count_ &&
+        !waiting_for_pip_visibility_changed_) {
       run_loop_->Quit();
     }
   }
@@ -165,6 +194,17 @@ class MediaToolbarButtonWatcher : public MediaToolbarButtonObserver,
     return false;
   }
 
+  bool CheckPictureInPictureButtonVisibility(bool visible) {
+    const auto notification_pair = MediaDialogView::GetDialogViewForTesting()
+                                       ->GetNotificationsForTesting()
+                                       .begin();
+    const media_message_center::MediaNotificationViewImpl* view =
+        notification_pair->second->view_for_testing();
+
+    return view->picture_in_picture_button_for_testing()->GetVisible() ==
+           visible;
+  }
+
   int GetNotificationCount() {
     return MediaDialogView::GetDialogViewForTesting()
         ->GetNotificationsForTesting()
@@ -177,11 +217,13 @@ class MediaToolbarButtonWatcher : public MediaToolbarButtonObserver,
   bool waiting_for_dialog_opened_ = false;
   bool waiting_for_button_shown_ = false;
   bool waiting_for_notification_count_ = false;
+  bool waiting_for_pip_visibility_changed_ = false;
 
   MediaDialogView* observed_dialog_ = nullptr;
   bool waiting_for_dialog_to_contain_text_ = false;
   base::string16 expected_text_;
   int expected_notification_count_ = 0;
+  bool expected_pip_visibility_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(MediaToolbarButtonWatcher);
 };
@@ -295,7 +337,14 @@ class MediaDialogViewBrowserTest : public InProcessBrowserTest {
                 context, base::BindRepeating(&TestMediaRouter::Create)));
   }
 
+  void LayoutBrowser() {
+    BrowserView::GetBrowserViewForBrowser(browser())
+        ->GetWidget()
+        ->LayoutRootViewIfNecessary();
+  }
+
   MediaToolbarButtonView* GetToolbarIcon() {
+    LayoutBrowser();
     return BrowserView::GetBrowserViewForBrowser(browser())
         ->toolbar()
         ->media_button();
@@ -339,9 +388,35 @@ class MediaDialogViewBrowserTest : public InProcessBrowserTest {
     observer.Wait();
   }
 
-  void WaitForStop() {
+  void WaitForStop() { WaitForStop(GetActiveWebContents()); }
+
+  void WaitForStop(content::WebContents* web_contents) {
     content::MediaStartStopObserver observer(
-        GetActiveWebContents(), content::MediaStartStopObserver::Type::kStop);
+        web_contents, content::MediaStartStopObserver::Type::kStop);
+    observer.Wait();
+  }
+
+  void DisablePictureInPicture() {
+    GetActiveWebContents()->GetMainFrame()->ExecuteJavaScriptForTests(
+        base::ASCIIToUTF16("disablePictureInPicture()"), base::NullCallback());
+  }
+
+  void EnablePictureInPicture() {
+    GetActiveWebContents()->GetMainFrame()->ExecuteJavaScriptForTests(
+        base::ASCIIToUTF16("enablePictureInPicture()"), base::NullCallback());
+  }
+
+  void WaitForEnterPictureInPicture() {
+    content::MediaStartStopObserver observer(
+        GetActiveWebContents(),
+        content::MediaStartStopObserver::Type::kEnterPictureInPicture);
+    observer.Wait();
+  }
+
+  void WaitForExitPictureInPicture() {
+    content::MediaStartStopObserver observer(
+        GetActiveWebContents(),
+        content::MediaStartStopObserver::Type::kExitPictureInPicture);
     observer.Wait();
   }
 
@@ -360,6 +435,11 @@ class MediaDialogViewBrowserTest : public InProcessBrowserTest {
     MediaToolbarButtonWatcher(GetToolbarIcon()).WaitForNotificationCount(count);
   }
 
+  void WaitForPictureInPictureButtonVisibility(bool visible) {
+    MediaToolbarButtonWatcher(GetToolbarIcon())
+        .WaitForPictureInPictureButtonVisibility(visible);
+  }
+
   void ClickPauseButtonOnDialog() {
     base::RunLoop().RunUntilIdle();
     ASSERT_TRUE(MediaDialogView::IsShowing());
@@ -372,6 +452,18 @@ class MediaDialogViewBrowserTest : public InProcessBrowserTest {
     ClickButton(GetButtonForAction(MediaSessionAction::kPlay));
   }
 
+  void ClickEnterPictureInPictureButtonOnDialog() {
+    base::RunLoop().RunUntilIdle();
+    ASSERT_TRUE(MediaDialogView::IsShowing());
+    ClickButton(GetButtonForAction(MediaSessionAction::kEnterPictureInPicture));
+  }
+
+  void ClickExitPictureInPictureButtonOnDialog() {
+    base::RunLoop().RunUntilIdle();
+    ASSERT_TRUE(MediaDialogView::IsShowing());
+    ClickButton(GetButtonForAction(MediaSessionAction::kExitPictureInPicture));
+  }
+
   void ClickNotificationByTitle(const base::string16& title) {
     ASSERT_TRUE(MediaDialogView::IsShowing());
     MediaNotificationContainerImplView* notification =
@@ -382,6 +474,25 @@ class MediaDialogViewBrowserTest : public InProcessBrowserTest {
 
   content::WebContents* GetActiveWebContents() {
     return browser()->tab_strip_model()->GetActiveWebContents();
+  }
+
+  bool IsPlayingSessionDisplayedFirst() {
+    bool seen_paused = false;
+    for (views::View* view : MediaDialogView::GetDialogViewForTesting()
+                                 ->GetListViewForTesting()
+                                 ->contents()
+                                 ->children()) {
+      MediaNotificationContainerImplView* notification =
+          static_cast<MediaNotificationContainerImplView*>(view);
+
+      if (seen_paused && notification->is_playing_for_testing())
+        return false;
+
+      if (!seen_paused && !notification->is_playing_for_testing())
+        seen_paused = true;
+    }
+
+    return true;
   }
 
  protected:
@@ -453,6 +564,7 @@ IN_PROC_BROWSER_TEST_F(MediaDialogViewBrowserTest,
   // Opening a page with media that hasn't played yet should not make the
   // toolbar icon visible.
   OpenTestURL();
+  LayoutBrowser();
   EXPECT_FALSE(IsToolbarIconVisible());
 
   // Once playback starts, the icon should be visible, but the dialog should not
@@ -462,6 +574,10 @@ IN_PROC_BROWSER_TEST_F(MediaDialogViewBrowserTest,
   WaitForVisibleToolbarIcon();
   EXPECT_TRUE(IsToolbarIconVisible());
   EXPECT_FALSE(IsDialogVisible());
+
+  // At this point, the toolbar icon has been set visible. Layout the
+  // browser to ensure it can be clicked.
+  LayoutBrowser();
 
   // Clicking on the toolbar icon should open the dialog.
   ClickToolbarIcon();
@@ -569,4 +685,76 @@ IN_PROC_BROWSER_TEST_F(MediaDialogViewBrowserTest, ShowsCastSession) {
   WaitForDialogToContainText(
       base::UTF8ToUTF16(route_description + " \xC2\xB7 " + sink_name));
   WaitForNotificationCount(1);
+}
+
+IN_PROC_BROWSER_TEST_F(MediaDialogViewBrowserTest, PictureInPicture) {
+  // Open a tab and play media.
+  OpenTestURL();
+  StartPlayback();
+  WaitForStart();
+
+  // Open the media dialog.
+  WaitForVisibleToolbarIcon();
+  ClickToolbarIcon();
+  WaitForDialogOpened();
+  EXPECT_TRUE(IsDialogVisible());
+
+  ClickEnterPictureInPictureButtonOnDialog();
+  WaitForEnterPictureInPicture();
+
+  ClickExitPictureInPictureButtonOnDialog();
+  WaitForExitPictureInPicture();
+}
+
+IN_PROC_BROWSER_TEST_F(MediaDialogViewBrowserTest,
+                       PictureInPictureButtonVisibility) {
+  // Open a tab and play media.
+  OpenTestURL();
+  StartPlayback();
+  WaitForStart();
+
+  // Open the media dialog.
+  WaitForVisibleToolbarIcon();
+  ClickToolbarIcon();
+  WaitForDialogOpened();
+  EXPECT_TRUE(IsDialogVisible());
+
+  DisablePictureInPicture();
+  WaitForPictureInPictureButtonVisibility(false);
+
+  EnablePictureInPicture();
+  WaitForPictureInPictureButtonVisibility(true);
+}
+
+IN_PROC_BROWSER_TEST_F(MediaDialogViewBrowserTest,
+                       PlayingSessionAlwaysDisplayFirst) {
+  OpenTestURL();
+  StartPlayback();
+  WaitForStart();
+
+  content::WebContents* first_web_contents = GetActiveWebContents();
+
+  OpenDifferentMetadataURLInNewTab();
+  StartPlayback();
+  WaitForStart();
+
+  WaitForVisibleToolbarIcon();
+  EXPECT_TRUE(IsToolbarIconVisible());
+
+  ClickToolbarIcon();
+  WaitForDialogOpened();
+  EXPECT_TRUE(IsDialogVisible());
+
+  // Pause the first session.
+  ClickPauseButtonOnDialog();
+  WaitForStop(first_web_contents);
+
+  // Reopen dialog.
+  ClickToolbarIcon();
+  EXPECT_FALSE(IsDialogVisible());
+  ClickToolbarIcon();
+  WaitForDialogOpened();
+  EXPECT_TRUE(IsDialogVisible());
+
+  EXPECT_TRUE(IsPlayingSessionDisplayedFirst());
 }

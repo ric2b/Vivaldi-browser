@@ -161,10 +161,6 @@ bool PasswordStore::Init(PrefService* prefs,
         base::BindOnce(&PasswordStore::OnInitCompleted, this));
   }
 
-  compromised_credentials_observer_ =
-      std::make_unique<CompromisedCredentialsObserver>(this);
-  compromised_credentials_observer_->Initialize();
-
   return true;
 }
 
@@ -389,12 +385,44 @@ void PasswordStore::RemoveCompromisedCredentials(
       std::move(callback)));
 }
 
+void PasswordStore::RemoveCompromisedCredentialsByCompromiseType(
+    const std::string& signon_realm,
+    const base::string16& username,
+    const CompromiseType& compromise_type,
+    RemoveCompromisedCredentialsReason reason) {
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
+  auto callback = base::BindOnce(
+      &PasswordStore::RemoveCompromisedCredentialsByCompromiseTypeImpl, this,
+      signon_realm, username, compromise_type, reason);
+  ScheduleTask(base::BindOnce(
+      &PasswordStore::InvokeAndNotifyAboutCompromisedPasswordsChange, this,
+      std::move(callback)));
+}
+
 void PasswordStore::GetAllCompromisedCredentials(
     CompromisedCredentialsConsumer* consumer) {
   DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
   PostCompromisedCredentialsTaskAndReplyToConsumerWithResult(
       consumer,
       base::BindOnce(&PasswordStore::GetAllCompromisedCredentialsImpl, this));
+}
+
+void PasswordStore::GetMatchingCompromisedCredentials(
+    const std::string& signon_realm,
+    CompromisedCredentialsConsumer* consumer) {
+  if (affiliated_match_helper_) {
+    FormDigest form(PasswordForm::Scheme::kHtml, signon_realm,
+                    GURL(signon_realm));
+    affiliated_match_helper_->GetAffiliatedAndroidRealms(
+        form,
+        base::BindOnce(&PasswordStore::ScheduleGetCompromisedWithAffiliations,
+                       this, consumer->GetWeakPtr(), signon_realm));
+  } else {
+    PostCompromisedCredentialsTaskAndReplyToConsumerWithResult(
+        consumer,
+        base::BindOnce(&PasswordStore::GetMatchingCompromisedCredentialsImpl,
+                       this, signon_realm));
+  }
 }
 
 void PasswordStore::RemoveCompromisedCredentialsByUrlAndTime(
@@ -490,6 +518,14 @@ PasswordStore::CreateSyncControllerDelegate() {
       base::BindRepeating(
           &PasswordStore::GetSyncControllerDelegateOnBackgroundSequence,
           base::Unretained(this)));
+}
+
+void PasswordStore::SetUnsyncedCredentialsDeletionNotifier(
+    std::unique_ptr<PasswordStore::UnsyncedCredentialsDeletionNotifier>
+        notifier) {
+  DCHECK(!deletion_notifier_);
+  DCHECK(notifier);
+  deletion_notifier_ = std::move(notifier);
 }
 
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
@@ -621,7 +657,6 @@ void PasswordStore::ScheduleEnterprisePasswordURLUpdate() {
 
 PasswordStore::~PasswordStore() {
   DCHECK(shutdown_called_);
-  compromised_credentials_observer_.reset(nullptr);
 }
 
 scoped_refptr<base::SequencedTaskRunner>
@@ -695,6 +730,19 @@ void PasswordStore::NotifyLoginsChanged(
     if (reuse_detector_)
       reuse_detector_->OnLoginsChanged(changes);
 #endif
+    ProcessLoginsChanged(
+        changes,
+        base::BindRepeating(
+            [](scoped_refptr<PasswordStore> store,
+               const std::string& signon_realm, const base::string16& username,
+               RemoveCompromisedCredentialsReason reason) {
+              auto callback = base::BindOnce(
+                  &PasswordStore::RemoveCompromisedCredentialsImpl, store,
+                  signon_realm, username, reason);
+              store->InvokeAndNotifyAboutCompromisedPasswordsChange(
+                  std::move(callback));
+            },
+            scoped_refptr<PasswordStore>(this)));
   }
 }
 
@@ -705,6 +753,20 @@ void PasswordStore::InvokeAndNotifyAboutCompromisedPasswordsChange(
     compromised_credentials_observers_->Notify(
         FROM_HERE, &DatabaseCompromisedCredentialsObserver::
                        OnCompromisedCredentialsChanged);
+  }
+}
+
+void PasswordStore::NotifyUnsyncedCredentialsWillBeDeleted(
+    const std::vector<autofill::PasswordForm>& unsynced_credentials) {
+  DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
+  DCHECK(IsAccountStore());
+  // |deletion_notifier_| only gets set for desktop.
+  if (deletion_notifier_) {
+    main_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &PasswordStore::UnsyncedCredentialsDeletionNotifier::Notify,
+            deletion_notifier_->GetWeakPtr(), unsynced_credentials));
   }
 }
 
@@ -1052,6 +1114,23 @@ PasswordStore::GetLoginsWithAffiliationsImpl(
   return results;
 }
 
+std::vector<CompromisedCredentials>
+PasswordStore::GetCompromisedWithAffiliationsImpl(
+    const std::string& signon_realm,
+    const std::vector<std::string>& additional_android_realms) {
+  DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
+  std::vector<CompromisedCredentials> results(
+      GetMatchingCompromisedCredentialsImpl(signon_realm));
+  for (const std::string& realm : additional_android_realms) {
+    std::vector<CompromisedCredentials> more_results(
+        GetMatchingCompromisedCredentialsImpl(realm));
+    results.insert(results.end(), std::make_move_iterator(more_results.begin()),
+                   std::make_move_iterator(more_results.end()));
+  }
+
+  return results;
+}
+
 void PasswordStore::InjectAffiliationAndBrandingInformation(
     LoginsReply callback,
     LoginsResult forms) {
@@ -1074,6 +1153,18 @@ void PasswordStore::ScheduleGetFilteredLoginsWithAffiliations(
         base::BindOnce(&PasswordStore::GetLoginsWithAffiliationsImpl, this,
                        form, additional_android_realms),
         base::BindOnce(FilterLogins, cutoff));
+  }
+}
+
+void PasswordStore::ScheduleGetCompromisedWithAffiliations(
+    base::WeakPtr<CompromisedCredentialsConsumer> consumer,
+    const std::string& signon_realm,
+    const std::vector<std::string>& additional_android_realms) {
+  if (consumer) {
+    PostCompromisedCredentialsTaskAndReplyToConsumerWithResult(
+        consumer.get(),
+        base::BindOnce(&PasswordStore::GetCompromisedWithAffiliationsImpl, this,
+                       signon_realm, additional_android_realms));
   }
 }
 

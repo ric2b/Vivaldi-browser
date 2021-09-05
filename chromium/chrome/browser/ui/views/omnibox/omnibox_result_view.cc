@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/views/location_bar/selected_keyword_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_match_cell_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
+#include "chrome/browser/ui/views/omnibox/omnibox_suggestion_button_row_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_tab_switch_button.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_text_view.h"
 #include "chrome/browser/ui/views/omnibox/remove_suggestion_bubble.h"
@@ -39,38 +40,11 @@
 #include "ui/events/event.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/button/image_button_factory.h"
-#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #if defined(OS_WIN)
 #include "base/win/atl.h"
 #endif
-
-namespace {
-
-views::MdTextButton* CreatePillButton(views::View* button_row,
-                                      OmniboxResultView* parent_view,
-                                      const char* message) {
-  views::MdTextButton* button = button_row->AddChildView(
-      views::MdTextButton::Create(parent_view, base::ASCIIToUTF16(message)));
-  button->SetCornerRadius(16);
-  button->SetVisible(false);
-  return button;
-}
-
-size_t LayoutPillButton(views::MdTextButton* button,
-                        size_t button_indent,
-                        size_t suggestion_height) {
-  gfx::Size button_size = button->GetPreferredSize();
-  button->SetBounds(button_indent,
-                    (suggestion_height - button_size.height()) / 2,
-                    button_size.width(), button_size.height());
-  button->SetVisible(true);
-  // TODO(orinj): Determine and use the right gap between buttons.
-  return button_indent + button_size.width() + 10;
-}
-
-}  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // OmniboxResultView, public:
@@ -106,18 +80,16 @@ OmniboxResultView::OmniboxResultView(
   remove_suggestion_focus_ring_ =
       views::FocusRing::Install(remove_suggestion_button_);
   remove_suggestion_focus_ring_->SetHasFocusPredicate([&](View* view) {
-    return view->GetVisible() && IsSelected() &&
+    return view->GetVisible() && IsMatchSelected() &&
            popup_contents_view_->IsButtonSelected();
   });
 
   if (OmniboxFieldTrial::IsSuggestionButtonRowEnabled()) {
-    button_row_ = AddChildView(std::make_unique<views::View>());
+    button_row_ = AddChildView(std::make_unique<OmniboxSuggestionButtonRowView>(
+        popup_contents_view_, model_index));
+    // The button row shows itself during Layout when appropriate.
+    // TODO(orinj): Visibility should also be revisited when layout is reworked.
     button_row_->SetVisible(false);
-    keyword_button_ = CreatePillButton(button_row_, this, "Keyword search");
-    pedal_button_ = CreatePillButton(button_row_, this, "Pedal");
-    // TODO(orinj): Use the real translated string table values here instead.
-    tab_switch_button_ =
-        CreatePillButton(button_row_, this, "Switch to this tab");
   }
 
   keyword_view_ = AddChildView(std::make_unique<OmniboxMatchCellView>(this));
@@ -127,6 +99,23 @@ OmniboxResultView::OmniboxResultView(
 }
 
 OmniboxResultView::~OmniboxResultView() {}
+
+// static
+std::unique_ptr<views::Background> OmniboxResultView::GetPopupCellBackground(
+    views::View* view,
+    OmniboxPartState part_state) {
+  DCHECK(view);
+
+  bool high_contrast = view->GetNativeTheme() &&
+                       view->GetNativeTheme()->UsesHighContrastColors();
+  // TODO(tapted): Consider using background()->SetNativeControlColor() and
+  // always have a background.
+  if ((part_state == OmniboxPartState::NORMAL && !high_contrast))
+    return nullptr;
+
+  return views::CreateSolidBackground(GetOmniboxColor(
+      view->GetThemeProvider(), OmniboxPart::RESULTS_BACKGROUND, part_state));
+}
 
 SkColor OmniboxResultView::GetColor(OmniboxPart part) const {
   return GetOmniboxColor(GetThemeProvider(), part, GetThemeState());
@@ -154,14 +143,9 @@ void OmniboxResultView::SetMatch(const AutocompleteMatch& match) {
         match_.description, match_.description_class, deemphasize);
   }
 
-  // With button row, |keyword_button_| is used instead of |keyword_view_|.
+  // With button row, its keyword button is used instead of |keyword_view_|.
   if (OmniboxFieldTrial::IsSuggestionButtonRowEnabled()) {
-    const OmniboxEditModel* edit_model =
-        popup_contents_view_->model()->edit_model();
-    const base::string16& keyword = edit_model->keyword();
-    const auto names = SelectedKeywordView::GetKeywordLabelNames(
-        keyword, edit_model->client()->GetTemplateURLService());
-    keyword_button_->SetText(names.full_name);
+    button_row_->UpdateKeyword();
   } else {
     AutocompleteMatch* keyword_match = match_.associated_keyword.get();
     keyword_view_->SetVisible(keyword_match != nullptr);
@@ -185,14 +169,7 @@ void OmniboxResultView::ShowKeyword(bool show_keyword) {
 }
 
 void OmniboxResultView::ApplyThemeAndRefreshIcons(bool force_reapply_styles) {
-  bool high_contrast =
-      GetNativeTheme() && GetNativeTheme()->UsesHighContrastColors();
-  // TODO(tapted): Consider using background()->SetNativeControlColor() and
-  // always have a background.
-  SetBackground((GetThemeState() == OmniboxPartState::NORMAL && !high_contrast)
-                    ? nullptr
-                    : views::CreateSolidBackground(
-                          GetColor(OmniboxPart::RESULTS_BACKGROUND)));
+  SetBackground(GetPopupCellBackground(this, GetThemeState()));
 
   // Reapply the dim color to account for the highlight state.
   suggestion_view_->separator()->ApplyTextColor(
@@ -213,6 +190,8 @@ void OmniboxResultView::ApplyThemeAndRefreshIcons(bool force_reapply_styles) {
       omnibox::kKeywordSearchIcon, GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
       GetColor(OmniboxPart::RESULTS_ICON)));
 
+  bool high_contrast =
+      GetNativeTheme() && GetNativeTheme()->UsesHighContrastColors();
   if (match_.answer) {
     suggestion_view_->content()->ApplyTextColor(
         OmniboxPart::RESULTS_TEXT_DEFAULT);
@@ -232,11 +211,15 @@ void OmniboxResultView::ApplyThemeAndRefreshIcons(bool force_reapply_styles) {
     keyword_view_->description()->ApplyTextColor(
         OmniboxPart::RESULTS_TEXT_DIMMED);
   }
+
+  if (OmniboxFieldTrial::IsSuggestionButtonRowEnabled()) {
+    button_row_->OnStyleRefresh();
+  }
 }
 
 void OmniboxResultView::OnSelectionStateChanged() {
   UpdateRemoveSuggestionVisibility();
-  if (IsSelected()) {
+  if (IsMatchSelected()) {
     // Immediately before notifying screen readers that the selected item has
     // changed, we want to update the name of the newly-selected item so that
     // any cached values get updated prior to the selection change.
@@ -249,14 +232,22 @@ void OmniboxResultView::OnSelectionStateChanged() {
     // but this selection event allows the screen reader to get more details
     // about the list and the user's position within it.
     NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
-  }
 
+    // TODO(orinj): Eventually the deep digging in this class should get
+    //  replaced with a single local point of access to all selection state.
+    ShowKeyword(popup_contents_view_->model()->selection().state ==
+                OmniboxPopupModel::KEYWORD);
+  } else {
+    ShowKeyword(false);
+  }
   ApplyThemeAndRefreshIcons();
-  ShowKeyword(false);
 }
 
-bool OmniboxResultView::IsSelected() const {
-  return popup_contents_view_->IsSelectedIndex(model_index_);
+bool OmniboxResultView::IsMatchSelected() const {
+  // The header button being focused means the match itself is NOT focused.
+  return popup_contents_view_->IsSelectedIndex(model_index_) &&
+         popup_contents_view_->model()->selected_line_state() !=
+             OmniboxPopupModel::HEADER_BUTTON_FOCUSED;
 }
 
 views::Button* OmniboxResultView::GetSecondaryButton() {
@@ -284,9 +275,9 @@ base::string16 OmniboxResultView::ToAccessibilityLabelWithSecondaryButton(
     int* label_prefix_length) {
   int additional_message_id = 0;
   views::Button* secondary_button = GetSecondaryButton();
-  bool button_focused =
-      IsSelected() && popup_contents_view_->model()->selected_line_state() ==
-                          OmniboxPopupModel::BUTTON_FOCUSED;
+  bool button_focused = IsMatchSelected() &&
+                        popup_contents_view_->model()->selected_line_state() ==
+                            OmniboxPopupModel::BUTTON_FOCUSED;
 
   // If there's a button focused, we don't want the "n of m" message announced.
   if (button_focused)
@@ -315,7 +306,7 @@ base::string16 OmniboxResultView::ToAccessibilityLabelWithSecondaryButton(
 }
 
 OmniboxPartState OmniboxResultView::GetThemeState() const {
-  if (IsSelected())
+  if (IsMatchSelected())
     return OmniboxPartState::SELECTED;
 
   // If we don't highlight the whole row when the user has the mouse over the
@@ -340,7 +331,7 @@ void OmniboxResultView::SetRichSuggestionImage(const gfx::ImageSkia& image) {
 
 void OmniboxResultView::ButtonPressed(views::Button* button,
                                       const ui::Event& event) {
-  if (button == suggestion_tab_switch_button_ || button == tab_switch_button_) {
+  if (button == suggestion_tab_switch_button_) {
     OpenMatch(WindowOpenDisposition::SWITCH_TO_TAB, event.time_stamp());
   } else if (button == remove_suggestion_button_) {
     if (!base::FeatureList::IsEnabled(
@@ -368,28 +359,6 @@ void OmniboxResultView::ButtonPressed(views::Button* button,
                                         weak_factory_.GetWeakPtr()));
 
     popup_contents_view_->model()->set_popup_closes_on_blur(true);
-  } else if (button == keyword_button_) {
-    // TODO(orinj): Clear out existing suggestions, particularly this one, as
-    // once we AcceptKeyword, we are really in a new scope state and holding
-    // onto old suggestions is confusing and error prone. Without this check,
-    // a second click of the button violates assumptions in |AcceptKeyword|.
-    if (popup_contents_view_->model()->edit_model()->is_keyword_hint()) {
-      auto method = metrics::OmniboxEventProto::INVALID;
-      if (event.IsKeyEvent()) {
-        method = metrics::OmniboxEventProto::KEYBOARD_SHORTCUT;
-      } else if (event.IsMouseEvent()) {
-        method = metrics::OmniboxEventProto::CLICK_HINT_VIEW;
-      } else if (event.IsGestureEvent()) {
-        method = metrics::OmniboxEventProto::TAP_HINT_VIEW;
-      }
-      DCHECK_NE(method, metrics::OmniboxEventProto::INVALID);
-      popup_contents_view_->model()->edit_model()->AcceptKeyword(method);
-    }
-  } else if (button == pedal_button_) {
-    DCHECK(match_.pedal);
-    // Pedal action intent means we execute the match instead of opening it.
-    popup_contents_view_->model()->edit_model()->ExecutePedal(
-        match_, event.time_stamp());
   } else {
     NOTREACHED();
   }
@@ -458,42 +427,13 @@ void OmniboxResultView::Layout() {
                               suggestion_height);
 
   if (OmniboxFieldTrial::IsSuggestionButtonRowEnabled()) {
-    int start_indent = OmniboxMatchCellView::GetTextIndent();
-    // This button_indent strictly increases with each button added.
-    int button_indent = start_indent;
-    if (match_.associated_keyword) {
-      button_indent =
-          LayoutPillButton(keyword_button_, button_indent, suggestion_height);
-    } else if (keyword_button_->GetVisible()) {
-      // Setting visibility does lots of work, even if not changing.
-      keyword_button_->SetVisible(false);
-    }
-    if (match_.pedal) {
-      pedal_button_->SetText(match_.pedal->GetLabelStrings().hint);
-      button_indent =
-          LayoutPillButton(pedal_button_, button_indent, suggestion_height);
-    } else if (pedal_button_->GetVisible()) {
-      pedal_button_->SetVisible(false);
-    }
-    if (match_.has_tab_match) {
-      button_indent = LayoutPillButton(tab_switch_button_, button_indent,
-                                       suggestion_height);
-    } else if (tab_switch_button_->GetVisible()) {
-      tab_switch_button_->SetVisible(false);
-    }
-
-    if (button_indent != start_indent) {
-      // TODO(orinj): Determine and use the best way to set bounds; probably
-      // GetPreferredSize() with a layout manager.
-      button_row_->Layout();
-      // Put it below the suggestion view.
-      button_row_->SetBounds(0, button_row_->height(),
-                             suggestion_width - suggestion_indent,
-                             suggestion_height);
-      button_row_->SetVisible(true);
-    } else if (button_row_->GetVisible()) {
-      button_row_->SetVisible(false);
-    }
+    // TODO(orinj): Determine and use the best way to set bounds; probably
+    // GetPreferredSize() with a layout manager.
+    // Put it below the suggestion view.
+    button_row_->SetBounds(0, button_row_->height(),
+                           suggestion_width - suggestion_indent,
+                           suggestion_height);
+    button_row_->Layout();
   }
 }
 
@@ -508,7 +448,7 @@ bool OmniboxResultView::OnMouseDragged(const ui::MouseEvent& event) {
     // When the drag enters or remains within the bounds of this view, either
     // set the state to be selected or hovered, depending on the mouse button.
     if (event.IsOnlyLeftMouseButton()) {
-      if (!IsSelected())
+      if (!IsMatchSelected())
         popup_contents_view_->SetSelectedLine(model_index_);
       if (suggestion_tab_switch_button_) {
         gfx::Point point_in_child_coords(event.location());
@@ -572,7 +512,7 @@ void OmniboxResultView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
                              popup_contents_view_->model()->result().size());
 
   node_data->AddBoolAttribute(ax::mojom::BoolAttribute::kSelected,
-                              IsSelected());
+                              IsMatchSelected());
   if (IsMouseHovered())
     node_data->AddState(ax::mojom::State::kHovered);
 }
@@ -657,7 +597,7 @@ void OmniboxResultView::UpdateRemoveSuggestionVisibility() {
                         !match_.ShouldShowTabMatchButton() &&
                         base::FeatureList::IsEnabled(
                             omnibox::kOmniboxSuggestionTransparencyOptions) &&
-                        (IsSelected() || IsMouseHovered());
+                        (IsMatchSelected() || IsMouseHovered());
 
   remove_suggestion_button_->SetVisible(new_visibility);
 

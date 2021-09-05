@@ -54,7 +54,6 @@
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/console_message_storage.h"
-#include "third_party/blink/renderer/core/inspector/inspector_issue.h"
 #include "third_party/blink/renderer/core/inspector/inspector_issue_storage.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/text_autosizer.h"
@@ -90,7 +89,7 @@
 
 namespace blink {
 
-// Wrapper function defined in WebKit.h
+// Function defined in third_party/blink/public/web/blink.h.
 void ResetPluginCache(bool reload_pages) {
   // At this point we already know that the browser has refreshed its list, so
   // it is not necessary to force it to be regenerated.
@@ -202,7 +201,7 @@ Page::Page(PageClients& page_clients)
       tab_key_cycles_through_elements_(true),
       paused_(false),
       device_scale_factor_(1),
-      visibility_state_(PageVisibilityState::kVisible),
+      visibility_state_(mojom::blink::PageVisibilityState::kVisible),
       is_ordinary_(false),
       page_lifecycle_state_(kDefaultPageLifecycleState),
       is_cursor_visible_(true),
@@ -511,8 +510,9 @@ void Page::VisitedStateChanged(LinkHash link_hash) {
   }
 }
 
-void Page::SetVisibilityState(PageVisibilityState visibility_state,
-                              bool is_initial_state) {
+void Page::SetVisibilityState(
+    mojom::blink::PageVisibilityState visibility_state,
+    bool is_initial_state) {
   if (visibility_state_ == visibility_state)
     return;
   visibility_state_ = visibility_state;
@@ -526,18 +526,18 @@ void Page::SetVisibilityState(PageVisibilityState visibility_state,
       });
 
   if (main_frame_) {
-    if (visibility_state_ == PageVisibilityState::kVisible)
+    if (visibility_state_ == mojom::blink::PageVisibilityState::kVisible)
       RestoreSVGImageAnimations();
     main_frame_->DidChangeVisibilityState();
   }
 }
 
-PageVisibilityState Page::GetVisibilityState() const {
+mojom::blink::PageVisibilityState Page::GetVisibilityState() const {
   return visibility_state_;
 }
 
 bool Page::IsPageVisible() const {
-  return visibility_state_ == PageVisibilityState::kVisible;
+  return visibility_state_ == mojom::blink::PageVisibilityState::kVisible;
 }
 
 void Page::SetLifecycleState(PageLifecycleState state) {
@@ -857,6 +857,7 @@ void Page::UpdateAcceleratedCompositingSettings() {
 void Page::DidCommitLoad(LocalFrame* frame) {
   if (main_frame_ == frame) {
     GetConsoleMessageStorage().Clear();
+    GetInspectorIssueStorage().Clear();
     // TODO(loonybear): Most of this doesn't appear to take into account that
     // each SVGImage gets it's own Page instance.
     GetDeprecation().ClearSuppression();

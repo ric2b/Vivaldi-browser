@@ -4,17 +4,21 @@
 
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_mediator.h"
 
+#include "base/check_op.h"
 #include "base/feature_list.h"
-#include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
 #include "components/language/ios/browser/ios_language_detection_tab_helper.h"
 #import "components/language/ios/browser/ios_language_detection_tab_helper_observer_bridge.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
+#import "components/prefs/ios/pref_observer_bridge.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -22,6 +26,7 @@
 #import "ios/chrome/browser/find_in_page/find_tab_helper.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter_observer_bridge.h"
+#include "ios/chrome/browser/policy/policy_features.h"
 #import "ios/chrome/browser/search_engines/search_engines_util.h"
 #import "ios/chrome/browser/translate/chrome_ios_translate_client.h"
 #import "ios/chrome/browser/ui/activity_services/canonical_url_retriever.h"
@@ -87,6 +92,7 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
                                  CRWWebStateObserver,
                                  IOSLanguageDetectionTabHelperObserving,
                                  OverlayPresenterObserving,
+                                 PrefObserverDelegate,
                                  ReadingListMenuNotificationDelegate,
                                  WebStateListObserving> {
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
@@ -97,6 +103,10 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   std::unique_ptr<language::IOSLanguageDetectionTabHelperObserverBridge>
       _iOSLanguageDetectionTabHelperObserverBridge;
   std::unique_ptr<OverlayPresenterObserver> _overlayPresenterObserver;
+  // Pref observer to track changes to prefs.
+  std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
+  // Registrar for pref changes notifications.
+  std::unique_ptr<PrefChangeRegistrar> _prefChangeRegistrar;
 }
 
 // Items to be displayed in the popup menu.
@@ -201,6 +211,9 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   _readingListMenuNotifier = nil;
   _bookmarkModelBridge.reset();
   _iOSLanguageDetectionTabHelperObserverBridge.reset();
+
+  _prefChangeRegistrar.reset();
+  _prefObserverBridge.reset();
 }
 
 #pragma mark - CRWWebStateObserver
@@ -307,6 +320,13 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
 - (void)overlayPresenter:(OverlayPresenter*)presenter
     didHideOverlayForRequest:(OverlayRequest*)request {
   self.webContentAreaShowingOverlay = NO;
+}
+
+#pragma mark - PrefObserverDelegate
+
+- (void)onPreferenceChanged:(const std::string&)preferenceName {
+  if (preferenceName == bookmarks::prefs::kEditBookmarksEnabled)
+    [self updateBookmarkItem];
 }
 
 #pragma mark - Properties
@@ -471,6 +491,15 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   [self updatePopupMenu];
 }
 
+- (void)setPrefService:(PrefService*)prefService {
+  _prefService = prefService;
+  _prefChangeRegistrar = std::make_unique<PrefChangeRegistrar>();
+  _prefChangeRegistrar->Init(prefService);
+  _prefObserverBridge.reset(new PrefObserverBridge(self));
+  _prefObserverBridge->ObserveChangesForPreference(
+      bookmarks::prefs::kEditBookmarksEnabled, _prefChangeRegistrar.get());
+}
+
 #pragma mark - PopupMenuActionHandlerCommands
 
 - (void)readPageLater {
@@ -556,7 +585,8 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   if (!self.bookmarkItem)
     return;
 
-  self.bookmarkItem.enabled = [self isCurrentURLWebURL];
+  self.bookmarkItem.enabled =
+      [self isCurrentURLWebURL] && [self isEditBookmarksEnabled];
 
   if (self.webState && self.bookmarkModel &&
       self.bookmarkModel->IsBookmarked(self.webState->GetVisibleURL())) {
@@ -773,12 +803,10 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   NSArray* tabActions = [@[ self.reloadStopItem ]
       arrayByAddingObjectsFromArray:[self itemsForNewTab]];
 
-#if !defined(NDEBUG)
   if (IsMultiwindowSupported() && IsIPadIdiom()) {
     tabActions =
         [tabActions arrayByAddingObjectsFromArray:[self itemsForNewWindow]];
   }
-#endif  // !defined(NDEBUG)
 
   NSArray* browserActions = [self actionItems];
 
@@ -801,22 +829,17 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   return @[ openNewTabItem, self.openNewIncognitoTabItem ];
 }
 
-#if !defined(NDEBUG)
 - (NSArray<TableViewItem*>*)itemsForNewWindow {
   if (!IsMultiwindowSupported())
     return @[];
 
   // Create the menu item -- hardcoded string and no accessibility ID.
-  PopupMenuToolsItem* openNewWindowItem =
-      [[PopupMenuToolsItem alloc] initWithType:kItemTypeEnumZero];
-  openNewWindowItem.title = @"New Window";
-  openNewWindowItem.actionIdentifier = PopupMenuActionOpenNewWindow;
-  openNewWindowItem.image = [[UIImage imageNamed:@"popup_menu_new_tab"]
-      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  PopupMenuToolsItem* openNewWindowItem = CreateTableViewItem(
+      IDS_IOS_TOOLS_MENU_NEW_WINDOW, PopupMenuActionOpenNewWindow,
+      @"popup_menu_new_tab", kToolsMenuNewWindow);
 
   return @[ openNewWindowItem ];
 }
-#endif  // !defined(NDEBUG)
 
 - (NSArray<TableViewItem*>*)actionItems {
   NSMutableArray* actionsArray = [NSMutableArray array];
@@ -982,7 +1005,17 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   if (!visibleItem)
     return web::UserAgentType::NONE;
 
-  return visibleItem->GetUserAgentType();
+  return visibleItem->GetUserAgentType(self.webState->GetView());
+}
+
+#pragma mark - Other private methods
+
+// Returns YES if user is allowed to edit any bookmarks.
+- (BOOL)isEditBookmarksEnabled {
+  if (IsEditBookmarksIOSEnabled())
+    return self.prefService->GetBoolean(
+        bookmarks::prefs::kEditBookmarksEnabled);
+  return YES;
 }
 
 @end

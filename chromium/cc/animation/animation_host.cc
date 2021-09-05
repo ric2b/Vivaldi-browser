@@ -46,19 +46,6 @@ AnimationWorkletMutationState ToAnimationWorkletMutationState(
   }
 }
 
-bool TickAnimationsIf(AnimationHost::AnimationsList animations,
-                      base::TimeTicks monotonic_time,
-                      bool (*predicate)(const Animation&)) {
-  bool did_tick = false;
-  for (auto& it : animations) {
-    if (predicate(*it)) {
-      it->Tick(monotonic_time);
-      did_tick = true;
-    }
-  }
-  return did_tick;
-}
-
 }  // namespace
 
 std::unique_ptr<AnimationHost> AnimationHost::CreateMainInstance() {
@@ -305,6 +292,12 @@ void AnimationHost::PushPropertiesToImplThread(AnimationHost* host_impl) {
   host_impl->main_thread_animations_count_ = main_thread_animations_count_;
   host_impl->current_frame_had_raf_ = current_frame_had_raf_;
   host_impl->next_frame_has_pending_raf_ = next_frame_has_pending_raf_;
+
+  // The pending info list is cleared in LayerTreeHostImpl::CommitComplete
+  // and should be empty when pushing properties.
+  DCHECK(host_impl->pending_throughput_tracker_infos_.empty());
+  host_impl->pending_throughput_tracker_infos_ =
+      TakePendingThroughputTrackerInfos();
 }
 
 scoped_refptr<ElementAnimations>
@@ -404,12 +397,17 @@ bool AnimationHost::TickAnimations(base::TimeTicks monotonic_time,
 
   TRACE_EVENT_INSTANT0("cc", "NeedsTickAnimations", TRACE_EVENT_SCOPE_THREAD);
 
-  // Worklet animations are ticked at a later stage. See above comment for
-  // details.
-  bool animated = TickAnimationsIf(ticking_animations_, monotonic_time,
-                                   [](const Animation& animation) {
-                                     return !animation.IsWorkletAnimation();
-                                   });
+  bool animated = false;
+  for (auto& kv : id_to_timeline_map_) {
+    AnimationTimeline* timeline = kv.second.get();
+    if (timeline->IsScrollTimeline()) {
+      animated |= timeline->TickScrollLinkedAnimations(
+          ticking_animations_, scroll_tree, is_active_tree);
+    } else {
+      animated |= timeline->TickTimeLinkedAnimations(ticking_animations_,
+                                                     monotonic_time);
+    }
+  }
 
   // TODO(majidvp): At the moment we call this for both active and pending
   // trees similar to other animations. However our final goal is to only call
@@ -431,10 +429,11 @@ void AnimationHost::TickScrollAnimations(base::TimeTicks monotonic_time,
 }
 
 void AnimationHost::TickWorkletAnimations() {
-  TickAnimationsIf(ticking_animations_, base::TimeTicks(),
-                   [](const Animation& animation) {
-                     return animation.IsWorkletAnimation();
-                   });
+  for (auto& animation : ticking_animations_) {
+    if (!animation->IsWorkletAnimation())
+      continue;
+    animation->Tick(base::TimeTicks());
+  }
 }
 
 std::unique_ptr<MutatorInputState> AnimationHost::CollectWorkletAnimationsState(
@@ -803,6 +802,26 @@ bool AnimationHost::CurrentFrameHadRAF() const {
 
 bool AnimationHost::NextFrameHasPendingRAF() const {
   return next_frame_has_pending_raf_;
+}
+
+AnimationHost::PendingThroughputTrackerInfos
+AnimationHost::TakePendingThroughputTrackerInfos() {
+  PendingThroughputTrackerInfos infos =
+      std::move(pending_throughput_tracker_infos_);
+  pending_throughput_tracker_infos_ = {};
+  return infos;
+}
+
+void AnimationHost::StartThroughputTracking(
+    TrackedAnimationSequenceId sequence_id) {
+  pending_throughput_tracker_infos_.push_back({sequence_id, true});
+  SetNeedsPushProperties();
+}
+
+void AnimationHost::StopThroughputTracking(
+    TrackedAnimationSequenceId sequnece_id) {
+  pending_throughput_tracker_infos_.push_back({sequnece_id, false});
+  SetNeedsPushProperties();
 }
 
 }  // namespace cc

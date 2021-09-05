@@ -16,7 +16,6 @@
 #include "extensions/common/permissions/permissions_data.h"
 
 #include "app/vivaldi_apptools.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
@@ -48,7 +47,8 @@ ExtensionFunction::ResponseAction GuestViewInternalCreateGuestFunction::Run() {
   if (!guest_view_manager) {
     guest_view_manager = GuestViewManager::CreateWithDelegate(
         browser_context(),
-        ExtensionsAPIClient::Get()->CreateGuestViewManagerDelegate(context_));
+        ExtensionsAPIClient::Get()->CreateGuestViewManagerDelegate(
+            browser_context()));
   }
 
   content::WebContents* sender_web_contents = GetSenderWebContents();

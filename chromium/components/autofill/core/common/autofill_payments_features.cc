@@ -28,6 +28,11 @@ const base::Feature kAutofillAlwaysReturnCloudTokenizedCard{
     "AutofillAlwaysReturnCloudTokenizedCard",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// If enabled, when a server card is unmasked, its info will be cached until
+// page navigation to simplify consecutive fills on the same page.
+const base::Feature kAutofillCacheServerCardInfo{
+    "AutofillCacheServerCardInfo", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kAutofillCreditCardAblationExperiment{
     "AutofillCreditCardAblationExperiment", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -42,10 +47,30 @@ const base::Feature kAutofillCreditCardAuthentication{
 const base::Feature kAutofillCreditCardUploadFeedback{
     "AutofillCreditCardUploadFeedback", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// When enabled, enable local card migration flow for user who has signed in but
-// has not turned on sync.
-const base::Feature kAutofillEnableLocalCardMigrationForNonSyncUser{
-    "AutofillEnableLocalCardMigrationForNonSyncUser",
+// When enabled, the credit card nicknames will be manageable. They can be
+// uploaded to Payments or be modified locally.
+const base::Feature kAutofillEnableCardNicknameManagement{
+    "AutofillEnableCardNicknameManagement", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled, autofill payments bubbles' result will be recorded as either
+// 'accepted', 'cancelled', 'closed', 'not interacted' or 'lost focus'.
+const base::Feature kAutofillEnableFixedPaymentsBubbleLogging{
+    "AutofillEnableFixedPaymentsBubbleLogging",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether we show a Google-issued card in the suggestions list.
+const base::Feature kAutofillEnableGoogleIssuedCard{
+    "AutofillEnableGoogleIssuedCard", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled, all payments related bubbles will not be dismissed upon page
+// navigation.
+const base::Feature kAutofillEnableStickyPaymentsBubble{
+    "AutofillEnableStickyPaymentsBubble", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled, if Google Payments cards were given nicknames in a Google Pay
+// app, Autofill will surface these nicknames in suggestions.
+const base::Feature kAutofillEnableSurfacingServerCardNickname{
+    "AutofillEnableSurfacingServerCardNickname",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, Autofill data related icons will be shown in the status
@@ -62,11 +87,6 @@ const base::Feature kAutofillEnableVirtualCard{
 // FULL_SERVER_CARDs upon successful unmask.
 const base::Feature kAutofillNoLocalSaveOnUnmaskSuccess{
     "AutofillNoLocalSaveOnUnmaskSuccess", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// When enabled, no local copy of server card will be saved when upload
-// succeeds.
-const base::Feature kAutofillNoLocalSaveOnUploadSuccess{
-    "AutofillNoLocalSaveOnUploadSuccess", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // When enabled, the Save Card infobar will be dismissed by a user initiated
 // navigation other than one caused by submitted form.
@@ -91,13 +111,7 @@ const base::Feature kAutofillUpstreamAllowAllEmailDomains{
     "AutofillUpstreamAllowAllEmailDomains", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kAutofillUpstreamEditableExpirationDate{
-  "AutofillUpstreamEditableExpirationDate",
-#if defined(OS_ANDROID)
-      base::FEATURE_ENABLED_BY_DEFAULT
-#else
-      base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-};
+    "AutofillUpstreamEditableExpirationDate", base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool ShouldShowImprovedUserConsentForCreditCardSave() {
 #if defined(OS_WIN) || defined(OS_MACOSX) || \

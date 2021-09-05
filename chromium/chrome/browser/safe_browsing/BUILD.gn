@@ -2,11 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//components/safe_browsing/buildflags.gni")
 import("//extensions/buildflags/buildflags.gni")
 
-jumbo_static_library("safe_browsing") {
+static_library("safe_browsing") {
   sources = [
     "chrome_controller_client.cc",
     "chrome_controller_client.h",
@@ -75,6 +74,8 @@ jumbo_static_library("safe_browsing") {
       "certificate_reporting_service_factory.h",
       "chrome_password_protection_service.cc",
       "chrome_password_protection_service.h",
+      "delayed_warning_navigation_throttle.cc",
+      "delayed_warning_navigation_throttle.h",
       "safe_browsing_blocking_page.cc",
       "safe_browsing_blocking_page.h",
       "safe_browsing_navigation_observer.cc",
@@ -121,6 +122,7 @@ jumbo_static_library("safe_browsing") {
       "//components/safe_browsing/core/db:metadata_proto",
       "//components/safe_browsing/core/triggers",
       "//components/safe_browsing/core/triggers:trigger_throttler",
+      "//services/preferences/public/mojom:mojom",
     ]
     if (safe_browsing_mode == 1) {
       # "Safe Browsing Full" files in addition to the "basic" ones to use for
@@ -136,6 +138,8 @@ jumbo_static_library("safe_browsing") {
         "client_side_detection_host.h",
         "client_side_detection_service.cc",
         "client_side_detection_service.h",
+        "client_side_detection_service_factory.cc",
+        "client_side_detection_service_factory.h",
         "client_side_model_loader.cc",
         "client_side_model_loader.h",
         "cloud_content_scanning/binary_fcm_service.cc",
@@ -168,8 +172,6 @@ jumbo_static_library("safe_browsing") {
         "download_protection/download_feedback.h",
         "download_protection/download_feedback_service.cc",
         "download_protection/download_feedback_service.h",
-        "download_protection/download_item_request.cc",
-        "download_protection/download_item_request.h",
         "download_protection/download_protection_service.cc",
         "download_protection/download_protection_service.h",
         "download_protection/download_protection_util.cc",
@@ -248,6 +250,7 @@ jumbo_static_library("safe_browsing") {
         "//components/content_settings/core/browser",
         "//components/language/core/common",
         "//components/prefs",
+        "//components/safe_browsing/core:client_model_proto",
         "//components/safe_browsing/core:webprotect_proto",
         "//components/safe_browsing/core/db",
         "//components/security_interstitials/content:security_interstitial_page",
@@ -285,6 +288,7 @@ source_set("url_lookup_service_factory") {
     ":verdict_cache_manager_factory",
     "//chrome/common",
     "//components/keyed_service/content",
+    "//components/safe_browsing:buildflags",
     "//components/safe_browsing/core/realtime:url_lookup_service",
     "//components/signin/public/identity_manager",
     "//content/public/browser",
@@ -298,6 +302,7 @@ source_set("verdict_cache_manager_factory") {
   ]
 
   deps = [
+    "//chrome/common",
     "//components/content_settings/core/browser",
     "//components/history/core/browser",
     "//components/keyed_service/content",

@@ -21,9 +21,9 @@
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/switches.h"
+#include "ui/platform_window/x11/x11_topmost_window_finder.h"
 #include "ui/views/widget/desktop_aura/desktop_screen.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_x11.h"
-#include "ui/views/widget/desktop_aura/x11_topmost_window_finder.h"
 
 namespace views {
 
@@ -60,8 +60,29 @@ bool DesktopScreenX11::IsWindowUnderCursor(gfx::NativeWindow window) {
 
 gfx::NativeWindow DesktopScreenX11::GetWindowAtScreenPoint(
     const gfx::Point& point) {
-  return X11TopmostWindowFinder().FindLocalProcessWindowAt(
-      gfx::ConvertPointToPixel(GetXDisplayScaleFactor(), point), {});
+  auto accelerated_widget =
+      ui::X11TopmostWindowFinder().FindLocalProcessWindowAt(
+          gfx::ConvertPointToPixel(GetXDisplayScaleFactor(), point), {});
+  return accelerated_widget
+             ? views::DesktopWindowTreeHostPlatform::GetContentWindowForWidget(
+                   static_cast<gfx::AcceleratedWidget>(accelerated_widget))
+             : nullptr;
+}
+
+gfx::NativeWindow DesktopScreenX11::GetLocalProcessWindowAtPoint(
+    const gfx::Point& point,
+    const std::set<gfx::NativeWindow>& ignore) {
+  std::set<gfx::AcceleratedWidget> ignore_widgets;
+  for (auto* const window : ignore)
+    ignore_widgets.emplace(window->GetHost()->GetAcceleratedWidget());
+  auto accelerated_widget =
+      ui::X11TopmostWindowFinder().FindLocalProcessWindowAt(
+          gfx::ConvertPointToPixel(GetXDisplayScaleFactor(), point),
+          ignore_widgets);
+  return accelerated_widget
+             ? views::DesktopWindowTreeHostPlatform::GetContentWindowForWidget(
+                   static_cast<gfx::AcceleratedWidget>(accelerated_widget))
+             : nullptr;
 }
 
 int DesktopScreenX11::GetNumDisplays() const {

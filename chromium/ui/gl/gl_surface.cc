@@ -4,9 +4,10 @@
 
 #include "ui/gl/gl_surface.h"
 
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_local.h"
 #include "base/trace_event/trace_event.h"
@@ -506,6 +507,10 @@ void GLSurfaceAdapter::SetGpuVSyncEnabled(bool enabled) {
 
 void GLSurfaceAdapter::SetDisplayTransform(gfx::OverlayTransform transform) {
   return surface_->SetDisplayTransform(transform);
+}
+
+void GLSurfaceAdapter::SetFrameRate(float frame_rate) {
+  surface_->SetFrameRate(frame_rate);
 }
 
 void GLSurfaceAdapter::SetCurrent() {

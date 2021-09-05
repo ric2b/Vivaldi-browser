@@ -11,6 +11,7 @@ from blinkbuild.name_style_converter import NameStyleConverter
 from .callback_function import CallbackFunction
 from .callback_interface import CallbackInterface
 from .composition_parts import Identifier
+from .constructor import Constructor
 from .constructor import ConstructorGroup
 from .database import Database
 from .database import DatabaseBody
@@ -100,6 +101,10 @@ class IdlCompiler(object):
 
         # Process inheritances.
         self._process_interface_inheritances()
+
+        # Temporary mitigation of misuse of [HTMLConstructor]
+        # This should be removed once the IDL definitions get fixed.
+        self._supplement_missing_html_constructor_operation()
 
         self._copy_named_constructor_extattrs()
 
@@ -243,9 +248,10 @@ class IdlCompiler(object):
                       default_value=True)
 
         old_irs = self._ir_map.irs_of_kinds(
-            IRMap.IR.Kind.DICTIONARY, IRMap.IR.Kind.INTERFACE,
-            IRMap.IR.Kind.INTERFACE_MIXIN, IRMap.IR.Kind.NAMESPACE,
-            IRMap.IR.Kind.PARTIAL_DICTIONARY, IRMap.IR.Kind.PARTIAL_INTERFACE,
+            IRMap.IR.Kind.CALLBACK_INTERFACE, IRMap.IR.Kind.DICTIONARY,
+            IRMap.IR.Kind.INTERFACE, IRMap.IR.Kind.INTERFACE_MIXIN,
+            IRMap.IR.Kind.NAMESPACE, IRMap.IR.Kind.PARTIAL_DICTIONARY,
+            IRMap.IR.Kind.PARTIAL_INTERFACE,
             IRMap.IR.Kind.PARTIAL_INTERFACE_MIXIN,
             IRMap.IR.Kind.PARTIAL_NAMESPACE)
 
@@ -385,6 +391,8 @@ class IdlCompiler(object):
 
         self._ir_map.move_to_new_phase()
 
+        identifier_to_derived_set = {}
+
         for old_interface in old_interfaces.values():
             new_interface = make_copy(old_interface)
             self._ir_map.add(new_interface)
@@ -406,6 +414,46 @@ class IdlCompiler(object):
                     make_copy(operation) for operation in interface.operations
                     if is_own_member(operation)
                 ])
+
+                identifier_to_derived_set.setdefault(
+                    interface.identifier, set()).add(new_interface.identifier)
+
+        for new_interface in self._ir_map.irs_of_kind(IRMap.IR.Kind.INTERFACE):
+            assert not new_interface.deriveds
+            derived_set = identifier_to_derived_set.get(
+                new_interface.identifier, set())
+            new_interface.deriveds = map(
+                lambda id_: self._ref_to_idl_def_factory.create(id_),
+                sorted(derived_set))
+
+    def _supplement_missing_html_constructor_operation(self):
+        # Temporary mitigation of misuse of [HTMLConstructor]
+        # https://html.spec.whatwg.org/C/#htmlconstructor
+        # [HTMLConstructor] must be applied to only the single constructor
+        # operation, but it's now applied to interfaces without a constructor
+        # operation declaration.
+        old_irs = self._ir_map.irs_of_kind(IRMap.IR.Kind.INTERFACE)
+
+        self._ir_map.move_to_new_phase()
+
+        for old_ir in old_irs:
+            new_ir = self._maybe_make_copy(old_ir)
+            self._ir_map.add(new_ir)
+
+            if not (not new_ir.constructors
+                    and "HTMLConstructor" in new_ir.extended_attributes):
+                continue
+
+            html_constructor = Constructor.IR(
+                identifier=None,
+                arguments=[],
+                return_type=self._idl_type_factory.reference_type(
+                    new_ir.identifier),
+                extended_attributes=ExtendedAttributesMutable(
+                    [ExtendedAttribute(key="HTMLConstructor")]),
+                component=new_ir.components[0],
+                debug_info=new_ir.debug_info)
+            new_ir.constructors.append(html_constructor)
 
     def _copy_named_constructor_extattrs(self):
         old_irs = self._ir_map.irs_of_kind(IRMap.IR.Kind.INTERFACE)
@@ -436,30 +484,37 @@ class IdlCompiler(object):
 
         self._ir_map.move_to_new_phase()
 
-        for old_ir in old_irs:
-            assert not old_ir.constructor_groups
-            assert not old_ir.named_constructor_groups
-            assert not old_ir.operation_groups
-            new_ir = self._maybe_make_copy(old_ir)
-            self._ir_map.add(new_ir)
+        def make_groups(group_ir_class, operations):
             sort_key = lambda x: x.identifier
-            new_ir.constructor_groups = [
-                ConstructorGroup.IR(constructors=list(constructors))
-                for identifier, constructors in itertools.groupby(
-                    sorted(new_ir.constructors, key=sort_key), key=sort_key)
-            ]
-            new_ir.named_constructor_groups = [
-                ConstructorGroup.IR(constructors=list(constructors))
-                for identifier, constructors in itertools.groupby(
-                    sorted(new_ir.named_constructors, key=sort_key),
-                    key=sort_key)
-            ]
-            new_ir.operation_groups = [
-                OperationGroup.IR(operations=list(operations))
-                for identifier, operations in itertools.groupby(
-                    sorted(new_ir.operations, key=sort_key), key=sort_key)
+            return [
+                group_ir_class(list(operations_in_group))
+                for identifier, operations_in_group in itertools.groupby(
+                    sorted(operations, key=sort_key), key=sort_key)
                 if identifier
             ]
+
+        for old_ir in old_irs:
+            new_ir = self._maybe_make_copy(old_ir)
+            self._ir_map.add(new_ir)
+
+            assert not new_ir.constructor_groups
+            assert not new_ir.named_constructor_groups
+            assert not new_ir.operation_groups
+            new_ir.constructor_groups = make_groups(ConstructorGroup.IR,
+                                                    new_ir.constructors)
+            new_ir.named_constructor_groups = make_groups(
+                ConstructorGroup.IR, new_ir.named_constructors)
+            new_ir.operation_groups = make_groups(OperationGroup.IR,
+                                                  new_ir.operations)
+
+            if not isinstance(new_ir, Interface.IR):
+                continue
+
+            for item in (new_ir.iterable, new_ir.maplike, new_ir.setlike):
+                if item:
+                    assert not item.operation_groups
+                    item.operation_groups = make_groups(
+                        OperationGroup.IR, item.operations)
 
     def _propagate_extattrs_to_overload_group(self):
         ANY_OF = ('CrossOrigin', 'Custom', 'LenientThis', 'NotEnumerable',
@@ -475,9 +530,7 @@ class IdlCompiler(object):
             new_ir = self._maybe_make_copy(old_ir)
             self._ir_map.add(new_ir)
 
-            for group in itertools.chain(new_ir.constructor_groups,
-                                         new_ir.named_constructor_groups,
-                                         new_ir.operation_groups):
+            for group in new_ir.iter_all_overload_groups():
                 for key in ANY_OF:
                     if any(key in overload.extended_attributes
                            for overload in group):
@@ -489,7 +542,8 @@ class IdlCompiler(object):
                         ExtendedAttribute(key='Affects', values='Nothing'))
 
     def _calculate_group_exposure(self):
-        old_irs = self._ir_map.irs_of_kinds(IRMap.IR.Kind.INTERFACE,
+        old_irs = self._ir_map.irs_of_kinds(IRMap.IR.Kind.CALLBACK_INTERFACE,
+                                            IRMap.IR.Kind.INTERFACE,
                                             IRMap.IR.Kind.NAMESPACE)
 
         self._ir_map.move_to_new_phase()
@@ -498,9 +552,7 @@ class IdlCompiler(object):
             new_ir = self._maybe_make_copy(old_ir)
             self._ir_map.add(new_ir)
 
-            for group in itertools.chain(new_ir.constructor_groups,
-                                         new_ir.named_constructor_groups,
-                                         new_ir.operation_groups):
+            for group in new_ir.iter_all_overload_groups():
                 exposures = map(lambda overload: overload.exposure, group)
 
                 # [Exposed]
@@ -548,6 +600,8 @@ class IdlCompiler(object):
                     group.exposure.set_only_in_secure_contexts(flag_names)
 
     def _fill_exposed_constructs(self):
+        old_callback_interfaces = self._ir_map.irs_of_kind(
+            IRMap.IR.Kind.CALLBACK_INTERFACE)
         old_interfaces = self._ir_map.irs_of_kind(IRMap.IR.Kind.INTERFACE)
         old_namespaces = self._ir_map.irs_of_kind(IRMap.IR.Kind.NAMESPACE)
 
@@ -578,7 +632,8 @@ class IdlCompiler(object):
 
         exposed_map = {}  # global name: [construct's identifier...]
         legacy_window_aliases = []
-        for ir in itertools.chain(old_interfaces, old_namespaces):
+        for ir in itertools.chain(old_callback_interfaces, old_interfaces,
+                                  old_namespaces):
             for pair in ir.exposure.global_names_and_features:
                 exposed_map.setdefault(pair.global_name,
                                        []).append(ir.identifier)

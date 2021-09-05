@@ -369,16 +369,15 @@ void NetworkConfigurationHandler::CreateShillConfiguration(
   }
 
   LogConfigProperties("Configure", type, *properties_to_set);
-
   std::unique_ptr<base::DictionaryValue> properties_copy(
       properties_to_set->DeepCopy());
   manager->ConfigureServiceForProfile(
       dbus::ObjectPath(profile_path), *properties_to_set,
-      base::Bind(&NetworkConfigurationHandler::ConfigurationCompleted,
-                 weak_ptr_factory_.GetWeakPtr(), profile_path,
-                 base::Passed(&properties_copy), callback),
-      base::Bind(&NetworkConfigurationHandler::ConfigurationFailed,
-                 weak_ptr_factory_.GetWeakPtr(), error_callback));
+      base::BindOnce(&NetworkConfigurationHandler::ConfigurationCompleted,
+                     weak_ptr_factory_.GetWeakPtr(), profile_path, guid,
+                     base::Passed(&properties_copy), callback),
+      base::BindOnce(&NetworkConfigurationHandler::ConfigurationFailed,
+                     weak_ptr_factory_.GetWeakPtr(), error_callback));
 }
 
 void NetworkConfigurationHandler::RemoveConfiguration(
@@ -460,7 +459,7 @@ void NetworkConfigurationHandler::SetManagerProperty(
   NET_LOG(USER) << "SetManagerProperty: " << property_name << ": " << value;
   ShillManagerClient::Get()->SetProperty(
       property_name, value, callback,
-      base::Bind(&ManagerSetPropertiesErrorCallback, error_callback));
+      base::BindOnce(&ManagerSetPropertiesErrorCallback, error_callback));
 }
 
 // NetworkStateHandlerObserver methods
@@ -520,6 +519,7 @@ void NetworkConfigurationHandler::ConfigurationFailed(
 
 void NetworkConfigurationHandler::ConfigurationCompleted(
     const std::string& profile_path,
+    const std::string& guid,
     std::unique_ptr<base::DictionaryValue> configure_properties,
     const network_handler::ServiceResultCallback& callback,
     const dbus::ObjectPath& service_path) {
@@ -531,6 +531,9 @@ void NetworkConfigurationHandler::ConfigurationCompleted(
   // Shill should send a network list update, but to ensure that Shill sends
   // the newly configured properties immediately, request an update here.
   network_state_handler_->RequestUpdateForNetwork(service_path.value());
+
+  for (auto& observer : observers_)
+    observer.OnConfigurationCreated(service_path.value(), guid);
 
   if (callback.is_null())
     return;
@@ -593,7 +596,7 @@ void NetworkConfigurationHandler::GetPropertiesCallback(
   // Get the GUID property from NetworkState if it is not set in Shill.
   const std::string* guid =
       properties.FindStringKey(::onc::network_config::kGUID);
-  if (!guid) {
+  if (!guid || guid->empty()) {
     const NetworkState* network_state =
         network_state_handler_->GetNetworkState(service_path);
     if (network_state) {

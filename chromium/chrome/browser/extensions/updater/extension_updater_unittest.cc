@@ -640,7 +640,7 @@ class ExtensionUpdaterTest : public testing::Test {
     result.extension_id = id;
     result.version = version;
     result.crx_url = GURL(url);
-    results->list.push_back(result);
+    results->update_list.push_back(result);
   }
 
   void StartUpdateCheck(ExtensionDownloader* downloader,
@@ -902,7 +902,7 @@ class ExtensionUpdaterTest : public testing::Test {
     UpdateManifestResults updates;
     std::vector<UpdateManifestResult*> updateable;
     std::set<std::string> not_updateable;
-    std::set<std::string> errors;
+    ManifestInvalidErrorList errors;
     helper.downloader().DetermineUpdates(*fetch_data, updates, &updateable,
                                          &not_updateable, &errors);
     EXPECT_TRUE(updateable.empty());
@@ -1017,11 +1017,20 @@ class ExtensionUpdaterTest : public testing::Test {
 
     std::vector<UpdateManifestResult*> updateable;
     std::set<std::string> not_updateable;
-    std::set<std::string> errors;
+    ManifestInvalidErrorList errors;
     helper.downloader().DetermineUpdates(*fetch_data, updates, &updateable,
                                          &not_updateable, &errors);
     EXPECT_THAT(not_updateable, testing::UnorderedElementsAre(id2, id3));
-    EXPECT_THAT(errors, testing::UnorderedElementsAre(id4, id5, id6));
+    std::vector<ExtensionId> ids_with_error({id4, id5, id6});
+    for (const auto& id : ids_with_error) {
+      auto it = std::find_if(
+          errors.begin(), errors.end(),
+          [&](const std::pair<ExtensionId, ManifestInvalidError>& error) {
+            return error.first == id;
+          });
+      EXPECT_TRUE(it != errors.end());
+    }
+    EXPECT_EQ(3u, errors.size());
     ASSERT_EQ(1u, updateable.size());
     EXPECT_EQ("1.1", updateable[0]->version);
   }
@@ -1058,7 +1067,7 @@ class ExtensionUpdaterTest : public testing::Test {
 
     std::vector<UpdateManifestResult*> updateable;
     std::set<std::string> not_updateable;
-    std::set<std::string> errors;
+    ManifestInvalidErrorList errors;
     helper.downloader().DetermineUpdates(*fetch_data, updates, &updateable,
                                          &not_updateable, &errors);
     // All the apps should be updateable.
@@ -1140,11 +1149,20 @@ class ExtensionUpdaterTest : public testing::Test {
 
     std::vector<UpdateManifestResult*> updateable;
     std::set<std::string> not_updateable;
-    std::set<std::string> errors;
+    ManifestInvalidErrorList errors;
     helper.downloader().DetermineUpdates(*fetch_data, updates, &updateable,
                                          &not_updateable, &errors);
     EXPECT_THAT(not_updateable, testing::UnorderedElementsAre(id1, id4));
-    EXPECT_THAT(errors, testing::UnorderedElementsAre(id2, id5, id7));
+    std::vector<ExtensionId> ids_with_error({id2, id5, id7});
+    for (const auto& id : ids_with_error) {
+      auto it = std::find_if(
+          errors.begin(), errors.end(),
+          [&](const std::pair<ExtensionId, ManifestInvalidError>& error) {
+            return error.first == id;
+          });
+      EXPECT_TRUE(it != errors.end());
+    }
+    EXPECT_EQ(3u, errors.size());
     ASSERT_EQ(2u, updateable.size());
     EXPECT_EQ("1.3.1.0", updateable[0]->version);
     EXPECT_EQ("1.6.1.0", updateable[1]->version);
@@ -1508,8 +1526,8 @@ class ExtensionUpdaterTest : public testing::Test {
       delegate.Wait();
     } else {
       EXPECT_TRUE(updater.downloader_->extension_loader_);
-      EXPECT_CALL(delegate, OnExtensionDownloadFinished(
-                                _, _, _, version.GetString(), _, requests, _))
+      EXPECT_CALL(delegate,
+                  OnExtensionDownloadFinished(_, _, _, _, requests, _))
           .WillOnce(
               DoAll(testing::SaveArg<0>(&crx_file_info),
                     InvokeWithoutArgs(&delegate,
@@ -1517,6 +1535,7 @@ class ExtensionUpdaterTest : public testing::Test {
       helper.test_url_loader_factory().AddResponse(
           test_url.spec(), "Any content. It is irrelevant.");
       delegate.Wait();
+      EXPECT_EQ(version.GetString(), crx_file_info.expected_version);
     }
 
     if (fail) {
@@ -1683,8 +1702,11 @@ class ExtensionUpdaterTest : public testing::Test {
     content::RunAllTasksUntilIdle();
 
     LoadErrorReporter::Init(false);
-    fake_crx_installer->InstallCrxFile(
-        CRXFileInfo(kTestExtensionId, filename, hash, GetTestVerifierFormat()));
+
+    CRXFileInfo crx_info(filename, GetTestVerifierFormat());
+    crx_info.extension_id = kTestExtensionId;
+    crx_info.expected_hash = hash;
+    fake_crx_installer->InstallCrxFile(crx_info);
 
     content::RunAllTasksUntilIdle();
 
@@ -1903,7 +1925,7 @@ class ExtensionUpdaterTest : public testing::Test {
           *updater.downloader_->extensions_queue_.active_request();
 
       CRXFileInfo crx_file_info;
-      EXPECT_CALL(delegate, OnExtensionDownloadFinished(_, _, _, _, _, _, _))
+      EXPECT_CALL(delegate, OnExtensionDownloadFinished(_, _, _, _, _, _))
           .WillOnce(
               DoAll(testing::SaveArg<0>(&crx_file_info),
                     InvokeWithoutArgs(&delegate,
@@ -2248,9 +2270,9 @@ class ExtensionUpdaterTest : public testing::Test {
     constexpr int kDaystartElapsedSeconds = 750;
     results->daystart_elapsed_seconds = kDaystartElapsedSeconds;
 
-    updater.downloader_->HandleManifestResults(
-        std::move(fetch_data), std::move(results),
-        /*error=*/base::Optional<std::string>());
+    updater.downloader_->HandleManifestResults(std::move(fetch_data),
+                                               std::move(results),
+                                               /*error=*/base::nullopt);
     Time last_ping_day =
         service.extension_prefs()->LastPingDay(extension->id());
     EXPECT_FALSE(last_ping_day.is_null());

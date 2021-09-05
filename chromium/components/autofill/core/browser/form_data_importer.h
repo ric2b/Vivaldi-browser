@@ -63,11 +63,14 @@ class FormDataImporter {
   // Checks suitability of |profile| for adding to the user's set of profiles.
   static bool IsValidLearnableProfile(const AutofillProfile& profile,
                                       const std::string& finch_country_code,
-                                      const std::string& app_locale);
+                                      const std::string& app_locale,
+                                      LogBuffer* import_log_buffer);
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
   LocalCardMigrationManager* local_card_migration_manager() {
     return local_card_migration_manager_.get();
   }
+#endif  // #if !defined(OS_ANDROID) && !defined(OS_IOS)
 
  protected:
   // Exposed for testing.
@@ -76,11 +79,13 @@ class FormDataImporter {
     credit_card_save_manager_ = std::move(credit_card_save_manager);
   }
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
   // Exposed for testing.
   void set_local_card_migration_manager(
       std::unique_ptr<LocalCardMigrationManager> local_card_migration_manager) {
     local_card_migration_manager_ = std::move(local_card_migration_manager);
   }
+#endif  // #if !defined(OS_ANDROID) && !defined(OS_IOS)
 
  private:
   // Scans the given |form| for importable Autofill data. If the form includes
@@ -111,7 +116,8 @@ class FormDataImporter {
   // Helper method for ImportAddressProfiles which only considers the fields for
   // a specified |section|.
   bool ImportAddressProfileForSection(const FormStructure& form,
-                                      const std::string& section);
+                                      const std::string& section,
+                                      LogBuffer* import_log_buffer);
 
   // Go through the |form| fields and attempt to extract a new credit card in
   // |imported_credit_card|, or update an existing card.
@@ -145,12 +151,12 @@ class FormDataImporter {
   std::unique_ptr<CreditCardSaveManager> credit_card_save_manager_;
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
+  // Responsible for migrating locally saved credit cards to Google Pay.
+  std::unique_ptr<LocalCardMigrationManager> local_card_migration_manager_;
+
   // Responsible for managing UPI/VPA save flows.
   std::unique_ptr<UpiVpaSaveManager> upi_vpa_save_manager_;
 #endif  // #if !defined(OS_ANDROID) && !defined(OS_IOS)
-
-  // Responsible for migrating locally saved credit cards to Google Pay.
-  std::unique_ptr<LocalCardMigrationManager> local_card_migration_manager_;
 
   // The personal data manager, used to save and load personal data to/from the
   // web database.  This is overridden by the AutofillManagerTest.

@@ -113,7 +113,23 @@ SafeBrowsingUrlCheckerImpl::SafeBrowsingUrlCheckerImpl(
       database_manager_(url_checker_delegate_->GetDatabaseManager()),
       real_time_lookup_enabled_(real_time_lookup_enabled),
       enhanced_protection_enabled_(enhanced_protection_enabled),
-      url_lookup_service_on_ui_(url_lookup_service_on_ui) {}
+      url_lookup_service_on_ui_(url_lookup_service_on_ui) {
+  DCHECK(!web_contents_getter_.is_null());
+}
+
+SafeBrowsingUrlCheckerImpl::SafeBrowsingUrlCheckerImpl(
+    ResourceType resource_type,
+    scoped_refptr<UrlCheckerDelegate> url_checker_delegate,
+    const base::RepeatingCallback<web::WebState*()>& web_state_getter)
+    : load_flags_(0),
+      resource_type_(resource_type),
+      has_user_gesture_(false),
+      web_state_getter_(web_state_getter),
+      url_checker_delegate_(url_checker_delegate),
+      database_manager_(url_checker_delegate_->GetDatabaseManager()),
+      real_time_lookup_enabled_(false) {
+  DCHECK(!web_state_getter_.is_null());
+}
 
 SafeBrowsingUrlCheckerImpl::~SafeBrowsingUrlCheckerImpl() {
   DCHECK(CurrentlyOnThread(ThreadID::IO));
@@ -154,12 +170,14 @@ SafeBrowsingUrlCheckerImpl::MakeUnsafeResource(const GURL& url,
   resource.is_subframe = resource_type_ == ResourceType::kSubFrame;
   resource.threat_type = threat_type;
   resource.threat_metadata = metadata;
+  resource.resource_type = resource_type_;
   resource.callback =
       base::BindRepeating(&SafeBrowsingUrlCheckerImpl::OnBlockingPageComplete,
                           weak_factory_.GetWeakPtr());
   resource.callback_thread =
       base::CreateSingleThreadTaskRunner(CreateTaskTraits(ThreadID::IO));
   resource.web_contents_getter = web_contents_getter_;
+  resource.web_state_getter = web_state_getter_;
   resource.threat_source = database_manager_->GetThreatSource();
   return resource;
 }
@@ -183,23 +201,27 @@ void SafeBrowsingUrlCheckerImpl::OnUrlResult(const GURL& url,
 
   TRACE_EVENT_ASYNC_END1("safe_browsing", "CheckUrl", this, "url", url.spec());
 
-  if (base::FeatureList::IsEnabled(kDelayedWarnings)) {
-    // Delayed warnings experiment delays the warning until a user interaction
-    // happens. Create an interaction observer and continue like there wasn't
-    // a warning. The observer will create the interstitial when necessary.
-    security_interstitials::UnsafeResource unsafe_resource =
-        MakeUnsafeResource(url, threat_type, metadata);
-    unsafe_resource.is_delayed_warning = true;
-    url_checker_delegate_
-        ->StartObservingInteractionsForDelayedBlockingPageHelper(
-            unsafe_resource, resource_type_ == ResourceType::kMainFrame);
+  const bool is_prefetch = (load_flags_ & net::LOAD_PREFETCH);
 
-    // Let the navigation continue.
-    threat_type = SB_THREAT_TYPE_SAFE;
-    state_ = STATE_DELAYED_BLOCKING_PAGE;
-    if (!RunNextCallback(true, false))
-      return;
-    // No need to call ProcessUrls, it'll return early.
+  // Handle main frame and subresources. We do this to catch resources flagged
+  // as phishing even if the top frame isn't flagged.
+  if (!is_prefetch && threat_type == SB_THREAT_TYPE_URL_PHISHING &&
+      base::FeatureList::IsEnabled(kDelayedWarnings)) {
+    if (state_ != STATE_DELAYED_BLOCKING_PAGE) {
+      // Delayed warnings experiment delays the warning until a user interaction
+      // happens. Create an interaction observer and continue like there wasn't
+      // a warning. The observer will create the interstitial when necessary.
+      security_interstitials::UnsafeResource unsafe_resource =
+          MakeUnsafeResource(url, threat_type, metadata);
+      unsafe_resource.is_delayed_warning = true;
+      url_checker_delegate_
+          ->StartObservingInteractionsForDelayedBlockingPageHelper(
+              unsafe_resource, resource_type_ == ResourceType::kMainFrame);
+      state_ = STATE_DELAYED_BLOCKING_PAGE;
+    }
+    // Let the navigation continue in case of delayed warnings.
+    // No need to call ProcessUrls here, it'll return early.
+    RunNextCallback(true, false);
     return;
   }
 
@@ -218,7 +240,7 @@ void SafeBrowsingUrlCheckerImpl::OnUrlResult(const GURL& url,
     return;
   }
 
-  if (load_flags_ & net::LOAD_PREFETCH) {
+  if (is_prefetch) {
     // Destroy the prefetch with FINAL_STATUS_SAFEBROSWING.
     if (resource_type_ == ResourceType::kMainFrame) {
       url_checker_delegate_->MaybeDestroyPrerenderContents(
@@ -424,7 +446,8 @@ void SafeBrowsingUrlCheckerImpl::BlockAndProcessUrls(bool showed_interstitial) {
 void SafeBrowsingUrlCheckerImpl::OnBlockingPageComplete(
     bool proceed,
     bool showed_interstitial) {
-  DCHECK_EQ(STATE_DISPLAYING_BLOCKING_PAGE, state_);
+  DCHECK(state_ == STATE_DISPLAYING_BLOCKING_PAGE ||
+         state_ == STATE_DELAYED_BLOCKING_PAGE);
 
   if (proceed) {
     state_ = STATE_NONE;

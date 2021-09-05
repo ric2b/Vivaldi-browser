@@ -62,7 +62,7 @@ declare_args() {
 
   # When we are going to use gold we need to find it.
   # This is initialized below, after use_gold might have been overridden.
-  gold_path = false
+  gold_path = ""
 
   # Enable fatal linker warnings. Building Chromium with certain versions
   # of binutils can cause linker warning.
@@ -106,11 +106,6 @@ declare_args() {
 
   # Turn this on to have the compiler output extra timing information.
   compiler_timing = false
-
-  # Set to true to pass --no-rosegment to lld. This is a workaround
-  # for a KI issue in Valgrind,
-  # https://bugs.kde.org/show_bug.cgi?id=384727
-  ro_segment_workaround_for_valgrind = false
 
   # Turn this on to use ghash feature of lld for faster debug link on Windows.
   # http://blog.llvm.org/2018/01/improving-link-time-on-windows-with.html
@@ -160,9 +155,6 @@ declare_args() {
   #
   # icf=all is broken in older golds, see
   # https://sourceware.org/bugzilla/show_bug.cgi?id=17704
-  # See also https://crbug.com/663886
-  # `linux_use_bundled_binutils` is to avoid breaking Linux distros which may
-  # still have a buggy gold.
   # chromeos binutils has been patched with the fix, so always use icf there.
   # The bug only affects x86 and x64, so we can still use ICF when targeting
   # other architectures.
@@ -170,20 +162,8 @@ declare_args() {
   # lld doesn't have the bug.
   use_icf = (is_posix || is_fuchsia) && !is_debug && !using_sanitizer &&
             !use_clang_coverage && !(is_android && use_order_profiling) &&
-            (use_lld ||
-             (use_gold &&
-              ((!is_android && linux_use_bundled_binutils) || is_chromeos ||
-               !(current_cpu == "x86" || current_cpu == "x64"))))
-}
-
-# Apply the default logic for these values if they were not set explicitly.
-if (gold_path == false) {
-  if (use_gold) {
-    gold_path = rebase_path("//third_party/binutils/Linux_x64/Release/bin",
-                            root_build_dir)
-  } else {
-    gold_path = ""
-  }
+            (use_lld || (use_gold && (is_chromeos || !(current_cpu == "x86" ||
+                                                       current_cpu == "x64"))))
 }
 
 if (use_debug_fission == "default") {
@@ -425,19 +405,19 @@ config("compiler") {
       # On Android, this isn't needed.  gcc in the NDK knows to look next to
       # it with -fuse-ld=gold, and clang gets a --gcc-toolchain flag passed
       # above.
-      ldflags += [ "-B$gold_path" ]
-
-      if (linux_use_bundled_binutils) {
-        ldflags += [
-          # Experimentation found that using four linking threads
-          # saved ~20% of link time.
-          # https://groups.google.com/a/chromium.org/group/chromium-dev/browse_thread/thread/281527606915bb36
-          # Only apply this to the target linker, since the host
-          # linker might not be gold, but isn't used much anyway.
-          "-Wl,--threads",
-          "-Wl,--thread-count=4",
-        ]
+      if (gold_path != "") {
+        ldflags += [ "-B$gold_path" ]
       }
+
+      ldflags += [
+        # Experimentation found that using four linking threads
+        # saved ~20% of link time.
+        # https://groups.google.com/a/chromium.org/group/chromium-dev/browse_thread/thread/281527606915bb36
+        # Only apply this to the target linker, since the host
+        # linker might not be gold, but isn't used much anyway.
+        "-Wl,--threads",
+        "-Wl,--thread-count=4",
+      ]
     }
 
     # TODO(thestig): Make this flag work with GN.
@@ -446,18 +426,10 @@ config("compiler") {
     #    "-Wl,--detect-odr-violations",
     #  ]
     #}
-  } else if (linux_use_bundled_binutils) {
-    # Gold is the default linker for the bundled binutils so we explicitly
-    # enable the bfd linker when use_gold is not set.
-    ldflags += [ "-fuse-ld=bfd" ]
   }
 
   if (use_icf) {
     ldflags += [ "-Wl,--icf=all" ]
-  }
-
-  if (linux_use_bundled_binutils) {
-    cflags += [ "-B$binutils_path" ]
   }
 
   if (is_linux) {
@@ -666,11 +638,6 @@ config("compiler") {
       }
     }
 
-    # Work-around for http://openradar.appspot.com/20356002
-    if (is_mac) {
-      ldflags += [ "-Wl,-all_load" ]
-    }
-
     # This flag causes LTO to create an .ARM.attributes section with the correct
     # architecture. This is necessary because LLD will refuse to link a program
     # unless the architecture revision in .ARM.attributes is sufficiently new.
@@ -697,11 +664,9 @@ config("compiler") {
     }
   }
 
-  # Pass flag to LLD to work around issue in Valgrind related to
-  # location of debug symbols. This is also enabled for Android
-  # builds to allow debuggerd to properly symbolize stack crashes
-  # on this platform (http://crbug.com/919499).
-  if (use_lld && (ro_segment_workaround_for_valgrind || is_android)) {
+  # Pass flag to LLD so Android builds can allow debuggerd to properly symbolize
+  # stack crashes (http://crbug.com/919499).
+  if (use_lld && is_android) {
     ldflags += [ "-Wl,--no-rosegment" ]
   }
 
@@ -1503,6 +1468,14 @@ config("default_warnings") {
         cflags += [ "-Wno-nonportable-include-path" ]
       }
 
+      if (target_os == "chromeos") {
+        # Disable clang warnings of "-Wmax-tokens" because CQ doesn't cover all CrOS use
+        # cases, so it's too late to fix when the error goes to CrOS side.
+        # Also nacl toolchain doesn't recognize the flag, so avoid passing to nacl clang
+        # See crbug.com/1079053 for more details.
+        cflags += [ "-Wno-max-tokens" ]
+      }
+
       if (current_toolchain == host_toolchain || !use_xcode_clang) {
         # Flags NaCl (Clang 3.7) and Xcode 9.2 (Clang clang-900.0.39.2) do not
         # recognize.
@@ -1525,17 +1498,7 @@ config("default_warnings") {
 
           # TODO(https://crbug.com/1050281): Clean up, enable.
           "-Wno-non-c-typedef-for-linkage",
-
-          # TODO(https://crbug.com/1059231): Clean up, enable.
-          "-Wno-pointer-to-int-cast",
         ]
-
-        if (is_android) {
-          cflags += [
-            # TODO(https://crbug.com/1016947) Clean up, enable.
-            "-Wno-bitwise-conditional-parentheses",
-          ]
-        }
 
         cflags_c += [
           # TODO(https://crbug.com/995993): Clean up and enable.
@@ -1989,9 +1952,15 @@ config("default_stack_frames") {
 # Default "optimization on" config.
 config("optimize") {
   if (is_win) {
-    # Favor size over speed, /O1 must be before the common flags.
-    # /O1 implies /Os and /GF.
-    cflags = [ "/O1" ] + common_optimize_on_cflags + [ "/Oi" ]
+    if (chrome_pgo_phase != 2) {
+      # Favor size over speed, /O1 must be before the common flags.
+      # /O1 implies /Os and /GF.
+      cflags = [ "/O1" ] + common_optimize_on_cflags + [ "/Oi" ]
+    } else {
+      # PGO requires all translation units to be compiled with /O2. The actual
+      # optimization level will be decided based on the profiling data.
+      cflags = [ "/O2" ] + common_optimize_on_cflags + [ "/Oi" ]
+    }
   } else if (optimize_for_size && !is_nacl) {
     # Favor size over speed.
     # TODO(crbug.com/718650): Fix -Os in PNaCl compiler and remove the is_nacl

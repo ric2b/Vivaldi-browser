@@ -19,6 +19,7 @@ const char kCrashHandlerSwitch[] = "crash-handler";
 const char kInstallSwitch[] = "install";
 const char kUninstallSwitch[] = "uninstall";
 const char kUpdateAppsSwitch[] = "ua";
+const char kSystemSwitch[] = "system";
 const char kTestSwitch[] = "test";
 const char kInitDoneNotifierSwitch[] = "init-done-notifier";
 const char kNoRateLimitSwitch[] = "no-rate-limit";
@@ -26,6 +27,14 @@ const char kEnableLoggingSwitch[] = "enable-logging";
 const char kLoggingModuleSwitch[] = "vmodule";
 const char kSingleProcessSwitch[] = "single-process";
 const char kAppIdSwitch[] = "appid";
+
+#if defined(OS_MACOSX)
+const char kSwapUpdaterSwitch[] = "swap-updater";
+#endif  // OS_MACOSX
+
+#if defined(OS_WIN)
+const char kInstallFromOutDir[] = "install-from-out-dir";
+#endif  // OS_WIN
 
 // URLs.
 const char kUpdaterJSONDefaultUrl[] =
@@ -37,5 +46,19 @@ const char kCrashStagingUploadURL[] =
 // Path names.
 const char kAppsDir[] = "apps";
 const char kUninstallScript[] = "uninstall.cmd";
+
+// Developer override key names.
+const char kDevOverrideKeyUrl[] = "url";
+const char kDevOverrideKeyUseCUP[] = "use_cup";
+
+// Policy Management constants.
+const char kProxyModeDirect[] = "direct";
+const char kProxyModeAutoDetect[] = "auto_detect";
+const char kProxyModePacScript[] = "pac_script";
+const char kProxyModeFixedServers[] = "fixed_servers";
+const char kProxyModeSystem[] = "system";
+
+// Specifies that urls that can be cached by proxies are preferred.
+const char kDownloadPreferenceCacheable[] = "cacheable";
 
 }  // namespace updater

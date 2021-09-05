@@ -67,7 +67,6 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public DialogDelegateView,
 
   // DialogDelegateView:
   BubbleDialogDelegateView* AsBubbleDialogDelegate() override;
-  bool ShouldShowCloseButton() const override;
   NonClientFrameView* CreateNonClientFrameView(Widget* widget) override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
 
@@ -212,9 +211,6 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public DialogDelegateView,
 
   // Called when a deactivation is detected.
   void OnDeactivate();
-
-  // Updates the anchoring widget.
-  void SetAnchorWidget(Widget* widget);
 
   // Update the button highlight, which may be the anchor view or an explicit
   // view set in |highlighted_button_tracker_|. This can be overridden to

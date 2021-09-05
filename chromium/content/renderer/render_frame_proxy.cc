@@ -21,16 +21,19 @@
 #include "content/common/view_messages.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/impression.h"
 #include "content/public/common/screen_info.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/renderer/child_frame_compositing_helper.h"
+#include "content/renderer/impression_conversions.h"
 #include "content/renderer/loader/web_url_request_util.h"
 #include "content/renderer/mojo/blink_interface_registry_impl.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
 #include "content/renderer/render_widget.h"
+#include "ipc/ipc_message.h"
 #include "ipc/ipc_message_macros.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "printing/buildflags/buildflags.h"
@@ -73,7 +76,8 @@ base::LazyInstance<FrameProxyMap>::DestructorAtExit g_frame_proxy_map =
 RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
     RenderFrameImpl* frame_to_replace,
     int routing_id,
-    blink::WebTreeScopeType scope) {
+    blink::mojom::TreeScopeType scope,
+    const base::UnguessableToken& proxy_frame_token) {
   CHECK_NE(routing_id, MSG_ROUTING_NONE);
 
   std::unique_ptr<RenderFrameProxy> proxy(new RenderFrameProxy(routing_id));
@@ -85,7 +89,7 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
   // follow later.
   blink::WebRemoteFrame* web_frame = blink::WebRemoteFrame::Create(
       scope, proxy.get(), proxy->blink_interface_registry_.get(),
-      proxy->GetRemoteAssociatedInterfaces());
+      proxy->GetRemoteAssociatedInterfaces(), proxy_frame_token);
 
   RenderWidget* ancestor_widget = nullptr;
   bool parent_is_local = false;
@@ -119,6 +123,7 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
     blink::WebFrame* opener,
     int parent_routing_id,
     const FrameReplicationState& replicated_state,
+    const base::UnguessableToken& frame_token,
     const base::UnguessableToken& devtools_frame_token) {
   RenderFrameProxy* parent = nullptr;
   if (parent_routing_id != MSG_ROUTING_NONE) {
@@ -142,7 +147,7 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
     web_frame = blink::WebRemoteFrame::CreateMainFrame(
         render_view->GetWebView(), proxy.get(),
         proxy->blink_interface_registry_.get(),
-        proxy->GetRemoteAssociatedInterfaces(), opener);
+        proxy->GetRemoteAssociatedInterfaces(), frame_token, opener);
     // Root frame proxy has no ancestors to point to their RenderWidget.
   } else {
     // Create a frame under an existing parent. The parent is always expected
@@ -154,7 +159,7 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
         replicated_state.frame_policy,
         replicated_state.frame_owner_element_type, proxy.get(),
         proxy->blink_interface_registry_.get(),
-        proxy->GetRemoteAssociatedInterfaces(), opener);
+        proxy->GetRemoteAssociatedInterfaces(), frame_token, opener);
     proxy->unique_name_ = replicated_state.unique_name;
     render_view = parent->render_view();
     ancestor_widget = parent->ancestor_render_widget_;
@@ -177,14 +182,15 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
 RenderFrameProxy* RenderFrameProxy::CreateProxyForPortal(
     RenderFrameImpl* parent,
     int proxy_routing_id,
+    const base::UnguessableToken& frame_token,
     const base::UnguessableToken& devtools_frame_token,
     const blink::WebElement& portal_element) {
   auto proxy = base::WrapUnique(new RenderFrameProxy(proxy_routing_id));
   proxy->devtools_frame_token_ = devtools_frame_token;
   blink::WebRemoteFrame* web_frame = blink::WebRemoteFrame::CreateForPortal(
-      blink::WebTreeScopeType::kDocument, proxy.get(),
+      blink::mojom::TreeScopeType::kDocument, proxy.get(),
       proxy->blink_interface_registry_.get(),
-      proxy->GetRemoteAssociatedInterfaces(), portal_element);
+      proxy->GetRemoteAssociatedInterfaces(), frame_token, portal_element);
   proxy->Init(web_frame, parent->render_view(),
               parent->GetLocalRootRenderWidget(), true);
   return proxy.release();
@@ -634,13 +640,16 @@ void RenderFrameProxy::ForwardPostMessage(
   Send(new FrameHostMsg_RouteMessageEvent(routing_id_, params));
 }
 
-void RenderFrameProxy::Navigate(const blink::WebURLRequest& request,
-                                bool should_replace_current_entry,
-                                bool is_opener_navigation,
-                                bool initiator_frame_has_download_sandbox_flag,
-                                bool blocking_downloads_in_sandbox_enabled,
-                                bool initiator_frame_is_ad,
-                                mojo::ScopedMessagePipeHandle blob_url_token) {
+void RenderFrameProxy::Navigate(
+    const blink::WebURLRequest& request,
+    blink::WebLocalFrame* initiator_frame,
+    bool should_replace_current_entry,
+    bool is_opener_navigation,
+    bool initiator_frame_has_download_sandbox_flag,
+    bool blocking_downloads_in_sandbox_enabled,
+    bool initiator_frame_is_ad,
+    mojo::ScopedMessagePipeHandle blob_url_token,
+    const base::Optional<blink::WebImpression>& impression) {
   // The request must always have a valid initiator origin.
   DCHECK(!request.RequestorOrigin().IsNull());
 
@@ -657,6 +666,15 @@ void RenderFrameProxy::Navigate(const blink::WebURLRequest& request,
   params.user_gesture = request.HasUserGesture();
   params.triggering_event_info = blink::TriggeringEventInfo::kUnknown;
   params.blob_url_token = blob_url_token.release();
+
+  RenderFrameImpl* initiator_render_frame =
+      RenderFrameImpl::FromWebFrame(initiator_frame);
+  params.initiator_routing_id = initiator_render_frame
+                                    ? initiator_render_frame->GetRoutingID()
+                                    : MSG_ROUTING_NONE;
+
+  if (impression)
+    params.impression = ConvertWebImpressionToImpression(*impression);
 
   // Note: For the AdFrame/Sandbox download policy here it only covers the case
   // where the navigation initiator frame is ad. The download_policy may be

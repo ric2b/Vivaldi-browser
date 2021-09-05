@@ -26,7 +26,6 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
-#include "chrome/browser/chromeos/printing/cups_printers_manager_factory.h"
 #include "chrome/browser/chromeos/printing/ppd_provider_factory.h"
 #include "chrome/browser/chromeos/printing/printer_configurer.h"
 #include "chrome/browser/chromeos/printing/printer_event_tracker.h"
@@ -38,10 +37,12 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/browser/ui/webui/settings/chromeos/server_printer_url_util.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon/debug_daemon_client.h"
 #include "chromeos/printing/ppd_line_reader.h"
@@ -92,18 +93,6 @@ void RecordIppQueryResult(const PrinterQueryResult& result) {
     bool query_success = (result == PrinterQueryResult::SUCCESS);
     UMA_HISTOGRAM_BOOLEAN("Printing.CUPS.IppAttributesSuccess", query_success);
   }
-}
-
-// Returns true if |printer_uri| is an IPP uri.
-bool IsIppUri(base::StringPiece printer_uri) {
-  base::StringPiece::size_type separator_location =
-      printer_uri.find(url::kStandardSchemeSeparator);
-  if (separator_location == base::StringPiece::npos) {
-    return false;
-  }
-
-  base::StringPiece scheme_part = printer_uri.substr(0, separator_location);
-  return scheme_part == kIppScheme || scheme_part == kIppsScheme;
 }
 
 // Query an IPP printer to check for autoconf support where the printer is
@@ -276,6 +265,13 @@ GURL GenerateHttpCupsServerUrl(const GURL& server_url) {
 
 }  // namespace
 
+CupsPrintersHandler::CupsPrintersHandler(Profile* profile,
+                                         CupsPrintersManager* printers_manager)
+    : CupsPrintersHandler(profile,
+                          CreatePpdProvider(profile),
+                          PrinterConfigurer::Create(profile),
+                          printers_manager) {}
+
 CupsPrintersHandler::CupsPrintersHandler(
     Profile* profile,
     scoped_refptr<PpdProvider> ppd_provider,
@@ -287,19 +283,6 @@ CupsPrintersHandler::CupsPrintersHandler(
       printers_manager_(printers_manager),
       endpoint_resolver_(std::make_unique<local_discovery::EndpointResolver>()),
       printers_manager_observer_(this) {}
-
-// static
-std::unique_ptr<CupsPrintersHandler> CupsPrintersHandler::Create(
-    content::WebUI* webui) {
-  Profile* profile(Profile::FromWebUI(webui));
-  auto ppd_provider = CreatePpdProvider(profile);
-  auto printer_configurer = PrinterConfigurer::Create(profile);
-  CupsPrintersManager* printers_manager =
-      CupsPrintersManagerFactory::GetForBrowserContext(profile);
-  // Using 'new' to access non-public constructor.
-  return base::WrapUnique(new CupsPrintersHandler(
-      profile, ppd_provider, std::move(printer_configurer), printers_manager));
-}
 
 // static
 std::unique_ptr<CupsPrintersHandler> CupsPrintersHandler::CreateForTesting(
@@ -380,6 +363,13 @@ void CupsPrintersHandler::RegisterMessages() {
       "queryPrintServer",
       base::BindRepeating(&CupsPrintersHandler::HandleQueryPrintServer,
                           base::Unretained(this)));
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kPrintJobManagementApp)) {
+    web_ui()->RegisterMessageCallback(
+        "openPrintManagementApp",
+        base::BindRepeating(&CupsPrintersHandler::HandleOpenPrintManagementApp,
+                            base::Unretained(this)));
+  }
 }
 
 void CupsPrintersHandler::OnJavascriptAllowed() {
@@ -773,8 +763,7 @@ void CupsPrintersHandler::OnAddedOrEditedPrinterCommon(
       UMA_HISTOGRAM_ENUMERATION("Printing.CUPS.PrinterAdded",
                                 printer.GetProtocol(), Printer::kProtocolMax);
       PRINTER_LOG(USER) << "Performing printer setup";
-      printers_manager_->PrinterInstalled(printer, is_automatic,
-                                          PrinterSetupSource::kSettings);
+      printers_manager_->PrinterInstalled(printer, is_automatic);
       printers_manager_->SavePrinter(printer);
       if (printer.IsUsbProtocol()) {
         // Record UMA for USB printer setup source.
@@ -989,7 +978,7 @@ void CupsPrintersHandler::FileSelected(const base::FilePath& path,
 
 void CupsPrintersHandler::VerifyPpdContents(const base::FilePath& path,
                                             const std::string& contents) {
-  std::string result = "";
+  std::string result;
   if (PpdLineReader::ContainsMagicNumber(contents, kPpdMaxLineLength))
     result = path.value();
 
@@ -1332,6 +1321,14 @@ void CupsPrintersHandler::OnQueryPrintServerCompleted(
   // Create result value and finish the callback.
   base::Value result_dict = BuildCupsPrintersList(printers);
   ResolveJavascriptCallback(base::Value(callback_id), result_dict);
+}
+
+void CupsPrintersHandler::HandleOpenPrintManagementApp(
+    const base::ListValue* args) {
+  DCHECK(args->empty());
+  DCHECK(
+      base::FeatureList::IsEnabled(chromeos::features::kPrintJobManagementApp));
+  chrome::ShowPrintManagementApp(profile_);
 }
 
 }  // namespace settings

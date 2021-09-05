@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Keyboard untuk bahasa Jerman</translation>
 <translation id="1972984168337863910">Luaskan panel masukan file</translation>
 <translation id="1984603991036629094">Keyboard fonetik Armenia</translation>
+<translation id="1995337122023280937">Buka lokasi file</translation>
 <translation id="2001796770603320721">Kelola di Drive</translation>
 <translation id="2009067268969781306">Memformat drive akan menghapus semua data yang tersimpan di dalamnya. Tindakan ini tidak dapat diurungkan.</translation>
 <translation id="2028997212275086731">Arsip RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Google Drive tidak dapat dibuka. <ph name="BEGIN_LINK" />Keluar<ph name="END_LINK" /> dan masuk lagi.</translation>
 <translation id="2649120831653069427">Ikan Pelangi</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">Lokasi file</translation>
 <translation id="2672394958563893062">Terjadi kesalahan. Klik untuk memulai ulang dari awal.</translation>
 <translation id="2676946222714718093">Diputar di</translation>
 <translation id="2735698359135166290">Keyboard standar Rumania</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> kesalahan.</translation>
 <translation id="3519867315646775981">Transliterasi (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portugis</translation>
+<translation id="3524311639100184459">Perhatian: File ini bersifat sementara dan dapat dihapus secara otomatis untuk mengosongkan ruang disk.  <ph name="BEGIN_LINK" />Pelajari Lebih Lanjut<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Folder</translation>
 <translation id="3549797760399244642">Buka drive.google.com...</translation>
 <translation id="357479282490346887">Lithuania</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Burung Kiwi</translation>
 <translation id="3966388904776714213">Pemutar Audio</translation>
 <translation id="4002066346123236978">Judul</translation>
+<translation id="4065397611279318371">Untuk membuka file dengan aplikasi <ph name="APP_NAME" />, pindahkan ke folder <ph name="SHARED_DIRECTORY_LABEL" /> terlebih dulu.</translation>
 <translation id="4070370845051020638">Metode masukan Kanton</translation>
 <translation id="4072248638558688893">Keyboard Tamil (Fonetik)</translation>
 <translation id="4124935795427217608">Unicorn</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Perbaikan Otomatis</translation>
 <translation id="4881695831933465202">Buka</translation>
 <translation id="4886021172213954916">Keyboard Tamil (Mesin ketik)</translation>
+<translation id="4892969127351273348">Tidak dapat membuka dengan <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Siap untuk mencadangkan <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Telah Diperbaiki</translation>
 <translation id="4935975195727477204">Bunga Gazania</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Kelola fitur berbagi Linux</translation>
 <translation id="6808193438228982088">Rubah</translation>
 <translation id="6820687829547641339">Arsip tar terkompresi Gzip</translation>
+<translation id="6823166707458800069">Semua file yang disimpan dalam folder ini otomatis dicadangkan secara online.</translation>
 <translation id="6825883775269213504">Rusia</translation>
 <translation id="6827236167376090743">Video ini akan terus berputar sampai sapinya pulang.</translation>
 <translation id="6847101934483209767"><ph name="ENTRY_NAME" /> dihapus dari pilihan.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Peta Google</translation>
 <translation id="7419631653042041064">Keyboard untuk bahasa Katalana</translation>
 <translation id="7434823369735508263">Keyboard Dvorak Inggris</translation>
+<translation id="7447678886297481665">File dalam folder ini bersifat hanya baca. Beberapa aktivitas tidak didukung.</translation>
 <translation id="7460898608667578234">Ukraina</translation>
 <translation id="7474889694310679759">Keyboard untuk bahasa Inggris Kanada</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> ditemukan

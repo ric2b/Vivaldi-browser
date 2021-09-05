@@ -9,10 +9,10 @@ import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_CHECK_INTERVAL
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_CHECK_INTERVAL_SHORT_MS;
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_LONG_MS;
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_SHORT_MS;
-import static org.chromium.chrome.browser.vr.XrTestFramework.VR_SKIA_GOLD_CORPUS;
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE;
 
 import android.graphics.PointF;
+import android.os.Build;
 import android.os.SystemClock;
 import android.support.test.filters.MediumTest;
 
@@ -24,7 +24,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BundleTestRule;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -61,7 +61,10 @@ public class VrBrowserWebInputEditingTest {
 
     @Rule
     public RenderTestRule mRenderTestRule =
-            new RenderTestRule.SkiaGoldBuilder().setCorpus(VR_SKIA_GOLD_CORPUS).build();
+            new RenderTestRule.SkiaGoldBuilder()
+                    .setCorpus(RenderTestRule.Corpus.ANDROID_VR_RENDER_TESTS)
+                    .setFailOnUnsupportedConfigs(true)
+                    .build();
 
     private VrBrowserTestFramework mVrBrowserTestFramework;
 
@@ -175,7 +178,7 @@ public class VrBrowserWebInputEditingTest {
         // click while the dialog is technically present, but not fully ready, resulting in the
         // click not registering. Since there doesn't seem to be a good way to wait for the dialog
         // to be ready, try several times.
-        CriteriaHelper.pollInstrumentationThread(
+        CriteriaHelper.pollUiThread(
                 ()
                         -> {
                     if (!mVrTestRule.getActivity().getModalDialogManager().isShowing()) return true;
@@ -438,7 +441,7 @@ public class VrBrowserWebInputEditingTest {
     @Test
     @MediumTest
     @Feature({"Browser", "RenderTest"})
-    @DisabledTest(message = "https://crbug.com/1041904")
+    @DisableIf.Build(sdk_is_greater_than = Build.VERSION_CODES.O_MR1, message = "crbug.com/1071466")
     public void testFullscreenVideoControls()
             throws InterruptedException, TimeoutException, IOException {
         // There's occasionally slight AA differences along the play button, so tolerate a small

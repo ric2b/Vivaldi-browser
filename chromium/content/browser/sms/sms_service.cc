@@ -11,8 +11,8 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/optional.h"
 #include "content/browser/sms/sms_metrics.h"
 #include "content/public/browser/navigation_details.h"
@@ -35,7 +35,9 @@ SmsService::SmsService(
     mojo::PendingReceiver<blink::mojom::SmsReceiver> receiver)
     : FrameServiceBase(host, std::move(receiver)),
       fetcher_(fetcher),
-      origin_(origin) {}
+      origin_(origin) {
+  DCHECK(fetcher_);
+}
 
 SmsService::SmsService(
     SmsFetcher* fetcher,
@@ -49,6 +51,7 @@ SmsService::SmsService(
 SmsService::~SmsService() {
   if (callback_)
     Process(SmsStatus::kTimeout, base::nullopt);
+  DCHECK(!callback_);
 }
 
 // static
@@ -91,7 +94,7 @@ void SmsService::Receive(ReceiveCallback callback) {
     return;
   }
 
-  fetcher_->Subscribe(origin_, this);
+  fetcher_->Subscribe(origin_, this, render_frame_host());
 }
 
 void SmsService::OnReceive(const std::string& one_time_code) {

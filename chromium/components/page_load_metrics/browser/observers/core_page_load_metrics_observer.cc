@@ -61,6 +61,19 @@ void RecordFirstMeaningfulPaintStatus(
                             internal::FIRST_MEANINGFUL_PAINT_LAST_ENTRY);
 }
 
+std::unique_ptr<base::trace_event::TracedValue> FirstInputDelayTraceData(
+    const page_load_metrics::mojom::PageLoadTiming& timing) {
+  std::unique_ptr<base::trace_event::TracedValue> data =
+      std::make_unique<base::trace_event::TracedValue>();
+  data->SetDouble(
+      "firstInputDelayInMilliseconds",
+      timing.interactive_timing->first_input_delay->InMillisecondsF());
+  data->SetDouble(
+      "navStartToFirstInputTimestampInMilliseconds",
+      timing.interactive_timing->first_input_timestamp->InMillisecondsF());
+  return data;
+}
+
 }  // namespace
 
 namespace internal {
@@ -268,6 +281,9 @@ const char kHistogramInputToFirstContentfulPaint[] =
 const char kBackgroundHistogramInputToFirstContentfulPaint[] =
     "PageLoad.Experimental.PaintTiming.InputToFirstContentfulPaint.Background";
 
+const char kHistogramBackForwardCacheEvent[] =
+    "PageLoad.BackForwardCache.Event";
+
 const char kHistogramFontPreloadFirstPaint[] =
     "PageLoad.Clients.FontPreload.PaintTiming.NavigationToFirstPaint";
 const char kHistogramFontPreloadFirstContentfulPaint[] =
@@ -275,6 +291,18 @@ const char kHistogramFontPreloadFirstContentfulPaint[] =
 const char kHistogramFontPreloadLargestContentfulPaint[] =
     "PageLoad.Clients.FontPreload.PaintTiming."
     "NavigationToLargestContentfulPaint";
+
+// Navigation metrics from the navigation start.
+const char kHistogramNavigationTimingNavigationStartToFirstRequestStart[] =
+    "PageLoad.Experimental.NavigationTiming.NavigationStartToFirstRequestStart";
+const char kHistogramNavigationTimingNavigationStartToFirstResponseStart[] =
+    "PageLoad.Experimental.NavigationTiming."
+    "NavigationStartToFirstResponseStart";
+
+// Navigation metrics between milestones.
+const char kHistogramNavigationTimingFirstRequestStartToFirstResponseStart[] =
+    "PageLoad.Experimental.NavigationTiming."
+    "FirstRequestStartToFirstResponseStart";
 
 }  // namespace internal
 
@@ -311,6 +339,7 @@ CorePageLoadMetricsObserver::OnCommit(
   }
   UMA_HISTOGRAM_COUNTS_100("PageLoad.Navigation.RedirectChainLength",
                            redirect_chain_size_);
+  RecordNavigationTimingHistograms(navigation_handle);
   return CONTINUE_OBSERVING;
 }
 
@@ -352,7 +381,7 @@ void CorePageLoadMetricsObserver::OnFirstPaintInPage(
 
     // Note: This depends on PageLoadMetrics internally processing loading
     // behavior before timing metrics if they come in the same IPC update.
-    if (render_delayed_for_web_font_preloading_observed_) {
+    if (font_preload_started_before_rendering_observed_) {
       PAGE_LOAD_HISTOGRAM(internal::kHistogramFontPreloadFirstPaint,
                           timing.paint_timing->first_paint.value());
     }
@@ -403,7 +432,7 @@ void CorePageLoadMetricsObserver::OnFirstContentfulPaintInPage(
 
     // Note: This depends on PageLoadMetrics internally processing loading
     // behavior before timing metrics if they come in the same IPC update.
-    if (render_delayed_for_web_font_preloading_observed_) {
+    if (font_preload_started_before_rendering_observed_) {
       PAGE_LOAD_HISTOGRAM(internal::kHistogramFontPreloadFirstContentfulPaint,
                           timing.paint_timing->first_contentful_paint.value());
     }
@@ -567,6 +596,11 @@ void CorePageLoadMetricsObserver::OnFirstInputInPage(
       50);
   PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstInputTimestamp,
                       timing.interactive_timing->first_input_timestamp.value());
+  TRACE_EVENT_MARK_WITH_TIMESTAMP1(
+      "loading", "FirstInputDelay::AllFrames::UMA",
+      GetDelegate().GetNavigationStart() +
+          timing.interactive_timing->first_input_timestamp.value(),
+      "data", FirstInputDelayTraceData(timing));
 }
 
 void CorePageLoadMetricsObserver::OnParseStart(
@@ -697,8 +731,8 @@ void CorePageLoadMetricsObserver::OnUserInput(
   click_tracker_.OnUserInput(event);
 
   if (!received_non_scroll_input_after_first_paint_) {
-    if (event.GetType() == blink::WebInputEvent::kGestureTap ||
-        event.GetType() == blink::WebInputEvent::kMouseUp) {
+    if (event.GetType() == blink::WebInputEvent::Type::kGestureTap ||
+        event.GetType() == blink::WebInputEvent::Type::kMouseUp) {
       received_non_scroll_input_after_first_paint_ = true;
       if (now.is_null())
         now = base::TimeTicks::Now();
@@ -708,7 +742,7 @@ void CorePageLoadMetricsObserver::OnUserInput(
     }
   }
   if (!received_scroll_input_after_first_paint_ &&
-      event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
+      event.GetType() == blink::WebInputEvent::Type::kGestureScrollBegin) {
     received_scroll_input_after_first_paint_ = true;
     if (now.is_null())
       now = base::TimeTicks::Now();
@@ -734,6 +768,44 @@ void CorePageLoadMetricsObserver::OnResourceDataUseObserved(
     }
     network_bytes_including_headers_ += resource->delta_bytes;
   }
+}
+
+void CorePageLoadMetricsObserver::RecordNavigationTimingHistograms(
+    content::NavigationHandle* navigation_handle) {
+  // Record only main frame navigation.
+  DCHECK(navigation_handle->IsInMainFrame());
+
+  // Record metrics for navigation only when all relevant milestones are
+  // recorded and in the expected order. It is allowed that they have the same
+  // value for some cases (e.g., internal redirection for HSTS).
+  if (navigation_handle->NavigationStart().is_null() ||
+      navigation_handle->FirstRequestStart().is_null() ||
+      navigation_handle->FirstResponseStart().is_null())
+    return;
+  // TODO(https://crbug.com/1076710): Change these early-returns to DCHECKs
+  // after the issue 1076710 is fixed.
+  if (navigation_handle->NavigationStart() >
+          navigation_handle->FirstRequestStart() ||
+      navigation_handle->FirstRequestStart() >
+          navigation_handle->FirstResponseStart()) {
+    return;
+  }
+
+  // Record the elapsed time from the navigation start milestone.
+  PAGE_LOAD_HISTOGRAM(
+      internal::kHistogramNavigationTimingNavigationStartToFirstRequestStart,
+      navigation_handle->FirstRequestStart() -
+          navigation_handle->NavigationStart());
+  PAGE_LOAD_HISTOGRAM(
+      internal::kHistogramNavigationTimingNavigationStartToFirstResponseStart,
+      navigation_handle->FirstResponseStart() -
+          navigation_handle->NavigationStart());
+
+  // Record the intervals between milestones.
+  PAGE_LOAD_HISTOGRAM(
+      internal::kHistogramNavigationTimingFirstRequestStartToFirstResponseStart,
+      navigation_handle->FirstResponseStart() -
+          navigation_handle->FirstRequestStart());
 }
 
 // This method records values for metrics that were not recorded during any
@@ -774,10 +846,15 @@ void CorePageLoadMetricsObserver::RecordTimingHistograms(
     UMA_HISTOGRAM_ENUMERATION(
         internal::kHistogramLargestContentfulPaintContentType,
         all_frames_largest_contentful_paint.Type());
+    TRACE_EVENT_MARK_WITH_TIMESTAMP1(
+        "loading", "NavStartToLargestContentfulPaint::AllFrames::UMA",
+        GetDelegate().GetNavigationStart() +
+            all_frames_largest_contentful_paint.Time().value(),
+        "data", all_frames_largest_contentful_paint.DataAsTraceValue());
 
     // Note: This depends on PageLoadMetrics internally processing loading
     // behavior before timing metrics if they come in the same IPC update.
-    if (render_delayed_for_web_font_preloading_observed_) {
+    if (font_preload_started_before_rendering_observed_) {
       PAGE_LOAD_HISTOGRAM(internal::kHistogramFontPreloadLargestContentfulPaint,
                           all_frames_largest_contentful_paint.Time().value());
     }
@@ -937,11 +1014,31 @@ void CorePageLoadMetricsObserver::OnDidFinishSubFrameNavigation(
       navigation_handle, GetDelegate());
 }
 
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+CorePageLoadMetricsObserver::OnEnterBackForwardCache(
+    const page_load_metrics::mojom::PageLoadTiming& timing) {
+  UMA_HISTOGRAM_ENUMERATION(
+      internal::kHistogramBackForwardCacheEvent,
+      internal::PageLoadBackForwardCacheEvent::kEnterBackForwardCache);
+  return PageLoadMetricsObserver::OnEnterBackForwardCache(timing);
+}
+
+void CorePageLoadMetricsObserver::OnRestoreFromBackForwardCache(
+    const page_load_metrics::mojom::PageLoadTiming& timing) {
+  // This never reaches yet because OnEnterBackForwardCache returns
+  // STOP_OBSERVING.
+  // TODO(hajimehoshi): After changing OnEnterBackForwardCache to continue
+  // observation, remove the above comment.
+  UMA_HISTOGRAM_ENUMERATION(
+      internal::kHistogramBackForwardCacheEvent,
+      internal::PageLoadBackForwardCacheEvent::kRestoreFromBackForwardCache);
+}
+
 void CorePageLoadMetricsObserver::OnLoadingBehaviorObserved(
     content::RenderFrameHost* rfh,
     int behavior_flag) {
   if (behavior_flag & blink::LoadingBehaviorFlag::
                           kLoadingBehaviorFontPreloadStartedBeforeRendering) {
-    render_delayed_for_web_font_preloading_observed_ = true;
+    font_preload_started_before_rendering_observed_ = true;
   }
 }

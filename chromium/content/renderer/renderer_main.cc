@@ -24,7 +24,6 @@
 #include "build/build_config.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/content_switches_internal.h"
-#include "content/common/service_manager/service_manager_connection_impl.h"
 #include "content/common/skia_utils.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
@@ -37,8 +36,8 @@
 #include "mojo/public/cpp/bindings/mojo_buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/service_manager/sandbox/switches.h"
-#include "services/tracing/public/cpp/stack_sampling/tracing_sampler_profiler.h"
 #include "services/tracing/public/cpp/trace_startup.h"
+#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/webrtc_overrides/init_webrtc.h"  // nogncheck
 #include "ui/base/ui_base_switches.h"
@@ -56,6 +55,10 @@
 #include "base/message_loop/message_pump_mac.h"
 #include "third_party/blink/public/web/web_view.h"
 #endif  // OS_MACOSX
+
+#if defined(OS_CHROMEOS)
+#include "chromeos/system/core_scheduling.h"
+#endif  // OS_CHROMEOS
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/renderer/pepper/pepper_plugin_registry.h"
@@ -121,6 +124,10 @@ int RendererMain(const MainFunctionParams& parameters) {
         command_line.GetSwitchValueASCII(switches::kLang);
     base::i18n::SetICUDefaultLocale(locale);
   }
+
+  // When we start the renderer on ChromeOS if the system has core scheduling
+  // available we want to turn it on.
+  chromeos::system::EnableCoreSchedulingIfAvailable();
 #endif
 
   InitializeSkia();
@@ -154,6 +161,7 @@ int RendererMain(const MainFunctionParams& parameters) {
     }
   }
 
+  blink::Platform::InitializeBlink();
   std::unique_ptr<blink::scheduler::WebThreadScheduler> main_thread_scheduler =
       blink::scheduler::WebThreadScheduler::CreateMainThreadScheduler(
           CreateMainThreadMessagePump(), initial_virtual_time);
@@ -203,10 +211,6 @@ int RendererMain(const MainFunctionParams& parameters) {
                                true);
     }
 #endif  // OS_POSIX && !OS_ANDROID && !!OS_MACOSX
-
-    // Setup tracing sampler profiler as early as possible.
-    auto tracing_sampler_profiler =
-        tracing::TracingSamplerProfiler::CreateOnMainThread();
 
     if (need_sandbox)
       should_run_loop = platform.EnableSandbox();

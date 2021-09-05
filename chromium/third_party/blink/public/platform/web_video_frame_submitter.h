@@ -49,7 +49,7 @@ class BLINK_PLATFORM_EXPORT WebVideoFrameSubmitter
 
   // Intialize must be called before submissions occur, pulled out of
   // StartSubmitting() to enable tests without the full mojo statck running.
-  virtual void Initialize(cc::VideoFrameProvider*) = 0;
+  virtual void Initialize(cc::VideoFrameProvider*, bool is_media_stream) = 0;
 
   // Set the rotation state of the video to be used while appending frames.
   //
@@ -68,6 +68,10 @@ class BLINK_PLATFORM_EXPORT WebVideoFrameSubmitter
   // Set whether the page containing the video element is visible. Stops
   // submission if not unless SetForceSubmit(true) has been called.
   virtual void SetIsPageVisible(bool) = 0;
+
+  // Set whether BeginFrames should be generated regardless of visibility. Does
+  // not submit unless submission is expected.
+  virtual void SetForceBeginFrames(bool) = 0;
 
   // Set whether frames should always be submitted regardless of visibility.
   virtual void SetForceSubmit(bool) = 0;

@@ -5,7 +5,6 @@
 #include "content/common/cursors/webcursor.h"
 
 
-#include "base/logging.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/cursor_loader_x11.h"
 #include "ui/base/cursor/cursor_lookup.h"
@@ -21,7 +20,7 @@ ui::PlatformCursor WebCursor::GetPlatformCursor(const ui::Cursor& cursor) {
   SkBitmap bitmap = GetCursorBitmap(cursor);
 
   XcursorImage* image =
-      ui::SkBitmapToXcursorImage(&bitmap, GetCursorHotspot(cursor));
+      ui::SkBitmapToXcursorImage(bitmap, GetCursorHotspot(cursor));
   platform_cursor_ = ui::CreateReffedCustomXCursor(image);
   return platform_cursor_;
 }

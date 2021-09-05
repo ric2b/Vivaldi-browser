@@ -31,7 +31,8 @@ class ServerPrintersProvider;
 class SyncedPrintersManager;
 class UsbPrinterNotificationController;
 
-enum class PrinterSetupSource;
+// Returns true if |printer_uri| is an IPP uri.
+bool IsIppUri(base::StringPiece printer_uri);
 
 // Top level manager of available CUPS printers in ChromeOS.  All functions
 // in this class must be called from a sequenced context.
@@ -52,6 +53,9 @@ class CupsPrintersManager : public PrinterInstallationManager,
     virtual ~Observer() = default;
   };
 
+  using PrinterStatusCallback =
+      base::OnceCallback<void(const CupsPrinterStatus&)>;
+
   // Factory function.
   static std::unique_ptr<CupsPrintersManager> Create(Profile* profile);
 
@@ -65,7 +69,7 @@ class CupsPrintersManager : public PrinterInstallationManager,
       std::unique_ptr<PrinterConfigurer> printer_configurer,
       std::unique_ptr<UsbPrinterNotificationController>
           usb_notification_controller,
-      std::unique_ptr<ServerPrintersProvider> server_printers_provider,
+      ServerPrintersProvider* server_printers_provider,
       std::unique_ptr<EnterprisePrintersProvider> enterprise_printers_provider,
       PrinterEventTracker* event_tracker,
       PrefService* pref_service);
@@ -97,9 +101,7 @@ class CupsPrintersManager : public PrinterInstallationManager,
   // Parameter |is_automatic| should be set to true if the printer was
   // saved automatically (without requesting additional information
   // from the user).
-  void PrinterInstalled(const Printer& printer,
-                        bool is_automatic,
-                        PrinterSetupSource source) override = 0;
+  void PrinterInstalled(const Printer& printer, bool is_automatic) override = 0;
 
   // Returns true if |printer| is currently installed in CUPS with this
   // configuration.
@@ -112,6 +114,11 @@ class CupsPrintersManager : public PrinterInstallationManager,
   // Log an event that the user started trying to set up the given printer,
   // but setup was not completed for some reason.
   virtual void RecordSetupAbandoned(const Printer& printer) = 0;
+
+  // Performs individual printer status requests for each printer provided.
+  // Passes retrieved printer status to the callbacks.
+  virtual void FetchPrinterStatus(const std::string& printer_id,
+                                  PrinterStatusCallback cb) = 0;
 };
 
 }  // namespace chromeos

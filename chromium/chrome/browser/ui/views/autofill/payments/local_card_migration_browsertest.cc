@@ -68,6 +68,7 @@
 #include "components/sync/test/fake_server/fake_server.h"
 #include "components/sync/test/fake_server/fake_server_network_resources.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/mock_navigation_handle.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -428,7 +429,7 @@ class LocalCardMigrationBrowserTest
     ClickOnDialogViewAndWait(cancel_button, local_card_migration_view);
   }
 
-  views::DialogDelegateView* GetLocalCardMigrationOfferBubbleViews() {
+  LocalCardMigrationBubbleViews* GetLocalCardMigrationOfferBubbleViews() {
     LocalCardMigrationBubbleControllerImpl*
         local_card_migration_bubble_controller_impl =
             LocalCardMigrationBubbleControllerImpl::FromWebContents(
@@ -1148,8 +1149,85 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTestForStatusChip,
 
 #endif  // !defined(OS_CHROMEOS)
 
+class LocalCardMigrationBrowserTestForFixedLogging
+    : public LocalCardMigrationBrowserTest {
+ protected:
+  LocalCardMigrationBrowserTestForFixedLogging() {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kAutofillEnableFixedPaymentsBubbleLogging);
+  }
+
+  ~LocalCardMigrationBrowserTestForFixedLogging() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTestForFixedLogging,
+                       ClosedReason_BubbleAccepted) {
+  base::HistogramTester histogram_tester;
+
+  SaveLocalCard(kFirstCardNumber);
+  SaveLocalCard(kSecondCardNumber);
+  UseCardAndWaitForMigrationOffer(kFirstCardNumber);
+  ClickOnOkButton(GetLocalCardMigrationOfferBubbleViews());
+
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.LocalCardMigrationBubbleResult.FirstShow",
+      AutofillMetrics::LOCAL_CARD_MIGRATION_BUBBLE_ACCEPTED, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTestForFixedLogging,
+                       ClosedReason_BubbleClosed) {
+  base::HistogramTester histogram_tester;
+
+  SaveLocalCard(kFirstCardNumber);
+  SaveLocalCard(kSecondCardNumber);
+  UseCardAndWaitForMigrationOffer(kFirstCardNumber);
+  ClickOnDialogViewAndWait(GetCloseButton(),
+                           GetLocalCardMigrationOfferBubbleViews());
+
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.LocalCardMigrationBubbleResult.FirstShow",
+      AutofillMetrics::LOCAL_CARD_MIGRATION_BUBBLE_CLOSED, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTestForFixedLogging,
+                       ClosedReason_BubbleNotInteracted) {
+  base::HistogramTester histogram_tester;
+
+  SaveLocalCard(kFirstCardNumber);
+  SaveLocalCard(kSecondCardNumber);
+  UseCardAndWaitForMigrationOffer(kFirstCardNumber);
+  views::test::WidgetDestroyedWaiter destroyed_waiter(
+      GetLocalCardMigrationOfferBubbleViews()->GetWidget());
+  browser()->tab_strip_model()->CloseAllTabs();
+  destroyed_waiter.Wait();
+
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.LocalCardMigrationBubbleResult.FirstShow",
+      AutofillMetrics::LOCAL_CARD_MIGRATION_BUBBLE_NOT_INTERACTED, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTestForFixedLogging,
+                       ClosedReason_BubbleLostFocus) {
+  base::HistogramTester histogram_tester;
+
+  SaveLocalCard(kFirstCardNumber);
+  SaveLocalCard(kSecondCardNumber);
+  UseCardAndWaitForMigrationOffer(kFirstCardNumber);
+  views::test::WidgetDestroyedWaiter destroyed_waiter(
+      GetLocalCardMigrationOfferBubbleViews()->GetWidget());
+  GetLocalCardMigrationOfferBubbleViews()->GetWidget()->CloseWithReason(
+      views::Widget::ClosedReason::kLostFocus);
+  destroyed_waiter.Wait();
+
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.LocalCardMigrationBubbleResult.FirstShow",
+      AutofillMetrics::LOCAL_CARD_MIGRATION_BUBBLE_LOST_FOCUS, 1);
+}
+
 // TODO(crbug.com/897998):
-// - Update test set-up and add navigation tests.
 // - Add more tests for feedback dialog.
 
 }  // namespace autofill

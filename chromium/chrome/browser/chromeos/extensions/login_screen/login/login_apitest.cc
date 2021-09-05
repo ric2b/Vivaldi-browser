@@ -36,6 +36,7 @@
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/test/test_api.h"
 #include "extensions/common/extension.h"
@@ -440,8 +441,9 @@ IN_PROC_BROWSER_TEST_F(LoginApitestWithEnterpriseUser,
       kUnlockManagedGuestSessionNotManagedGuestSession);
 }
 
+// TODO(https://crbug.com/1075511) Flaky test
 IN_PROC_BROWSER_TEST_F(LoginApitestWithEnterpriseUser,
-                       LockManagedGuestSessionNotManagedGuestSession) {
+                       DISABLED_LockManagedGuestSessionNotManagedGuestSession) {
   LoginUser();
   SetUpTestListeners();
   SetUpInSessionExtension();

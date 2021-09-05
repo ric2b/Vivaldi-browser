@@ -102,9 +102,11 @@ void PerformanceObserver::observe(const PerformanceObserverInit* observer_init,
   bool is_buffered = false;
   if (observer_init->hasEntryTypes()) {
     if (observer_init->hasType()) {
-      exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError,
-                                        "An observe() call must not include "
-                                        "both entryTypes and type arguments.");
+      UseCounter::Count(GetExecutionContext(),
+                        WebFeature::kPerformanceObserverTypeError);
+      exception_state.ThrowTypeError(
+          "An observe() call must not include "
+          "both entryTypes and type arguments.");
       return;
     }
     if (type_ == PerformanceObserverType::kTypeObserver) {
@@ -134,7 +136,9 @@ void PerformanceObserver::observe(const PerformanceObserverInit* observer_init,
     if (entry_types == PerformanceEntry::kInvalid) {
       return;
     }
-    if (observer_init->buffered()) {
+    if (observer_init->buffered() || observer_init->hasDurationThreshold()) {
+      UseCounter::Count(GetExecutionContext(),
+                        WebFeature::kPerformanceObserverEntryTypesAndBuffered);
       String message =
           "The PerformanceObserver does not support buffered flag with "
           "the entryTypes argument.";
@@ -146,9 +150,11 @@ void PerformanceObserver::observe(const PerformanceObserverInit* observer_init,
     filter_options_ = entry_types;
   } else {
     if (!observer_init->hasType()) {
-      exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError,
-                                        "An observe() call must include either "
-                                        "entryTypes or type arguments.");
+      UseCounter::Count(GetExecutionContext(),
+                        WebFeature::kPerformanceObserverTypeError);
+      exception_state.ThrowTypeError(
+          "An observe() call must include either "
+          "entryTypes or type arguments.");
       return;
     }
     if (type_ == PerformanceObserverType::kEntryTypesObserver) {
@@ -178,6 +184,11 @@ void PerformanceObserver::observe(const PerformanceObserverInit* observer_init,
       std::sort(performance_entries_.begin(), performance_entries_.end(),
                 PerformanceEntry::StartTimeCompareLessThan);
       is_buffered = true;
+    }
+    if (entry_type == PerformanceEntry::kEvent &&
+        observer_init->hasDurationThreshold()) {
+      // TODO(npm): should we do basic validation (like negative values etc?).
+      duration_threshold_ = std::max(16.0, observer_init->durationThreshold());
     }
     filter_options_ |= entry_type;
   }
@@ -223,6 +234,12 @@ void PerformanceObserver::EnqueuePerformanceEntry(PerformanceEntry& entry) {
   performance_entries_.push_back(&entry);
   if (performance_)
     performance_->ActivateObserver(*this);
+}
+
+bool PerformanceObserver::CanObserve(const PerformanceEntry& entry) const {
+  if (entry.EntryTypeEnum() != PerformanceEntry::kEvent)
+    return true;
+  return entry.duration() >= duration_threshold_;
 }
 
 bool PerformanceObserver::HasPendingActivity() const {

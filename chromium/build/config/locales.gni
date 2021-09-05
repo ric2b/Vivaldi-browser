@@ -126,6 +126,7 @@ all_chrome_locales = [
   "sl",
   "sq",
   "sr",
+  "sr-Latn", # -b+sr+Latn in .xml
   "sv",
   "sw",
   "ta",
@@ -167,6 +168,7 @@ android_bundle_only_locales = [
   "pa",
   "si",
   "sq",
+  "sr-Latn",
   "ur",
   "uz",
   "zh-HK",
@@ -192,15 +194,18 @@ if (is_android) {
 
   #  - remove en-US
   #  - swap: (he, id, en-419, fil) -> (iw, in, es-rUS, tl)
+  #  - sr-rLatn -> -b+sr+Latn
   android_bundle_locales_as_resources -= [
     "en-rUS",
     "es-r419",
+    "sr-rLatn",
     "fil",
     "he",
     "id",
   ]
   android_bundle_locales_as_resources += [
     "es-rUS",
+    "b+sr+Latn",
     "in",
     "iw",
     "tl",

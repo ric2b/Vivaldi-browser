@@ -15,6 +15,7 @@
 <link rel="import" href="../../settings_shared_css.html">
 <link rel="import" href="../metrics_recorder.html">
 <link rel="import" href="crostini_disk_resize_dialog.html">
+<link rel="import" href="crostini_disk_resize_confirmation_dialog.html">
 
 <dom-module id="settings-crostini-subpage">
   <template>
@@ -24,14 +25,18 @@
         <!-- TODO(davidmunro): Add Icon from
              https://docs.google.com/presentation/d/1cBU0TnQhuorL69NmifWJ1OzLMsu9dihw64Jo031jUZ4/edit#slide=id.g6b38a81213_0_0
           --->
-        <div id="containerUpgradeLabel" class="start">
-          $i18n{crostiniContainerUpgrade}
-          <div class="secondary" id="secondaryText">
+        <div class="start" aria-hidden="true">
+          <div id="containerUpgradeLabel">
+            $i18n{crostiniContainerUpgrade}
+          </div>
+          <div class="secondary" id="containerUpgradeDescription">
             $i18n{crostiniContainerUpgradeSubtext}
           </div>
         </div>
-        <cr-button on-click="onContainerUpgradeClick_"
-            aria-labelledby="upgradeCrostiniLabel"
+        <cr-button id="containerUpgradeButton"
+            on-click="onContainerUpgradeClick_"
+            aria-labelledby="containerUpgradeLabel containerUpgradeButton"
+            aria-describedby="containerUpgradeDescription"
             disabled="[[disableUpgradeButton_]]">
           $i18n{crostiniContainerUpgradeButton}
         </cr-button>
@@ -81,11 +86,18 @@
     <template is="dom-if" if="[[showCrostiniDiskResize_]]">
       <div class="settings-box hr" id="crostini-disk-resize">
         <div class="start">
-          $i18n{crostiniDiskResizeLabel}
+          <div>
+            $i18n{crostiniDiskResizeLabel}
+          </div>
+          <div class="secondary" id="diskSizeDescription">
+            [[diskSizeLabel_]]
+          </div>
         </div>
-        <cr-button on-click="onDiskResizeClick_"
-            aria-labelledby="diskResizeLabel" id="showDiskResizeButton">
-            $i18n{crostiniDiskResizeShowButton}
+        <cr-button on-click="onDiskResizeClick_" hidden="[[!canDiskResize_]]"
+            aria-label="[[diskResizeButtonAriaLabel_]]"
+            aria-describedby="diskSizeDescription"
+            id="showDiskResizeButton">
+          [[diskResizeButtonLabel_]]
         </cr-button>
       </div>
       <template is="dom-if" if="[[showDiskResizeDialog_]]" restamp>
@@ -93,17 +105,30 @@
             on-close="onDiskResizeDialogClose_">
         </settings-crostini-disk-resize-dialog>
       </template>
+      <template is="dom-if" if="[[showDiskResizeConfirmationDialog_]]" restamp>
+        <settings-crostini-disk-resize-confirmation-dialog
+            on-close="onDiskResizeConfirmationDialogClose_"
+            on-cancel="onDiskResizeConfirmationDialogCancel_">
+        </settings-crostini-disk-resize-confirmation-dialog>
+      </template>
     </template>
     <template is="dom-if" if="[[showCrostiniMic_]]">
-      <settings-toggle-button id="crostini-mic-sharing"
-        on-change="onMicSharingChange_"
-        pref="{{prefs.crostini.mic_sharing}}"
-        label="$i18n{crostiniMicTitle}">
-      </settings-toggle-button>
+      <div class="settings-box">
+        <div id="crostini-mic-sharing-label" class="start" aria-hidden="true">
+          $i18n{crostiniMicTitle}
+        </div>
+        <cr-toggle id="crostini-mic-sharing-toggle"
+            checked="[[crostiniMicSharingEnabled_]]"
+            on-change="onMicSharingChange_"
+            aria-label="$i18n{crostiniMicTitle}">
+        </cr-toggle>
+      </div>
     </template>
     <template is="dom-if" if="[[!hideCrostiniUninstall_]]">
       <div id="remove" class="settings-box">
-        <div id="removeCrostiniLabel" class="start">$i18n{crostiniRemove}</div>
+        <div id="removeCrostiniLabel" class="start" aria-hidden="true">
+          $i18n{crostiniRemove}
+        </div>
         <cr-button on-click="onRemoveClick_"
             aria-labelledby="removeCrostiniLabel">
           $i18n{crostiniRemoveButton}
@@ -113,7 +138,8 @@
 
     <template is="dom-if" if="[[showCrostiniMicSharingDialog_]]" restamp>
       <settings-crostini-mic-sharing-dialog
-          on-close="onCrostiniMicSharingDialogClose_">
+          on-close="onCrostiniMicSharingDialogClose_"
+          pending-mic-sharing-state="[[!crostiniMicSharingEnabled_]]">
       </settings-crostini-mic-sharing-dialog>
     </template>
   </template>

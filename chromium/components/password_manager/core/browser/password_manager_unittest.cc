@@ -25,6 +25,8 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "components/autofill/core/common/renderer_id.h"
+#include "components/autofill/core/common/signatures.h"
 #include "components/password_manager/core/browser/field_info_manager.h"
 #include "components/password_manager/core/browser/form_fetcher_impl.h"
 #include "components/password_manager/core/browser/leak_detection/leak_detection_check.h"
@@ -57,8 +59,10 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+using autofill::FieldRendererId;
 using autofill::FormData;
 using autofill::FormFieldData;
+using autofill::FormRendererId;
 using autofill::FormStructure;
 using autofill::NO_SERVER_DATA;
 using autofill::NOT_USERNAME;
@@ -148,7 +152,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
                void(PasswordFormManagerForUI*, bool, bool));
   MOCK_METHOD0(HideManualFallbackForSaving, void());
   MOCK_METHOD1(NotifySuccessfulLoginWithExistingPassword,
-               void(const autofill::PasswordForm&));
+               void(std::unique_ptr<PasswordFormManagerForUI>));
   MOCK_METHOD0(AutomaticPasswordSaveIndicator, void());
   MOCK_CONST_METHOD0(GetPrefs, PrefService*());
   MOCK_CONST_METHOD0(GetMainFrameURL, const GURL&());
@@ -289,8 +293,16 @@ void SetUniqueIdIfNeeded(FormData* form) {
 
 class MockFieldInfoManager : public FieldInfoManager {
  public:
-  MOCK_METHOD3(AddFieldType, void(uint64_t, uint32_t, ServerFieldType));
-  MOCK_CONST_METHOD2(GetFieldType, ServerFieldType(uint64_t, uint32_t));
+  MOCK_METHOD(void,
+              AddFieldType,
+              (autofill::FormSignature,
+               autofill::FieldSignature,
+               ServerFieldType),
+              (override));
+  MOCK_METHOD(ServerFieldType,
+              GetFieldType,
+              (autofill::FormSignature, autofill::FieldSignature),
+              (const override));
 };
 
 }  // namespace
@@ -304,9 +316,8 @@ class PasswordManagerTest : public testing::Test {
 
  protected:
   void SetUp() override {
-    store_ = new testing::StrictMock<MockPasswordStore>;
-    EXPECT_CALL(*store_, ReportMetrics(_, _, _)).Times(AnyNumber());
-    CHECK(store_->Init(nullptr));
+    store_ = new MockPasswordStore;
+    ASSERT_TRUE(store_->Init(nullptr));
 
     ON_CALL(client_, GetProfilePasswordStore())
         .WillByDefault(Return(store_.get()));
@@ -336,17 +347,15 @@ class PasswordManagerTest : public testing::Test {
     prefs_.reset(new TestingPrefServiceSimple());
     prefs_->registry()->RegisterIntegerPref(
         prefs::kPasswordManagerOnboardingState,
-        static_cast<int>(metrics_util::OnboardingState::kDoNotShow));
+        static_cast<int>(OnboardingState::kDoNotShow));
     prefs_->registry()->RegisterBooleanPref(
         prefs::kWasOnboardingFeatureCheckedBefore, false);
     prefs_->registry()->RegisterBooleanPref(
         prefs::kPasswordLeakDetectionEnabled, true);
-#if !defined(OS_IOS)
     prefs_->registry()->RegisterBooleanPref(::prefs::kSafeBrowsingEnabled,
                                             true);
     prefs_->registry()->RegisterBooleanPref(::prefs::kSafeBrowsingEnhanced,
                                             true);
-#endif
     ON_CALL(client_, GetPrefs()).WillByDefault(Return(prefs_.get()));
 
     // When waiting for predictions is on, it makes tests more complicated.
@@ -385,7 +394,7 @@ class PasswordManagerTest : public testing::Test {
     form_data.url = GURL("http://www.google.com/a/LoginAuth");
     form_data.action = GURL("http://www.google.com/a/Login");
     form_data.name = ASCIIToUTF16("the-form-name");
-    form_data.unique_renderer_id = 10;
+    form_data.unique_renderer_id = FormRendererId(10);
 
     FormFieldData field;
     field.name = ASCIIToUTF16("Email");
@@ -393,7 +402,7 @@ class PasswordManagerTest : public testing::Test {
     field.name_attribute = field.name;
     field.value = ASCIIToUTF16("googleuser");
     field.form_control_type = "text";
-    field.unique_renderer_id = 2;
+    field.unique_renderer_id = FieldRendererId(2);
     form_data.fields.push_back(field);
 
     field.name = ASCIIToUTF16("Passwd");
@@ -401,7 +410,7 @@ class PasswordManagerTest : public testing::Test {
     field.name_attribute = field.name;
     field.value = ASCIIToUTF16("p4ssword");
     field.form_control_type = "password";
-    field.unique_renderer_id = 3;
+    field.unique_renderer_id = FieldRendererId(3);
     form_data.fields.push_back(field);
 
     SetUniqueIdIfNeeded(&form_data);
@@ -485,6 +494,27 @@ class PasswordManagerTest : public testing::Test {
     return form;
   }
 
+  PasswordForm MakeSimpleFormWithOnlyUsernameField() {
+    PasswordForm form;
+    form.origin = GURL("http://www.google.com/a/LoginAuth");
+    form.username_element = ASCIIToUTF16("Email");
+    form.submit_element = ASCIIToUTF16("signIn");
+    form.signon_realm = "http://www.google.com/";
+    form.form_data.name = ASCIIToUTF16("username_only_form");
+    form.form_data.url = GURL("http://www.google.com/a/LoginAuth");
+    form.form_data.unique_renderer_id = FormRendererId(30);
+
+    FormFieldData field;
+    field.name = ASCIIToUTF16("Email");
+    field.id_attribute = field.name;
+    field.name_attribute = field.name;
+    field.form_control_type = "text";
+    field.unique_renderer_id = FieldRendererId(31);
+    form.form_data.fields.push_back(field);
+
+    return form;
+  }
+
   PasswordForm MakeSimpleFormWithOnlyPasswordField() {
     PasswordForm form(MakeSimpleForm());
     form.username_element.clear();
@@ -509,7 +539,7 @@ class PasswordManagerTest : public testing::Test {
     field.id_attribute = field.name;
     field.value = form.username_value;
     field.form_control_type = "text";
-    field.unique_renderer_id = 2;
+    field.unique_renderer_id = FieldRendererId(2);
     field.autocomplete_attribute = "cc-name";
     form.form_data.fields.push_back(field);
 
@@ -517,7 +547,7 @@ class PasswordManagerTest : public testing::Test {
     field.id_attribute = field.name;
     field.value = form.password_value;
     field.form_control_type = "password";
-    field.unique_renderer_id = 3;
+    field.unique_renderer_id = FieldRendererId(3);
     field.autocomplete_attribute = "cc-number";
     form.form_data.fields.push_back(field);
 
@@ -987,9 +1017,8 @@ TEST_F(PasswordManagerTest, OnboardingSimple) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
       features::kPasswordManagerOnboardingAndroid);
-  prefs_->SetInteger(
-      prefs::kPasswordManagerOnboardingState,
-      static_cast<int>(metrics_util::OnboardingState::kShouldShow));
+  prefs_->SetInteger(prefs::kPasswordManagerOnboardingState,
+                     static_cast<int>(OnboardingState::kShouldShow));
 
   FormData form_data(MakeSimpleFormData());
   std::vector<FormData> observed = {form_data};
@@ -1017,9 +1046,8 @@ TEST_F(PasswordManagerTest, OnboardingPasswordSyncDisabled) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
       features::kPasswordManagerOnboardingAndroid);
-  prefs_->SetInteger(
-      prefs::kPasswordManagerOnboardingState,
-      static_cast<int>(metrics_util::OnboardingState::kShouldShow));
+  prefs_->SetInteger(prefs::kPasswordManagerOnboardingState,
+                     static_cast<int>(OnboardingState::kShouldShow));
 
   FormData form_data(MakeSimpleFormData());
   std::vector<FormData> observed = {form_data};
@@ -1050,9 +1078,8 @@ TEST_F(PasswordManagerTest, OnboardingPasswordUpdate) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
       features::kPasswordManagerOnboardingAndroid);
-  prefs_->SetInteger(
-      prefs::kPasswordManagerOnboardingState,
-      static_cast<int>(metrics_util::OnboardingState::kShouldShow));
+  prefs_->SetInteger(prefs::kPasswordManagerOnboardingState,
+                     static_cast<int>(OnboardingState::kShouldShow));
 
   FormData observed_form_data(MakeSimpleFormData());
   std::vector<FormData> observed_forms = {observed_form_data};
@@ -1254,7 +1281,7 @@ TEST_F(PasswordManagerTest, PasswordFormReappearance) {
   // Simulate form reapperance with different path in url and different renderer
   // ids.
   FormData failed_login_form_data = login_form_data;
-  failed_login_form_data.unique_renderer_id += 1000;
+  failed_login_form_data.unique_renderer_id.value() += 1000;
   failed_login_form_data.url =
       GURL("https://accounts.google.com/login/error?redirect_after_login");
   observed.push_back(failed_login_form_data);
@@ -1607,7 +1634,7 @@ TEST_F(PasswordManagerTest, DoNotSaveWithEmptyNewPasswordAndNonemptyPassword) {
   field.id_attribute = field.name;
   field.name_attribute = field.name;
   field.form_control_type = "password";
-  field.unique_renderer_id = 4;
+  field.unique_renderer_id = FieldRendererId(4);
   form_data.fields.push_back(field);
 
   observed.push_back(form_data);
@@ -1695,11 +1722,11 @@ TEST_F(PasswordManagerTest, FillPasswordOnManyFrames_SameId) {
   form_data.fields.resize(2);
   form_data.fields[0].name = ASCIIToUTF16("Email");
   form_data.fields[0].value = ASCIIToUTF16("googleuser");
-  form_data.fields[0].unique_renderer_id = 1;
+  form_data.fields[0].unique_renderer_id = FieldRendererId(1);
   form_data.fields[0].form_control_type = "text";
   form_data.fields[1].name = ASCIIToUTF16("Passwd");
   form_data.fields[1].value = ASCIIToUTF16("p4ssword");
-  form_data.fields[1].unique_renderer_id = 2;
+  form_data.fields[1].unique_renderer_id = FieldRendererId(2);
   form_data.fields[1].form_control_type = "password";
   PasswordForm first_form;
   first_form.form_data = form_data;
@@ -1708,16 +1735,16 @@ TEST_F(PasswordManagerTest, FillPasswordOnManyFrames_SameId) {
   form_data.action = GURL("http://www.example.com/");
   form_data.fields[0].name = ASCIIToUTF16("User");
   form_data.fields[0].value = ASCIIToUTF16("exampleuser");
-  form_data.fields[0].unique_renderer_id = 3;
+  form_data.fields[0].unique_renderer_id = FieldRendererId(3);
   form_data.fields[1].name = ASCIIToUTF16("Pwd");
   form_data.fields[1].value = ASCIIToUTF16("1234");
-  form_data.fields[1].unique_renderer_id = 4;
+  form_data.fields[1].unique_renderer_id = FieldRendererId(4);
   PasswordForm second_form;
   second_form.form_data = form_data;
 
   // Make the forms be "similar".
-  first_form.form_data.unique_renderer_id =
-      second_form.form_data.unique_renderer_id = 7654;
+  first_form.form_data.unique_renderer_id = FormRendererId(7654);
+  second_form.form_data.unique_renderer_id = FormRendererId(7654);
 
   // Observe the form in the first frame.
   EXPECT_CALL(*store_,
@@ -1812,7 +1839,9 @@ TEST_F(PasswordManagerTest, FormSubmittedUnchangedNotifiesClient) {
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_)).Times(0);
   EXPECT_CALL(*store_, UpdateLogin(_)).WillOnce(SaveArg<0>(&updated_form));
   EXPECT_CALL(client_, NotifySuccessfulLoginWithExistingPassword(_))
-      .WillOnce(SaveArg<0>(&notified_form));
+      .WillOnce([&notified_form](const auto& submitted_manager) {
+        notified_form = submitted_manager->GetPendingCredentials();
+      });
 
   // Now the password manager waits for the navigation to complete.
   observed.clear();
@@ -2220,11 +2249,13 @@ TEST_F(PasswordManagerTest, AutofillingOfAffiliatedCredentials) {
   OnPasswordFormSubmitted(filled_form.form_data);
 
   PasswordForm saved_form;
-  PasswordForm saved_notified_form;
+  autofill::PasswordForm saved_notified_form;
   EXPECT_CALL(*store_, UpdateLogin(_)).WillOnce(SaveArg<0>(&saved_form));
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_)).Times(0);
   EXPECT_CALL(client_, NotifySuccessfulLoginWithExistingPassword(_))
-      .WillOnce(SaveArg<0>(&saved_notified_form));
+      .WillOnce([&saved_notified_form](const auto& submitted_manager) {
+        saved_notified_form = submitted_manager->GetPendingCredentials();
+      });
   EXPECT_CALL(*store_, AddLogin(_)).Times(0);
   EXPECT_CALL(*store_, UpdateLoginWithPrimaryKey(_, _)).Times(0);
 
@@ -2907,22 +2938,69 @@ TEST_F(PasswordManagerTest, AutofillPredictionBeforeFormParsed) {
       .WillRepeatedly(Return(true));
 
   PasswordForm form(MakeSimpleForm());
-  // Simulate that the form is incorrectly marked as sign-up, which means it can
-  // not be filled without server predictions.
-  form.form_data.fields[1].autocomplete_attribute = "new-password";
 
   // Server predictions says that this is a sign-in form. Since they have higher
   // priority than autocomplete attributes then the form should be filled.
   FormStructure form_structure(form.form_data);
   form_structure.field(1)->set_server_type(autofill::PASSWORD);
+#if !defined(OS_IOS)
   manager()->ProcessAutofillPredictions(&driver_, {&form_structure});
+#else  // On iOS predictions are propagated with nullptr driver.
+  manager()->ProcessAutofillPredictions(nullptr, {&form_structure});
+#endif
 
   EXPECT_CALL(*store_, GetLogins(_, _))
       .WillRepeatedly(WithArg<1>(InvokeConsumer(form)));
   EXPECT_CALL(driver_, FillPasswordForm(_));
 
+  // Simulate that the form is incorrectly marked as sign-up, which means it can
+  // not be filled without server predictions.
+  form.form_data.fields[1].autocomplete_attribute = "new-password";
+
   manager()->OnPasswordFormsParsed(&driver_, {form.form_data});
-  task_runner_->FastForwardUntilNoTasksRemain();
+}
+
+// Check that when autofill predictions are received before a form is found then
+// server predictions are not ignored and used for filling in case there are
+// multiple forms on a page, including forms that have UsernameFirstFlow votes.
+TEST_F(PasswordManagerTest, AutofillPredictionBeforeMultipleFormsParsed) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kUsernameFirstFlow);
+  PasswordFormManager::set_wait_for_server_predictions_for_filling(true);
+  EXPECT_CALL(client_, IsSavingAndFillingEnabled(_))
+      .WillRepeatedly(Return(true));
+
+  PasswordForm form1(MakeSimpleFormWithOnlyUsernameField());
+  PasswordForm form2(MakeSimpleForm());
+
+  EXPECT_CALL(*store_, GetLogins)
+      .WillRepeatedly(WithArg<1>(InvokeConsumer(form2)));
+
+  FormStructure form_structure1(form1.form_data);
+  form_structure1.field(0)->set_server_type(autofill::SINGLE_USERNAME);
+  // Server predictions says that this is a sign-in form. Since they have higher
+  // priority than autocomplete attributes then the form should be filled.
+  FormStructure form_structure2(form2.form_data);
+  form_structure2.field(1)->set_server_type(autofill::PASSWORD);
+
+#if !defined(OS_IOS)
+  manager()->ProcessAutofillPredictions(&driver_,
+                                        {&form_structure1, &form_structure2});
+  // Both forms should be filled.
+  EXPECT_CALL(driver_, FillPasswordForm(_)).Times(2);
+#else  // On iOS predictions are propagated with nullptr driver.
+  manager()->ProcessAutofillPredictions(nullptr,
+                                        {&form_structure1, &form_structure2});
+  // Only one form should be filled, as username first flow is not supported
+  // yet on iOS.
+  EXPECT_CALL(driver_, FillPasswordForm(_));
+#endif
+
+  // Simulate that the form is incorrectly marked as sign-up, which means it can
+  // not be filled without server predictions.
+  form2.form_data.fields[1].autocomplete_attribute = "new-password";
+  manager()->OnPasswordFormsParsed(&driver_,
+                                   {form1.form_data, form2.form_data});
 }
 
 // Checks the following scenario:
@@ -2980,7 +3058,7 @@ TEST_F(PasswordManagerTest, ProvisionallySaveFailure) {
   base::HistogramTester histogram_tester;
   ukm::TestAutoSetUkmRecorder test_ukm_recorder;
   auto metrics_recorder = std::make_unique<PasswordManagerMetricsRecorder>(
-      1234, GURL("http://example.com"));
+      1234, GURL("http://example.com"), nullptr);
   EXPECT_CALL(client_, GetMetricsRecorder())
       .WillRepeatedly(Return(metrics_recorder.get()));
 
@@ -3030,8 +3108,7 @@ struct MissingFormManagerTestCase {
 TEST_F(PasswordManagerTest, ReportMissingFormManager) {
   const FormData form_data = MakeSimpleFormData();
   FormData other_form_data = MakeSimpleFormData();
-  ++other_form_data.unique_renderer_id;
-  // other_form.signon_realm += "other";
+  other_form_data.unique_renderer_id.value() += 1;
 
   const MissingFormManagerTestCase kTestCases[] = {
       {
@@ -3115,7 +3192,7 @@ TEST_F(PasswordManagerTest, ReportMissingFormManager) {
 
     ukm::TestAutoSetUkmRecorder test_ukm_recorder;
     auto metrics_recorder = std::make_unique<PasswordManagerMetricsRecorder>(
-        1234, GURL("http://example.com"));
+        1234, GURL("http://example.com"), nullptr);
     EXPECT_CALL(client_, GetMetricsRecorder())
         .WillRepeatedly(Return(metrics_recorder.get()));
 
@@ -3164,7 +3241,7 @@ TEST_F(PasswordManagerTest, CreatePasswordFormManagerOnSaving) {
   // Simulate that JavaScript creates a new form, fills username/password and
   // submits it.
   auto submitted_form = form;
-  submitted_form.form_data.unique_renderer_id += 1000;
+  submitted_form.form_data.unique_renderer_id.value() += 1000;
   submitted_form.username_value = ASCIIToUTF16("username1");
   submitted_form.form_data.fields[0].value = submitted_form.username_value;
   submitted_form.password_value = ASCIIToUTF16("password1");
@@ -3228,9 +3305,8 @@ TEST_F(PasswordManagerTest, FillingAndSavingFallbacksOnNonPasswordForm) {
   EXPECT_EQ(saved_match.username_value, form_data.username_field.value);
   EXPECT_EQ(saved_match.password_value, form_data.password_field.value);
   // Check that no automatic filling available.
-  uint32_t renderer_id_not_set = FormData::kNotSetRendererId;
-  EXPECT_EQ(renderer_id_not_set, form_data.username_field.unique_renderer_id);
-  EXPECT_EQ(renderer_id_not_set, form_data.password_field.unique_renderer_id);
+  EXPECT_TRUE(form_data.username_field.unique_renderer_id.is_null());
+  EXPECT_TRUE(form_data.password_field.unique_renderer_id.is_null());
 
   // Check that saving fallback is available.
   std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
@@ -3295,12 +3371,12 @@ TEST_F(PasswordManagerTest, FillSingleUsername) {
 
   // Create FormdData for a form with 1 text field.
   FormData form_data;
-  const uint32_t form_id = 1001;
+  constexpr FormRendererId form_id(1001);
   form_data.unique_renderer_id = form_id;
-  form_data.url = GURL("example.com");
+  form_data.url = GURL("http://example.com");
   FormFieldData field;
   field.form_control_type = "text";
-  const uint32_t field_id = 10;
+  constexpr FieldRendererId field_id(10);
   field.unique_renderer_id = field_id;
   form_data.fields.push_back(field);
 
@@ -3316,8 +3392,7 @@ TEST_F(PasswordManagerTest, FillSingleUsername) {
   EXPECT_EQ(saved_match.username_value, fill_data.username_field.value);
   EXPECT_EQ(field_id, fill_data.username_field.unique_renderer_id);
   EXPECT_EQ(saved_match.password_value, fill_data.password_field.value);
-  EXPECT_EQ(std::numeric_limits<uint32_t>::max(),
-            fill_data.password_field.unique_renderer_id);
+  EXPECT_TRUE(fill_data.password_field.unique_renderer_id.is_null());
 #else   // defined(OS_IOS)
   EXPECT_CALL(driver_, FillPasswordForm(_)).Times(0);
 #endif  // !defined(OS_IOS)
@@ -3340,19 +3415,19 @@ TEST_F(PasswordManagerTest,
 
   // Create FormdData for a form with 1 text field.
   FormData form_data;
-  const uint32_t form_id = 1001;
+  constexpr FormRendererId form_id(1001);
   form_data.unique_renderer_id = form_id;
-  form_data.url = GURL("example.com");
+  form_data.url = GURL("http://example.com");
 
   FormFieldData username_field;
   username_field.form_control_type = "text";
-  const uint32_t username_field_id = 10;
+  constexpr FieldRendererId username_field_id(10);
   username_field.unique_renderer_id = username_field_id;
   form_data.fields.push_back(username_field);
 
   FormFieldData password_field;
   password_field.form_control_type = "text";
-  const uint32_t password_field_id = 11;
+  constexpr FieldRendererId password_field_id(11);
   password_field.unique_renderer_id = password_field_id;
   form_data.fields.push_back(password_field);
 
@@ -3380,7 +3455,7 @@ TEST_F(PasswordManagerTest, UsernameFirstFlow) {
   // Simulate the user typed a username in username form.
   const base::string16 username = ASCIIToUTF16("username1");
   EXPECT_CALL(driver_, GetLastCommittedURL()).WillOnce(ReturnRef(form.origin));
-  manager()->OnUserModifiedNonPasswordField(&driver_, 1001 /* renderer_id */,
+  manager()->OnUserModifiedNonPasswordField(&driver_, FieldRendererId(1001),
                                             username /* value */);
 
   // Simulate that a form which contains only 1 field which is password is added
@@ -3429,9 +3504,10 @@ TEST_F(PasswordManagerTest, UsernameFirstFlowFillingServerAndLocalPredictions) {
       .WillRepeatedly(WithArg<1>(InvokeConsumer(MakeSavedForm())));
   EXPECT_CALL(client_, IsSavingAndFillingEnabled).WillRepeatedly(Return(true));
 
-  constexpr uint32_t kFieldRendererId = 1;
+  constexpr FieldRendererId kFieldRendererId(1);
 
   FormData non_password_form;
+  non_password_form.url = GURL("http://example.com");
   FormFieldData field;
   field.form_control_type = "text";
   field.unique_renderer_id = kFieldRendererId;
@@ -3451,7 +3527,7 @@ TEST_F(PasswordManagerTest, UsernameFirstFlowFillingServerAndLocalPredictions) {
           .WillOnce(Return(local_type));
 
       // Simulate filling of different forms on each iteration.
-      ++non_password_form.unique_renderer_id;
+      non_password_form.unique_renderer_id.value() += 1;
       non_password_form.name += ASCIIToUTF16("1");  // for iOS.
 
       FormStructure form_structure(non_password_form);
@@ -3543,8 +3619,7 @@ TEST_F(PasswordManagerTest, FormSubmittedOnIFrameMainFrameLoaded) {
 }
 
 TEST_F(PasswordManagerTest, NoPromptAutofillAssistantManuallyCuratedScript) {
-  manager()->set_autofill_assistance_mode(
-      AutofillAssistantMode::kManuallyCuratedScript);
+  manager()->SetAutofillAssistantMode(AutofillAssistantMode::kRunning);
 
   PasswordForm form(MakeSimpleForm());
   EXPECT_CALL(client_, IsSavingAndFillingEnabled(form.origin))
@@ -3552,16 +3627,40 @@ TEST_F(PasswordManagerTest, NoPromptAutofillAssistantManuallyCuratedScript) {
   EXPECT_CALL(*store_, GetLogins)
       .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
   manager()->OnPasswordFormsParsed(&driver_, {form.form_data});
-
-  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
-  EXPECT_CALL(client_, ShowManualFallbackForSavingPtr(_, false, false))
-      .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
   manager()->ShowManualFallbackForSaving(&driver_, form.form_data);
-  ASSERT_TRUE(form_manager_to_save);
-  EXPECT_THAT(form_manager_to_save->GetPendingCredentials(), FormMatches(form));
 
   // Check that a save prompt is not shown.
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr).Times(0);
+
+  manager()->DidNavigateMainFrame(true /* form_may_be_submitted */);
+  manager()->OnPasswordFormsRendered(&driver_, {} /* observed */,
+                                     true /* did stop loading */);
+}
+
+// Tests the following scenario:
+// 1. Password Manager's prompts are disabled by Autofill Assistant because it
+// runs a script.
+// 2. The timeout for prompts disabling expires.
+// 3. The timer re-enables the prompts.
+// 4. A prompt is shown after a form submission.
+TEST_F(PasswordManagerTest, ResetAutofillAssistantModeAfterTimeout) {
+  manager()->SetDisablePromptsTimeoutToZero();
+
+  manager()->SetAutofillAssistantMode(AutofillAssistantMode::kRunning);
+
+  PasswordForm form(MakeSimpleForm());
+  EXPECT_CALL(client_, IsSavingAndFillingEnabled(form.origin))
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(*store_, GetLogins)
+      .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+  manager()->OnPasswordFormsParsed(&driver_, {form.form_data});
+  manager()->ShowManualFallbackForSaving(&driver_, form.form_data);
+
+  // Timer should reset |autofill_assistant_mode| after timeout.
+  base::RunLoop().RunUntilIdle();
+
+  // Check that a save prompt is shown.
+  EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr);
 
   manager()->DidNavigateMainFrame(true /* form_may_be_submitted */);
   manager()->OnPasswordFormsRendered(&driver_, {} /* observed */,

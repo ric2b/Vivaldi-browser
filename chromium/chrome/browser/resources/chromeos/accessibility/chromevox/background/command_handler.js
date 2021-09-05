@@ -14,6 +14,7 @@ goog.require('CustomAutomationEvent');
 goog.require('LogStore');
 goog.require('Output');
 goog.require('PhoneticData');
+goog.require('SmartStickyMode');
 goog.require('TreeDumper');
 goog.require('ChromeVoxBackground');
 goog.require('ChromeVoxKbHandler');
@@ -31,16 +32,26 @@ const RoleType = chrome.automation.RoleType;
 const StateType = chrome.automation.StateType;
 
 /** @private {boolean} */
-CommandHandler.incognito_ = !!chrome.runtime.getManifest()['incognito'];
+CommandHandler.isIncognito_ = !!chrome.runtime.getManifest()['incognito'];
+
+/** @private {boolean} */
+CommandHandler.languageLoggingEnabled_ = false;
 
 /**
- * Handles ChromeVox Next commands.
+ * Handles toggling sticky mode when encountering editables.
+ * @private {!SmartStickyMode}
+ */
+CommandHandler.smartStickyMode_ = new SmartStickyMode();
+
+/**
+ * Handles ChromeVox commands.
  * @param {string} command
  * @return {boolean} True if the command should propagate.
  */
 CommandHandler.onCommand = function(command) {
-  // Check for a command disallowed in OOBE/login.
-  if (CommandHandler.incognito_ && CommandStore.CMD_WHITELIST[command] &&
+  // Check for a command disallowed in incognito contexts and kiosk.
+  if ((CommandHandler.isIncognito_ || CommandHandler.isKioskSession_) &&
+      CommandStore.CMD_WHITELIST[command] &&
       CommandStore.CMD_WHITELIST[command].disallowOOBE) {
     return true;
   }
@@ -94,12 +105,8 @@ CommandHandler.onCommand = function(command) {
       break;
     case 'toggleStickyMode':
       ChromeVoxBackground.setPref('sticky', !ChromeVox.isStickyPrefOn, true);
-
-      if (ChromeVox.isStickyPrefOn) {
-        chrome.accessibilityPrivate.setKeyboardListener(true, true);
-      } else {
-        chrome.accessibilityPrivate.setKeyboardListener(true, false);
-      }
+      CommandHandler.smartStickyMode_.onStickyModeCommand(
+          ChromeVoxState.instance.currentRange);
       return false;
     case 'passThroughMode':
       ChromeVox.passThroughMode = true;
@@ -266,13 +273,68 @@ CommandHandler.onCommand = function(command) {
       break;
     default:
       break;
+    case 'toggleKeyboardHelp':
+      (new PanelCommand(PanelCommandType.OPEN_MENUS)).send();
+      return false;
+    case 'showPanelMenuMostRecent':
+      (new PanelCommand(PanelCommandType.OPEN_MENUS_MOST_RECENT)).send();
+      return false;
+    case 'nextGranularity':
+    case 'previousGranularity': {
+      const backwards = command == 'previousGranularity';
+      let gran = GestureCommandHandler.granularity;
+      const next = backwards ?
+          (--gran >= 0 ? gran : GestureGranularity.COUNT - 1) :
+          ++gran % GestureGranularity.COUNT;
+      GestureCommandHandler.granularity =
+          /** @type {GestureGranularity} */ (next);
+
+      let announce = '';
+      switch (GestureCommandHandler.granularity) {
+        case GestureGranularity.CHARACTER:
+          announce = Msgs.getMsg('character_granularity');
+          break;
+        case GestureGranularity.WORD:
+          announce = Msgs.getMsg('word_granularity');
+          break;
+        case GestureGranularity.LINE:
+          announce = Msgs.getMsg('line_granularity');
+          break;
+        case GestureGranularity.HEADING:
+          announce = Msgs.getMsg('heading_granularity');
+          break;
+        case GestureGranularity.LINK:
+          announce = Msgs.getMsg('link_granularity');
+          break;
+        case GestureGranularity.FORM_FIELD_CONTROL:
+          announce = Msgs.getMsg('form_field_control_granularity');
+          break;
+      }
+      ChromeVox.tts.speak(announce, QueueMode.FLUSH);
+    }
+      return false;
+    case 'announceBatteryDescription':
+      chrome.accessibilityPrivate.getBatteryDescription(function(
+          batteryDescription) {
+        new Output()
+            .withString(batteryDescription)
+            .withQueueMode(QueueMode.FLUSH)
+            .go();
+      });
+      break;
+    case 'resetTextToSpeechSettings':
+      ChromeVox.tts.resetTextToSpeechSettings();
+      return false;
   }
 
   // Require a current range.
   if (!ChromeVoxState.instance.currentRange_) {
     if (!ChromeVoxState.instance.talkBackEnabled) {
       new Output()
-          .withString(Msgs.getMsg('no_focus'))
+          .withString(Msgs.getMsg(
+              EventSourceState.get() == EventSourceType.TOUCH_GESTURE ?
+                  'no_focus_touch' :
+                  'no_focus'))
           .withQueueMode(QueueMode.FLUSH)
           .go();
     }
@@ -363,11 +425,13 @@ CommandHandler.onCommand = function(command) {
     case 'nextEditText':
       pred = AutomationPredicate.editText;
       predErrorMsg = 'no_next_edit_text';
+      CommandHandler.smartStickyMode_.startIgnoringRangeChanges();
       break;
     case 'previousEditText':
       dir = Dir.BACKWARD;
       pred = AutomationPredicate.editText;
       predErrorMsg = 'no_previous_edit_text';
+      CommandHandler.smartStickyMode_.startIgnoringRangeChanges();
       break;
     case 'nextFormField':
       pred = AutomationPredicate.formField;
@@ -555,10 +619,11 @@ CommandHandler.onCommand = function(command) {
         let actionNode = ChromeVoxState.instance.currentRange.start.node;
         // Scan for a clickable, which overrides the |actionNode|.
         let clickable = actionNode;
-        while (clickable && !clickable.clickable) {
+        while (clickable && !clickable.clickable &&
+               actionNode.root == clickable.root) {
           clickable = clickable.parent;
         }
-        if (clickable) {
+        if (clickable && actionNode.root == clickable.root) {
           clickable.doDefault();
           return false;
         }
@@ -653,12 +718,6 @@ CommandHandler.onCommand = function(command) {
         return false;
       }
       break;
-    case 'toggleKeyboardHelp':
-      (new PanelCommand(PanelCommandType.OPEN_MENUS)).send();
-      return false;
-    case 'showPanelMenuMostRecent':
-      (new PanelCommand(PanelCommandType.OPEN_MENUS_MOST_RECENT)).send();
-      return false;
     case 'showHeadingsList':
       (new PanelCommand(PanelCommandType.OPEN_MENUS, 'role_heading')).send();
       return false;
@@ -898,43 +957,18 @@ CommandHandler.onCommand = function(command) {
         case GestureGranularity.LINE:
           command = backwards ? 'previousLine' : 'nextLine';
           break;
+        case GestureGranularity.HEADING:
+          command = backwards ? 'previousHeading' : 'nextHeading';
+          break;
+        case GestureGranularity.LINK:
+          command = backwards ? 'previousLink' : 'nextLink';
+          break;
+        case GestureGranularity.FORM_FIELD_CONTROL:
+          command = backwards ? 'previousFormField' : 'nextFormField';
+          break;
       }
       CommandHandler.onCommand(command);
       return false;
-    case 'nextGranularity':
-    case 'previousGranularity': {
-      const backwards = command == 'previousGranularity';
-      let gran = GestureCommandHandler.granularity;
-      const next = backwards ?
-          (--gran >= 0 ? gran : GestureGranularity.COUNT - 1) :
-          ++gran % GestureGranularity.COUNT;
-      GestureCommandHandler.granularity =
-          /** @type {GestureGranularity} */ (next);
-
-      let announce = '';
-      switch (GestureCommandHandler.granularity) {
-        case GestureGranularity.CHARACTER:
-          announce = Msgs.getMsg('character_granularity');
-          break;
-        case GestureGranularity.WORD:
-          announce = Msgs.getMsg('word_granularity');
-          break;
-        case GestureGranularity.LINE:
-          announce = Msgs.getMsg('line_granularity');
-          break;
-      }
-      ChromeVox.tts.speak(announce, QueueMode.FLUSH);
-    }
-      return false;
-    case 'announceBatteryDescription':
-      chrome.accessibilityPrivate.getBatteryDescription(function(
-          batteryDescription) {
-        new Output()
-            .withString(batteryDescription)
-            .withQueueMode(QueueMode.FLUSH)
-            .go();
-      });
-      break;
     case 'announceRichTextDescription': {
       const node = ChromeVoxState.instance.currentRange.start.node;
       const optSubs = [];
@@ -997,12 +1031,10 @@ CommandHandler.onCommand = function(command) {
 
       // Get unicode-aware array of characters.
       const characterArray = [...word];
-      // We currently only load phonetic data for the browser UI language.
       const language = chrome.i18n.getUILanguage();
       for (let i = 0; i < characterArray.length; ++i) {
         const character = characterArray[i];
-        const phoneticText =
-            PhoneticData.getPhoneticDisambiguation(language, character);
+        const phoneticText = PhoneticData.forCharacter(character, language);
         // Speak the character followed by its phonetic disambiguation, if it
         // was found.
         new Output()
@@ -1036,9 +1068,6 @@ CommandHandler.onCommand = function(command) {
           .go();
     }
       return false;
-    case 'resetTextToSpeechSettings':
-      ChromeVox.tts.resetTextToSpeechSettings();
-      return false;
     case 'toggleAnnotationsWidget': {
       if (!UserAnnotationHandler.instance.enabled) {
         return false;
@@ -1048,6 +1077,29 @@ CommandHandler.onCommand = function(command) {
       (new PanelCommand(
            PanelCommandType.OPEN_ANNOTATIONS_UI, JSON.stringify(identifier)))
           .send();
+    }
+      return false;
+    case 'logLanguageInformationForCurrentNode': {
+      if (!CommandHandler.languageLoggingEnabled_) {
+        return false;
+      }
+
+      const node = ChromeVoxState.instance.currentRange.start.node;
+      const outString = `
+      Language information for node
+      Name: ${node.name}
+      Detected language: ${node.detectedLanguage || 'None'}
+      Author language: ${node.language || 'None'}
+      `;
+      new Output()
+          .withString(outString)
+          .withQueueMode(QueueMode.CATEGORY_FLUSH)
+          .go();
+      const annotation = node.languageAnnotationForStringAttribute('name');
+      const logString = outString.concat(`Language spans:
+        ${JSON.stringify(annotation)}`);
+      console.error(logString);
+      LogStore.getInstance().writeTextLog(logString, LogStore.LogType.TEXT);
     }
       return false;
     default:
@@ -1091,6 +1143,7 @@ CommandHandler.onCommand = function(command) {
                 .withQueueMode(QueueMode.FLUSH)
                 .go();
           }
+          CommandHandler.onFinishCommand();
           return false;
         }
 
@@ -1125,6 +1178,7 @@ CommandHandler.onCommand = function(command) {
               .withString(Msgs.getMsg(predErrorMsg))
               .withQueueMode(QueueMode.FLUSH)
               .go();
+          CommandHandler.onFinishCommand();
           return false;
         }
       }
@@ -1156,6 +1210,7 @@ CommandHandler.onCommand = function(command) {
               // Jump or if there is a valid current range, then move from it
               // since we have refreshed node data.
               CommandHandler.onCommand(command);
+              CommandHandler.onFinishCommand();
               return;
             }
 
@@ -1185,6 +1240,7 @@ CommandHandler.onCommand = function(command) {
       } else {
         scrollable.scrollBackward(callback);
       }
+      CommandHandler.onFinishCommand();
       return false;
     }
   }
@@ -1194,7 +1250,15 @@ CommandHandler.onCommand = function(command) {
         current, undefined, speechProps, skipSettingSelection);
   }
 
+  CommandHandler.onFinishCommand();
   return false;
+};
+
+/**
+ * Finishes processing of a command.
+ */
+CommandHandler.onFinishCommand = function() {
+  CommandHandler.smartStickyMode_.stopIgnoringRangeChanges();
 };
 
 /**
@@ -1409,5 +1473,26 @@ CommandHandler.init = function() {
       });
     }
   });
+
+  chrome.commandLinePrivate.hasSwitch(
+      'enable-experimental-accessibility-language-detection', (enabled) => {
+        if (enabled) {
+          CommandHandler.languageLoggingEnabled_ = true;
+        }
+      });
+  chrome.commandLinePrivate.hasSwitch(
+      'enable-experimental-accessibility-language-detection-dynamic',
+      (enabled) => {
+        if (enabled) {
+          CommandHandler.languageLoggingEnabled_ = true;
+        }
+      });
+
+  chrome.chromeosInfoPrivate.get(['sessionType'], (result) => {
+    /** @type {boolean} */
+    CommandHandler.isKioskSession_ =
+        result['sessionType'] == chrome.chromeosInfoPrivate.SessionType.KIOSK;
+  });
 };
+
 });  // goog.scope

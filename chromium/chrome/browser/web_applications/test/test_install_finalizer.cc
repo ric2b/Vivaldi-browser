@@ -7,7 +7,8 @@
 #include "chrome/browser/web_applications/test/test_install_finalizer.h"
 
 #include "base/callback.h"
-#include "base/logging.h"
+#include "base/check.h"
+#include "base/notreached.h"
 #include "base/test/bind_test_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
@@ -124,14 +125,6 @@ void TestInstallFinalizer::ReparentTab(const AppId& app_id,
                                        bool shortcut_created,
                                        content::WebContents* web_contents) {
   ++num_reparent_tab_calls_;
-}
-
-bool TestInstallFinalizer::CanRevealAppShim() const {
-  return true;
-}
-
-void TestInstallFinalizer::RevealAppShim(const AppId& app_id) {
-  ++num_reveal_appshim_calls_;
 }
 
 void TestInstallFinalizer::SetNextFinalizeInstallResult(

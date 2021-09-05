@@ -83,7 +83,6 @@
 #include "components/sync/model_impl/forwarding_model_type_controller_delegate.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
 #include "components/sync_preferences/pref_service_syncable.h"
-#include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/session_sync_service.h"
 #include "components/sync_user_events/user_event_service.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -362,9 +361,13 @@ ChromeSyncClient::CreateDataTypeControllers(syncer::SyncService* sync_service) {
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   controllers.push_back(std::make_unique<SupervisedUserSyncModelTypeController>(
-      syncer::SUPERVISED_USER_SETTINGS, profile_, dump_stack, this));
+      syncer::SUPERVISED_USER_SETTINGS, profile_, dump_stack,
+      model_type_store_factory,
+      GetSyncableServiceForType(syncer::SUPERVISED_USER_SETTINGS)));
   controllers.push_back(std::make_unique<SupervisedUserSyncModelTypeController>(
-      syncer::SUPERVISED_USER_WHITELISTS, profile_, dump_stack, this));
+      syncer::SUPERVISED_USER_WHITELISTS, profile_, dump_stack,
+      model_type_store_factory,
+      GetSyncableServiceForType(syncer::SUPERVISED_USER_WHITELISTS)));
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -448,6 +451,8 @@ ChromeSyncClient::CreateDataTypeControllers(syncer::SyncService* sync_service) {
   }
 #endif  // defined(OS_CHROMEOS)
 
+// Chrome prefers OS provided spell checkers where they exist. So only sync the
+// custom dictionary on platforms that typically don't provide one.
 #if defined(OS_LINUX) || defined(OS_WIN)
   // Dictionary sync is enabled by default.
   if (!disabled_types.Has(syncer::DICTIONARY)) {
@@ -506,6 +511,17 @@ ChromeSyncClient::CreateDataTypeControllers(syncer::SyncService* sync_service) {
           /*delegate_for_transport_mode=*/
           std::make_unique<ForwardingModelTypeControllerDelegate>(delegate),
           profile_->GetPrefs(), sync_service));
+    }
+  } else {
+    // SplitSettingsSync is disabled.
+    if (!disabled_types.Has(syncer::WIFI_CONFIGURATIONS) &&
+        base::FeatureList::IsEnabled(switches::kSyncWifiConfigurations) &&
+        WifiConfigurationSyncServiceFactory::ShouldRunInProfile(profile_)) {
+      syncer::ModelTypeControllerDelegate* delegate =
+          GetControllerDelegateForModelType(syncer::WIFI_CONFIGURATIONS).get();
+      controllers.push_back(std::make_unique<syncer::ModelTypeController>(
+          syncer::WIFI_CONFIGURATIONS,
+          std::make_unique<ForwardingModelTypeControllerDelegate>(delegate)));
     }
   }
 #endif  // defined(OS_CHROMEOS)

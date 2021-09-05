@@ -11,7 +11,9 @@
 #include <memory>
 #include <utility>
 
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/notreached.h"
 #include "base/numerics/math_constants.h"
 #include "base/numerics/safe_math.h"
 #include "base/strings/string_number_conversions.h"
@@ -25,6 +27,7 @@
 #include "third_party/pdfium/public/cpp/fpdf_scopers.h"
 #include "third_party/pdfium/public/fpdf_annot.h"
 #include "third_party/pdfium/public/fpdf_catalog.h"
+#include "ui/gfx/range/range.h"
 
 using printing::ConvertUnitDouble;
 using printing::kPointsPerInch;
@@ -201,6 +204,64 @@ std::string GetFormFieldProperty(GetFormFieldPropertyFunction function) {
   return base::UTF16ToUTF8(data);
 }
 
+// Count overlaps across text annotations.
+template <typename T, typename U>
+uint32_t CountOverlaps(const std::vector<T>& first_set,
+                       const std::vector<U>& second_set) {
+  // This method assumes vectors passed are sorted by |start_char_index|.
+  uint32_t overlaps = 0;
+  // Count overlaps between |first_set| and |second_set|.
+  for (const auto& first_set_object : first_set) {
+    gfx::Range first_range(
+        first_set_object.start_char_index,
+        first_set_object.start_char_index + first_set_object.char_count);
+    for (const auto& second_set_object : second_set) {
+      gfx::Range second_range(
+          second_set_object.start_char_index,
+          second_set_object.start_char_index + second_set_object.char_count);
+      if (first_range.Intersects(second_range)) {
+        overlaps++;
+      } else if (first_range.start() < second_range.start()) {
+        // Both range vectors are sorted by |start_char_index|. In case they
+        // don't overlap, and the |second_range| starts after the |first_range|,
+        // then all successive |second_set_object| will not overlap with
+        // |first_range|.
+        break;
+      }
+    }
+  }
+  return overlaps;
+}
+
+// Count overlaps within text annotations.
+template <typename T>
+uint32_t CountInternalTextOverlaps(const std::vector<T>& text_objects) {
+  // This method assumes text_objects is sorted by |start_char_index|.
+  uint32_t overlaps = 0;
+  for (size_t i = 0; i < text_objects.size(); ++i) {
+    gfx::Range range1(
+        text_objects[i].start_char_index,
+        text_objects[i].start_char_index + text_objects[i].char_count);
+    for (size_t j = i + 1; j < text_objects.size(); ++j) {
+      DCHECK_GE(text_objects[j].start_char_index,
+                text_objects[i].start_char_index);
+      gfx::Range range2(
+          text_objects[j].start_char_index,
+          text_objects[j].start_char_index + text_objects[j].char_count);
+      if (range1.Intersects(range2)) {
+        overlaps++;
+      } else {
+        // The input is sorted by |start_char_index|. In case |range1| and
+        // |range2| do not overlap, and |range2| starts after |range1|, then
+        // successive ranges in the inner loop will also not overlap with
+        // |range1|.
+        break;
+      }
+    }
+  }
+  return overlaps;
+}
+
 }  // namespace
 
 PDFiumPage::LinkTarget::LinkTarget() : page(-1) {}
@@ -368,6 +429,24 @@ bool PDFiumPage::AreTextStyleEqual(
          char_style.stroke_color == style.stroke_color &&
          char_style.is_italic == style.is_italic &&
          char_style.is_bold == style.is_bold;
+}
+
+void PDFiumPage::LogOverlappingAnnotations() {
+  if (logged_overlapping_annotations_)
+    return;
+  logged_overlapping_annotations_ = true;
+
+  DCHECK(calculated_page_object_text_run_breaks_);
+
+  std::vector<Link> links = links_;
+  std::sort(links.begin(), links.end(), [](const Link& a, const Link& b) {
+    return a.start_char_index < b.start_char_index;
+  });
+  uint32_t overlap_count = CountLinkHighlightOverlaps(links, highlights_);
+  // We log this overlap count per page of the PDF. Typically we expect only a
+  // few overlaps because intersecting links/highlights are not that common.
+  base::UmaHistogramCustomCounts("PDF.LinkHighlightOverlapsInPage",
+                                 overlap_count, 1, 100, 50);
 }
 
 base::Optional<pp::PDF::PrivateAccessibilityTextRunInfo>
@@ -637,6 +716,35 @@ PDFiumPage::Area PDFiumPage::GetLinkTargetAtIndex(int link_index,
   return target->url.empty() ? DOCLINK_AREA : WEBLINK_AREA;
 }
 
+PDFiumPage::Area PDFiumPage::GetLinkTarget(FPDF_LINK link, LinkTarget* target) {
+  FPDF_DEST dest_link = FPDFLink_GetDest(engine_->doc(), link);
+  if (dest_link)
+    return GetDestinationTarget(dest_link, target);
+
+  FPDF_ACTION action = FPDFLink_GetAction(link);
+  if (!action)
+    return NONSELECTABLE_AREA;
+
+  switch (FPDFAction_GetType(action)) {
+    case PDFACTION_GOTO: {
+      FPDF_DEST dest_action = FPDFAction_GetDest(engine_->doc(), action);
+      if (dest_action)
+        return GetDestinationTarget(dest_action, target);
+      // TODO(crbug.com/55776): We don't fully support all types of the
+      // in-document links.
+      return NONSELECTABLE_AREA;
+    }
+    case PDFACTION_URI:
+      return GetURITarget(action, target);
+      // TODO(crbug.com/767191): Support PDFACTION_LAUNCH.
+      // TODO(crbug.com/142344): Support PDFACTION_REMOTEGOTO.
+    case PDFACTION_LAUNCH:
+    case PDFACTION_REMOTEGOTO:
+    default:
+      return NONSELECTABLE_AREA;
+  }
+}
+
 PDFiumPage::Area PDFiumPage::GetCharIndex(const pp::Point& point,
                                           PageOrientation orientation,
                                           int* char_index,
@@ -729,35 +837,6 @@ int PDFiumPage::GetCharCount() {
 
 bool PDFiumPage::IsCharIndexInBounds(int index) {
   return index >= 0 && index < GetCharCount();
-}
-
-PDFiumPage::Area PDFiumPage::GetLinkTarget(FPDF_LINK link, LinkTarget* target) {
-  FPDF_DEST dest_link = FPDFLink_GetDest(engine_->doc(), link);
-  if (dest_link)
-    return GetDestinationTarget(dest_link, target);
-
-  FPDF_ACTION action = FPDFLink_GetAction(link);
-  if (!action)
-    return NONSELECTABLE_AREA;
-
-  switch (FPDFAction_GetType(action)) {
-    case PDFACTION_GOTO: {
-      FPDF_DEST dest_action = FPDFAction_GetDest(engine_->doc(), action);
-      if (dest_action)
-        return GetDestinationTarget(dest_action, target);
-      // TODO(crbug.com/55776): We don't fully support all types of the
-      // in-document links.
-      return NONSELECTABLE_AREA;
-    }
-    case PDFACTION_URI:
-      return GetURITarget(action, target);
-    // TODO(crbug.com/767191): Support PDFACTION_LAUNCH.
-    // TODO(crbug.com/142344): Support PDFACTION_REMOTEGOTO.
-    case PDFACTION_LAUNCH:
-    case PDFACTION_REMOTEGOTO:
-    default:
-      return NONSELECTABLE_AREA;
-  }
 }
 
 PDFiumPage::Area PDFiumPage::GetDestinationTarget(FPDF_DEST destination,
@@ -1311,6 +1390,14 @@ PDFiumPage::TextField::TextField() = default;
 PDFiumPage::TextField::TextField(const TextField& that) = default;
 
 PDFiumPage::TextField::~TextField() = default;
+
+// static
+uint32_t PDFiumPage::CountLinkHighlightOverlaps(
+    const std::vector<Link>& links,
+    const std::vector<Highlight>& highlights) {
+  return CountOverlaps(links, highlights) + CountInternalTextOverlaps(links) +
+         CountInternalTextOverlaps(highlights);
+}
 
 int ToPDFiumRotation(PageOrientation orientation) {
   // Could static_cast<int>(orientation), but using an exhaustive switch will

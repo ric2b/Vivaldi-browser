@@ -6,8 +6,12 @@
 #define CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_INSTALL_MANAGER_H_
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "base/callback_forward.h"
+#include "base/optional.h"
+#include "chrome/browser/web_applications/components/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
@@ -97,7 +101,8 @@ class InstallManager {
       WebappInstallSource install_source,
       OnceInstallCallback callback) = 0;
 
-  // These params are a subset of ExternalInstallOptions.
+  // See related ExternalInstallOptions struct and
+  // ConvertExternalInstallOptionsToParams function.
   struct InstallParams {
     InstallParams();
     ~InstallParams();
@@ -108,9 +113,19 @@ class InstallManager {
     // URL to be used as start_url if manifest is unavailable.
     GURL fallback_start_url;
 
+    // App name to be used if manifest is unavailable.
+    base::Optional<base::string16> fallback_app_name;
+
+    bool locally_installed = true;
+    // These OS shortcut fields can't be true if |locally_installed| is false.
     bool add_to_applications_menu = true;
     bool add_to_desktop = true;
     bool add_to_quick_launch_bar = true;
+
+    // These have no effect outside of Chrome OS.
+    bool add_to_search = true;
+    bool add_to_management = true;
+    bool is_disabled = false;
 
     bool bypass_service_worker_check = false;
     bool require_manifest = false;

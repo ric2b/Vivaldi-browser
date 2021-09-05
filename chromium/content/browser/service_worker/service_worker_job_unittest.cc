@@ -8,8 +8,8 @@
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/logging.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -1183,17 +1183,15 @@ void WriteResponse(ServiceWorkerResponseWriter* writer,
                    const std::string& headers,
                    IOBuffer* body,
                    int length) {
-  std::unique_ptr<net::HttpResponseInfo> info =
-      std::make_unique<net::HttpResponseInfo>();
-  info->request_time = base::Time::Now();
-  info->response_time = base::Time::Now();
-  info->was_cached = false;
-  info->headers = new net::HttpResponseHeaders(headers);
-  scoped_refptr<HttpResponseInfoIOBuffer> info_buffer =
-      base::MakeRefCounted<HttpResponseInfoIOBuffer>(std::move(info));
+  auto response_head = network::mojom::URLResponseHead::New();
+  response_head->request_time = base::Time::Now();
+  response_head->response_time = base::Time::Now();
+  response_head->headers = new net::HttpResponseHeaders(headers);
+  response_head->content_length = length;
 
   int rv = -1234;
-  writer->WriteInfo(info_buffer.get(), base::BindOnce(&OnIOComplete, &rv));
+  writer->WriteResponseHead(*response_head, length,
+                            base::BindOnce(&OnIOComplete, &rv));
   RunNestedUntilIdle();
   EXPECT_LT(0, rv);
 
@@ -1281,7 +1279,8 @@ class UpdateJobTestHelper : public EmbeddedWorkerTestHelper,
         blink::mojom::ServiceWorkerRegistrationObjectInfoPtr,
         blink::mojom::ServiceWorkerObjectInfoPtr,
         blink::mojom::FetchHandlerExistence,
-        std::unique_ptr<blink::PendingURLLoaderFactoryBundle>) override {
+        std::unique_ptr<blink::PendingURLLoaderFactoryBundle>,
+        mojo::PendingReceiver<blink::mojom::ReportingObserver>) override {
       client_->SimulateFailureOfScriptEvaluation();
     }
 
@@ -1366,12 +1365,11 @@ class UpdateJobTestHelper : public EmbeddedWorkerTestHelper,
   // ServiceWorkerRegistration::Listener overrides
   void OnVersionAttributesChanged(
       ServiceWorkerRegistration* registration,
-      blink::mojom::ChangedServiceWorkerObjectsMaskPtr changed_mask,
-      const ServiceWorkerRegistrationInfo& info) override {
+      blink::mojom::ChangedServiceWorkerObjectsMaskPtr changed_mask) override {
     AttributeChangeLogEntry entry;
     entry.registration_id = registration->id();
     entry.mask = std::move(changed_mask);
-    entry.info = info;
+    entry.info = registration->GetInfo();
     attribute_change_log_.push_back(std::move(entry));
   }
 

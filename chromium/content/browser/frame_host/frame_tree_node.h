@@ -20,9 +20,9 @@
 #include "content/common/content_export.h"
 #include "content/common/frame_replication_state.h"
 #include "services/network/public/mojom/content_security_policy.mojom-forward.h"
-#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/common/frame/user_activation_state.h"
+#include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-forward.h"
@@ -69,19 +69,23 @@ class CONTENT_EXPORT FrameTreeNode {
   // regardless of which FrameTree it is in.
   static FrameTreeNode* GloballyFindByID(int frame_tree_node_id);
 
+  // Returns the FrameTreeNode for the given |rfh|. Same as
+  // rfh->frame_tree_node(), but also supports nullptrs.
+  static FrameTreeNode* From(RenderFrameHost* rfh);
+
   // Callers are are expected to initialize sandbox flags separately after
   // calling the constructor.
   FrameTreeNode(
       FrameTree* frame_tree,
       Navigator* navigator,
-      FrameTreeNode* parent,
-      blink::WebTreeScopeType scope,
+      RenderFrameHostImpl* parent,
+      blink::mojom::TreeScopeType scope,
       const std::string& name,
       const std::string& unique_name,
       bool is_created_by_script,
       const base::UnguessableToken& devtools_frame_token,
       const blink::mojom::FrameOwnerProperties& frame_owner_properties,
-      blink::FrameOwnerElementType owner_type);
+      blink::mojom::FrameOwnerElementType owner_type);
 
   ~FrameTreeNode();
 
@@ -116,7 +120,7 @@ class CONTENT_EXPORT FrameTreeNode {
 
   unsigned int depth() const { return depth_; }
 
-  FrameTreeNode* parent() const { return parent_; }
+  RenderFrameHostImpl* parent() const { return parent_; }
 
   FrameTreeNode* opener() const { return opener_; }
 
@@ -352,7 +356,7 @@ class CONTENT_EXPORT FrameTreeNode {
   // pending_frame_policy() for those. To see the flags which will take effect
   // on navigation (which does not include the CSP-set flags), use
   // effective_frame_policy().
-  blink::mojom::WebSandboxFlags active_sandbox_flags() const {
+  network::mojom::WebSandboxFlags active_sandbox_flags() const {
     return replication_state_.active_sandbox_flags;
   }
 
@@ -363,7 +367,7 @@ class CONTENT_EXPORT FrameTreeNode {
   // will be cleared, and the flags in the pending frame policy will be applied
   // to the frame.
   void UpdateFramePolicyHeaders(
-      blink::mojom::WebSandboxFlags sandbox_flags,
+      network::mojom::WebSandboxFlags sandbox_flags,
       const blink::ParsedFeaturePolicy& parsed_header);
 
   // Returns whether the frame received a user gesture.
@@ -408,7 +412,7 @@ class CONTENT_EXPORT FrameTreeNode {
   // will never be reused - this saves memory.
   void PruneChildFrameNavigationEntries(NavigationEntryImpl* entry);
 
-  blink::FrameOwnerElementType frame_owner_element_type() const {
+  blink::mojom::FrameOwnerElementType frame_owner_element_type() const {
     return replication_state_.frame_owner_element_type;
   }
   // Only meaningful to call on a root frame. The value of |feature_state| will
@@ -416,18 +420,6 @@ class CONTENT_EXPORT FrameTreeNode {
   // feature policies.
   void SetOpenerFeaturePolicyState(
       const blink::FeaturePolicy::FeatureState& feature_state);
-
-  // Returns the embedding token for the frame. A frame is embedded if it is the
-  // child to a parent frame that is cross-process. As such, this will return
-  // base::nullopt for:
-  // - The main frame.
-  // - Child frames that are in the same process as their parent.
-  const base::Optional<base::UnguessableToken>& GetEmbeddingToken() const;
-
-  // Called by NavigationImpl::DidNavigate() on completion of a navigation to
-  // update the embedding token for the frame.
-  void SetEmbeddingToken(
-      const base::Optional<base::UnguessableToken>& embedding_token);
 
   void SetAdFrameType(blink::mojom::AdFrameType ad_frame_type);
 
@@ -471,8 +463,9 @@ class CONTENT_EXPORT FrameTreeNode {
   // even if the frame does a cross-process navigation.
   const int frame_tree_node_id_;
 
-  // The parent node of this frame. |nullptr| if this node is the root.
-  FrameTreeNode* const parent_;
+  // The RenderFrameHost owning this FrameTreeNode, which cannot change for the
+  // life of this FrameTreeNode. |nullptr| if this node is the root.
+  RenderFrameHostImpl* const parent_;
 
   // Number of edges from this node to the root. 0 if this is the root.
   const unsigned int depth_;
@@ -529,13 +522,6 @@ class CONTENT_EXPORT FrameTreeNode {
   // sent back from the renderer in the control calls. It should be never used
   // to look up the FrameTreeNode instance.
   base::UnguessableToken devtools_frame_token_;
-
-  // A token tracking the embedding relationship between a out-of-process
-  // frames. This is only accessible by the renderer for the active
-  // RenderFrameHost and the renderer for the RenderFrameProxyHost from
-  // RenderFrameProxyHostManager::GetProxyToParent(). Should only be set
-  // if the frame is embedded in a parent frame.
-  base::Optional<base::UnguessableToken> embedding_token_;
 
   // Tracks the scrolling and margin properties for this frame.  These
   // properties affect the child renderer but are stored on its parent's

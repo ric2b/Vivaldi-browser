@@ -182,11 +182,6 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
   ProcessorEntity* CreateEntity(const std::string& storage_key,
                                 const EntityData& data);
 
-  // Version of the above that generates a tag for |data|.
-  // Returns created entity or nullptr if generated storage key from the bridge
-  // is empty (i.e. the remote update is invalid and should be ignored).
-  ProcessorEntity* CreateEntity(const EntityData& data);
-
   // Removes metadata for all entries unless they are unsynced.
   // This is used to limit the amount of data stored in sync, and this does not
   // tell the bridge to delete the actual data.
@@ -209,6 +204,10 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
   // GetEntityForStorageKey, GetEntityForTagHash and maybe more).
   void MergeDataWithMetadataForDebugging(AllNodesCallback callback,
                                          std::unique_ptr<DataBatch> batch);
+
+  // Checks for valid cache GUID and data type id. Resets state if metadata is
+  // invalid.
+  void CheckForInvalidPersistedMetadata();
 
   /////////////////////
   // Processor state //

@@ -6,10 +6,10 @@
 
 #include <unistd.h>
 
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
-#include "base/logging.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
@@ -219,7 +219,7 @@ void SetupSandboxParameters(service_manager::SandboxType sandbox_type,
                             sandbox::SeatbeltExecClient* client) {
   switch (sandbox_type) {
     case service_manager::SandboxType::kAudio:
-    case service_manager::SandboxType::kSoda:
+    case service_manager::SandboxType::kSpeechRecognition:
     case service_manager::SandboxType::kNaClLoader:
     case service_manager::SandboxType::kPrintCompositor:
     case service_manager::SandboxType::kRenderer:
@@ -244,7 +244,7 @@ void SetupSandboxParameters(service_manager::SandboxType sandbox_type,
       SetupUtilitySandboxParameters(client, command_line);
       break;
     case service_manager::SandboxType::kNoSandbox:
-    case service_manager::SandboxType::kInvalid:
+    case service_manager::SandboxType::kVideoCapture:
       CHECK(false) << "Unhandled parameters for sandbox_type "
                    << static_cast<int>(sandbox_type);
   }

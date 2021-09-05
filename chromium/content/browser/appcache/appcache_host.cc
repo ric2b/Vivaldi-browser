@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -104,6 +104,8 @@ AppCacheHost::AppCacheHost(
         ChildProcessSecurityPolicyImpl::GetInstance()->CreateHandle(
             process_id_);
   }
+  is_origin_trial_required_ =
+      service_->appcache_policy()->IsOriginTrialRequiredForAppCache();
 }
 
 AppCacheHost::~AppCacheHost() {
@@ -215,7 +217,8 @@ void AppCacheHost::SelectCache(const GURL& document_url,
 
     AppCachePolicy* policy = service()->appcache_policy();
     if (policy && !policy->CanCreateAppCache(
-                      manifest_url, site_for_cookies_.RepresentativeUrl())) {
+                      manifest_url, site_for_cookies_.RepresentativeUrl(),
+                      top_frame_origin_)) {
       FinishCacheSelection(nullptr, nullptr, mojo::ReportBadMessageCallback());
       frontend()->EventRaised(
           blink::mojom::AppCacheEventID::APPCACHE_CHECKING_EVENT);
@@ -404,6 +407,7 @@ std::unique_ptr<AppCacheRequestHandler> AppCacheHost::CreateRequestHandler(
     // for checking whether the creation of the appcache is allowed.
     site_for_cookies_ = request->GetSiteForCookies();
     site_for_cookies_initialized_ = true;
+    top_frame_origin_ = request->GetTopFrameOrigin();
     return base::WrapUnique(new AppCacheRequestHandler(
         this, resource_type, should_reset_appcache, std::move(request)));
   }
@@ -710,6 +714,10 @@ void AppCacheHost::AssociateCacheHelper(AppCache* cache,
 
 void AppCacheHost::OnContentBlocked(const GURL& manifest_url) {
   OnAppCacheAccessed(manifest_url, /*blocked=*/true);
+}
+
+bool AppCacheHost::IsOriginTrialRequiredForAppCache() {
+  return is_origin_trial_required_;
 }
 
 void AppCacheHost::OnAppCacheAccessed(const GURL& manifest_url, bool blocked) {

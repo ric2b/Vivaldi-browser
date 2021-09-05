@@ -31,6 +31,7 @@
 #include "content/common/savable_subframe.h"
 #include "content/public/common/common_param_traits.h"
 #include "content/public/common/frame_navigate_params.h"
+#include "content/public/common/impression.h"
 #include "content/public/common/navigation_policy.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/previews_state.h"
@@ -47,7 +48,6 @@
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
-#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/public/common/messaging/transferable_message.h"
@@ -56,11 +56,14 @@
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/mojom/feature_policy/document_policy_feature.mojom.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-shared.h"
 #include "third_party/blink/public/mojom/feature_policy/policy_disposition.mojom.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
+#include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom.h"
+#include "third_party/blink/public/mojom/frame/tree_scope_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
@@ -68,9 +71,8 @@
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
 #include "third_party/blink/public/platform/viewport_intersection_state.h"
-#include "third_party/blink/public/platform/web_intrinsic_sizing_info.h"
+#include "third_party/blink/public/platform/web_float_size.h"
 #include "third_party/blink/public/web/web_frame_owner_properties.h"
-#include "third_party/blink/public/web/web_tree_scope_type.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
@@ -100,8 +102,8 @@ using FrameMsg_GetSerializedHtmlWithLocalLinks_FrameRoutingIdMap =
 #define IPC_MESSAGE_START FrameMsgStart
 IPC_ENUM_TRAITS_MAX_VALUE(content::FrameDeleteIntention,
                           content::FrameDeleteIntention::kMaxValue)
-IPC_ENUM_TRAITS_MAX_VALUE(blink::FrameOwnerElementType,
-                          blink::FrameOwnerElementType::kMaxValue)
+IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::FrameOwnerElementType,
+                          blink::mojom::FrameOwnerElementType::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::AdFrameType,
                           blink::mojom::AdFrameType::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::ContextMenuDataMediaType,
@@ -114,9 +116,9 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::ScrollbarMode,
                           blink::mojom::ScrollbarMode::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(content::StopFindAction,
                           content::STOP_FIND_ACTION_LAST)
-IPC_ENUM_TRAITS(blink::mojom::WebSandboxFlags)  // Bitmask
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebTreeScopeType,
-                          blink::WebTreeScopeType::kMaxValue)
+IPC_ENUM_TRAITS(network::mojom::WebSandboxFlags)  // Bitmask.
+IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::TreeScopeType,
+                          blink::mojom::TreeScopeType::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(ui::MenuSourceType, ui::MENU_SOURCE_TYPE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(network::mojom::CSPDirectiveName,
                           network::mojom::CSPDirectiveName::kMaxValue)
@@ -148,16 +150,16 @@ IPC_STRUCT_TRAITS_BEGIN(content::NavigationDownloadPolicy)
   IPC_STRUCT_TRAITS_MEMBER(blocking_downloads_in_sandbox_enabled)
 IPC_STRUCT_TRAITS_END()
 
+IPC_STRUCT_TRAITS_BEGIN(content::Impression)
+  IPC_STRUCT_TRAITS_MEMBER(conversion_destination)
+  IPC_STRUCT_TRAITS_MEMBER(reporting_origin)
+  IPC_STRUCT_TRAITS_MEMBER(impression_data)
+  IPC_STRUCT_TRAITS_MEMBER(expiry)
+IPC_STRUCT_TRAITS_END()
+
 IPC_STRUCT_TRAITS_BEGIN(blink::WebFloatSize)
   IPC_STRUCT_TRAITS_MEMBER(width)
   IPC_STRUCT_TRAITS_MEMBER(height)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(blink::WebIntrinsicSizingInfo)
-  IPC_STRUCT_TRAITS_MEMBER(size)
-  IPC_STRUCT_TRAITS_MEMBER(aspect_ratio)
-  IPC_STRUCT_TRAITS_MEMBER(has_width)
-  IPC_STRUCT_TRAITS_MEMBER(has_height)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::UntrustworthyContextMenuParams)
@@ -375,7 +377,7 @@ IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(blink::ParsedFeaturePolicyDeclaration)
   IPC_STRUCT_TRAITS_MEMBER(feature)
-  IPC_STRUCT_TRAITS_MEMBER(values)
+  IPC_STRUCT_TRAITS_MEMBER(allowed_origins)
   IPC_STRUCT_TRAITS_MEMBER(fallback_value)
   IPC_STRUCT_TRAITS_MEMBER(opaque_value)
 IPC_STRUCT_TRAITS_END()
@@ -405,6 +407,7 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_BEGIN(FrameHostMsg_OpenURL_Params)
   IPC_STRUCT_MEMBER(GURL, url)
   IPC_STRUCT_MEMBER(url::Origin, initiator_origin)
+  IPC_STRUCT_MEMBER(int32_t, initiator_routing_id)
   IPC_STRUCT_MEMBER(scoped_refptr<network::ResourceRequestBody>, post_body)
   IPC_STRUCT_MEMBER(std::string, extra_headers)
   IPC_STRUCT_MEMBER(content::Referrer, referrer)
@@ -414,6 +417,7 @@ IPC_STRUCT_BEGIN(FrameHostMsg_OpenURL_Params)
   IPC_STRUCT_MEMBER(blink::TriggeringEventInfo, triggering_event_info)
   IPC_STRUCT_MEMBER(mojo::MessagePipeHandle, blob_url_token)
   IPC_STRUCT_MEMBER(std::string, href_translate)
+  IPC_STRUCT_MEMBER(base::Optional<content::Impression>, impression)
   IPC_STRUCT_MEMBER(content::NavigationDownloadPolicy, download_policy)
 IPC_STRUCT_END()
 
@@ -424,19 +428,21 @@ IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_BEGIN(FrameHostMsg_CreateChildFrame_Params)
   IPC_STRUCT_MEMBER(int32_t, parent_routing_id)
-  IPC_STRUCT_MEMBER(blink::WebTreeScopeType, scope)
+  IPC_STRUCT_MEMBER(blink::mojom::TreeScopeType, scope)
   IPC_STRUCT_MEMBER(std::string, frame_name)
   IPC_STRUCT_MEMBER(std::string, frame_unique_name)
   IPC_STRUCT_MEMBER(bool, is_created_by_script)
   IPC_STRUCT_MEMBER(blink::FramePolicy, frame_policy)
   IPC_STRUCT_MEMBER(blink::mojom::FrameOwnerProperties, frame_owner_properties)
-  IPC_STRUCT_MEMBER(blink::FrameOwnerElementType, frame_owner_element_type)
+  IPC_STRUCT_MEMBER(blink::mojom::FrameOwnerElementType,
+                    frame_owner_element_type)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(FrameHostMsg_CreateChildFrame_Params_Reply)
   IPC_STRUCT_MEMBER(int32_t, child_routing_id)
   IPC_STRUCT_MEMBER(mojo::MessagePipeHandle, new_interface_provider)
   IPC_STRUCT_MEMBER(mojo::MessagePipeHandle, browser_interface_broker_handle)
+  IPC_STRUCT_MEMBER(base::UnguessableToken, frame_token)
   IPC_STRUCT_MEMBER(base::UnguessableToken, devtools_frame_token)
 IPC_STRUCT_END()
 
@@ -455,33 +461,6 @@ IPC_STRUCT_BEGIN(FrameMsg_MixedContentFound_Params)
   IPC_STRUCT_MEMBER(bool, had_redirect)
   IPC_STRUCT_MEMBER(network::mojom::SourceLocation, source_location)
 IPC_STRUCT_END()
-
-#if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
-// This message is used for supporting popup menus on Mac OS X and Android using
-// native controls. See the FrameHostMsg_ShowPopup message.
-IPC_STRUCT_BEGIN(FrameHostMsg_ShowPopup_Params)
-  // Position on the screen.
-  IPC_STRUCT_MEMBER(gfx::Rect, bounds)
-
-  // The height of each item in the menu.
-  IPC_STRUCT_MEMBER(int, item_height)
-
-  // The size of the font to use for those items.
-  IPC_STRUCT_MEMBER(double, item_font_size)
-
-  // The currently selected (displayed) item in the menu.
-  IPC_STRUCT_MEMBER(int, selected_item)
-
-  // The entire list of items in the popup menu.
-  IPC_STRUCT_MEMBER(std::vector<content::MenuItem>, popup_items)
-
-  // Whether items should be right-aligned.
-  IPC_STRUCT_MEMBER(bool, right_aligned)
-
-  // Whether this is a multi-select popup.
-  IPC_STRUCT_MEMBER(bool, allow_multiple_selection)
-IPC_STRUCT_END()
-#endif
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 IPC_STRUCT_TRAITS_BEGIN(content::PepperRendererInstanceData)
@@ -515,17 +494,6 @@ IPC_MESSAGE_ROUTED1(FrameMsg_UpdateOpener, int /* opener_routing_id */)
 // commit, activation and frame swap of the current DOM tree in blink.
 IPC_MESSAGE_ROUTED1(FrameMsg_VisualStateRequest, uint64_t /* id */)
 
-// Requests that a provisional RenderFrame swap itself into the frame tree,
-// replacing the RenderFrameProxy that it is associated with.  This is used
-// with remote-to-local frame navigations when the RenderFrameProxy corresponds
-// to a non-live (crashed) frame.  In that case, the browser process will send
-// this message as part of an early commit to stop showing the sad iframe
-// without waiting for the provisional RenderFrame's navigation to commit.
-IPC_MESSAGE_ROUTED0(FrameMsg_SwapIn)
-
-// Instructs the frame to stop the load in progress, if any.
-IPC_MESSAGE_ROUTED0(FrameMsg_Stop)
-
 // TODO(https://crbug.com/995428): Deprecated.
 // Tells the renderer to reload the frame.
 IPC_MESSAGE_ROUTED0(FrameMsg_Reload)
@@ -535,17 +503,6 @@ IPC_MESSAGE_ROUTED0(FrameMsg_Reload)
 IPC_MESSAGE_ROUTED2(FrameMsg_DidUpdateName,
                     std::string /* name */,
                     std::string /* unique_name */)
-
-#if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
-#if defined(OS_MACOSX)
-IPC_MESSAGE_ROUTED1(FrameMsg_SelectPopupMenuItem,
-                    int /* selected index, -1 means no selection */)
-#else
-IPC_MESSAGE_ROUTED2(FrameMsg_SelectPopupMenuItems,
-                    bool /* user canceled the popup */,
-                    std::vector<int> /* selected indices */)
-#endif
-#endif
 
 // Request to enumerate and return links to all savable resources in the frame
 // Note: this covers only the immediate frame / doesn't cover subframes.
@@ -558,18 +515,10 @@ IPC_MESSAGE_ROUTED3(FrameMsg_GetSerializedHtmlWithLocalLinks,
                     FrameMsg_GetSerializedHtmlWithLocalLinks_FrameRoutingIdMap,
                     bool /* save_with_empty_url */)
 
-// Request to continue running the sequential focus navigation algorithm in
-// this frame.  |source_routing_id| identifies the frame that issued this
-// request.  This message is sent when pressing <tab> or <shift-tab> needs to
-// find the next focusable element in a cross-process frame.
-IPC_MESSAGE_ROUTED2(FrameMsg_AdvanceFocus,
-                    blink::mojom::FocusType /* type */,
-                    int32_t /* source_routing_id */)
-
 #if BUILDFLAG(ENABLE_PLUGINS)
-// Notifies the renderer of updates to the Plugin Power Saver origin whitelist.
-IPC_MESSAGE_ROUTED1(FrameMsg_UpdatePluginContentOriginWhitelist,
-                    std::set<url::Origin> /* origin_whitelist */)
+// Notifies the renderer of updates to the Plugin Power Saver origin allowlist.
+IPC_MESSAGE_ROUTED1(FrameMsg_UpdatePluginContentOriginAllowlist,
+                    std::set<url::Origin> /* origin_allowlist */)
 
 // This message notifies that the frame that the volume of the Pepper instance
 // for |pp_instance| should be changed to |volume|.
@@ -630,21 +579,6 @@ IPC_MESSAGE_ROUTED2(
     FrameHostMsg_DidChangeFramePolicy,
     int32_t /* subframe_routing_id */,
     blink::FramePolicy /* updated sandbox flags and container policy */)
-
-// Notifies the browser that frame owner properties have changed for a subframe
-// of this frame.
-IPC_MESSAGE_ROUTED2(
-    FrameHostMsg_DidChangeFrameOwnerProperties,
-    int32_t /* subframe_routing_id */,
-    blink::mojom::FrameOwnerProperties /* frame_owner_properties */)
-
-// Following message is used to communicate the values received by the
-// callback binding the JS to Cpp.
-// An instance of browser that has an automation host listening to it can
-// have a javascript send a native value (string, number, boolean) to the
-// listener in Cpp. (DomAutomationController)
-IPC_MESSAGE_ROUTED1(FrameHostMsg_DomOperationResponse,
-                    std::string  /* json_string */)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 // Notification sent from a renderer to the browser that a Pepper plugin
@@ -830,16 +764,6 @@ IPC_SYNC_MESSAGE_ROUTED1_2(FrameHostMsg_RunBeforeUnloadConfirm,
                            bool /* out - success */,
                            base::string16 /* out - This is ignored.*/)
 
-// Sent when the renderer loads a resource from its memory cache.
-// The security info is non empty if the resource was originally loaded over
-// a secure connection.
-// Note: May only be sent once per URL per frame per committed load.
-IPC_MESSAGE_ROUTED4(FrameHostMsg_DidLoadResourceFromMemoryCache,
-                    GURL /* url */,
-                    std::string /* http method */,
-                    std::string /* mime type */,
-                    network::mojom::RequestDestination)
-
 // Sent as a response to FrameMsg_VisualStateRequest.
 // The message is delivered using RenderWidget::QueueMessage.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_VisualStateResponse, uint64_t /* id */)
@@ -905,15 +829,6 @@ IPC_MESSAGE_ROUTED0(FrameHostMsg_FrameDidCallFocus)
 IPC_MESSAGE_ROUTED2(FrameHostMsg_PrintCrossProcessSubframe,
                     gfx::Rect /* rect area of the frame content */,
                     int /* rendered document cookie */)
-
-#if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
-
-// Message to show/hide a popup menu using native controls.
-IPC_MESSAGE_ROUTED1(FrameHostMsg_ShowPopup,
-                    FrameHostMsg_ShowPopup_Params)
-IPC_MESSAGE_ROUTED0(FrameHostMsg_HidePopup)
-
-#endif
 
 // Adding a new message? Stick to the sort order above: first platform
 // independent FrameMsg, then ifdefs for platform specific FrameMsg, then

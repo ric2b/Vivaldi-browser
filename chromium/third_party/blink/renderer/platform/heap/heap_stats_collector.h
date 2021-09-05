@@ -61,7 +61,6 @@ class PLATFORM_EXPORT ThreadHeapStatsObserver {
   V(MarkWeakProcessing)               \
   V(UnifiedMarkingStep)               \
   V(VisitCrossThreadPersistents)      \
-  V(VisitDOMWrappers)                 \
   V(VisitPersistentRoots)             \
   V(VisitPersistents)                 \
   V(VisitRoots)                       \
@@ -131,7 +130,7 @@ class PLATFORM_EXPORT ThreadHeapStatsCollector {
     return nullptr;
   }
 
-  enum TraceCategory { kEnabled, kDisabled, kDevTools };
+  enum TraceCategory { kEnabled, kDisabled };
   enum ScopeContext { kMutatorThread, kConcurrentThread };
 
   // Trace a particular scope. Will emit a trace event and record the time in
@@ -182,7 +181,6 @@ class PLATFORM_EXPORT ThreadHeapStatsCollector {
   using EnabledScope = InternalScope<kEnabled>;
   using ConcurrentScope = InternalScope<kDisabled, kConcurrentThread>;
   using EnabledConcurrentScope = InternalScope<kEnabled, kConcurrentThread>;
-  using DevToolsScope = InternalScope<kDevTools>;
 
   // BlinkGCInV8Scope keeps track of time spent in Blink's GC when called by V8.
   // This is necessary to avoid double-accounting of Blink's time when computing
@@ -268,7 +266,6 @@ class PLATFORM_EXPORT ThreadHeapStatsCollector {
     size_t allocated_space_in_bytes_before_sweeping = 0;
     size_t partition_alloc_bytes_before_sweeping = 0;
     double live_object_rate = 0;
-    size_t wrapper_count_before_sweeping = 0;
     base::TimeDelta gc_nested_in_v8;
   };
 
@@ -372,9 +369,6 @@ class PLATFORM_EXPORT ThreadHeapStatsCollector {
   // Allocated space in bytes for all arenas.
   size_t allocated_space_bytes_ = 0;
 
-  size_t wrapper_count_ = 0;
-  size_t collected_wrapper_count_ = 0;
-
   bool is_started_ = false;
 
   // base::TimeDelta for RawScope. These don't need to be nested within a
@@ -395,11 +389,9 @@ ThreadHeapStatsCollector::InternalScope<trace_category,
                                         scope_category>::TraceCategory() {
   switch (trace_category) {
     case kEnabled:
-      return "blink_gc";
+      return "blink_gc,devtools.timeline";
     case kDisabled:
       return TRACE_DISABLED_BY_DEFAULT("blink_gc");
-    case kDevTools:
-      return "blink_gc,devtools.timeline";
   }
 }
 

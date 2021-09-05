@@ -34,6 +34,30 @@ namespace safe_browsing {
 class WebUIInfoSingleton;
 class ReferrerChainProvider;
 
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+struct DeepScanDebugData {
+  DeepScanDebugData();
+  DeepScanDebugData(const DeepScanDebugData&);
+  ~DeepScanDebugData();
+
+  base::Time request_time;
+  base::Optional<DeepScanningClientRequest> request;
+
+  base::Time response_time;
+  std::string response_status;
+  base::Optional<DeepScanningClientResponse> response;
+};
+#endif
+
+// The struct to combine a real time lookup request and the token associated
+// with it. The token is not part of the request proto because it is sent in the
+// header. The token will be displayed along with the request in the safe
+// browsing page.
+struct RTLookupRequestAndToken {
+  RTLookupRequest request;
+  std::string token;
+};
+
 class SafeBrowsingUIHandler : public content::WebUIMessageHandler {
  public:
   SafeBrowsingUIHandler(content::BrowserContext* context);
@@ -115,12 +139,9 @@ class SafeBrowsingUIHandler : public content::WebUIMessageHandler {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   // Get the deep scanning requests that have been collected since the oldest
   // currently open chrome://safe-browsing tab was opened.
-  void GetDeepScanRequests(const base::ListValue* args);
-
-  // Get the deep scanning responses that have been collected since the oldest
-  // currently open chrome://safe-browsing tab was opened.
-  void GetDeepScanResponses(const base::ListValue* args);
+  void GetDeepScans(const base::ListValue* args);
 #endif
+
   // Register callbacks for WebUI messages.
   void RegisterMessages() override;
 
@@ -165,7 +186,8 @@ class SafeBrowsingUIHandler : public content::WebUIMessageHandler {
 
   // Called when any new real time lookup pings are sent while one or more
   // WebUI tabs are open.
-  void NotifyRTLookupPingJsListener(int token, const RTLookupRequest& request);
+  void NotifyRTLookupPingJsListener(int token,
+                                    const RTLookupRequestAndToken& request);
 
   // Called when any new real time lookup responses are received while one or
   // more WebUI tabs are open.
@@ -182,18 +204,12 @@ class SafeBrowsingUIHandler : public content::WebUIMessageHandler {
   void NotifyReportingEventJsListener(const base::Value& event);
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
-  // Called when any new deep scan requests are sent while one or more WebUI
+  // Called when any deep scans are updated while one or more WebUI
   // tabs are open.
-  void NotifyDeepScanRequestJsListener(
-      const DeepScanningClientRequest& request);
-
-  // Called when any new PhishGuard responses are received while one or more
-  // WebUI tabs are open.
-  void NotifyDeepScanResponseJsListener(
-      const std::string& token,
-      const std::string& status,
-      const DeepScanningClientResponse& response);
+  void NotifyDeepScanJsListener(const std::string& token,
+                                const DeepScanDebugData& request);
 #endif
+
   // Callback when the CookieManager has returned the cookie.
   void OnGetCookie(const std::string& callback_id,
                    const std::vector<net::CanonicalCookie>& cookies);
@@ -220,13 +236,6 @@ class SafeBrowsingUI : public content::WebUIController {
 
 class WebUIInfoSingleton {
  public:
-#if BUILDFLAG(FULL_SAFE_BROWSING)
-  using DeepScanningRequestMap =
-      std::map<std::string, DeepScanningClientRequest>;
-  using StatusAndDeepScanningResponseMap =
-      std::map<std::string, std::pair<std::string, DeepScanningClientResponse>>;
-#endif
-
   static WebUIInfoSingleton* GetInstance();
 
   // Returns true when there is a listening chrome://safe-browsing tab.
@@ -284,7 +293,8 @@ class WebUIInfoSingleton {
 
   // Add the new ping to |rt_lookup_pings_|. Returns a token that can be used in
   // |AddToRTLookupResponses| to correlate a ping and response.
-  int AddToRTLookupPings(const RTLookupRequest request);
+  int AddToRTLookupPings(const RTLookupRequest request,
+                         const std::string oauth_token);
 
   // Add the new response to |rt_lookup_responses_| and send it to all the open
   // chrome://safe-browsing tabs.
@@ -318,7 +328,7 @@ class WebUIInfoSingleton {
   // and response.
   void AddToDeepScanRequests(const DeepScanningClientRequest& request);
 
-  // Add the new response to |deep_scan_responses_| and send it to all the open
+  // Add the new response to |deep_scan_requests_| and send it to all the open
   // chrome://safe-browsing tabs.
   void AddToDeepScanResponses(const std::string& token,
                               const std::string& status,
@@ -386,7 +396,7 @@ class WebUIInfoSingleton {
 
   // Get the list of real time lookup pings since the oldest currently open
   // chrome://safe-browsing tab was opened.
-  const std::vector<RTLookupRequest>& rt_lookup_pings() const {
+  const std::vector<RTLookupRequestAndToken>& rt_lookup_pings() const {
     return rt_lookup_pings_;
   }
 
@@ -400,14 +410,9 @@ class WebUIInfoSingleton {
   // Get the collection of deep scanning requests since the oldest currently
   // open chrome://safe-browsing tab was opened. Returns a map from a unique
   // token to the request proto.
-  const DeepScanningRequestMap& deep_scan_requests() const {
+  const base::flat_map<std::string, DeepScanDebugData>& deep_scan_requests()
+      const {
     return deep_scan_requests_;
-  }
-
-  // Get the list of deep scan responses since the oldest currently open
-  // chrome://safe-browsing tab was opened.
-  const StatusAndDeepScanningResponseMap& deep_scan_responses() const {
-    return deep_scan_responses_;
   }
 #endif
 
@@ -485,7 +490,7 @@ class WebUIInfoSingleton {
 
   // List of real time lookup pings sent since the oldest currently open
   // chrome://safe-browsing tab was opened.
-  std::vector<RTLookupRequest> rt_lookup_pings_;
+  std::vector<RTLookupRequestAndToken> rt_lookup_pings_;
 
   // List of real time lookup responses received since the oldest currently open
   // chrome://safe-browsing tab was opened.
@@ -507,12 +512,8 @@ class WebUIInfoSingleton {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   // Map of deep scan requests sent since the oldest currently open
   // chrome://safe-browsing tab was opened. Maps from the unique token per
-  // request to the request proto.
-  DeepScanningRequestMap deep_scan_requests_;
-
-  // List of deep scan responses received since the oldest currently open
-  // chrome://safe-browsing tab was opened.
-  StatusAndDeepScanningResponseMap deep_scan_responses_;
+  // request to the data about the request.
+  base::flat_map<std::string, DeepScanDebugData> deep_scan_requests_;
 #endif
 
   // The current referrer chain provider, if any. Can be nullptr.

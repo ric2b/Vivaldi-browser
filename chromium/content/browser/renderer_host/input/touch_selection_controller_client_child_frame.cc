@@ -4,7 +4,8 @@
 
 #include "content/browser/renderer_host/input/touch_selection_controller_client_child_frame.h"
 
-#include "base/logging.h"
+#include "base/check.h"
+#include "base/notreached.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
@@ -12,6 +13,7 @@
 #include "content/public/browser/touch_selection_controller_client_manager.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "ui/base/clipboard/clipboard.h"
+#include "ui/base/pointer/touch_editing_controller.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/strings/grit/ui_strings.h"
 
@@ -150,11 +152,11 @@ bool TouchSelectionControllerClientChildFrame::IsCommandIdEnabled(
 
   bool has_selection = !rwhv_->GetSelectedText().empty();
   switch (command_id) {
-    case IDS_APP_CUT:
+    case ui::TouchEditable::kCut:
       return editable && readable && has_selection;
-    case IDS_APP_COPY:
+    case ui::TouchEditable::kCopy:
       return readable && has_selection;
-    case IDS_APP_PASTE: {
+    case ui::TouchEditable::kPaste: {
       base::string16 result;
       ui::Clipboard::GetForCurrentThread()->ReadText(
           ui::ClipboardBuffer::kCopyPaste, &result);
@@ -174,13 +176,13 @@ void TouchSelectionControllerClientChildFrame::ExecuteCommand(int command_id,
     return;
 
   switch (command_id) {
-    case IDS_APP_CUT:
+    case ui::TouchEditable::kCut:
       host_delegate->Cut();
       break;
-    case IDS_APP_COPY:
+    case ui::TouchEditable::kCopy:
       host_delegate->Copy();
       break;
-    case IDS_APP_PASTE:
+    case ui::TouchEditable::kPaste:
       host_delegate->Paste();
       break;
     default:

@@ -13,6 +13,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/layers/layer.h"
@@ -426,9 +427,11 @@ class MockWebVideoFrameSubmitter : public WebVideoFrameSubmitter {
   MOCK_METHOD1(SetIsSurfaceVisible, void(bool));
   MOCK_METHOD1(SetIsPageVisible, void(bool));
   MOCK_METHOD1(SetForceSubmit, void(bool));
+  MOCK_METHOD1(SetForceBeginFrames, void(bool));
   MOCK_CONST_METHOD0(IsDrivingFrameUpdates, bool());
 
-  void Initialize(cc::VideoFrameProvider* provider) override {
+  void Initialize(cc::VideoFrameProvider* provider,
+                  bool is_media_stream) override {
     provider_ = provider;
     MockInitialize(provider);
   }
@@ -461,7 +464,8 @@ class MockRenderFactory : public WebMediaStreamRendererFactory {
   scoped_refptr<WebMediaStreamAudioRenderer> GetAudioRenderer(
       const WebMediaStream& web_stream,
       WebLocalFrame* web_frame,
-      const WebString& device_id) override {
+      const WebString& device_id,
+      base::RepeatingCallback<void()> on_render_error_callback) override {
     return audio_renderer_;
   }
 
@@ -1405,6 +1409,29 @@ TEST_P(WebMediaPlayerMSTest, RequestVideoFrameCallback) {
   message_loop_controller_.RunAndWaitForStatus(
       media::PipelineStatus::PIPELINE_OK);
   testing::Mock::VerifyAndClearExpectations(this);
+}
+
+TEST_P(WebMediaPlayerMSTest, RequestVideoFrameCallback_ForcesBeginFrames) {
+  InitializeWebMediaPlayerMS();
+
+  if (!enable_surface_layer_for_video_)
+    return;
+
+  LoadAndGetFrameProvider(true);
+
+  EXPECT_CALL(*submitter_ptr_, SetForceBeginFrames(true));
+  player_->RequestVideoFrameCallback();
+  base::RunLoop().RunUntilIdle();
+
+  testing::Mock::VerifyAndClearExpectations(submitter_ptr_);
+
+  // The flag should be un-set when stop receiving callbacks.
+  base::RunLoop run_loop;
+  EXPECT_CALL(*submitter_ptr_, SetForceBeginFrames(false))
+      .WillOnce(base::test::RunClosure(run_loop.QuitClosure()));
+  run_loop.Run();
+
+  testing::Mock::VerifyAndClear(submitter_ptr_);
 }
 
 TEST_P(WebMediaPlayerMSTest, GetVideoFramePresentationMetadata) {

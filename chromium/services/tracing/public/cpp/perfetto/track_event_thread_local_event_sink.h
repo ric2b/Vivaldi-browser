@@ -22,6 +22,7 @@
 #include "third_party/perfetto/include/perfetto/tracing/event_context.h"
 #include "third_party/perfetto/protos/perfetto/trace/interned_data/interned_data.pbzero.h"
 #include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_thread_descriptor.pbzero.h"
+#include "third_party/perfetto/protos/perfetto/trace/track_event/counter_descriptor.pbzero.h"
 #include "third_party/perfetto/protos/perfetto/trace/track_event/track_event.pbzero.h"
 
 namespace tracing {
@@ -66,9 +67,9 @@ class COMPONENT_EXPORT(TRACING_CPP) TrackEventThreadLocalEventSink
   // (e.g. interning index entries and a ThreadDescriptor) to be emitted again.
   static void ClearIncrementalState();
 
-  // If we need to perform an incremental reset we will do so, and also emit all
-  // the relevant descriptors to start a new fresh sequence.
-  void ResetIncrementalStateIfNeeded(
+  // Emit any necessary descriptors that we haven't emitted yet and, if
+  // required, perform an incremental state reset.
+  void UpdateIncrementalStateIfNeeded(
       base::trace_event::TraceEvent* trace_event);
 
   // Fills in all the fields in |trace_packet| that can be directly deduced from
@@ -91,14 +92,20 @@ class COMPONENT_EXPORT(TRACING_CPP) TrackEventThreadLocalEventSink
       typename TrackEventArgumentFunction = void (*)(perfetto::EventContext)>
   void AddTraceEvent(base::trace_event::TraceEvent* trace_event,
                      base::trace_event::TraceEventHandle* handle,
+                     const perfetto::Track& track,
                      TrackEventArgumentFunction arg_func) {
-    ResetIncrementalStateIfNeeded(trace_event);
+    UpdateIncrementalStateIfNeeded(trace_event);
 
     auto trace_packet = trace_writer_->NewTracePacket();
 
     // Note: Since |track_event| is a protozero message under |trace_packet|, we
     // can't modify |trace_packet| further until we're done with |track_event|.
     auto* track_event = PrepareTrackEvent(trace_event, handle, &trace_packet);
+
+    if (track) {
+      track_event->set_track_uuid(track.uuid);
+    }
+
     arg_func(perfetto::EventContext(track_event));
 
     if (!pending_interning_updates_.empty()) {
@@ -125,12 +132,16 @@ class COMPONENT_EXPORT(TRACING_CPP) TrackEventThreadLocalEventSink
  private:
   static constexpr size_t kMaxCompleteEventDepth = 30;
 
-  void EmitTrackDescriptor(
-      protozero::MessageHandle<perfetto::protos::pbzero::TracePacket>*
-          trace_packet,
-      base::trace_event::TraceEvent* trace_event,
+  void EmitThreadTrackDescriptor(base::trace_event::TraceEvent* trace_event,
+                                 base::TimeTicks timestamp,
+                                 const char* maybe_new_name = nullptr);
+  void EmitCounterTrackDescriptor(
       base::TimeTicks timestamp,
-      const char* maybe_new_name = nullptr);
+      uint64_t thread_track_uuid,
+      uint64_t counter_track_uuid_bit,
+      perfetto::protos::pbzero::CounterDescriptor::BuiltinCounterType
+          counter_type,
+      uint64_t unit_multiplier = 0u);
   void DoResetIncrementalState(base::trace_event::TraceEvent* trace_event,
                                bool explicit_timestamp);
   void SetPacketTimestamp(
@@ -153,6 +164,8 @@ class COMPONENT_EXPORT(TRACING_CPP) TrackEventThreadLocalEventSink
   InterningIndex<TypeList<std::string>, SizeList<128>>
       interned_log_message_bodies_;
   InternedIndexesUpdates pending_interning_updates_;
+
+  std::vector<uint64_t> extra_emitted_track_descriptor_uuids_;
 
   static std::atomic<uint32_t> incremental_state_reset_id_;
 

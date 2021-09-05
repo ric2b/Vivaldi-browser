@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_context.h"
+#include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
@@ -13,16 +14,17 @@
 
 namespace blink {
 
-class DisplayLockUtilitiesTest : public RenderingTest,
-                                 private ScopedCSSSubtreeVisibilityHiddenMatchableForTest {
+class DisplayLockUtilitiesTest
+    : public RenderingTest,
+      private ScopedCSSContentVisibilityHiddenMatchableForTest {
  public:
   DisplayLockUtilitiesTest()
       : RenderingTest(MakeGarbageCollected<SingleChildLocalFrameClient>()),
-        ScopedCSSSubtreeVisibilityHiddenMatchableForTest(true) {}
+        ScopedCSSContentVisibilityHiddenMatchableForTest(true) {}
 
   void LockElement(Element& element, bool activatable) {
     StringBuilder value;
-    value.Append("subtree-visibility: hidden");
+    value.Append("content-visibility: hidden");
     if (activatable)
       value.Append("-matchable");
     element.setAttribute(html_names::kStyleAttr, value.ToAtomicString());
@@ -60,8 +62,12 @@ TEST_F(DisplayLockUtilitiesTest, DISABLED_ActivatableLockedInclusiveAncestors) {
   Element& shadow_div = *shadow_root.getElementById("shadowDiv");
 
   LockElement(outer, true);
-  EXPECT_EQ(GetDocument().LockedDisplayLockCount(), 1);
-  EXPECT_EQ(GetDocument().DisplayLockBlockingAllActivationCount(), 0);
+  EXPECT_EQ(
+      GetDocument().GetDisplayLockDocumentState().LockedDisplayLockCount(), 1);
+  EXPECT_EQ(GetDocument()
+                .GetDisplayLockDocumentState()
+                .DisplayLockBlockingAllActivationCount(),
+            0);
   // Querying from every element gives |outer|.
   HeapVector<Member<Element>> result_for_outer =
       DisplayLockUtilities::ActivatableLockedInclusiveAncestors(
@@ -95,8 +101,12 @@ TEST_F(DisplayLockUtilitiesTest, DISABLED_ActivatableLockedInclusiveAncestors) {
 
   // Lock innermost with activatable flag.
   LockElement(innermost, true);
-  EXPECT_EQ(GetDocument().LockedDisplayLockCount(), 2);
-  EXPECT_EQ(GetDocument().DisplayLockBlockingAllActivationCount(), 0);
+  EXPECT_EQ(
+      GetDocument().GetDisplayLockDocumentState().LockedDisplayLockCount(), 2);
+  EXPECT_EQ(GetDocument()
+                .GetDisplayLockDocumentState()
+                .DisplayLockBlockingAllActivationCount(),
+            0);
 
   result_for_outer = DisplayLockUtilities::ActivatableLockedInclusiveAncestors(
       outer, DisplayLockActivationReason::kAny);
@@ -131,8 +141,12 @@ TEST_F(DisplayLockUtilitiesTest, DISABLED_ActivatableLockedInclusiveAncestors) {
   // Unlock everything.
   CommitElement(innermost);
   CommitElement(outer);
-  EXPECT_EQ(GetDocument().LockedDisplayLockCount(), 0);
-  EXPECT_EQ(GetDocument().DisplayLockBlockingAllActivationCount(), 0);
+  EXPECT_EQ(
+      GetDocument().GetDisplayLockDocumentState().LockedDisplayLockCount(), 0);
+  EXPECT_EQ(GetDocument()
+                .GetDisplayLockDocumentState()
+                .DisplayLockBlockingAllActivationCount(),
+            0);
 
   EXPECT_EQ(DisplayLockUtilities::ActivatableLockedInclusiveAncestors(
                 outer, DisplayLockActivationReason::kAny)
@@ -192,8 +206,11 @@ TEST_F(DisplayLockUtilitiesTest, LockedSubtreeCrossingFrames) {
   // Lock parent.
   LockElement(*parent, false);
 
-  EXPECT_EQ(GetDocument().LockedDisplayLockCount(), 0);
-  EXPECT_EQ(ChildDocument().LockedDisplayLockCount(), 1);
+  EXPECT_EQ(
+      GetDocument().GetDisplayLockDocumentState().LockedDisplayLockCount(), 0);
+  EXPECT_EQ(
+      ChildDocument().GetDisplayLockDocumentState().LockedDisplayLockCount(),
+      1);
 
   EXPECT_FALSE(
       DisplayLockUtilities::IsInLockedSubtreeCrossingFrames(*grandparent));

@@ -22,7 +22,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
-#include "components/omnibox/browser/omnibox_pref_names.h"
+#include "components/omnibox/browser/omnibox_prefs.h"
 #import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 #import "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
 #import "components/remote_cocoa/app_shim/window_touch_bar_delegate.h"
@@ -51,7 +51,7 @@ bool ShouldHandleKeyboardEvent(const content::NativeWebKeyboardEvent& event) {
     return false;
 
   // Ignore synthesized keyboard events. See http://crbug.com/23221.
-  if (event.GetType() == content::NativeWebKeyboardEvent::kChar)
+  if (event.GetType() == content::NativeWebKeyboardEvent::Type::kChar)
     return false;
 
   // If the event was not synthesized it should have an os_event.
@@ -270,8 +270,8 @@ bool BrowserFrameMac::ExecuteCommand(
     // https://crbug.com/836947.
     // The function IsReservedCommandOrKey does not examine its event argument
     // on macOS.
-    content::NativeWebKeyboardEvent dummy_event(blink::WebInputEvent::kKeyDown,
-                                                0, base::TimeTicks());
+    content::NativeWebKeyboardEvent dummy_event(
+        blink::WebInputEvent::Type::kKeyDown, 0, base::TimeTicks());
     if (!browser->command_controller()->IsReservedCommandOrKey(command,
                                                                dummy_event)) {
       return false;

@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Alman klaviaturası</translation>
 <translation id="1972984168337863910">Faylların rəy panelini genişləndirin</translation>
 <translation id="1984603991036629094">Erməni Fonetik klaviaturası</translation>
+<translation id="1995337122023280937">Faylın yerinə keçin</translation>
 <translation id="2001796770603320721">Diskdə idarə edin</translation>
 <translation id="2009067268969781306">Formatdan sonra diskdə saxlanılan bütün data silinəcək. Bu əməliyyat geri qaytarıla bilməz.</translation>
 <translation id="2028997212275086731">RAR arxivi</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Google Diskə daxil olmaq alınmadı. Lütfən, <ph name="BEGIN_LINK" />hesabdan çıxın<ph name="END_LINK" /> və yenidən daxil olun.</translation>
 <translation id="2649120831653069427">Göyqurşaqlı balıq</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">Faylın yeri</translation>
 <translation id="2672394958563893062">Xəta oldu. Əvvəldən başlamaq üçün klikləyin.</translation>
 <translation id="2676946222714718093">Playing</translation>
 <translation id="2735698359135166290">Rumın standart klaviaturası</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> xətalar.</translation>
 <translation id="3519867315646775981">Transliterasiya (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portuqal</translation>
+<translation id="3524311639100184459">Xəbərdarlıq: Bu fayllar müvəqqətidir və diskdə yer boşaltmaq üçün avtomatik silinə bilər.  <ph name="BEGIN_LINK" />Ətraflı Məlumat<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Qovluq</translation>
 <translation id="3549797760399244642">drive.google.com saytına keçin...</translation>
 <translation id="357479282490346887">Litva</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kivi</translation>
 <translation id="3966388904776714213">Audio Oxuducu</translation>
 <translation id="4002066346123236978">Başlıq</translation>
+<translation id="4065397611279318371">Faylları <ph name="APP_NAME" /> tətbiqləri ilə açmaq üçün əvvəlcə onları <ph name="SHARED_DIRECTORY_LABEL" /> qovluğuna köçürün.</translation>
 <translation id="4070370845051020638">Cənubi Çin dili daxil etmə üsulu</translation>
 <translation id="4072248638558688893">Tamil klaviaturası (fonetik)</translation>
 <translation id="4124935795427217608">Tək buynuzlu at</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Avtomatik düzəliş</translation>
 <translation id="4881695831933465202">Açın</translation>
 <translation id="4886021172213954916">Tamil klaviaturası (Makina)</translation>
+<translation id="4892969127351273348"><ph name="APP_NAME" /> ilə açmaq mümkün olmadı</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> yedəklənmə üçün hazırdır</translation>
 <translation id="4924638091161556692">Fiksə edilmiş</translation>
 <translation id="4935975195727477204">Gazania Flower</translation>
@@ -499,6 +504,7 @@
 <translation id="6806699711453372963">Linux paylaşımını idarə edin</translation>
 <translation id="6808193438228982088">Tülkü</translation>
 <translation id="6820687829547641339">Gzip sıxılmış tar arxivi</translation>
+<translation id="6823166707458800069">Bu qovluqda saxlanan bütün fayllar avtomatik olaraq onlayn yedəklənir.</translation>
 <translation id="6825883775269213504">Rus</translation>
 <translation id="6827236167376090743">Bu video uzun müddət ərzində göstəriləcək.</translation>
 <translation id="6847101934483209767"><ph name="ENTRY_NAME" /> seçimdən silindi.</translation>
@@ -555,6 +561,7 @@
 <translation id="7417705661718309329">Google xəritə</translation>
 <translation id="7419631653042041064">Katalan klaviaturası</translation>
 <translation id="7434823369735508263">Böyük Britaniya Dvorak klaviaturası</translation>
+<translation id="7447678886297481665">Bu qovluqdakı fayllar ancaq oxuna bilər. Bəzi fəaliyyətlər dəstəklənmir.</translation>
 <translation id="7460898608667578234">Ukrayna</translation>
 <translation id="7474889694310679759">Kanada İngiliscəsi klaviaturası</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> nəticə

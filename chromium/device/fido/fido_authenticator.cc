@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/callback.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "device/fido/fido_constants.h"
 
 namespace device {
@@ -128,6 +128,10 @@ void FidoAuthenticator::Reset(ResetCallback callback) {
 
 ProtocolVersion FidoAuthenticator::SupportedProtocol() const {
   return ProtocolVersion::kUnknown;
+}
+
+bool FidoAuthenticator::SupportsCredProtectExtension() const {
+  return Options() && Options()->supports_cred_protect;
 }
 
 }  // namespace device

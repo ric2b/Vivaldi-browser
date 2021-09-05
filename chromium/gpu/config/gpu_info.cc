@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 
+#include "base/logging.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_util.h"
@@ -148,6 +149,8 @@ const char* OverlaySupportToString(gpu::OverlaySupport support) {
       return "DIRECT";
     case gpu::OverlaySupport::kScaling:
       return "SCALING";
+    case gpu::OverlaySupport::kSoftware:
+      return "SOFTWARE";
   }
 }
 #endif  // OS_WIN

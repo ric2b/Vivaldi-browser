@@ -240,8 +240,6 @@ void WebContentsEntry::DidFinishNavigation(
   if (!main_frame_task)
     return;
 
-  main_frame_task->UpdateRapporSampleName();
-
   ForEachTask(base::Bind([](RendererTask* task) {
     // Listening to WebContentsObserver::TitleWasSet() only is not enough in
     // some cases when the the web page doesn't have a title. That's why we
@@ -335,10 +333,11 @@ void WebContentsEntry::CreateTaskForFrame(RenderFrameHost* render_frame_host) {
     // If we don't know the OS process handle yet (e.g., because this task is
     // still launching), update the task when it becomes available.
     if (new_task->process_id() == base::kNullProcessId) {
-      render_frame_host->GetProcess()->PostTaskWhenProcessIsReady(base::Bind(
-          &WebContentsEntry::RenderFrameReady, weak_factory_.GetWeakPtr(),
-          render_frame_host->GetProcess()->GetID(),
-          render_frame_host->GetRoutingID()));
+      render_frame_host->GetProcess()->PostTaskWhenProcessIsReady(
+          base::BindOnce(&WebContentsEntry::RenderFrameReady,
+                         weak_factory_.GetWeakPtr(),
+                         render_frame_host->GetProcess()->GetID(),
+                         render_frame_host->GetRoutingID()));
     }
   }
 }

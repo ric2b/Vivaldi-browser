@@ -49,7 +49,6 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/public/base/signin_pref_names.h"
-#include "components/signin/public/identity_manager/accounts_mutator.h"
 #include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
 #include "components/strings/grit/components_strings.h"
@@ -95,8 +94,8 @@ void NavigateToGoogleAccountPage(Profile* profile, const std::string& email) {
 // Note: For regular profiles this includes incognito sessions.
 int CountBrowsersFor(Profile* profile) {
   int browser_count = chrome::GetBrowserCount(profile);
-  if (!profile->IsOffTheRecord() && profile->HasOffTheRecordProfile())
-    browser_count += chrome::GetBrowserCount(profile->GetOffTheRecordProfile());
+  if (!profile->IsOffTheRecord() && profile->HasPrimaryOTRProfile())
+    browser_count += chrome::GetBrowserCount(profile->GetPrimaryOTRProfile());
   return browser_count;
 }
 
@@ -294,7 +293,8 @@ void ProfileMenuView::OnSyncErrorButtonClicked(
       break;
     case sync_ui_util::TRUSTED_VAULT_KEY_MISSING_FOR_EVERYTHING_ERROR:
     case sync_ui_util::TRUSTED_VAULT_KEY_MISSING_FOR_PASSWORDS_ERROR:
-      sync_ui_util::OpenTabForSyncKeyRetrieval(browser());
+      sync_ui_util::OpenTabForSyncKeyRetrieval(
+          browser(), syncer::KeyRetrievalTriggerForUMA::kProfileMenu);
       break;
     case sync_ui_util::PASSPHRASE_ERROR:
     case sync_ui_util::SETTINGS_UNCONFIRMED_ERROR:
@@ -316,19 +316,18 @@ void ProfileMenuView::OnSigninAccountButtonClicked(AccountInfo account) {
       true /* is_default_promo_account */);
 }
 
+#if !defined(OS_CHROMEOS)
 void ProfileMenuView::OnSignoutButtonClicked() {
   RecordClick(ActionableItem::kSignoutButton);
   // TODO(crbug.com/995757): Remove user action.
   base::RecordAction(base::UserMetricsAction("Signin_Signout_FromUserMenu"));
   Hide();
   // Sign out from all accounts.
-  IdentityManagerFactory::GetForProfile(browser()->profile())
-      ->GetAccountsMutator()
-      ->RemoveAllAccounts(signin_metrics::SourceForRefreshTokenOperation::
-                              kUserMenu_SignOutAllAccounts);
+  browser()->signin_view_controller()->ShowGaiaLogoutTab(
+      signin_metrics::SourceForRefreshTokenOperation::
+          kUserMenu_SignOutAllAccounts);
 }
 
-#if !defined(OS_CHROMEOS)
 void ProfileMenuView::OnSigninButtonClicked() {
   RecordClick(ActionableItem::kSigninButton);
   Hide();
@@ -526,8 +525,6 @@ void ProfileMenuView::BuildFeatureButtons() {
   const bool has_unconsented_account =
       !is_guest &&
       identity_manager->HasPrimaryAccount(signin::ConsentLevel::kNotRequired);
-  const bool has_primary_account =
-      !is_guest && identity_manager->HasPrimaryAccount();
 
   if (has_unconsented_account && !IsSyncPaused(profile)) {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -559,6 +556,9 @@ void ProfileMenuView::BuildFeatureButtons() {
         vector_icons::kCloseIcon);
   }
 
+#if !defined(OS_CHROMEOS)
+  const bool has_primary_account =
+      !is_guest && identity_manager->HasPrimaryAccount();
   // The sign-out button is always at the bottom.
   if (has_unconsented_account && !has_primary_account) {
     AddFeatureButton(
@@ -567,6 +567,7 @@ void ProfileMenuView::BuildFeatureButtons() {
                             base::Unretained(this)),
         kSignOutIcon);
   }
+#endif
 }
 
 #if !defined(OS_CHROMEOS)

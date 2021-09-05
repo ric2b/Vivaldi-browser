@@ -40,11 +40,11 @@ import org.chromium.chrome.browser.feed.library.api.host.logging.InternalFeedErr
 import org.chromium.chrome.browser.feed.library.api.host.stream.TooltipInfo;
 import org.chromium.chrome.browser.feed.library.api.internal.actionparser.ActionSource;
 import org.chromium.chrome.browser.feed.library.api.internal.protocoladapter.ProtocolAdapter;
-import org.chromium.chrome.browser.feed.library.common.Result;
 import org.chromium.chrome.browser.feed.library.feedactionparser.internal.PietFeedActionPayloadRetriever;
 import org.chromium.components.feed.core.proto.libraries.api.internal.StreamDataProto.StreamDataOperation;
 import org.chromium.components.feed.core.proto.libraries.api.internal.StreamDataProto.StreamStructure;
 import org.chromium.components.feed.core.proto.ui.action.FeedActionPayloadProto.FeedActionPayload;
+import org.chromium.components.feed.core.proto.ui.action.FeedActionProto.BlockContentData;
 import org.chromium.components.feed.core.proto.ui.action.FeedActionProto.DismissData;
 import org.chromium.components.feed.core.proto.ui.action.FeedActionProto.FeedAction;
 import org.chromium.components.feed.core.proto.ui.action.FeedActionProto.FeedActionMetadata;
@@ -58,6 +58,7 @@ import org.chromium.components.feed.core.proto.ui.action.FeedActionProto.OpenUrl
 import org.chromium.components.feed.core.proto.ui.action.FeedActionProto.TooltipData;
 import org.chromium.components.feed.core.proto.ui.action.FeedActionProto.TooltipData.FeatureName;
 import org.chromium.components.feed.core.proto.ui.action.FeedActionProto.UndoAction;
+import org.chromium.components.feed.core.proto.ui.action.FeedActionProto.ViewReportData;
 import org.chromium.components.feed.core.proto.ui.action.PietExtensionsProto.PietFeedActionPayload;
 import org.chromium.components.feed.core.proto.ui.piet.ActionsProto.Action;
 import org.chromium.components.feed.core.proto.ui.piet.LogDataProto.LogData;
@@ -400,6 +401,23 @@ public class FeedActionParserTest {
             .build())
         .build();
 
+     private static final FeedActionPayload BLOCK_CONTENT_ACTION =
+        FeedActionPayload.newBuilder()
+        .setExtension(FeedAction.feedActionExtension,
+            FeedAction.newBuilder()
+            .setMetadata(
+                FeedActionMetadata.newBuilder()
+                .setType(Type.BLOCK_CONTENT)
+                .setBlockContentData(
+                    BlockContentData.newBuilder()
+                    .addDataOperations(
+                        DataOperation
+                        .getDefaultInstance())
+                    .setPayload(ActionPayload.getDefaultInstance())
+                    ))
+            .build())
+        .build();
+
     private static final FeedActionPayload NOT_INTERESTED_IN =
         FeedActionPayload.newBuilder()
         .setExtension(FeedAction.feedActionExtension,
@@ -669,6 +687,63 @@ public class FeedActionParserTest {
     }
 
     @Test
+    public void testParseAction_reportViewVisible() {
+        FeedAction reportViewAction =
+                FeedAction.newBuilder()
+                        .setMetadata(
+                                FeedActionMetadata.newBuilder()
+                                        .setType(Type.REPORT_VIEW)
+                                        .setViewReportData(
+                                                ViewReportData.newBuilder()
+                                                        .setContentId(CONTENT_ID)
+                                                        .setVisibility(
+                                                                ViewReportData.Visibility.SHOW)
+                                                        .setPayload(ActionPayload
+                                                                            .getDefaultInstance())))
+                        .build();
+
+        FeedActionPayload reportViewActionPayload =
+                FeedActionPayload.newBuilder()
+                        .setExtension(FeedAction.feedActionExtension, reportViewAction)
+                        .build();
+
+        View view = new View(Robolectric.buildActivity(Activity.class).get());
+
+        mFeedActionParser.parseFeedActionPayload(
+                reportViewActionPayload, mStreamActionApi, view, ActionSource.VIEW);
+        verify(mStreamActionApi)
+                .reportViewVisible(view, CONTENT_ID_STRING, ActionPayload.getDefaultInstance());
+    }
+
+    @Test
+    public void testParseAction_reportViewHidden() {
+        FeedAction reportViewAction =
+                FeedAction.newBuilder()
+                        .setMetadata(
+                                FeedActionMetadata.newBuilder()
+                                        .setType(Type.REPORT_VIEW)
+                                        .setViewReportData(
+                                                ViewReportData.newBuilder()
+                                                        .setContentId(CONTENT_ID)
+                                                        .setVisibility(
+                                                                ViewReportData.Visibility.HIDE)
+                                                        .setPayload(ActionPayload
+                                                                            .getDefaultInstance())))
+                        .build();
+
+        FeedActionPayload reportViewActionPayload =
+                FeedActionPayload.newBuilder()
+                        .setExtension(FeedAction.feedActionExtension, reportViewAction)
+                        .build();
+
+        View view = new View(Robolectric.buildActivity(Activity.class).get());
+
+        mFeedActionParser.parseFeedActionPayload(
+                reportViewActionPayload, mStreamActionApi, view, ActionSource.VIEW);
+        verify(mStreamActionApi).reportViewHidden(view, CONTENT_ID_STRING);
+    }
+
+    @Test
     public void testCanPerformActionFromContextMenu_openUrl() {
         when(mStreamActionApi.canOpenUrl()).thenReturn(true);
         assertThat(mFeedActionParser.canPerformAction(OPEN_URL_FEED_ACTION, mStreamActionApi))
@@ -752,12 +827,27 @@ public class FeedActionParserTest {
                              .getMetadata()
                              .getDismissData()
                              .getDataOperationsList()))
-                .thenReturn(Result.success(mStreamDataOperations));
+                .thenReturn(mStreamDataOperations);
         mFeedActionParser.parseFeedActionPayload(
                 DISMISS_LOCAL_FEED_ACTION, mStreamActionApi, /* view= */ null, ActionSource.CLICK);
         verify(mStreamActionApi, never())
                 .dismiss(anyString(), ArgumentMatchers.anyList(), any(UndoAction.class),
                         any(ActionPayload.class));
+    }
+
+    @Test
+    public void testBlockContent() {
+        when(mProtocolAdapter.createOperations(
+                     BLOCK_CONTENT_ACTION.getExtension(FeedAction.feedActionExtension)
+                             .getMetadata()
+                             .getBlockContentData()
+                             .getDataOperationsList()))
+                .thenReturn(mStreamDataOperations);
+        mFeedActionParser.parseFeedActionPayload(
+                BLOCK_CONTENT_ACTION, mStreamActionApi, /* view= */ null, ActionSource.CLICK);
+        verify(mStreamActionApi)
+                .handleBlockContent(mStreamDataOperations, ActionPayload.getDefaultInstance());
+        verify(mStreamActionApi).onClientAction(ActionType.BLOCK_CONTENT);
     }
 
     @Test
@@ -768,7 +858,7 @@ public class FeedActionParserTest {
                              .getMetadata()
                              .getNotInterestedInData()
                              .getDataOperationsList()))
-                .thenReturn(Result.success(mStreamDataOperations));
+                .thenReturn(mStreamDataOperations);
         mFeedActionParser.parseFeedActionPayload(
                 DISMISS_LOCAL_FEED_ACTION, mStreamActionApi, /* view= */ null, ActionSource.CLICK);
         verify(mStreamActionApi, never())
@@ -784,29 +874,10 @@ public class FeedActionParserTest {
                              .getMetadata()
                              .getDismissData()
                              .getDataOperationsList()))
-                .thenReturn(Result.success(mStreamDataOperations));
+                .thenReturn(mStreamDataOperations);
         mFeedActionParser.parseFeedActionPayload(DISMISS_LOCAL_FEED_ACTION_NO_CONTENT_ID,
                 mStreamActionApi,
                 /* view= */ null, ActionSource.CLICK);
-        verify(mStreamActionApi, never())
-                .dismiss(anyString(), ArgumentMatchers.anyList(), any(UndoAction.class),
-                        any(ActionPayload.class));
-    }
-
-    @Test
-    public void testDismiss_unsuccessfulCreateOperations() {
-        when(mStreamActionApi.canDismiss()).thenReturn(true);
-
-        when(mProtocolAdapter.createOperations(
-                     DISMISS_LOCAL_FEED_ACTION.getExtension(FeedAction.feedActionExtension)
-                             .getMetadata()
-                             .getDismissData()
-                             .getDataOperationsList()))
-                .thenReturn(Result.failure());
-
-        mFeedActionParser.parseFeedActionPayload(
-                DISMISS_LOCAL_FEED_ACTION, mStreamActionApi, /* view= */ null, ActionSource.CLICK);
-
         verify(mStreamActionApi, never())
                 .dismiss(anyString(), ArgumentMatchers.anyList(), any(UndoAction.class),
                         any(ActionPayload.class));
@@ -821,7 +892,7 @@ public class FeedActionParserTest {
                              .getMetadata()
                              .getDismissData()
                              .getDataOperationsList()))
-                .thenReturn(Result.success(mStreamDataOperations));
+                .thenReturn(mStreamDataOperations);
 
         mFeedActionParser.parseFeedActionPayload(
                 DISMISS_LOCAL_FEED_ACTION, mStreamActionApi, /* view= */ null, ActionSource.CLICK);
@@ -841,7 +912,7 @@ public class FeedActionParserTest {
                              .getMetadata()
                              .getNotInterestedInData()
                              .getDataOperationsList()))
-                .thenReturn(Result.success(mStreamDataOperations));
+                .thenReturn(mStreamDataOperations);
 
         mFeedActionParser.parseFeedActionPayload(
                 NOT_INTERESTED_IN, mStreamActionApi, /* view= */ null, ActionSource.CLICK);

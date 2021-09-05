@@ -5,12 +5,15 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_browsertest_base.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_dialog_views.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/fake_deep_scanning_dialog_delegate.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/prefs/scoped_user_pref_update.h"
+#include "content/public/test/browser_test.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/image_view.h"
@@ -46,8 +49,9 @@ class DeepScanningDialogViewsBehaviorBrowserTest
     expected_scan_result_ = dlp_result && malware_result;
   }
 
-  void ConstructorCalled(DeepScanningDialogViews* views) override {
-    ctor_called_timestamp_ = base::TimeTicks::Now();
+  void ConstructorCalled(DeepScanningDialogViews* views,
+                         base::TimeTicks timestamp) override {
+    ctor_called_timestamp_ = timestamp;
     dialog_ = views;
 
     // The scan should be pending when constructed.
@@ -311,23 +315,9 @@ class DeepScanningDialogViewsAppearanceBrowserTest
     // The dialog initially shows the pending message for the appropriate access
     // point and scan type.
     base::string16 pending_message = views->GetMessageForTesting()->GetText();
-    int expected_message_id = 0;
-    switch (access_point()) {
-      case DeepScanAccessPoint::UPLOAD:
-        expected_message_id = IDS_DEEP_SCANNING_DIALOG_UPLOAD_PENDING_MESSAGE;
-        break;
-      case DeepScanAccessPoint::DRAG_AND_DROP:
-        expected_message_id =
-            file_scan() ? IDS_DEEP_SCANNING_DIALOG_DRAG_FILES_PENDING_MESSAGE
-                        : IDS_DEEP_SCANNING_DIALOG_DRAG_DATA_PENDING_MESSAGE;
-        break;
-      case DeepScanAccessPoint::PASTE:
-        expected_message_id = IDS_DEEP_SCANNING_DIALOG_PASTE_PENDING_MESSAGE;
-        break;
-      case DeepScanAccessPoint::DOWNLOAD:
-        NOTREACHED();
-    }
-    ASSERT_EQ(pending_message, l10n_util::GetStringUTF16(expected_message_id));
+    base::string16 expected_message = l10n_util::GetPluralStringFUTF16(
+        IDS_DEEP_SCANNING_DIALOG_UPLOAD_PENDING_MESSAGE, file_scan() ? 1 : 0);
+    ASSERT_EQ(pending_message, expected_message);
 
     // The top image is the pending one corresponding to the access point.
     const gfx::ImageSkia& actual_image =
@@ -362,27 +352,14 @@ class DeepScanningDialogViewsAppearanceBrowserTest
     // The dialog shows the failure or success message for the appropriate
     // access point and scan type.
     base::string16 final_message = views->GetMessageForTesting()->GetText();
-    int expected_message_id = 0;
-    if (success()) {
-      expected_message_id = IDS_DEEP_SCANNING_DIALOG_SUCCESS_MESSAGE;
-    } else {
-      switch (access_point()) {
-        case DeepScanAccessPoint::UPLOAD:
-          expected_message_id = IDS_DEEP_SCANNING_DIALOG_UPLOAD_FAILURE_MESSAGE;
-          break;
-        case DeepScanAccessPoint::DRAG_AND_DROP:
-          expected_message_id =
-              file_scan() ? IDS_DEEP_SCANNING_DIALOG_DRAG_FILES_FAILURE_MESSAGE
-                          : IDS_DEEP_SCANNING_DIALOG_DRAG_DATA_FAILURE_MESSAGE;
-          break;
-        case DeepScanAccessPoint::PASTE:
-          expected_message_id = IDS_DEEP_SCANNING_DIALOG_PASTE_FAILURE_MESSAGE;
-          break;
-        case DeepScanAccessPoint::DOWNLOAD:
-          NOTREACHED();
-      }
-    }
-    ASSERT_EQ(final_message, l10n_util::GetStringUTF16(expected_message_id));
+    int files_count = file_scan() ? 1 : 0;
+    base::string16 expected_message =
+        success()
+            ? l10n_util::GetPluralStringFUTF16(
+                  IDS_DEEP_SCANNING_DIALOG_SUCCESS_MESSAGE, files_count)
+            : l10n_util::GetPluralStringFUTF16(
+                  IDS_DEEP_SCANNING_DIALOG_UPLOAD_FAILURE_MESSAGE, files_count);
+    ASSERT_EQ(final_message, expected_message);
 
     // The top image is the failure/success one corresponding to the access
     // point and scan type.
@@ -427,6 +404,8 @@ class DeepScanningDialogViewsAppearanceBrowserTest
   DeepScanAccessPoint access_point() const { return std::get<2>(GetParam()); }
 };
 
+constexpr char kTestUrl[] = "https://google.com";
+
 }  // namespace
 
 IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsBehaviorBrowserTest, Test) {
@@ -448,6 +427,9 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsBehaviorBrowserTest, Test) {
   if (malware_enabled()) {
     malware = malware_success();
     SetMalwarePolicy(SEND_UPLOADS_AND_DOWNLOADS);
+    ListPrefUpdate(g_browser_process->local_state(),
+                   prefs::kURLsToCheckForMalwareOfUploadedContent)
+        ->Append("*");
   }
   SetStatusCallbackResponse(
       SimpleDeepScanningClientResponseForTesting(dlp, malware));
@@ -467,6 +449,9 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsBehaviorBrowserTest, Test) {
   data.do_dlp_scan = dlp_enabled();
   data.do_malware_scan = malware_enabled();
   CreateFilesForTest({"foo.doc"}, {"content"}, &data);
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      browser()->profile(), GURL(kTestUrl), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
   DeepScanningDialogDelegate::ShowForWebContents(
       browser()->tab_strip_model()->GetActiveWebContents(), std::move(data),
@@ -536,6 +521,9 @@ IN_PROC_BROWSER_TEST_F(DeepScanningDialogViewsCancelPendingScanBrowserTest,
   data.do_malware_scan = false;
   CreateFilesForTest({"foo.doc", "bar.doc", "baz.doc"},
                      {"random", "file", "contents"}, &data);
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      browser()->profile(), GURL(kTestUrl), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
   DeepScanningDialogDelegate::ShowForWebContents(
       browser()->tab_strip_model()->GetActiveWebContents(), std::move(data),
@@ -584,6 +572,9 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsWarningBrowserTest, Test) {
   data.text.emplace_back(base::UTF8ToUTF16("foo"));
   data.text.emplace_back(base::UTF8ToUTF16("bar"));
   CreateFilesForTest({"foo.doc", "bar.doc"}, {"file", "content"}, &data);
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      browser()->profile(), GURL(kTestUrl), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
   DeepScanningDialogDelegate::ShowForWebContents(
       browser()->tab_strip_model()->GetActiveWebContents(), std::move(data),
@@ -642,6 +633,9 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsAppearanceBrowserTest, Test) {
     CreateFilesForTest({"foo.doc"}, {"content"}, &data);
   else
     data.text.emplace_back(base::UTF8ToUTF16("foo"));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      browser()->profile(), GURL(kTestUrl), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
   DeepScanningDialogDelegate::ShowForWebContents(
       browser()->tab_strip_model()->GetActiveWebContents(), std::move(data),

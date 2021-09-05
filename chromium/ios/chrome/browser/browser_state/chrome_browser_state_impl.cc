@@ -6,9 +6,9 @@
 
 #include <utility>
 
+#include "base/check.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/logging.h"
 #include "base/sequenced_task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -37,7 +37,6 @@
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/prefs/browser_prefs.h"
 #include "ios/chrome/browser/prefs/ios_chrome_pref_service_factory.h"
-#include "ios/chrome/browser/send_tab_to_self/send_tab_to_self_client_service_factory.h"
 #include "ios/web/public/thread/web_thread.h"
 
 namespace {
@@ -136,8 +135,6 @@ ChromeBrowserStateImpl::ChromeBrowserStateImpl(
   bookmarks::BookmarkModel* model =
       ios::BookmarkModelFactory::GetForBrowserState(this);
   model->AddObserver(new BookmarkModelLoadedObserver(this));
-
-  send_tab_to_self::SendTabToSelfClientServiceFactory::GetForBrowserState(this);
 }
 
 ChromeBrowserStateImpl::~ChromeBrowserStateImpl() {
@@ -200,11 +197,10 @@ void ChromeBrowserStateImpl::SetOffTheRecordChromeBrowserState(
 }
 
 PrefService* ChromeBrowserStateImpl::GetOffTheRecordPrefs() {
-  DCHECK(prefs_);
-  if (!otr_prefs_) {
-    otr_prefs_ = CreateIncognitoBrowserStatePrefs(prefs_.get());
+  if (otr_state_) {
+    return otr_state_->GetPrefs();
   }
-  return otr_prefs_.get();
+  return nullptr;
 }
 
 ChromeBrowserStateIOData* ChromeBrowserStateImpl::GetIOData() {

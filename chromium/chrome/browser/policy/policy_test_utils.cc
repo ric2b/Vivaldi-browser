@@ -28,7 +28,6 @@
 #include "components/variations/variations_params_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/interstitial_page_delegate.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
@@ -167,13 +166,14 @@ void PolicyTest::PerformClick(int x, int y) {
   content::WebContents* contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   blink::WebMouseEvent click_event(
-      blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::Type::kMouseDown,
+      blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   click_event.button = blink::WebMouseEvent::Button::kLeft;
   click_event.click_count = 1;
   click_event.SetPositionInWidget(x, y);
   contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(click_event);
-  click_event.SetType(blink::WebInputEvent::kMouseUp);
+  click_event.SetType(blink::WebInputEvent::Type::kMouseUp);
   contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(click_event);
 }
 

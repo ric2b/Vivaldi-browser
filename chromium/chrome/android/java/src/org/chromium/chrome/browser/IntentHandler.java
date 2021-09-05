@@ -47,6 +47,7 @@ import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.webapps.WebappActivity;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
+import org.chromium.components.external_intents.ExternalNavigationHandler;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.ContentUrlConstants;
@@ -148,11 +149,6 @@ public class IntentHandler {
     private static final String TRUSTED_APPLICATION_CODE_EXTRA = "trusted_application_code_extra";
 
     /**
-     * The scheme for referrer coming from an application.
-     */
-    public static final String ANDROID_APP_REFERRER_SCHEME = "android-app";
-
-    /**
      * A referrer id used for Chrome to Chrome referrer passing.
      */
     public static final String EXTRA_REFERRER_ID = "org.chromium.chrome.browser.referrer_id";
@@ -175,12 +171,6 @@ public class IntentHandler {
     public static final String EXTRA_WINDOW_ID = "org.chromium.chrome.browser.window_id";
 
     /**
-     * Records package names of other applications in the system that could have handled
-     * this intent.
-     */
-    public static final String EXTRA_EXTERNAL_NAV_PACKAGES = "org.chromium.chrome.browser.eenp";
-
-    /**
      * Extra to indicate the launch type of the tab to be created.
      */
     private static final String EXTRA_TAB_LAUNCH_TYPE =
@@ -195,6 +185,17 @@ public class IntentHandler {
      * A boolean to indicate whether incognito mode is currently selected.
      */
     public static final String EXTRA_INCOGNITO_MODE = "org.chromium.chrome.browser.incognito_mode";
+
+    /**
+     * Byte array for the POST data when load a url, only Intents sent by Chrome can use this.
+     */
+    public static final String EXTRA_POST_DATA = "com.android.chrome.post_data";
+
+    /**
+     * The type of the POST data, need to be added to the HTTP request header, only Intents sent by
+     * Chrome can use this.
+     */
+    public static final String EXTRA_POST_DATA_TYPE = "com.android.chrome.post_data_type";
 
     /**
      * Fake ComponentName used in constructing TRUSTED_APPLICATION_CODE_EXTRA.
@@ -413,8 +414,8 @@ public class IntentHandler {
      * This doesn't include generic URL handlers, such as browsers.
      */
     private void recordAppHandlersForIntent(Intent intent) {
-        List<String> packages = IntentUtils.safeGetStringArrayListExtra(intent,
-                IntentHandler.EXTRA_EXTERNAL_NAV_PACKAGES);
+        List<String> packages = IntentUtils.safeGetStringArrayListExtra(
+                intent, ExternalNavigationHandler.EXTRA_EXTERNAL_NAV_PACKAGES);
         if (packages != null && packages.size() > 0) {
             RecordUserAction.record("MobileExternalNavigationReceived");
         }
@@ -575,7 +576,7 @@ public class IntentHandler {
     private static boolean isValidReferrerHeader(Uri referrer) {
         if (referrer == null) return false;
         Uri normalized = referrer.normalizeScheme();
-        return TextUtils.equals(normalized.getScheme(), ANDROID_APP_REFERRER_SCHEME)
+        return TextUtils.equals(normalized.getScheme(), IntentUtils.ANDROID_APP_REFERRER_SCHEME)
                 && !TextUtils.isEmpty(normalized.getHost());
     }
 
@@ -587,7 +588,7 @@ public class IntentHandler {
     public static Referrer constructValidReferrerForAuthority(String authority) {
         if (TextUtils.isEmpty(authority)) return null;
         return new Referrer(new Uri.Builder()
-                                    .scheme(ANDROID_APP_REFERRER_SCHEME)
+                                    .scheme(IntentUtils.ANDROID_APP_REFERRER_SCHEME)
                                     .authority(authority)
                                     .build()
                                     .toString(),
@@ -598,6 +599,8 @@ public class IntentHandler {
      * Extracts the URL from voice search result intent.
      * @return URL if it was found, null otherwise.
      */
+    // TODO(https://crbug.com/783819): Investigate whether this function can return a GURL instead,
+    // or split into formatted/unformatted getUrl.
     static String getUrlFromVoiceSearchResult(Intent intent) {
         if (!RecognizerResultsIntent.ACTION_VOICE_SEARCH_RESULTS.equals(intent.getAction())) {
             return null;
@@ -629,7 +632,7 @@ public class IntentHandler {
             if (urls != null && urls.size() > 0) {
                 url = urls.get(0);
             } else {
-                url = TemplateUrlServiceFactory.get().getUrlForVoiceSearchQuery(query);
+                url = TemplateUrlServiceFactory.get().getUrlForVoiceSearchQuery(query).getSpec();
             }
         }
         return url;

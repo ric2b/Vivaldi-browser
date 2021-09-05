@@ -56,6 +56,7 @@ static const SessionCommand::id_type kCommandSetWindowBounds3 = 14;
 static const SessionCommand::id_type kCommandSetWindowAppName = 15;
 static const SessionCommand::id_type kCommandTabClosed = 16;
 static const SessionCommand::id_type kCommandWindowClosed = 17;
+// OBSOLETE: Superseded by kCommandSetTabUserAgentOverride2.
 static const SessionCommand::id_type kCommandSetTabUserAgentOverride = 18;
 static const SessionCommand::id_type kCommandSessionStorageAssociated = 19;
 static const SessionCommand::id_type kCommandSetActiveWindow = 20;
@@ -74,6 +75,7 @@ static const SessionCommand::id_type kCommandSetTabGroup = 27;
 static const SessionCommand::id_type kCommandSetTabGroupMetadata = 28;
 static const SessionCommand::id_type kCommandSetTabGroupMetadata2 = 29;
 static const SessionCommand::id_type kCommandSetTabGuid = 30;
+static const SessionCommand::id_type kCommandSetTabUserAgentOverride2 = 31;
 
 // Vivaldi functions. Have to in this file because of constant declarations
 #include "components/sessions/vivaldi_session_service_commands_funcs.inc"
@@ -730,7 +732,26 @@ bool CreateTabsAndWindows(
           return true;
         }
 
-        GetTab(tab_id, tabs)->user_agent_override.swap(user_agent_override);
+        SessionTab* tab = GetTab(tab_id, tabs);
+        tab->user_agent_override.ua_string_override.swap(user_agent_override);
+        tab->user_agent_override.opaque_ua_metadata_override = base::nullopt;
+        break;
+      }
+
+      case kCommandSetTabUserAgentOverride2: {
+        SessionID tab_id = SessionID::InvalidValue();
+        std::string user_agent_override;
+        base::Optional<std::string> opaque_ua_metadata_override;
+        if (!RestoreSetTabUserAgentOverrideCommand2(
+                *command, &tab_id, &user_agent_override,
+                &opaque_ua_metadata_override)) {
+          return true;
+        }
+        SessionTab* tab = GetTab(tab_id, tabs);
+        tab->user_agent_override.ua_string_override =
+            std::move(user_agent_override);
+        tab->user_agent_override.opaque_ua_metadata_override =
+            std::move(opaque_ua_metadata_override);
         break;
       }
 
@@ -1000,8 +1021,8 @@ std::unique_ptr<SessionCommand> CreateSetTabExtensionAppIDCommand(
 
 std::unique_ptr<SessionCommand> CreateSetTabUserAgentOverrideCommand(
     const SessionID& tab_id,
-    const std::string& user_agent_override) {
-  return CreateSetTabUserAgentOverrideCommand(kCommandSetTabUserAgentOverride,
+    const SerializedUserAgentOverride& user_agent_override) {
+  return CreateSetTabUserAgentOverrideCommand(kCommandSetTabUserAgentOverride2,
                                               tab_id, user_agent_override);
 }
 

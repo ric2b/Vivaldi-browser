@@ -220,16 +220,99 @@ bool IsEsIterableObject(v8::Isolate* isolate,
 }
 
 Document* ToDocumentFromExecutionContext(ExecutionContext* execution_context) {
-  return execution_context->ExecutingWindow()->document();
+  return DynamicTo<LocalDOMWindow>(execution_context)->document();
 }
 
 ExecutionContext* ExecutionContextFromV8Wrappable(const Range* range) {
-  return range->startContainer()->GetDocument().ToExecutionContext();
+  return range->startContainer()->GetExecutionContext();
 }
 
 ExecutionContext* ExecutionContextFromV8Wrappable(const DOMParser* parser) {
-  return parser->GetDocument() ? parser->GetDocument()->ToExecutionContext()
+  return parser->GetDocument() ? parser->GetDocument()->GetExecutionContext()
                                : nullptr;
+}
+
+v8::MaybeLocal<v8::Function> CreateNamedConstructorFunction(
+    ScriptState* script_state,
+    v8::FunctionCallback callback,
+    const char* func_name,
+    int func_length,
+    const WrapperTypeInfo* wrapper_type_info) {
+  v8::Isolate* isolate = script_state->GetIsolate();
+  const DOMWrapperWorld& world = script_state->World();
+  V8PerIsolateData* per_isolate_data = V8PerIsolateData::From(isolate);
+  const void* callback_key = reinterpret_cast<const void*>(callback);
+
+  // Named constructors are not interface objcets (despite that they're
+  // pretending so), but we reuse the cache of interface objects, which just
+  // works because both are V8 function template.
+  v8::Local<v8::FunctionTemplate> function_template =
+      per_isolate_data->FindInterfaceTemplate(world, callback_key);
+  if (function_template.IsEmpty()) {
+    function_template = v8::FunctionTemplate::New(
+        isolate, callback, v8::Local<v8::Value>(), v8::Local<v8::Signature>(),
+        func_length, v8::ConstructorBehavior::kAllow,
+        v8::SideEffectType::kHasSideEffect);
+    v8::Local<v8::FunctionTemplate> interface_template =
+        wrapper_type_info->DomTemplate(isolate, world);
+    function_template->Inherit(interface_template);
+    function_template->SetClassName(V8AtomicString(isolate, func_name));
+    function_template->InstanceTemplate()->SetInternalFieldCount(
+        kV8DefaultWrapperInternalFieldCount);
+    per_isolate_data->SetInterfaceTemplate(world, callback_key,
+                                           function_template);
+  }
+
+  v8::Local<v8::Context> context = script_state->GetContext();
+  V8PerContextData* per_context_data = V8PerContextData::From(context);
+  v8::Local<v8::Function> function;
+  if (!function_template->GetFunction(context).ToLocal(&function)) {
+    return v8::MaybeLocal<v8::Function>();
+  }
+  v8::Local<v8::Object> prototype_object =
+      per_context_data->PrototypeForType(wrapper_type_info);
+  bool did_define;
+  if (!function
+           ->DefineOwnProperty(
+               context, V8AtomicString(isolate, "prototype"), prototype_object,
+               static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum |
+                                                  v8::DontDelete))
+           .To(&did_define)) {
+    return v8::MaybeLocal<v8::Function>();
+  }
+  CHECK(did_define);
+  return function;
+}
+
+void InstallUnscopablePropertyNames(
+    v8::Isolate* isolate,
+    v8::Local<v8::Context> context,
+    v8::Local<v8::Object> prototype_object,
+    base::span<const char* const> property_name_table) {
+  // 3.6.3. Interface prototype object
+  // https://heycam.github.io/webidl/#interface-prototype-object
+  // step 8. If interface has any member declared with the [Unscopable]
+  //   extended attribute, then:
+  // step 8.1. Let unscopableObject be the result of performing
+  //   ! ObjectCreate(null).
+  v8::Local<v8::Object> unscopable_object =
+      v8::Object::New(isolate, v8::Null(isolate), nullptr, nullptr, 0);
+  for (const char* const property_name : property_name_table) {
+    // step 8.2.2. Perform ! CreateDataProperty(unscopableObject, id, true).
+    unscopable_object
+        ->CreateDataProperty(context, V8AtomicString(isolate, property_name),
+                             v8::True(isolate))
+        .ToChecked();
+  }
+  // step 8.3. Let desc be the PropertyDescriptor{[[Value]]: unscopableObject,
+  //   [[Writable]]: false, [[Enumerable]]: false, [[Configurable]]: true}.
+  // step 8.4. Perform ! DefinePropertyOrThrow(interfaceProtoObj,
+  //   @@unscopables, desc).
+  prototype_object
+      ->DefineOwnProperty(
+          context, v8::Symbol::GetUnscopables(isolate), unscopable_object,
+          static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum))
+      .ToChecked();
 }
 
 v8::Local<v8::Array> EnumerateIndexedProperties(v8::Isolate* isolate,

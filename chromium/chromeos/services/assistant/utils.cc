@@ -6,10 +6,10 @@
 
 #include <utility>
 
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
-#include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
@@ -18,7 +18,7 @@
 #include "chromeos/assistant/internal/internal_constants.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/util/version_loader.h"
-#include "chromeos/services/assistant/public/features.h"
+#include "chromeos/services/assistant/public/cpp/features.h"
 
 namespace chromeos {
 namespace assistant {
@@ -112,6 +112,15 @@ std::string CreateLibAssistantConfig(
 
   // Enable logging.
   internal.SetBoolKey("enable_logging", true);
+
+  // This only enables logging to local disk combined with the flag above. When
+  // user choose to file a Feedback report, user can examine the log and choose
+  // to upload the log with the report or not.
+  internal.SetBoolKey("logging_opt_in", true);
+
+  // Allows libassistant to automatically toggle signed-out mode depending on
+  // whether it has auth_tokens.
+  internal.SetBoolKey("enable_signed_out_mode", true);
 
   config.SetKey("internal", std::move(internal));
 

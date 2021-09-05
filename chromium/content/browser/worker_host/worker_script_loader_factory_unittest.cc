@@ -14,7 +14,7 @@
 #include "content/browser/service_worker/service_worker_main_resource_handle_core.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/test/fake_network_url_loader_factory.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/isolation_info.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_client.h"
@@ -57,7 +57,7 @@ class WorkerScriptLoaderFactoryTest : public testing::Test {
 
     // Set up a service worker host for the shared worker.
     service_worker_handle_ = std::make_unique<ServiceWorkerMainResourceHandle>(
-        helper_->context_wrapper());
+        helper_->context_wrapper(), base::DoNothing());
   }
 
  protected:
@@ -69,9 +69,11 @@ class WorkerScriptLoaderFactoryTest : public testing::Test {
     network::ResourceRequest resource_request;
     resource_request.url = url;
     resource_request.trusted_params = network::ResourceRequest::TrustedParams();
-    resource_request.trusted_params->network_isolation_key =
-        net::NetworkIsolationKey(url::Origin::Create(url),
-                                 url::Origin::Create(url));
+    resource_request.trusted_params->isolation_info =
+        net::IsolationInfo::Create(
+            net::IsolationInfo::RedirectMode::kUpdateNothing,
+            url::Origin::Create(url), url::Origin::Create(url),
+            net::SiteForCookies());
     resource_request.resource_type =
         static_cast<int>(blink::mojom::ResourceType::kSharedWorker);
     factory->CreateLoaderAndStart(
@@ -94,9 +96,9 @@ class WorkerScriptLoaderFactoryTest : public testing::Test {
 TEST_F(WorkerScriptLoaderFactoryTest, ServiceWorkerProviderHost) {
   // Make the factory.
   auto factory = std::make_unique<WorkerScriptLoaderFactory>(
-      kProcessId, service_worker_handle_.get(),
-      /*appcache_host=*/nullptr, browser_context_getter_,
-      network_loader_factory_);
+      kProcessId, DedicatedWorkerId(), SharedWorkerId(),
+      service_worker_handle_.get(), /*appcache_host=*/nullptr,
+      browser_context_getter_, network_loader_factory_);
 
   // Load the script.
   GURL url("https://www.example.com/worker.js");
@@ -119,7 +121,8 @@ TEST_F(WorkerScriptLoaderFactoryTest, ServiceWorkerProviderHost) {
 TEST_F(WorkerScriptLoaderFactoryTest, NullServiceWorkerHandle) {
   // Make the factory.
   auto factory = std::make_unique<WorkerScriptLoaderFactory>(
-      kProcessId, service_worker_handle_.get(), nullptr /* appcache_host */,
+      kProcessId, DedicatedWorkerId(), SharedWorkerId(),
+      service_worker_handle_.get(), nullptr /* appcache_host */,
       browser_context_getter_, network_loader_factory_);
 
   // Destroy the handle.
@@ -142,7 +145,8 @@ TEST_F(WorkerScriptLoaderFactoryTest, NullServiceWorkerHandle) {
 TEST_F(WorkerScriptLoaderFactoryTest, NullBrowserContext) {
   // Make the factory.
   auto factory = std::make_unique<WorkerScriptLoaderFactory>(
-      kProcessId, service_worker_handle_.get(), nullptr /* appcache_host */,
+      kProcessId, DedicatedWorkerId(), SharedWorkerId(),
+      service_worker_handle_.get(), nullptr /* appcache_host */,
       browser_context_getter_, network_loader_factory_);
 
   // Set a null browser context.

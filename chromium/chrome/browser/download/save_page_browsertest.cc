@@ -56,6 +56,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/no_renderer_crashes_assertion.h"
@@ -885,8 +886,7 @@ IN_PROC_BROWSER_TEST_F(SavePageBrowserTest, SaveUnauthorizedResource) {
   base::FilePath file_path =
       temp_dir2.GetPath().Append(FILE_PATH_LITERAL("should-not-save.jpg"));
   std::string file_content("fake-jpg");
-  ASSERT_LT(
-      0, base::WriteFile(file_path, file_content.data(), file_content.size()));
+  ASSERT_TRUE(base::WriteFile(file_path, file_content));
 
   // Refer to the test file from the test page.
   GURL file_url = net::FilePathToFileURL(file_path);

@@ -183,7 +183,7 @@ bool IsIceCandidateMissingSdp(
   if (candidate.IsRTCIceCandidateInit()) {
     const RTCIceCandidateInit* ice_candidate_init =
         candidate.GetAsRTCIceCandidateInit();
-    return !ice_candidate_init->hasSdpMid() &&
+    return ice_candidate_init->sdpMid().IsNull() &&
            !ice_candidate_init->hasSdpMLineIndex();
   }
 
@@ -694,9 +694,11 @@ RTCPeerConnection* RTCPeerConnection::Create(
 
   RTCPeerConnection* peer_connection = MakeGarbageCollected<RTCPeerConnection>(
       context, std::move(configuration), rtc_configuration->hasSdpSemantics(),
-      rtc_configuration->forceEncodedAudioInsertableStreams(),
-      rtc_configuration->forceEncodedVideoInsertableStreams(), constraints,
-      exception_state);
+      rtc_configuration->forceEncodedAudioInsertableStreams() ||
+          rtc_configuration->encodedInsertableStreams(),
+      rtc_configuration->forceEncodedVideoInsertableStreams() ||
+          rtc_configuration->encodedInsertableStreams(),
+      constraints, exception_state);
   if (exception_state.HadException())
     return nullptr;
 
@@ -1103,8 +1105,7 @@ DOMException* RTCPeerConnection::checkSdpForStateErrors(
 
 base::Optional<ComplexSdpCategory> RTCPeerConnection::CheckForComplexSdp(
     const RTCSessionDescriptionInit* session_description_init) const {
-  if (!session_description_init->hasType() ||
-      !session_description_init->hasSdp())
+  if (!session_description_init->hasType())
     return base::nullopt;
 
   base::Optional<SdpFormat> sdp_format = DeduceSdpFormat(
@@ -1273,8 +1274,8 @@ void RTCPeerConnection::GenerateCertificateCompleted(
 bool RTCPeerConnection::HasDocumentMedia() const {
   if (!GetExecutionContext())
     return false;
-  UserMediaController* user_media_controller = UserMediaController::From(
-      To<LocalDOMWindow>(GetExecutionContext())->GetFrame());
+  UserMediaController* user_media_controller =
+      UserMediaController::From(To<LocalDOMWindow>(GetExecutionContext()));
   return user_media_controller &&
          user_media_controller->HasRequestedUserMedia();
 }
@@ -1284,7 +1285,7 @@ void RTCPeerConnection::UpdateIceConnectionState() {
   auto new_state = ComputeIceConnectionState();
   if (ice_connection_state_ != new_state) {
     peer_handler_->TrackIceConnectionStateChange(
-        RTCPeerConnectionHandlerPlatform::IceConnectionStateVersion::kDefault,
+        RTCPeerConnectionHandler::IceConnectionStateVersion::kDefault,
         new_state);
   }
   ChangeIceConnectionState(new_state);
@@ -1324,6 +1325,7 @@ void RTCPeerConnection::ReportSetSdpUsage(
 
 ScriptPromise RTCPeerConnection::setLocalDescription(
     ScriptState* script_state) {
+  DCHECK(script_state->ContextIsValid());
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
   auto* request = MakeGarbageCollected<RTCVoidRequestPromiseImpl>(
@@ -1337,8 +1339,14 @@ ScriptPromise RTCPeerConnection::setLocalDescription(
     ScriptState* script_state,
     const RTCSessionDescriptionInit* session_description_init,
     ExceptionState& exception_state) {
-  if (session_description_init->type().IsNull() &&
-      session_description_init->sdp().IsNull()) {
+  if (closed_) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kSignalingStateClosedMessage);
+    return ScriptPromise();
+  }
+
+  DCHECK(script_state->ContextIsValid());
+  if (!session_description_init->hasType()) {
     return setLocalDescription(script_state);
   }
   String sdp;
@@ -1375,6 +1383,12 @@ ScriptPromise RTCPeerConnection::setLocalDescription(
     const RTCSessionDescriptionInit* session_description_init,
     V8VoidFunction* success_callback,
     V8RTCPeerConnectionErrorCallback* error_callback) {
+  if (CallErrorCallbackIfSignalingStateClosed(signaling_state_,
+                                              error_callback)) {
+    return ScriptPromise::CastUndefined(script_state);
+  }
+
+  DCHECK(script_state->ContextIsValid());
   if (session_description_init->type() != "rollback") {
     MaybeWarnAboutUnsafeSdp(session_description_init);
     ReportSetSdpUsage(SetSdpOperationType::kSetLocalDescription,
@@ -1449,6 +1463,13 @@ ScriptPromise RTCPeerConnection::setRemoteDescription(
     ScriptState* script_state,
     const RTCSessionDescriptionInit* session_description_init,
     ExceptionState& exception_state) {
+  if (closed_) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kSignalingStateClosedMessage);
+    return ScriptPromise();
+  }
+
+  DCHECK(script_state->ContextIsValid());
   if (session_description_init->type() != "rollback") {
     MaybeWarnAboutUnsafeSdp(session_description_init);
     ReportSetSdpUsage(SetSdpOperationType::kSetRemoteDescription,
@@ -1481,12 +1502,19 @@ ScriptPromise RTCPeerConnection::setRemoteDescription(
     const RTCSessionDescriptionInit* session_description_init,
     V8VoidFunction* success_callback,
     V8RTCPeerConnectionErrorCallback* error_callback) {
+  if (CallErrorCallbackIfSignalingStateClosed(signaling_state_,
+                                              error_callback)) {
+    return ScriptPromise::CastUndefined(script_state);
+  }
+
+  DCHECK(script_state->ContextIsValid());
   if (session_description_init->type() != "rollback") {
     MaybeWarnAboutUnsafeSdp(session_description_init);
     ReportSetSdpUsage(SetSdpOperationType::kSetRemoteDescription,
                       session_description_init);
   }
   ExecutionContext* context = ExecutionContext::From(script_state);
+  CHECK(context);
   if (success_callback && error_callback) {
     UseCounter::Count(
         context,
@@ -1773,7 +1801,6 @@ ScriptPromise RTCPeerConnection::generateCertificate(
                                         "AlgorithmIdentifier, but the "
                                         "algorithm is not supported.");
       return ScriptPromise();
-      break;
   }
   DCHECK(key_params.has_value());
 
@@ -1983,12 +2010,6 @@ base::Optional<bool> RTCPeerConnection::canTrickleIceCandidates() const {
     return base::nullopt;
   }
   return *can_trickle;
-}
-
-bool RTCPeerConnection::canTrickleIceCandidates(bool& is_null) const {
-  base::Optional<bool> result = canTrickleIceCandidates();
-  is_null = !result;
-  return result.value_or(false);
 }
 
 void RTCPeerConnection::restartIce() {
@@ -2860,11 +2881,11 @@ void RTCPeerConnection::DidChangeIceConnectionState(
   if (sdp_semantics_ == webrtc::SdpSemantics::kUnifiedPlan) {
     // Unified plan relies on UpdateIceConnectionState() instead.
     peer_handler_->TrackIceConnectionStateChange(
-        RTCPeerConnectionHandlerPlatform::IceConnectionStateVersion::kLegacy,
+        RTCPeerConnectionHandler::IceConnectionStateVersion::kLegacy,
         new_state);
   } else {
     peer_handler_->TrackIceConnectionStateChange(
-        RTCPeerConnectionHandlerPlatform::IceConnectionStateVersion::kDefault,
+        RTCPeerConnectionHandler::IceConnectionStateVersion::kDefault,
         new_state);
     ChangeIceConnectionState(new_state);
   }
@@ -3178,9 +3199,14 @@ void RTCPeerConnection::DidAddRemoteDataChannel(
 
   auto* blink_channel = MakeGarbageCollected<RTCDataChannel>(
       GetExecutionContext(), std::move(channel), peer_handler_.get());
-  ScheduleDispatchEvent(MakeGarbageCollected<RTCDataChannelEvent>(
-      event_type_names::kDatachannel, blink_channel));
   has_data_channels_ = true;
+  blink_channel->SetStateToOpenWithoutEvent();
+  DispatchEvent(*MakeGarbageCollected<RTCDataChannelEvent>(
+      event_type_names::kDatachannel, blink_channel));
+  // The event handler might have closed the channel.
+  if (blink_channel->readyState() == "open") {
+    blink_channel->DispatchOpenEvent();
+  }
 }
 
 void RTCPeerConnection::DidNoteInterestingUsage(int usage_pattern) {
@@ -3221,6 +3247,9 @@ ExecutionContext* RTCPeerConnection::GetExecutionContext() const {
 }
 
 void RTCPeerConnection::ContextDestroyed() {
+  if (!closed_) {
+    CloseInternal();
+  }
   UnregisterPeerConnectionHandler();
 }
 

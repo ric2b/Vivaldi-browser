@@ -106,7 +106,8 @@ class ChromeContentRendererClient
       const base::FilePath& plugin_path) override;
   bool HasErrorPage(int http_status_code) override;
   bool ShouldSuppressErrorPage(content::RenderFrame* render_frame,
-                               const GURL& url) override;
+                               const GURL& url,
+                               int error_code) override;
   bool ShouldTrackUseCounter(const GURL& url) override;
   void PrepareErrorPage(content::RenderFrame* render_frame,
                         const blink::WebURLError& error,
@@ -132,7 +133,7 @@ class ChromeContentRendererClient
                        const net::SiteForCookies& site_for_cookies,
                        const url::Origin* initiator_origin,
                        GURL* new_url,
-                       bool* attach_same_site_cookies) override;
+                       bool* force_ignore_site_for_cookies) override;
   bool IsPrefetchOnly(content::RenderFrame* render_frame,
                       const blink::WebURLRequest& request) override;
   uint64_t VisitedLinkHash(const char* canonical_url, size_t length) override;
@@ -148,8 +149,10 @@ class ChromeContentRendererClient
   std::unique_ptr<blink::WebContentSettingsClient>
   CreateWorkerContentSettingsClient(
       content::RenderFrame* render_frame) override;
+#if !defined(OS_ANDROID)
   std::unique_ptr<media::SpeechRecognitionClient> CreateSpeechRecognitionClient(
       content::RenderFrame* render_frame) override;
+#endif
   void AddSupportedKeySystems(
       std::vector<std::unique_ptr<::media::KeySystemProperties>>* key_systems)
       override;

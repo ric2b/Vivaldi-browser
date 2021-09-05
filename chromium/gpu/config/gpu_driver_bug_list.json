@@ -682,8 +682,8 @@
       },
       "vendor_id": "0x8086",
       "driver_version": {
-        "op": "<",
-        "value": "0.0.0.3000"
+        "op": "<=",
+        "value": "9.18.0.0"
       },
       "features": [
         "disable_d3d11"
@@ -2868,17 +2868,6 @@
       ]
     },
     {
-      "id":273,
-      "cr_bugs": [866613, 860021],
-      "description": "Frequent crashes on Adreno (TM) on L and below",
-      "os": {
-        "type": "android"
-      },
-      "features": [
-        "use_es2_for_oopr"
-      ]
-    },
-    {
       "id": 274,
       "description": "glTexStorage* are buggy when base mipmap level is not 0",
       "cr_bugs": [877874],
@@ -3002,6 +2991,7 @@
         "type": "win"
       },
       "driver_version": {
+        "schema": "intel_driver",
         "op": ">",
         "value": "0.0.100.0"
       },
@@ -3072,25 +3062,6 @@
       },
       "features": [
         "gl_clear_broken"
-      ]
-    },
-    {
-      "id": 294,
-      "cr_bugs": [932879, 1025427],
-      "description": "Hardware overlays are only supported on certain Intel/AMD gpus",
-      "os": {
-        "type": "win"
-      },
-      "exceptions": [
-        {
-          "vendor_id": "0x8086"
-        },
-        {
-          "vendor_id": "0x1002"
-        }
-      ],
-      "features": [
-        "disable_direct_composition_video_overlays"
       ]
     },
     {
@@ -3183,6 +3154,7 @@
       },
       "vendor_id": "0x8086",
       "driver_version": {
+        "schema": "intel_driver",
         "op": "<",
         "value": "0.0.0.9999"
       },
@@ -3246,13 +3218,16 @@
     {
       "id": 309,
       "cr_bugs": [993233],
-      "description": "Don't use video processor scaling on non-Intel GPUs.",
+      "description": "Don't use video processor scaling on non-Intel, non-NVIDIA GPUs.",
       "os": {
         "type" : "win"
       },
       "exceptions": [
         {
           "vendor_id": "0x8086"
+        },
+        {
+          "vendor_id": "0x10de"
         }
       ],
       "features": [
@@ -3545,18 +3520,6 @@
       ]
     },
     {
-      "id": 333,
-      "cr_bugs": [1042615],
-      "description": "Disable Qcomm_tiled_rendering extension for webview",
-      "os": {
-        "type": "android"
-      },
-      "gl_vendor": "Qualcomm.*",
-      "features": [
-        "disable_qcomm_tiled_rendering"
-      ]
-    },
-    {
       "id": 334,
       "description": "NVidia drivers seem corrupt memory when all siblings of eglImage are destroyed",
       "cr_bugs": [1052114],
@@ -3602,6 +3565,89 @@
       ],
       "features": [
         "disable_dxva_video_decoder"
+      ]
+    },
+    {
+      "id": 337,
+      "description": "Disable hardware MFT H264 encoder on older NVIDIA drivers",
+      "cr_bugs": [1058583],
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x10de",
+      "driver_version": {
+        "op": "<",
+        "value": "24.21.13.9827"
+      },
+      "features": [
+        "disable_mediafoundation_async_h264_encoding"
+      ]
+    },
+    {
+      "id": 338,
+      "description": "Disable hardware overlay on icelake with older Intel drivers",
+      "cr_bugs": [1062653],
+      "os": {
+        "type": "win"
+      },
+      "intel_gpu_series" : [
+        "icelake"
+      ],
+      "vendor_id": "0x8086",
+      "driver_version": {
+        "op": "<",
+        "value": "26.20.100.7755"
+      },
+      "features": [
+        "disable_direct_composition_video_overlays"
+      ]
+    },
+    {
+      "id": 339,
+      "description": "NV12 textures trigger crash on Intel driver 20.19.15.*",
+      "cr_bugs": [971952],
+      "os": {
+        "type": "win",
+        "version": {
+          "op": "=",
+          "value": "10"
+        }
+      },
+      "vendor_id": "0x8086",
+      "intel_gpu_series": [
+        "skylake"
+      ],
+      "driver_version": {
+        "op": "between",
+        "value": "20.19.15.4285",
+        "value2": "20.19.15.4380"
+      },
+      "features": [
+        "disable_nv12_dxgi_video"
+      ]
+    },
+    {
+      "id": 340,
+      "description": "NV12 textures trigger crash on Intel driver 10.18.15.*",
+      "cr_bugs": [971952],
+      "os": {
+        "type": "win",
+        "version": {
+          "op": "=",
+          "value": "10"
+        }
+      },
+      "vendor_id": "0x8086",
+      "intel_gpu_series": [
+        "skylake"
+      ],
+      "driver_version": {
+        "op": "between",
+        "value": "10.18.15.4256",
+        "value2": "10.18.15.4293"
+      },
+      "features": [
+        "disable_nv12_dxgi_video"
       ]
     }
   ]

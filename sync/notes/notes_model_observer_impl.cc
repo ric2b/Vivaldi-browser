@@ -77,14 +77,6 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
                                             size_t index) {
   const vivaldi::NoteNode* node = parent->children()[index].get();
 
-  // Note (david@vivaldi.com): Not sure if it is really relevant to have a
-  // parent_entitiy here. Can be removed if that fixes VAB-1276.
-  const SyncedNoteTracker::Entity* parent_entity =
-      note_tracker_->GetEntityForNoteNode(parent);
-  // TODO(crbug.com/516866): The below CHECK is added to debug some crashes.
-  // Should be removed after figuring out the reason for the crash.
-  CHECK(parent_entity);
-
   // Similar to the directory implementation here:
   // https://cs.chromium.org/chromium/src/components/sync/syncable/mutable_entry.cc?l=237&gsn=CreateEntryKernel
   // Assign a temp server id for the entity. Will be overriden by the actual

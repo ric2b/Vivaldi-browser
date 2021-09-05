@@ -30,7 +30,6 @@ import android.text.style.ClickableSpan;
 import android.text.style.StyleSpan;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -49,17 +48,14 @@ import org.json.JSONArray;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.autofill_assistant.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcher;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcherConfig;
-import org.chromium.chrome.browser.ui.RootUiCoordinator;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
+import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -79,7 +75,7 @@ import jp.tomorrowkey.android.gifplayer.BaseGifImage;
  */
 class AutofillAssistantUiTestUtil {
     /** Image fetcher which synchronously returns a preset image. */
-    static class MockImageFetcher extends ImageFetcher {
+    static class MockImageFetcher extends ImageFetcher.ImageFetcherForTesting {
         private final Bitmap mBitmapToFetch;
         private final BaseGifImage mGifToFetch;
 
@@ -96,6 +92,11 @@ class AutofillAssistantUiTestUtil {
         @Override
         public void fetchImage(
                 String url, String clientName, int width, int height, Callback<Bitmap> callback) {
+            callback.onResult(mBitmapToFetch);
+        }
+
+        @Override
+        public void fetchImage(Params params, Callback<Bitmap> callback) {
             callback.onResult(mBitmapToFetch);
         }
 
@@ -308,6 +309,44 @@ class AutofillAssistantUiTestUtil {
         };
     }
 
+    static Matcher<View> fullyCovers(Rect rect) {
+        return new TypeSafeMatcher<View>() {
+            @Override
+            protected boolean matchesSafely(View view) {
+                Rect viewRect = new Rect();
+                if (!view.getGlobalVisibleRect(viewRect)) {
+                    throw new AssertionError("Expected view to be visible.");
+                }
+
+                return rect.left >= viewRect.left && rect.right <= viewRect.right
+                        && rect.top >= viewRect.top && rect.bottom <= viewRect.bottom;
+            }
+
+            @Override
+            public void describeTo(Description description) {
+                description.appendText("fully covering [" + rect.left + ", " + rect.top + ", "
+                        + rect.right + ", " + rect.bottom + "]");
+            }
+        };
+    }
+
+    static Matcher<View> withTextGravity(int gravity) {
+        return new TypeSafeMatcher<View>() {
+            @Override
+            protected boolean matchesSafely(View view) {
+                if (!(view instanceof TextView)) {
+                    return false;
+                }
+                return ((TextView) view).getGravity() == gravity;
+            }
+
+            @Override
+            public void describeTo(Description description) {
+                description.appendText("withTextGravity " + gravity);
+            }
+        };
+    }
+
     static ViewAction openTextLink(String textLink) {
         return new ViewAction() {
             @Override
@@ -415,7 +454,7 @@ class AutofillAssistantUiTestUtil {
      * after a default timeout.
      */
     public static void waitUntilKeyboardMatchesCondition(
-            CustomTabActivityTestRule testRule, boolean isShowing) {
+            ChromeActivityTestRule testRule, boolean isShowing) {
         CriteriaHelper.pollInstrumentationThread(new Criteria(
                 "Timeout while waiting for the keyboard to be "
                 + (isShowing ? "visible" : "hidden")) {
@@ -453,30 +492,10 @@ class AutofillAssistantUiTestUtil {
     }
 
     /**
-     * Creates a {@link BottomSheetController} for the activity, suitable for testing.
-     *
-     * <p>The returned controller is different from the one returned by {@link
-     * ChromeActivity#getBottomSheetController}.
+     * Get a {@link BottomSheetController} to run the tests with.
      */
-    static BottomSheetController createBottomSheetController(ChromeActivity activity) {
-        // Copied from {@link ChromeActivity#initializeBottomSheet}.
-
-        Supplier<View> sheetSupplier = () -> {
-            ViewGroup coordinator = activity.findViewById(R.id.coordinator);
-            LayoutInflater.from(activity).inflate(R.layout.bottom_sheet, coordinator);
-            View bottomSheet = coordinator.findViewById(R.id.bottom_sheet);
-            return bottomSheet;
-        };
-
-        Supplier<OverlayPanelManager> panelManagerProvider = () -> {
-            return activity.getCompositorViewHolder().getLayoutManager().getOverlayPanelManager();
-        };
-
-        RootUiCoordinator rootCoordinator = activity.getRootUiCoordinatorForTesting();
-        return new BottomSheetController(activity.getLifecycleDispatcher(),
-                activity.getActivityTabProvider(), rootCoordinator::getScrimCoordinatorForTesting,
-                sheetSupplier, panelManagerProvider, activity.getFullscreenManager(),
-                activity.getWindow(), activity.getWindowAndroid().getKeyboardDelegate());
+    static BottomSheetController getBottomSheetController(ChromeActivity activity) {
+        return activity.getRootUiCoordinatorForTesting().getBottomSheetController();
     }
 
     /**
@@ -511,7 +530,7 @@ class AutofillAssistantUiTestUtil {
     }
 
     /** Performs a single tap on the center of the specified element. */
-    public static void tapElement(CustomTabActivityTestRule testRule, String... elementIds)
+    public static void tapElement(ChromeActivityTestRule testRule, String... elementIds)
             throws Exception {
         Rect coords = getAbsoluteBoundingRect(testRule, elementIds);
         float x = coords.left + 0.5f * (coords.right - coords.left);
@@ -530,7 +549,7 @@ class AutofillAssistantUiTestUtil {
 
     /** Computes the bounding rectangle of the specified DOM element in absolute screen space. */
     public static Rect getAbsoluteBoundingRect(
-            CustomTabActivityTestRule testRule, String... elementIds) throws Exception {
+            ChromeActivityTestRule testRule, String... elementIds) throws Exception {
         // Get bounding rectangle in viewport space.
         Rect elementRect = getBoundingRectForElement(testRule.getWebContents(), elementIds);
 
@@ -590,7 +609,7 @@ class AutofillAssistantUiTestUtil {
     }
 
     public static boolean checkElementOnScreen(
-            CustomTabActivityTestRule testRule, String... elementIds) throws Exception {
+            ChromeActivityTestRule testRule, String... elementIds) throws Exception {
         Rect coords = getAbsoluteBoundingRect(testRule, elementIds);
         DisplayMetrics displayMetrics = testRule.getActivity().getResources().getDisplayMetrics();
 

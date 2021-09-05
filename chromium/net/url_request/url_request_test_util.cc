@@ -6,9 +6,9 @@
 
 #include <utility>
 
+#include "base/check_op.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/supports_user_data.h"
@@ -392,7 +392,6 @@ TestNetworkDelegate::TestNetworkDelegate()
       before_start_transaction_count_(0),
       headers_received_count_(0),
       has_load_timing_info_before_redirect_(false),
-      experimental_cookie_features_enabled_(false),
       cancel_request_with_policy_violating_referrer_(false),
       before_start_transaction_fails_(false),
       add_header_to_first_response_(false),
@@ -485,8 +484,8 @@ int TestNetworkDelegate::OnHeadersReceived(
         new HttpResponseHeaders(original_response_headers->raw_headers());
     (*override_response_headers)->ReplaceStatusLine("HTTP/1.1 302 Found");
     (*override_response_headers)->RemoveHeader("Location");
-    (*override_response_headers)->AddHeader(
-        "Location: " + redirect_on_headers_received_url_.spec());
+    (*override_response_headers)
+        ->AddHeader("Location", redirect_on_headers_received_url_.spec());
 
     redirect_on_headers_received_url_ = GURL();
 
@@ -496,7 +495,7 @@ int TestNetworkDelegate::OnHeadersReceived(
     *override_response_headers =
         new HttpResponseHeaders(original_response_headers->raw_headers());
     (*override_response_headers)
-        ->AddHeader("X-Network-Delegate: Greetings, planet");
+        ->AddHeader("X-Network-Delegate", "Greetings, planet");
   }
 
   headers_received_count_++;

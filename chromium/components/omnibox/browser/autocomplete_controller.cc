@@ -14,9 +14,9 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/format_macros.h"
-#include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/optional.h"
@@ -39,6 +39,7 @@
 #include "components/omnibox/browser/keyword_provider.h"
 #include "components/omnibox/browser/local_history_zero_suggest_provider.h"
 #include "components/omnibox/browser/on_device_head_provider.h"
+#include "components/omnibox/browser/query_tile_provider.h"
 #include "components/omnibox/browser/search_provider.h"
 #include "components/omnibox/browser/shortcuts_provider.h"
 #include "components/omnibox/browser/zero_suggest_provider.h"
@@ -305,6 +306,9 @@ AutocompleteController::AutocompleteController(
           ClipboardRecentContent::GetInstance()));
     }
   }
+
+  if (provider_types & AutocompleteProvider::TYPE_QUERY_TILE)
+    providers_.push_back(new QueryTileProvider(provider_client_.get(), this));
 
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       this, "AutocompleteController", base::ThreadTaskRunnerHandle::Get());
@@ -772,10 +776,11 @@ void AutocompleteController::UpdateHeaders(AutocompleteResult* result) {
   for (AutocompleteMatch& match : *result) {
     if (match.suggestion_group_id.has_value()) {
       int group_id = match.suggestion_group_id.value();
-      match.RecordAdditionalInfo("suggestion_group_id", group_id);
-      match.RecordAdditionalInfo(
-          "header string",
-          base::UTF16ToUTF8(result->GetHeaderForGroupId(group_id)));
+      const base::string16 header = result->GetHeaderForGroupId(group_id);
+      if (!header.empty()) {
+        match.RecordAdditionalInfo("suggestion_group_id", group_id);
+        match.RecordAdditionalInfo("header string", base::UTF16ToUTF8(header));
+      }
     }
   }
 }

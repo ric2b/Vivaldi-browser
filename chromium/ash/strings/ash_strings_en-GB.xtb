@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="en-GB">
 <translation id="1012876632442809908">USB-C device (front port)</translation>
+<translation id="1013598600051641573"><ph name="DISPLAY_NAME" /> changed to <ph name="RESOLUTION" /> (<ph name="REFRESH_RATE" /> Hz). Click confirm to keep changes. The previous settings will be restored in <ph name="TIMEOUT_SECONDS" />.</translation>
 <translation id="1013923882670373915">Bluetooth device "<ph name="DEVICE_NAME" />" would like permission to pair. Please enter this PIN code on that device: <ph name="PINCODE" /></translation>
 <translation id="1032891413405719768">Stylus battery is low</translation>
 <translation id="1037492556044956303"><ph name="DEVICE_NAME" /> added</translation>
@@ -19,6 +20,8 @@
 <translation id="1195412055398077112">overscan</translation>
 <translation id="119944043368869598">Clear all</translation>
 <translation id="1199716647557067911">Are you sure that you want to turn off switch access?</translation>
+<translation id="121097972571826261">Forward by word</translation>
+<translation id="1229194443904279055">Stop selecting</translation>
 <translation id="1247372569136754018">Microphone (internal)</translation>
 <translation id="1252999807265626933">Charging from <ph name="POWER_SOURCE" /></translation>
 <translation id="1255033239764210633">What's the weather?</translation>
@@ -45,6 +48,7 @@
 <translation id="1455242230282523554">Show language settings</translation>
 <translation id="1460620680449458626">Volume is muted.</translation>
 <translation id="1467432559032391204">Left</translation>
+<translation id="1479909375538722835">Floating accessibility menu</translation>
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1508507608940204251">On</translation>
 <translation id="1516740043221086139">Do Not Disturb is on.</translation>
@@ -55,7 +59,6 @@
 <translation id="1550523713251050646">Click for more options</translation>
 <translation id="1570871743947603115">Toggle Bluetooth. <ph name="STATE_TEXT" /></translation>
 <translation id="1589090746204042747">Access all your activity in this session</translation>
-<translation id="1608626060424371292">Remove this user</translation>
 <translation id="1632985212731562677">Switch access can be disabled in Settings &gt; Accessibility.</translation>
 <translation id="1654477262762802994">Start a voice query</translation>
 <translation id="1658406695958299976">Sorry, your password still couldn't be verified. Note: If you changed your password recently, your new password will be applied once you sign out. Please use the old password here.</translation>
@@ -110,6 +113,7 @@
 <translation id="2298170939937364391">Full-screen Magnifier enabled. Press Ctrl+Search+M again to toggle it off.</translation>
 <translation id="2302092602801625023">This account is managed by Family Link</translation>
 <translation id="2303600792989757991">Toggle window overview</translation>
+<translation id="2322173485024759474">Back by letter</translation>
 <translation id="2339073806695260576">Tap the stylus button on the shelf to take a note, screenshot, use the laser pointer or magnifying glass.</translation>
 <translation id="2341729377289034582">Locked to vertical</translation>
 <translation id="2352467521400612932">Stylus settings</translation>
@@ -141,6 +145,7 @@
 <translation id="2700493154570097719">Set your keyboard</translation>
 <translation id="2704781753052663061">Join other Wi-Fi networks</translation>
 <translation id="2705001408393684014">Toggle mic. <ph name="STATE_TEXT" /></translation>
+<translation id="2706462751667573066">Up</translation>
 <translation id="2718395828230677721">Night Light</translation>
 <translation id="2727977024730340865">Plugged in to a low-power charger. Battery charging may not be reliable.</translation>
 <translation id="2792498699870441125">Alt+Search</translation>
@@ -174,6 +179,7 @@
 <translation id="3077734595579995578">shift</translation>
 <translation id="3081696990447829002">Expand menu</translation>
 <translation id="3087734570205094154">Bottom</translation>
+<translation id="309749186376891736">Move cursor</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
 <translation id="3126069444801937830">Restart to update</translation>
 <translation id="3139942575505304791">Desk 1</translation>
@@ -203,6 +209,7 @@
 <translation id="3400357268283240774">Additional settings</translation>
 <translation id="3413817803639110246">Nothing to see just yet</translation>
 <translation id="3428447136709161042">Disconnect from <ph name="NETWORK_NAME" /></translation>
+<translation id="3430396595145920809">Swipe from the right to go back</translation>
 <translation id="343571671045587506">Edit reminder</translation>
 <translation id="3445925074670675829">USB-C device</translation>
 <translation id="3454224730401036106">Your connection has switched to a more secure network</translation>
@@ -218,11 +225,13 @@
 <translation id="3595596368722241419">Battery full</translation>
 <translation id="3604801046548457007">Desk <ph name="DESK_TITILE" /> created</translation>
 <translation id="3606978283550408104">Braille display connected.</translation>
+<translation id="3616883743181209306">Menu moved to the top-right corner of the screen.</translation>
 <translation id="3621202678540785336">Input</translation>
 <translation id="3621712662352432595">Audio Settings</translation>
 <translation id="3626281679859535460">Brightness</translation>
 <translation id="3631369015426612114">Allow notifications from the following</translation>
 <translation id="3638400994746983214">Toggle privacy screen. <ph name="STATE_TEXT" />.</translation>
+<translation id="366222428570480733"><ph name="USER_EMAIL_ADDRESS" /> managed user</translation>
 <translation id="3705722231355495246">-</translation>
 <translation id="3712407551474845318">Capture region</translation>
 <translation id="371370241367527062">Front microphone</translation>
@@ -236,12 +245,14 @@
 <translation id="383629559565718788">Show keyboard settings</translation>
 <translation id="3846575436967432996">No network information available</translation>
 <translation id="385051799172605136">Back</translation>
+<translation id="385300504083504382">Beginning</translation>
 <translation id="3891340733213178823">Press Ctrl+Shift+Q twice to sign out.</translation>
 <translation id="3893630138897523026">ChromeVox (spoken feedback)</translation>
 <translation id="3897533311200664389">Start a text query</translation>
 <translation id="3899995891769452915">Voice input</translation>
 <translation id="3900355044994618856">Your session will end in <ph name="SESSION_TIME_REMAINING" /></translation>
 <translation id="3901991538546252627">Connecting to <ph name="NAME" /></translation>
+<translation id="3943857333388298514">Paste</translation>
 <translation id="394485226368336402">Audio settings</translation>
 <translation id="3962859241508114581">Previous track</translation>
 <translation id="3965097803111112935">Off</translation>
@@ -326,6 +337,7 @@
 <translation id="4961318399572185831">Cast screen</translation>
 <translation id="5030687792513154421">Time is up</translation>
 <translation id="5035236842988137213"><ph name="DEVICE_NAME" /> connected to a new phone</translation>
+<translation id="5035389544768382859">Confirm display configuration</translation>
 <translation id="5083553833479578423">Unlock more Assistant features.</translation>
 <translation id="5136175204352732067">Different keyboard connected</translation>
 <translation id="5168181903108465623">Cast devices available</translation>
@@ -335,6 +347,7 @@
 <translation id="5250225880026334010">Off</translation>
 <translation id="5260676007519551770">Desk 4</translation>
 <translation id="5283198616748585639">Add 1 min</translation>
+<translation id="528468243742722775">End</translation>
 <translation id="5286194356314741248">Scanning</translation>
 <translation id="5302048478445481009">Language</translation>
 <translation id="5313326810920013265">Bluetooth settings</translation>
@@ -342,6 +355,7 @@
 <translation id="5379115545237091094">Too many attempts</translation>
 <translation id="5397578532367286026">Usage and history of this user can be reviewed by the manager (<ph name="MANAGER_EMAIL" />) on chrome.com.</translation>
 <translation id="5400461572260843123">Quick Settings: press search + left to access the notification centre.</translation>
+<translation id="5428899915242071344">Start selecting</translation>
 <translation id="5430931332414098647">Instant Tethering</translation>
 <translation id="5431825016875453137">OpenVPN / L2TP</translation>
 <translation id="544691375626129091">All available users have already been added to this session.</translation>
@@ -393,6 +407,7 @@
 <translation id="6018164090099858612">Exiting mirror mode</translation>
 <translation id="602001110135236999">Scroll left</translation>
 <translation id="6025324406281560198"><ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, signal strength <ph name="SIGNAL_STRENGTH" />, managed by your administrator</translation>
+<translation id="6030495522958826102">Menu moved to the bottom-left corner of the screen.</translation>
 <translation id="6040143037577758943">Close</translation>
 <translation id="6043212731627905357">This monitor isn't getting along with your <ph name="DEVICE_TYPE" /> (the monitor is not supported).</translation>
 <translation id="6043994281159824495">Sign out now</translation>
@@ -405,6 +420,7 @@
 <translation id="615957422585914272">Show on-screen keyboard</translation>
 <translation id="6164005077879661055">All files and local data associated with the supervised user will be permanently deleted once this supervised user is removed. Visited websites and settings for this supervised user may still be visible by the manager at <ph name="MANAGEMENT_URL" />.</translation>
 <translation id="6165508094623778733">Learn more</translation>
+<translation id="622484624075952240">Down</translation>
 <translation id="6236290670123303279">Manage settings</translation>
 <translation id="6237231532760393653">1X</translation>
 <translation id="6254629735336163724">Locked to horizontal</translation>
@@ -412,6 +428,7 @@
 <translation id="6267036997247669271"><ph name="NAME" />: Activating...</translation>
 <translation id="6283712521836204486">Do Not Disturb is off.</translation>
 <translation id="6284232397434400372">Resolution changed</translation>
+<translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> can be re-added later with a parent’s permission.</translation>
 <translation id="6297287540776456956">Use the stylus to select a region</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> was rotated to <ph name="ROTATION" /></translation>
 <translation id="6376931439017688372">Bluetooth is on</translation>
@@ -461,16 +478,20 @@
 <translation id="6777216307882431711">Powering connected USB-C devices</translation>
 <translation id="6790428901817661496">Play</translation>
 <translation id="6803622936009808957">Could not mirror displays since no supported resolutions found. Entered extended desktop instead.</translation>
+<translation id="6818242057446442178">Back by word</translation>
 <translation id="6820676911989879663">Take a break!</translation>
 <translation id="6857811139397017780">Activate <ph name="NETWORKSERVICE" /></translation>
 <translation id="6878400149835617132">Shortcut turned off</translation>
+<translation id="6896758677409633944">Copy</translation>
 <translation id="6910714959251846841">This update requires powerwashing of your device. Learn more about the latest <ph name="SYSTEM_APP_NAME" /> update.</translation>
 <translation id="6919251195245069855">Couldn’t recognise your smart card. Try again.</translation>
+<translation id="6945221475159498467">Select</translation>
 <translation id="6972754398087986839">Get Started</translation>
 <translation id="6981982820502123353">Accessibility</translation>
 <translation id="698231206551913481">All files and local data associated with this user will be permanently deleted once this user is removed.</translation>
 <translation id="7015766095477679451">Come back at <ph name="COME_BACK_TIME" />.</translation>
 <translation id="7025533177575372252">Connect your <ph name="DEVICE_NAME" /> with your phone</translation>
+<translation id="7026338066939101231">Decrement</translation>
 <translation id="7029814467594812963">Exit session</translation>
 <translation id="703425375924687388"><ph name="QUERY_NAME" />, Google Assistant</translation>
 <translation id="7042322267639375032">Collapse status area</translation>
@@ -485,6 +506,7 @@
 <translation id="7143207342074048698">Connecting ...</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358">Reverting to old resolution in <ph name="TIMEOUT_SECONDS" /></translation>
+<translation id="7188494361780961876">Menu moved to the top-left corner of the screen.</translation>
 <translation id="7246071203293827765"><ph name="UPDATE_TEXT" />. This Chromebook needs to restart to apply an update. This can take up to one minute.</translation>
 <translation id="7256634071279256947">Rear microphone</translation>
 <translation id="726276584504105859">Drag here to use split screen</translation>
@@ -504,6 +526,7 @@
 <translation id="7526573455193969409">Network may be monitored</translation>
 <translation id="7536035074519304529">IP address: <ph name="ADDRESS" /></translation>
 <translation id="7548434653388805669">Time for bed</translation>
+<translation id="7561982940498449837">Close menu</translation>
 <translation id="7562368315689366235">Emoji palette</translation>
 <translation id="7564874036684306347">Moving windows to another desktop may result in unexpected behaviour. Subsequent notifications, windows and dialogues may be split between desktops.</translation>
 <translation id="7568294522609223312">Turn off automatic clicks</translation>
@@ -517,6 +540,7 @@
 <translation id="7654687942625752712">Press and hold both volume keys for five seconds to disable spoken feedback.</translation>
 <translation id="7705524343798198388">VPN</translation>
 <translation id="7723389094756330927">{NUM_NOTIFICATIONS,plural, =1{1 notification}other{# notifications}}</translation>
+<translation id="7724603315864178912">Cut</translation>
 <translation id="7749443890790263709">Maximum number of desks reached.</translation>
 <translation id="776344839111254542">Click to view update details</translation>
 <translation id="7780159184141939021">Rotate screen</translation>
@@ -542,8 +566,10 @@
 <translation id="7984197416080286869">Too many fingerprint attempts</translation>
 <translation id="7994370417837006925">Multiple sign-in</translation>
 <translation id="8000066093800657092">No network</translation>
+<translation id="8004512796067398576">Increment</translation>
 <translation id="8029629653277878342">PIN or password required for more security</translation>
 <translation id="8030169304546394654">Disconnected</translation>
+<translation id="8042893070933512245">Open accessibility settings menu</translation>
 <translation id="8048123526339889627">Bluetooth settings</translation>
 <translation id="8054466585765276473">Calculating battery time.</translation>
 <translation id="8061464966246066292">High contrast</translation>
@@ -569,6 +595,7 @@
 <translation id="8308637677604853869">Previous menu</translation>
 <translation id="8341451174107936385"><ph name="UNLOCK_MORE_FEATURES" />  <ph name="GET_STARTED" /></translation>
 <translation id="8351131234907093545">Create note</translation>
+<translation id="8371779926711439835">Forward by letter</translation>
 <translation id="8375916635258623388">This <ph name="DEVICE_NAME" /> and your phone will connect automatically</translation>
 <translation id="8388750414311082622">Last desk can't be removed.</translation>
 <translation id="8392451568018454956">Options menu for <ph name="USER_EMAIL_ADDRESS" /></translation>
@@ -588,6 +615,7 @@
 <translation id="8513108775083588393">Auto-rotate</translation>
 <translation id="8517041960877371778">Your <ph name="DEVICE_TYPE" /> may not charge while it is turned on.</translation>
 <translation id="8563862697512465947">Notification Settings</translation>
+<translation id="857201607579416096">Menu moved to the bottom-right corner of the screen.</translation>
 <translation id="8627191004499078455">Connected to <ph name="DEVICE_NAME" /></translation>
 <translation id="8631727435199967028">Accessibility settings</translation>
 <translation id="8637598503828012618"><ph name="CONNECTION_STATUS" />, signal strength <ph name="SIGNAL_STRENGTH" />, managed by your administrator</translation>
@@ -610,6 +638,7 @@
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="8825863694328519386">Swipe from the left to go back</translation>
 <translation id="8828714802988429505">90°</translation>
+<translation id="8841375032071747811">Back button</translation>
 <translation id="8843682306134542540">Toggle rotation lock. <ph name="STATE_TEXT" /></translation>
 <translation id="8850991929411075241">Search+Esc</translation>
 <translation id="8870509716567206129">App does not support split-screen.</translation>
@@ -617,6 +646,7 @@
 <translation id="8877788021141246043">Set a reminder</translation>
 <translation id="8878886163241303700">Extending screen</translation>
 <translation id="890616557918890486">Change source</translation>
+<translation id="8908312332415978740"><ph name="DISPLAY_NAME" /> doesn't support <ph name="SPECIFIED_RESOLUTION" /> (<ph name="SPECIFIED_REFRESH_RATE" /> Hz). The resolution was changed to <ph name="FALLBACK_RESOLUTION" /> (<ph name="SPECIFIED_REFRESH_RATE" />). Click confirm to keep changes. The previous settings will be restored in <ph name="TIMEOUT_SECONDS" />.</translation>
 <translation id="8909138438987180327">Battery at <ph name="PERCENTAGE" /> per cent.</translation>
 <translation id="8921554779039049422">H+</translation>
 <translation id="8921624153894383499">The Google Assistant doesn’t speak this language.</translation>
@@ -651,6 +681,7 @@
 <translation id="9211681782751733685"><ph name="TIME_REMAINING" /> remaining until battery is fully charged.</translation>
 <translation id="9215934040295798075">Set wallpaper</translation>
 <translation id="921989828232331238">Your parent locked your device for the day</translation>
+<translation id="9220525904950070496">Remove account</translation>
 <translation id="923686485342484400">Press Control Shift Q twice to sign out.</translation>
 <translation id="938963181863597773">What's on my calendar?</translation>
 <translation id="945522503751344254">Send feedback</translation>

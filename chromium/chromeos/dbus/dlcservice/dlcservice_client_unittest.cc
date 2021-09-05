@@ -105,28 +105,28 @@ class DlcserviceClientTest : public testing::Test {
   std::deque<std::unique_ptr<dbus::ErrorResponse>> used_err_responses_;
 };
 
-TEST_F(DlcserviceClientTest, GetInstalledSuccessTest) {
+TEST_F(DlcserviceClientTest, GetExistingDlcsSuccessTest) {
   responses_.push_back(dbus::Response::CreateEmpty());
-  auto* response = responses_.front().get();
+  dbus::Response* response = responses_.front().get();
   dbus::MessageWriter writer(response);
-  dlcservice::DlcModuleList dlc_module_list;
-  writer.AppendProtoAsArrayOfBytes(dlc_module_list);
+  dlcservice::DlcsWithContent dlcs_with_content;
+  writer.AppendProtoAsArrayOfBytes(dlcs_with_content);
 
   EXPECT_CALL(*mock_proxy_.get(), DoCallMethodWithErrorResponse(_, _, _))
       .WillOnce(
           Invoke(this, &DlcserviceClientTest::CallMethodWithErrorResponse));
 
-  DlcserviceClient::GetInstalledCallback callback = base::BindOnce(
-      [](const std::string& err, const dlcservice::DlcModuleList&) {
+  DlcserviceClient::GetExistingDlcsCallback callback = base::BindOnce(
+      [](const std::string& err, const dlcservice::DlcsWithContent&) {
         EXPECT_EQ(dlcservice::kErrorNone, err);
       });
-  client_->GetInstalled(std::move(callback));
+  client_->GetExistingDlcs(std::move(callback));
   base::RunLoop().RunUntilIdle();
 }
 
-TEST_F(DlcserviceClientTest, GetInstalledFailureTest) {
+TEST_F(DlcserviceClientTest, GetExistingDlcsFailureTest) {
   dbus::MethodCall method_call(dlcservice::kDlcServiceInterface,
-                               dlcservice::kGetInstalledMethod);
+                               dlcservice::kGetExistingDlcsMethod);
   method_call.SetSerial(123);
   err_responses_.push_back(dbus::ErrorResponse::FromMethodCall(
       &method_call, DBUS_ERROR_FAILED, "some-unknown-error"));
@@ -135,17 +135,18 @@ TEST_F(DlcserviceClientTest, GetInstalledFailureTest) {
       .WillRepeatedly(
           Invoke(this, &DlcserviceClientTest::CallMethodWithErrorResponse));
 
-  client_->GetInstalled(base::BindOnce(
-      [](const std::string& err, const dlcservice::DlcModuleList&) {
+  client_->GetExistingDlcs(base::BindOnce(
+      [](const std::string& err, const dlcservice::DlcsWithContent&) {
         EXPECT_EQ(dlcservice::kErrorInternal, err);
       }));
   base::RunLoop().RunUntilIdle();
 
   err_responses_.push_back(dbus::ErrorResponse::FromMethodCall(
-      &method_call, dlcservice::kErrorInvalidDlc, "Bad DLC ID."));
+      &method_call, dlcservice::kErrorInvalidDlc,
+      "Some error due to bad DLC."));
 
-  client_->GetInstalled(base::BindOnce(
-      [](const std::string& err, const dlcservice::DlcModuleList&) {
+  client_->GetExistingDlcs(base::BindOnce(
+      [](const std::string& err, const dlcservice::DlcsWithContent&) {
         EXPECT_EQ(dlcservice::kErrorInvalidDlc, err);
       }));
   base::RunLoop().RunUntilIdle();
@@ -202,6 +203,57 @@ TEST_F(DlcserviceClientTest, UninstallBusyStatusTest) {
   base::RunLoop().RunUntilIdle();
 }
 
+TEST_F(DlcserviceClientTest, PurgeSuccessTest) {
+  responses_.push_back(dbus::Response::CreateEmpty());
+
+  EXPECT_CALL(*mock_proxy_.get(), DoCallMethodWithErrorResponse(_, _, _))
+      .WillOnce(
+          Invoke(this, &DlcserviceClientTest::CallMethodWithErrorResponse));
+
+  DlcserviceClient::PurgeCallback callback = base::BindOnce(
+      [](const std::string& err) { EXPECT_EQ(dlcservice::kErrorNone, err); });
+  client_->Purge("some-dlc-id", std::move(callback));
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(DlcserviceClientTest, PurgeFailureTest) {
+  dbus::MethodCall method_call(dlcservice::kDlcServiceInterface,
+                               dlcservice::kPurgeMethod);
+  method_call.SetSerial(123);
+  err_responses_.push_back(dbus::ErrorResponse::FromMethodCall(
+      &method_call, dlcservice::kErrorInternal, ""));
+
+  EXPECT_CALL(*mock_proxy_.get(), DoCallMethodWithErrorResponse(_, _, _))
+      .WillRepeatedly(
+          Invoke(this, &DlcserviceClientTest::CallMethodWithErrorResponse));
+
+  DlcserviceClient::PurgeCallback callback =
+      base::BindOnce([](const std::string& err) {
+        EXPECT_EQ(dlcservice::kErrorInternal, err);
+      });
+  client_->Purge("some-dlc-id", std::move(callback));
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(DlcserviceClientTest, PurgeBusyStatusTest) {
+  dbus::MethodCall method_call(dlcservice::kDlcServiceInterface,
+                               dlcservice::kPurgeMethod);
+  method_call.SetSerial(123);
+  err_responses_.push_back(dbus::ErrorResponse::FromMethodCall(
+      &method_call, dlcservice::kErrorBusy, ""));
+  err_responses_.push_back(dbus::ErrorResponse::FromMethodCall(
+      &method_call, dlcservice::kErrorNone, ""));
+
+  EXPECT_CALL(*mock_proxy_.get(), DoCallMethodWithErrorResponse(_, _, _))
+      .WillRepeatedly(
+          Invoke(this, &DlcserviceClientTest::CallMethodWithErrorResponse));
+
+  DlcserviceClient::PurgeCallback callback = base::BindOnce(
+      [](const std::string& err) { EXPECT_EQ(dlcservice::kErrorNone, err); });
+  client_->Purge("some-dlc-id", std::move(callback));
+  base::RunLoop().RunUntilIdle();
+}
+
 TEST_F(DlcserviceClientTest, InstallSuccessTest) {
   responses_.push_back(dbus::Response::CreateEmpty());
   dbus::MessageWriter writer(responses_.back().get());
@@ -211,11 +263,11 @@ TEST_F(DlcserviceClientTest, InstallSuccessTest) {
       .WillOnce(
           Invoke(this, &DlcserviceClientTest::CallMethodWithErrorResponse));
 
-  DlcserviceClient::InstallCallback install_callback = base::BindOnce(
-      [](const std::string& err, const dlcservice::DlcModuleList&) {
-        EXPECT_EQ(dlcservice::kErrorNone, err);
+  DlcserviceClient::InstallCallback install_callback =
+      base::BindOnce([](const DlcserviceClient::InstallResult& install_result) {
+        EXPECT_EQ(dlcservice::kErrorNone, install_result.error);
       });
-  client_->Install(dlcservice::DlcModuleList(), std::move(install_callback),
+  client_->Install("foo-dlc", std::move(install_callback),
                    DlcserviceClient::IgnoreProgress);
   base::RunLoop().RunUntilIdle();
 }
@@ -231,11 +283,11 @@ TEST_F(DlcserviceClientTest, InstallFailureTest) {
       .WillOnce(
           Invoke(this, &DlcserviceClientTest::CallMethodWithErrorResponse));
 
-  DlcserviceClient::InstallCallback install_callback = base::BindOnce(
-      [](const std::string& err, const dlcservice::DlcModuleList&) {
-        EXPECT_EQ(dlcservice::kErrorInternal, err);
+  DlcserviceClient::InstallCallback install_callback =
+      base::BindOnce([](const DlcserviceClient::InstallResult& install_result) {
+        EXPECT_EQ(dlcservice::kErrorInternal, install_result.error);
       });
-  client_->Install(dlcservice::DlcModuleList(), std::move(install_callback),
+  client_->Install("foo-dlc", std::move(install_callback),
                    DlcserviceClient::IgnoreProgress);
   base::RunLoop().RunUntilIdle();
 }
@@ -245,7 +297,7 @@ TEST_F(DlcserviceClientTest, InstallProgressTest) {
       .WillOnce(Return());
   std::atomic<size_t> counter{0};
   DlcserviceClient::InstallCallback install_callback = base::BindOnce(
-      [](const std::string& err, const dlcservice::DlcModuleList&) {});
+      [](const DlcserviceClient::InstallResult& install_result) {});
   DlcserviceClient::ProgressCallback progress_callback = base::BindRepeating(
       [](decltype(counter)* counter, double) { ++*counter; }, &counter);
 
@@ -279,11 +331,11 @@ TEST_F(DlcserviceClientTest, InstallBusyStatusTest) {
       .WillRepeatedly(
           Invoke(this, &DlcserviceClientTest::CallMethodWithErrorResponse));
 
-  DlcserviceClient::InstallCallback install_callback = base::BindOnce(
-      [](const std::string& err, const dlcservice::DlcModuleList&) {
-        EXPECT_EQ(dlcservice::kErrorNone, err);
+  DlcserviceClient::InstallCallback install_callback =
+      base::BindOnce([](const DlcserviceClient::InstallResult& install_result) {
+        EXPECT_EQ(dlcservice::kErrorNone, install_result.error);
       });
-  client_->Install(dlcservice::DlcModuleList(), std::move(install_callback),
+  client_->Install("foo-dlc", std::move(install_callback),
                    DlcserviceClient::IgnoreProgress);
   base::RunLoop().RunUntilIdle();
 }
@@ -297,10 +349,12 @@ TEST_F(DlcserviceClientTest, PendingTaskTest) {
 
   // All |Install()| request after the first should be queued.
   for (size_t i = 0; i < kLoopCount; ++i) {
-    DlcserviceClient::InstallCallback install_callback =
-        base::BindOnce([](decltype(counter)* counter, const std::string& err,
-                          const dlcservice::DlcModuleList&) { ++*counter; },
-                       &counter);
+    DlcserviceClient::InstallCallback install_callback = base::BindOnce(
+        [](decltype(counter)* counter,
+           const DlcserviceClient::InstallResult& install_result) {
+          ++*counter;
+        },
+        &counter);
     client_->Install({}, std::move(install_callback),
                      DlcserviceClient::IgnoreProgress);
   }

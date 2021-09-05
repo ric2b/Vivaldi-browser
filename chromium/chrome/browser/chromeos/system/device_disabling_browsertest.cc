@@ -39,6 +39,7 @@
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "dbus/object_path.h"
 
@@ -161,9 +162,8 @@ IN_PROC_BROWSER_TEST_F(DeviceDisablingTest, DisableWithEphemeralUsers) {
   // try to show the offline error screen.
   base::RunLoop connect_run_loop;
   DBusThreadManager::Get()->GetShillServiceClient()->Connect(
-      dbus::ObjectPath("/service/eth1"),
-      connect_run_loop.QuitClosure(),
-      base::Bind(&ErrorCallbackFunction));
+      dbus::ObjectPath("/service/eth1"), connect_run_loop.QuitClosure(),
+      base::BindOnce(&ErrorCallbackFunction));
   connect_run_loop.Run();
 
   // Skip to the login screen.
@@ -247,7 +247,10 @@ IN_PROC_BROWSER_TEST_F(PresetPolicyDeviceDisablingTest,
 class DeviceDisablingBeforeLoginHostCreated
     : public PresetPolicyDeviceDisablingTest {
  public:
-  DeviceDisablingBeforeLoginHostCreated() = default;
+  DeviceDisablingBeforeLoginHostCreated() {
+    // Start with user pods.
+    login_mixin_.AppendManagedUsers(2);
+  }
 
   bool SetUpUserDataDirectory() override {
     // LoginManagerMixin sets up command line in the SetUpUserDataDirectory.
@@ -262,12 +265,7 @@ class DeviceDisablingBeforeLoginHostCreated
   bool ShouldWaitForOobeUI() override { return false; }
 
  protected:
-  std::vector<LoginManagerMixin::TestUserInfo> users{
-      LoginManagerMixin::TestUserInfo(
-          AccountId::FromUserEmailGaiaId("user1@example.com", "111")),
-      LoginManagerMixin::TestUserInfo(
-          AccountId::FromUserEmailGaiaId("user2@example.com", "222"))};
-  LoginManagerMixin login_mixin_{&mixin_host_, users};
+  LoginManagerMixin login_mixin_{&mixin_host_};
 };
 
 // Sometimes LoginHost creation postponed (e.g. due to language switch

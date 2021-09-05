@@ -8,10 +8,10 @@
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_contact_info.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/modules/contacts_picker/contact_address.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -100,18 +100,20 @@ constexpr char kIcon[] = "icon";
 
 }  // namespace
 
-ContactsManager::ContactsManager() = default;
+ContactsManager::ContactsManager() : contacts_manager_(nullptr) {}
 
 ContactsManager::~ContactsManager() = default;
 
-mojo::Remote<mojom::blink::ContactsManager>&
-ContactsManager::GetContactsManager(ScriptState* script_state) {
-  if (!contacts_manager_) {
+mojom::blink::ContactsManager* ContactsManager::GetContactsManager(
+    ScriptState* script_state) {
+  if (!contacts_manager_.is_bound()) {
     ExecutionContext::From(script_state)
         ->GetBrowserInterfaceBroker()
-        .GetInterface(contacts_manager_.BindNewPipeAndPassReceiver());
+        .GetInterface(contacts_manager_.BindNewPipeAndPassReceiver(
+            ExecutionContext::From(script_state)
+                ->GetTaskRunner(TaskType::kMiscPlatformAPI)));
   }
-  return contacts_manager_;
+  return contacts_manager_.get();
 }
 
 const Vector<String>& ContactsManager::GetProperties(
@@ -132,17 +134,18 @@ ScriptPromise ContactsManager::select(ScriptState* script_state,
                                       const Vector<String>& properties,
                                       ContactsSelectOptions* options,
                                       ExceptionState& exception_state) {
-  Document* document = Document::From(ExecutionContext::From(script_state));
+  LocalFrame* frame = script_state->ContextIsValid()
+                          ? LocalDOMWindow::From(script_state)->GetFrame()
+                          : nullptr;
 
-  if (document->ParentDocument()) {
+  if (!frame || !frame->IsMainFrame()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "The contacts API can only be used in the top frame");
     return ScriptPromise();
   }
 
-  if (!LocalFrame::HasTransientUserActivation(document ? document->GetFrame()
-                                                       : nullptr)) {
+  if (!LocalFrame::HasTransientUserActivation(frame)) {
     exception_state.ThrowSecurityError(
         "A user gesture is required to call this method");
     return ScriptPromise();
@@ -229,6 +232,11 @@ void ContactsManager::OnContactsSelected(
 ScriptPromise ContactsManager::getProperties(ScriptState* script_state) {
   return ScriptPromise::Cast(script_state,
                              ToV8(GetProperties(script_state), script_state));
+}
+
+void ContactsManager::Trace(Visitor* visitor) {
+  visitor->Trace(contacts_manager_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

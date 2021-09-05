@@ -7,13 +7,14 @@
 
 <dom-module id="gaia-signin">
   <template>
-    <link rel="stylesheet" href="oobe_dialog_host.css">
-    <link rel="stylesheet" href="oobe_flex_layout.css">
+    <style include="oobe-dialog-host"></style>
     <link rel="stylesheet" href="oobe_popup_overlay.css">
     <link rel="stylesheet" href="screen_gaia_signin.css">
+    <!-- As this dialog have pre-loading logic that require access to elements,
+         dialog is marked as no-lazy. -->
     <oobe-dialog id="signin-frame-dialog" class="gaia-dialog" role="dialog"
         has-buttons="[[!isSamlSsoVisible_]]"
-        no-header no-footer-padding
+        no-header no-footer-padding no-lazy
         hidden="[[!isStep_(step_, 'online-gaia', 'gaia-loading')]]">
       <div slot="footer" class="flex layout vertical">
         <div id="signin-frame-container" transparent$="[[isLoadingUiShown_]]"
@@ -34,7 +35,8 @@
                 on-click="cancel">
             </cr-icon-button>
           </div>
-          <webview id="signin-frame" class="flex" name="signin-frame"></webview>
+          <webview id="signin-frame" class="flex"
+              name="signin-frame"></webview>
         </div>
       </div>
       <div id="gaia-screen-navigation-buttons"

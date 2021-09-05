@@ -4,11 +4,12 @@
 
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_coordinator.h"
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "components/google/core/common/google_util.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_service_utils.h"
 #include "components/sync/driver/sync_user_settings.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -77,9 +78,9 @@
   DCHECK(self.baseNavigationController);
   self.mediator = [[ManageSyncSettingsMediator alloc]
       initWithSyncService:self.syncService
-          userPrefService:self.browserState->GetPrefs()];
-  self.mediator.syncSetupService =
-      SyncSetupServiceFactory::GetForBrowserState(self.browserState);
+          userPrefService:self.browser->GetBrowserState()->GetPrefs()];
+  self.mediator.syncSetupService = SyncSetupServiceFactory::GetForBrowserState(
+      self.browser->GetBrowserState());
   self.mediator.commandHandler = self;
   self.viewController = [[ManageSyncSettingsTableViewController alloc]
       initWithStyle:UITableViewStyleGrouped];
@@ -95,7 +96,8 @@
 #pragma mark - Properties
 
 - (syncer::SyncService*)syncService {
-  return ProfileSyncServiceFactory::GetForBrowserState(self.browserState);
+  return ProfileSyncServiceFactory::GetForBrowserState(
+      self.browser->GetBrowserState());
 }
 
 #pragma mark - Private
@@ -142,10 +144,10 @@
   // Otherwise, show the full encryption options.
   if (self.syncService->GetUserSettings()->IsPassphraseRequired()) {
     controllerToPush = [[SyncEncryptionPassphraseTableViewController alloc]
-        initWithBrowserState:self.browserState];
+        initWithBrowserState:self.browser->GetBrowserState()];
   } else {
     controllerToPush = [[SyncEncryptionTableViewController alloc]
-        initWithBrowserState:self.browserState];
+        initWithBrowserState:self.browser->GetBrowserState()];
   }
   // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
   // clean up.
@@ -156,9 +158,21 @@
                                            animated:YES];
 }
 
+- (void)openTrustedVaultReauth {
+  id<ApplicationCommands> applicationCommands =
+      static_cast<id<ApplicationCommands>>(
+          self.browser->GetCommandDispatcher());
+  [applicationCommands
+      showTrustedVaultReauthenticationFromViewController:self.viewController
+                                        retrievalTrigger:
+                                            syncer::KeyRetrievalTriggerForUMA::
+                                                kSettings];
+}
+
 - (void)openWebAppActivityDialog {
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForBrowserState(self.browserState);
+      AuthenticationServiceFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
   base::RecordAction(base::UserMetricsAction(
       "Signin_AccountSettings_GoogleActivityControlsClicked"));
   self.dismissWebAndAppSettingDetailsControllerBlock =

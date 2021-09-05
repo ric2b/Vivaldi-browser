@@ -9,7 +9,8 @@
 
 #include <memory>
 
-#include "base/logging.h"
+#include "base/bind.h"
+#include "base/check_op.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
@@ -17,12 +18,17 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
+#include "ios/chrome/browser/download/confirm_download_closing_overlay.h"
+#include "ios/chrome/browser/download/confirm_download_replacing_overlay.h"
 #include "ios/chrome/browser/download/download_directory_util.h"
 #include "ios/chrome/browser/download/download_manager_metric_names.h"
 #import "ios/chrome/browser/download/download_manager_tab_helper.h"
 #import "ios/chrome/browser/download/external_app_util.h"
 #import "ios/chrome/browser/installation_notifier.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/overlays/public/common/confirmation/confirmation_overlay_response.h"
+#include "ios/chrome/browser/overlays/public/overlay_callback_manager.h"
+#import "ios/chrome/browser/overlays/public/overlay_request_queue.h"
 #import "ios/chrome/browser/store_kit/store_kit_coordinator.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
@@ -164,8 +170,6 @@ class UnopenedDownloadsTracker : public web::DownloadTaskObserver,
     DownloadManagerViewControllerDelegate> {
   // View controller for presenting Download Manager UI.
   DownloadManagerViewController* _viewController;
-  // A dialog which requests a confirmation from the user.
-  UIAlertController* _confirmationDialog;
   // View controller for presenting "Open In.." dialog.
   UIActivityViewController* _openInController;
   DownloadManagerMediator _mediator;
@@ -218,9 +222,7 @@ class UnopenedDownloadsTracker : public web::DownloadTaskObserver,
     _viewController.delegate = nil;
     _viewController = nil;
   }
-  [_confirmationDialog dismissViewControllerAnimated:self.animatesPresentation
-                                          completion:nil];
-  _confirmationDialog = nil;
+
   _downloadTask = nullptr;
 
   if (self.browser)
@@ -264,18 +266,25 @@ class UnopenedDownloadsTracker : public web::DownloadTaskObserver,
 - (void)downloadManagerTabHelper:(nonnull DownloadManagerTabHelper*)tabHelper
          decidePolicyForDownload:(nonnull web::DownloadTask*)download
                completionHandler:(nonnull void (^)(NewDownloadPolicy))handler {
-  const int title = IDS_IOS_DOWNLOAD_MANAGER_REPLACE_CONFIRMATION;
-  const int message = IDS_IOS_DOWNLOAD_MANAGER_REPLACE_CONFIRMATION_MESSAGE;
-  [self runConfirmationDialogWithTitle:title
-                               message:message
-                          confirmTitle:IDS_OK
-                           cancelTitle:IDS_CANCEL
-                     completionHandler:^(BOOL confirmed) {
-                       base::UmaHistogramBoolean("Download.IOSDownloadReplaced",
-                                                 confirmed);
-                       handler(confirmed ? kNewDownloadPolicyReplace
-                                         : kNewDownloadPolicyDiscard);
-                     }];
+  std::unique_ptr<OverlayRequest> request =
+      OverlayRequest::CreateWithConfig<ConfirmDownloadReplacingRequest>();
+
+  request->GetCallbackManager()->AddCompletionCallback(
+      base::BindOnce(^(OverlayResponse* response) {
+        // |response| is null if WebState was destroyed. Don't call completion
+        // handler if no buttons were tapped.
+        if (response) {
+          bool confirmed =
+              response->GetInfo<ConfirmationOverlayResponse>()->confirmed();
+          base::UmaHistogramBoolean("Download.IOSDownloadReplaced", confirmed);
+          handler(confirmed ? kNewDownloadPolicyReplace
+                            : kNewDownloadPolicyDiscard);
+        }
+      }));
+
+  web::WebState* webState = self.downloadTask->GetWebState();
+  OverlayRequestQueue::FromWebState(webState, OverlayModality::kWebContentArea)
+      ->AddRequest(std::move(request));
 }
 
 - (void)downloadManagerTabHelper:(nonnull DownloadManagerTabHelper*)tabHelper
@@ -313,30 +322,36 @@ class UnopenedDownloadsTracker : public web::DownloadTaskObserver,
     base::UmaHistogramEnumeration("Download.IOSDownloadFileResult",
                                   DownloadFileResult::NotStarted,
                                   DownloadFileResult::Count);
+    base::RecordAction(base::UserMetricsAction("IOSDownloadClose"));
     [self cancelDownload];
     return;
   }
+  base::RecordAction(
+      base::UserMetricsAction("IOSDownloadTryCloseWhenInProgress"));
+
+  std::unique_ptr<OverlayRequest> request =
+      OverlayRequest::CreateWithConfig<ConfirmDownloadClosingRequest>();
 
   __weak DownloadManagerCoordinator* weakSelf = self;
-  int title = IDS_IOS_DOWNLOAD_MANAGER_CANCEL_CONFIRMATION;
-  [self runConfirmationDialogWithTitle:title
-                               message:-1
-                          confirmTitle:IDS_IOS_DOWNLOAD_MANAGER_STOP
-                           cancelTitle:IDS_IOS_DOWNLOAD_MANAGER_CONTINUE
-                     completionHandler:^(BOOL confirmed) {
-                       if (confirmed) {
-                         base::UmaHistogramEnumeration(
-                             "Download.IOSDownloadFileResult",
-                             DownloadFileResult::Cancelled,
-                             DownloadFileResult::Count);
+  request->GetCallbackManager()->AddCompletionCallback(
+      base::BindOnce(^(OverlayResponse* response) {
+        if (response &&
+            response->GetInfo<ConfirmationOverlayResponse>()->confirmed()) {
+          base::UmaHistogramEnumeration("Download.IOSDownloadFileResult",
+                                        DownloadFileResult::Cancelled,
+                                        DownloadFileResult::Count);
+          [weakSelf cancelDownload];
+        }
+      }));
 
-                         [weakSelf cancelDownload];
-                       }
-                     }];
+  web::WebState* webState = self.downloadTask->GetWebState();
+  OverlayRequestQueue::FromWebState(webState, OverlayModality::kWebContentArea)
+      ->AddRequest(std::move(request));
 }
 
 - (void)installDriveForDownloadManagerViewController:
     (DownloadManagerViewController*)controller {
+  base::RecordAction(base::UserMetricsAction("IOSDownloadInstallGoogleDrive"));
   [self presentStoreKitForGoogleDriveApp];
 }
 
@@ -345,6 +360,7 @@ class UnopenedDownloadsTracker : public web::DownloadTaskObserver,
   if (_downloadTask->GetErrorCode() != net::OK) {
     base::RecordAction(base::UserMetricsAction("MobileDownloadRetryDownload"));
   } else {
+    base::RecordAction(base::UserMetricsAction("IOSDownloadStartDownload"));
     _unopenedDownloads.Add(_downloadTask);
   }
   _mediator.StartDowloading();
@@ -352,6 +368,7 @@ class UnopenedDownloadsTracker : public web::DownloadTaskObserver,
 
 - (void)presentOpenInForDownloadManagerViewController:
     (DownloadManagerViewController*)controller {
+  base::RecordAction(base::UserMetricsAction("IOSDownloadOpenIn"));
   base::FilePath path = _mediator.GetDownloadPath();
   NSURL* URL = [NSURL fileURLWithPath:base::SysUTF8ToNSString(path.value())];
 
@@ -394,42 +411,6 @@ class UnopenedDownloadsTracker : public web::DownloadTaskObserver,
   downloadTask->Cancel();
 }
 
-// Presents UIAlertController with |titleID|, |messageID| and two buttons
-// (confirmTitleID and cancelTitleID). |handler| is called with YES if confirm
-// button was tapped and with NO  if Cancel button was tapped. |messageID| is
-// optional and can be -1.
-- (void)runConfirmationDialogWithTitle:(int)titleID
-                               message:(int)messageID
-                          confirmTitle:(int)confirmTitleID
-                           cancelTitle:(int)cancelTitleID
-                     completionHandler:(void (^)(BOOL confirmed))handler {
-  NSString* message = messageID != -1 ? l10n_util::GetNSString(messageID) : nil;
-  NSString* title = l10n_util::GetNSString(titleID);
-  _confirmationDialog =
-      [UIAlertController alertControllerWithTitle:title
-                                          message:message
-                                   preferredStyle:UIAlertControllerStyleAlert];
-  UIAlertAction* OKAction =
-      [UIAlertAction actionWithTitle:l10n_util::GetNSString(confirmTitleID)
-                               style:UIAlertActionStyleDefault
-                             handler:^(UIAlertAction*) {
-                               handler(YES);
-                             }];
-  [_confirmationDialog addAction:OKAction];
-
-  UIAlertAction* cancelAction =
-      [UIAlertAction actionWithTitle:l10n_util::GetNSString(cancelTitleID)
-                               style:UIAlertActionStyleCancel
-                             handler:^(UIAlertAction*) {
-                               handler(NO);
-                             }];
-  [_confirmationDialog addAction:cancelAction];
-
-  [self.baseViewController presentViewController:_confirmationDialog
-                                        animated:YES
-                                      completion:nil];
-}
-
 // Called when Google Drive app is installed after starting StoreKitCoordinator.
 - (void)didInstallGoogleDriveApp {
   base::UmaHistogramEnumeration(
@@ -448,6 +429,7 @@ class UnopenedDownloadsTracker : public web::DownloadTaskObserver,
 
   _installDriveAlertCoordinator = [[AlertCoordinator alloc]
       initWithBaseViewController:self.baseViewController
+                         browser:self.browser
                            title:title
                          message:message];
 

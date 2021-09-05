@@ -141,7 +141,7 @@ class CONTENT_EXPORT AppCacheUpdateJob
   // new master entry.
   void FetchManifest();
   void HandleManifestFetchCompleted(URLFetcher* url_fetcher, int net_error);
-  void HandleFetchedManifestChanged(base::Time token_expires);
+  void HandleFetchedManifestChanged();
   void HandleFetchedManifestIsUnchanged();
 
   void HandleResourceFetchCompleted(URLFetcher* url_fetcher, int net_error);
@@ -153,8 +153,8 @@ class CONTENT_EXPORT AppCacheUpdateJob
   void RefetchManifest();
   void HandleManifestRefetchCompleted(URLFetcher* url_fetcher, int net_error);
 
-  void OnManifestInfoWriteComplete(base::Time token_expires, int result);
-  void OnManifestDataWriteComplete(base::Time token_expires, int result);
+  void OnManifestInfoWriteComplete(int result);
+  void OnManifestDataWriteComplete(int result);
 
   void StoreGroupAndCache();
 
@@ -169,8 +169,8 @@ class CONTENT_EXPORT AppCacheUpdateJob
 
   // Checks if manifest is byte for byte identical with the manifest
   // in the newest application cache.
-  void CheckIfManifestChanged(base::Time token_expires);
-  void OnManifestDataReadComplete(base::Time token_expires, int result);
+  void CheckIfManifestChanged();
+  void OnManifestDataReadComplete(int result);
 
   // Used to read a manifest from the cache in case of a 304 Not Modified HTTP
   // response.
@@ -304,7 +304,6 @@ class CONTENT_EXPORT AppCacheUpdateJob
   std::unique_ptr<net::HttpResponseInfo> manifest_response_info_;
   std::unique_ptr<AppCacheResponseWriter> manifest_response_writer_;
   scoped_refptr<net::IOBuffer> read_manifest_buffer_;
-  base::Time read_manifest_token_expires_;
   std::string loaded_manifest_data_;
   std::unique_ptr<AppCacheResponseReader> manifest_response_reader_;
   bool manifest_has_valid_mime_type_;
@@ -333,6 +332,10 @@ class CONTENT_EXPORT AppCacheUpdateJob
 
   // |cache_copier_by_url_| owns all running cache copies, indexed by |url|.
   std::map<GURL, std::unique_ptr<CacheCopier>> cache_copier_by_url_;
+
+  // Whether to gate the fetch/update of a manifest on the presence of
+  // an origin trial token in the manifest.
+  bool is_origin_trial_required_ = false;
 
   AppCacheStorage* storage_;
   base::WeakPtrFactory<AppCacheUpdateJob> weak_factory_{this};

@@ -24,7 +24,10 @@ import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.IS_INCOGN
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.IS_TAB_CAROUSEL_VISIBLE;
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.IS_VOICE_RECOGNITION_BUTTON_VISIBLE;
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.MORE_TABS_CLICK_LISTENER;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.MV_TILES_CONTAINER_TOP_MARGIN;
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.MV_TILES_VISIBLE;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.TAB_SWITCHER_TITLE_TOP_MARGIN;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.TASKS_SURFACE_BODY_TOP_MARGIN;
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.VOICE_SEARCH_BUTTON_CLICK_LISTENER;
 
 import android.content.res.Resources;
@@ -34,12 +37,14 @@ import android.support.test.filters.SmallTest;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
+import android.view.ViewGroup;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.ntp.IncognitoCookieControlsManager;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -49,6 +54,8 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 import org.chromium.ui.test.util.DummyUiActivityTestCase;
 
+import java.util.Collections;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Tests for {@link TasksViewBinder}. */
@@ -65,6 +72,10 @@ public class TasksViewBinderTest extends DummyUiActivityTestCase {
     public void setUpTest() throws Exception {
         super.setUpTest();
         MockitoAnnotations.initMocks(this);
+
+        Map<String, Boolean> testFeatures =
+                Collections.singletonMap(ChromeFeatureList.REPORT_FEED_USER_ACTIONS, true);
+        ChromeFeatureList.setTestFeatures(testFeatures);
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mTasksView = (TasksView) getActivity().getLayoutInflater().inflate(
@@ -210,12 +221,12 @@ public class TasksViewBinderTest extends DummyUiActivityTestCase {
     @Test
     @SmallTest
     public void testSetIncognitoDescriptionVisibilityAndClickListener() {
-        assertFalse(isViewVisible(R.id.incognito_description_layout_stub));
+        assertFalse(isViewVisible(R.id.incognito_description_container_layout_stub));
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mTasksViewPropertyModel.set(INCOGNITO_LEARN_MORE_CLICK_LISTENER, mViewOnClickListener);
         });
-        assertFalse(isViewVisible(R.id.incognito_description_layout_stub));
+        assertFalse(isViewVisible(R.id.incognito_description_container_layout_stub));
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mTasksViewPropertyModel.set(INCOGNITO_COOKIE_CONTROLS_MANAGER, mCookieControlsManager);
@@ -227,5 +238,46 @@ public class TasksViewBinderTest extends DummyUiActivityTestCase {
         mViewClicked.set(false);
         onView(withId(R.id.learn_more)).perform(click());
         assertTrue(mViewClicked.get());
+    }
+
+    @Test
+    @UiThreadTest
+    @SmallTest
+    public void testSetTasksSurfaceBodyTopMargin() {
+        ViewGroup.MarginLayoutParams params =
+                (ViewGroup.MarginLayoutParams) mTasksView.getBodyViewContainer().getLayoutParams();
+        assertEquals(0, params.topMargin);
+
+        mTasksViewPropertyModel.set(TASKS_SURFACE_BODY_TOP_MARGIN, 16);
+
+        assertEquals(16, params.topMargin);
+    }
+
+    @Test
+    @UiThreadTest
+    @SmallTest
+    public void testSetMVTilesContainerTopMargin() {
+        ViewGroup.MarginLayoutParams params =
+                (ViewGroup.MarginLayoutParams) mTasksView.findViewById(R.id.mv_tiles_container)
+                        .getLayoutParams();
+        assertEquals(0, params.topMargin);
+
+        mTasksViewPropertyModel.set(MV_TILES_CONTAINER_TOP_MARGIN, 16);
+
+        assertEquals(16, params.topMargin);
+    }
+
+    @Test
+    @UiThreadTest
+    @SmallTest
+    public void testSetTabSwitcherTitleTopMargin() {
+        ViewGroup.MarginLayoutParams params =
+                (ViewGroup.MarginLayoutParams) mTasksView.findViewById(R.id.tab_switcher_title)
+                        .getLayoutParams();
+        assertEquals(0, params.topMargin);
+
+        mTasksViewPropertyModel.set(TAB_SWITCHER_TITLE_TOP_MARGIN, 16);
+
+        assertEquals(16, params.topMargin);
     }
 }

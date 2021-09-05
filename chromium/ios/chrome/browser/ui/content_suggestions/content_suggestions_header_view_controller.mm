@@ -4,9 +4,9 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view_controller.h"
 
+#include "base/check.h"
 #include "base/feature_list.h"
 #include "base/ios/ios_util.h"
-#include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #include "components/strings/grit/components_strings.h"
@@ -25,6 +25,7 @@
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/fakebox_focuser.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
@@ -38,6 +39,12 @@
 #endif
 
 using base::UserMetricsAction;
+
+#if defined(__IPHONE_13_4)
+@interface ContentSuggestionsHeaderViewController (Pointer) <
+    UIPointerInteractionDelegate>
+@end
+#endif  // defined(__IPHONE_13_4)
 
 @interface ContentSuggestionsHeaderViewController () <
     UserAccountImageUpdateDelegate>
@@ -288,6 +295,15 @@ using base::UserMetricsAction;
   self.accessibilityButton.translatesAutoresizingMaskIntoConstraints = NO;
   AddSameConstraints(self.fakeOmnibox, self.accessibilityButton);
 
+#if defined(__IPHONE_13_4)
+  if (@available(iOS 13.4, *)) {
+    if (base::FeatureList::IsEnabled(kPointerSupport)) {
+      [self.fakeOmnibox
+          addInteraction:[[UIPointerInteraction alloc] initWithDelegate:self]];
+    }
+  }
+#endif  // defined(__IPHONE_13_4)
+
   [self.headerView addViewsToSearchField:self.fakeOmnibox];
 
   [self.headerView.voiceSearchButton addTarget:self
@@ -332,6 +348,29 @@ using base::UserMetricsAction;
   [self.identityDiscButton addTarget:self
                               action:@selector(identityDiscTapped)
                     forControlEvents:UIControlEventTouchUpInside];
+
+#if defined(__IPHONE_13_4)
+  if (@available(iOS 13.4, *)) {
+    if (base::FeatureList::IsEnabled(kPointerSupport)) {
+      self.identityDiscButton.pointerInteractionEnabled = YES;
+      self.identityDiscButton.pointerStyleProvider =
+          ^UIPointerStyle*(UIButton* button, UIPointerEffect* proposedEffect,
+                           UIPointerShape* proposedShape) {
+        // The identity disc button is oversized to the avatar image to meet the
+        // minimum touch target dimensions. The hover pointer effect should
+        // match the avatar image dimensions, not the button dimensions.
+        CGFloat singleInset =
+            (button.frame.size.width - ntp_home::kIdentityAvatarDimension) / 2;
+        CGRect rect = CGRectInset(button.frame, singleInset, singleInset);
+        UIPointerShape* shape =
+            [UIPointerShape shapeWithRoundedRect:rect
+                                    cornerRadius:rect.size.width / 2];
+        return [UIPointerStyle styleWithEffect:proposedEffect shape:shape];
+      };
+    }
+  }
+#endif  // defined(__IPHONE_13_4)
+
   // TODO(crbug.com/965958): Set action on button to launch into Settings.
   [self.headerView setIdentityDiscView:self.identityDiscButton];
 
@@ -575,5 +614,37 @@ using base::UserMetricsAction;
   self.identityDiscButton.imageView.layer.cornerRadius = image.size.width / 2;
   self.identityDiscButton.imageView.layer.masksToBounds = YES;
 }
+
+#if defined(__IPHONE_13_4)
+#pragma mark UIPointerInteractionDelegate
+
+- (UIPointerRegion*)pointerInteraction:(UIPointerInteraction*)interaction
+                      regionForRequest:(UIPointerRegionRequest*)request
+                         defaultRegion:(UIPointerRegion*)defaultRegion
+    API_AVAILABLE(ios(13.4)) {
+  return defaultRegion;
+}
+
+- (UIPointerStyle*)pointerInteraction:(UIPointerInteraction*)interaction
+                       styleForRegion:(UIPointerRegion*)region
+    API_AVAILABLE(ios(13.4)) {
+  UIBezierPath* path = [UIBezierPath
+      bezierPathWithRoundedRect:interaction.view.bounds
+                   cornerRadius:interaction.view.bounds.size.height];
+  UIPreviewParameters* parameters = [[UIPreviewParameters alloc] init];
+  parameters.visiblePath = path;
+  UITargetedPreview* preview =
+      [[UITargetedPreview alloc] initWithView:interaction.view
+                                   parameters:parameters];
+  UIPointerHoverEffect* effect =
+      [UIPointerHoverEffect effectWithPreview:preview];
+  effect.prefersScaledContent = NO;
+  effect.prefersShadow = NO;
+  UIPointerShape* shape = [UIPointerShape
+      beamWithPreferredLength:interaction.view.bounds.size.height / 2
+                         axis:UIAxisVertical];
+  return [UIPointerStyle styleWithEffect:effect shape:shape];
+}
+#endif  // defined(__IPHONE_13_4)
 
 @end

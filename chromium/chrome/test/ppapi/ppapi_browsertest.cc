@@ -16,7 +16,9 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
-#include "chrome/browser/apps/launch_service/launch_service.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/profiles/profile.h"
@@ -38,6 +40,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/network_service_util.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/javascript_test_observer.h"
 #include "content/public/test/ppapi_test_utils.h"
@@ -119,8 +122,9 @@ using content::RenderViewHost;
 #else
 
 #define MAYBE_PPAPI_NACL(test_name) test_name
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(ADDRESS_SANITIZER)
-// http://crbug.com/633067, http://crbug.com/727989
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX) || \
+    defined(ADDRESS_SANITIZER)
+// http://crbug.com/633067, http://crbug.com/727989, http://crbug.com/1076806
 #define MAYBE_PPAPI_PNACL(test_name) DISABLED_##test_name
 #else
 #define MAYBE_PPAPI_PNACL(test_name) test_name
@@ -2284,7 +2288,9 @@ class PackagedAppTest : public extensions::ExtensionBrowserTest {
         WindowOpenDisposition::NEW_WINDOW,
         apps::mojom::AppLaunchSource::kSourceTest);
     params.command_line = *base::CommandLine::ForCurrentProcess();
-    apps::LaunchService::Get(browser()->profile())->OpenApplication(params);
+    apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+        ->BrowserAppLauncher()
+        .LaunchAppWithParams(params);
   }
 
   void RunTests(const std::string& extension_dirname) {

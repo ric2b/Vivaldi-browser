@@ -47,6 +47,20 @@
 #define ALWAYS_INLINE inline
 #endif
 
+// Annotate a function indicating it should never be tail called. Useful to make
+// sure callers of the annotated function are never omitted from call-stacks.
+// To provide the complementary behavior (prevent the annotated function from
+// being omitted) look at NOINLINE. Also note that this doesn't prevent code
+// folding of multiple identical caller functions into a single signature. To
+// prevent code folding, see base::debug::Alias.
+// Use like:
+//   void NOT_TAIL_CALLED FooBar();
+#if defined(__clang__) && __has_attribute(not_tail_called)
+#define NOT_TAIL_CALLED __attribute__((not_tail_called))
+#else
+#define NOT_TAIL_CALLED
+#endif
+
 // Specify memory alignment for structs, classes, etc.
 // Use like:
 //   class ALIGNAS(16) MyClass { ... }
@@ -246,5 +260,36 @@
 #else
 #define STACK_UNINITIALIZED
 #endif
+
+// The ANALYZER_ASSUME_TRUE(bool arg) macro adds compiler-specific hints
+// to Clang which control what code paths are statically analyzed,
+// and is meant to be used in conjunction with assert & assert-like functions.
+// The expression is passed straight through if analysis isn't enabled.
+//
+// ANALYZER_SKIP_THIS_PATH() suppresses static analysis for the current
+// codepath and any other branching codepaths that might follow.
+#if defined(__clang_analyzer__)
+
+inline constexpr bool AnalyzerNoReturn() __attribute__((analyzer_noreturn)) {
+  return false;
+}
+
+inline constexpr bool AnalyzerAssumeTrue(bool arg) {
+  // AnalyzerNoReturn() is invoked and analysis is terminated if |arg| is
+  // false.
+  return arg || AnalyzerNoReturn();
+}
+
+#define ANALYZER_ASSUME_TRUE(arg) ::AnalyzerAssumeTrue(!!(arg))
+#define ANALYZER_SKIP_THIS_PATH() static_cast<void>(::AnalyzerNoReturn())
+#define ANALYZER_ALLOW_UNUSED(var) static_cast<void>(var);
+
+#else  // !defined(__clang_analyzer__)
+
+#define ANALYZER_ASSUME_TRUE(arg) (arg)
+#define ANALYZER_SKIP_THIS_PATH()
+#define ANALYZER_ALLOW_UNUSED(var) static_cast<void>(var);
+
+#endif  // defined(__clang_analyzer__)
 
 #endif  // BASE_COMPILER_SPECIFIC_H_

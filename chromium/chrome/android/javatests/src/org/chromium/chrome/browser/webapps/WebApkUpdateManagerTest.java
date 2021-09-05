@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.webapps;
 
 import android.support.test.filters.MediumTest;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -14,12 +13,12 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.Callback;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -95,14 +94,14 @@ public class WebApkUpdateManagerTest {
         }
 
         @Override
-        public void onGotManifestData(
-                WebApkInfo fetchedInfo, String primaryIconUrl, String splashIconUrl) {
+        public void onGotManifestData(BrowserServicesIntentDataProvider fetchedInfo,
+                String primaryIconUrl, String splashIconUrl) {
             super.onGotManifestData(fetchedInfo, primaryIconUrl, splashIconUrl);
             mWaiter.notifyCalled();
         }
 
         @Override
-        protected void storeWebApkUpdateRequestToFile(String updateRequestPath, WebApkInfo info,
+        protected void storeWebApkUpdateRequestToFile(String updateRequestPath, WebappInfo info,
                 String primaryIconUrl, String splashIconUrl, boolean isManifestStale,
                 @WebApkUpdateReason int updateReason, Callback<Boolean> callback) {
             mNeedsUpdate = true;
@@ -152,7 +151,6 @@ public class WebApkUpdateManagerTest {
     @Before
     public void setUp() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
-        RecordHistogram.setDisabledForTests(true);
         mActivity = mActivityTestRule.getActivity();
         mTab = mActivity.getActivityTab();
         mTestServer = mTestServerRule.getServer();
@@ -160,11 +158,6 @@ public class WebApkUpdateManagerTest {
         TestFetchStorageCallback callback = new TestFetchStorageCallback();
         WebappRegistry.getInstance().register(WEBAPK_ID, callback);
         callback.waitForCallback(0);
-    }
-
-    @After
-    public void tearDown() {
-        RecordHistogram.setDisabledForTests(false);
     }
 
      /** Checks whether a WebAPK update is needed. */
@@ -176,17 +169,19 @@ public class WebApkUpdateManagerTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             WebappDataStorage storage =
                     WebappRegistry.getInstance().getWebappDataStorage(WEBAPK_ID);
-            WebApkInfo info = WebApkInfo.create("", creationData.scope, null, null,
-                    creationData.name, creationData.shortName, creationData.displayMode,
-                    creationData.orientation, 0, creationData.themeColor,
-                    creationData.backgroundColor, 0, creationData.isPrimaryIconMaskable,
-                    false /* isSplashIconMaskable */, "",
-                    WebApkVersion.REQUEST_UPDATE_FOR_SHELL_APK_VERSION, creationData.manifestUrl,
-                    creationData.startUrl, WebApkDistributor.BROWSER,
-                    creationData.iconUrlToMurmur2HashMap, null, false /* forceNavigation */,
-                    false /* isSplashProvidedByWebApk */, null /* shareData */,
-                    creationData.shortcuts, 1 /* webApkVersionCode */);
-            updateManager.updateIfNeeded(storage, info);
+            BrowserServicesIntentDataProvider intentDataProvider =
+                    WebApkIntentDataProviderFactory.create("", creationData.scope, null, null,
+                            creationData.name, creationData.shortName, creationData.displayMode,
+                            creationData.orientation, 0, creationData.themeColor,
+                            creationData.backgroundColor, 0, creationData.isPrimaryIconMaskable,
+                            false /* isSplashIconMaskable */, "",
+                            WebApkVersion.REQUEST_UPDATE_FOR_SHELL_APK_VERSION,
+                            creationData.manifestUrl, creationData.startUrl,
+                            WebApkDistributor.BROWSER, creationData.iconUrlToMurmur2HashMap, null,
+                            false /* forceNavigation */, false /* isSplashProvidedByWebApk */,
+                            null /* shareData */, creationData.shortcuts,
+                            1 /* webApkVersionCode */);
+            updateManager.updateIfNeeded(storage, intentDataProvider);
         });
         waiter.waitForCallback(0);
 
@@ -302,7 +297,8 @@ public class WebApkUpdateManagerTest {
         creationData.manifestUrl = mTestServer.getURL(WEBAPK_MANIFEST_TOO_MANY_SHORTCUTS_URL);
         for (int i = 0; i < 4; i++) {
             creationData.shortcuts.add(new WebApkExtras.ShortcutItem("name" + String.valueOf(i),
-                    "short_name", mTestServer.getURL(WEBAPK_SCOPE_URL + "launch_url"), "", ""));
+                    "short_name", mTestServer.getURL(WEBAPK_SCOPE_URL + "launch_url"), "", "",
+                    new WebappIcon()));
         }
 
         // The fifth shortcut should be ignored.

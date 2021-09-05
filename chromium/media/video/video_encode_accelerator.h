@@ -110,6 +110,22 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
     // kDmabuf if a video frame is referred by dmabuf.
     enum class StorageType { kShmem, kDmabuf };
 
+    struct MEDIA_EXPORT SpatialLayer {
+      // The encoder dimension of the spatial layer.
+      int32_t width = 0;
+      int32_t height = 0;
+      // The bitrate of encoded output stream of the spatial layer in bits per
+      // second.
+      uint32_t bitrate_bps = 0u;
+      uint32_t framerate = 0u;
+      // The recommended maximum qp value of the spatial layer. VEA can ignore
+      // this value.
+      uint8_t max_qp = 0u;
+      // The number of temporal layers of the spatial layer. The detail of
+      // the temporal layer structure is up to VideoEncodeAccelerator.
+      uint8_t num_of_temporal_layers = 0u;
+    };
+
     Config();
     Config(const Config& config);
 
@@ -121,11 +137,15 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
            base::Optional<uint32_t> gop_length = base::nullopt,
            base::Optional<uint8_t> h264_output_level = base::nullopt,
            base::Optional<StorageType> storage_type = base::nullopt,
-           ContentType content_type = ContentType::kCamera);
+           ContentType content_type = ContentType::kCamera,
+           const std::vector<SpatialLayer>& spatial_layers = {});
 
     ~Config();
 
     std::string AsHumanReadableString() const;
+
+    bool HasTemporalLayer() const;
+    bool HasSpatialLayer() const;
 
     // Frame format of input stream (as would be reported by
     // VideoFrame::format() for frames passed to Encode()).
@@ -168,6 +188,12 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
     // bright colors. With this content hint the encoder may choose to optimize
     // for the given use case.
     ContentType content_type;
+
+    // The configuration for spatial layers. This is not empty if and only if
+    // either spatial or temporal layer encoding is configured. When this is not
+    // empty, VideoEncodeAccelerator should refer the width, height, bitrate and
+    // etc. of |spatial_layers|.
+    std::vector<SpatialLayer> spatial_layers;
   };
 
   // Interface for clients that use VideoEncodeAccelerator. These callbacks will

@@ -4,12 +4,15 @@
 
 #include "chrome/browser/android/dom_distiller/distiller_ui_handle_android.h"
 
+#include "base/notreached.h"
+
 namespace dom_distiller {
 
 namespace android {
 
 void DistillerUIHandleAndroid::OpenSettings() {
   // TODO(1073015) Clean up this UI handle system since it is no longer used.
+  NOTIMPLEMENTED();
 }
 
 }  // namespace android

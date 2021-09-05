@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
+  // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
 
 #ifndef UI_VIVALDI_BROWSER_WINDOW_H_
 #define UI_VIVALDI_BROWSER_WINDOW_H_
@@ -133,6 +133,9 @@ class VivaldiBrowserWindow
   content::WebContents* web_contents() const {
     return app_window_contents_.web_contents();
   }
+
+  // Used when the tabstrip closes all tabs on exit.
+  void AllTabsClosed(int window_id);
 
   // Takes ownership of |browser|.
   void SetBrowser(std::unique_ptr<Browser> browser);
@@ -295,6 +298,9 @@ class VivaldiBrowserWindow
   SharingDialog* ShowSharingDialog(content::WebContents* contents,
                                    SharingDialogData data) override;
   void ShowHatsBubble(const std::string& site_id) override {}
+  std::unique_ptr<content::EyeDropper> OpenEyeDropper(
+    content::RenderFrameHost* frame,
+    content::EyeDropperListener* listener) override;
   // BrowserWindow overrides end
 
   // BaseWindow overrides
@@ -325,8 +331,6 @@ class VivaldiBrowserWindow
       bool force_update) override;
   void OnExclusiveAccessUserInput() override;
   content::WebContents* GetActiveWebContents() override;
-  void UnhideDownloadShelf() override;
-  void HideDownloadShelf() override;
 
   ExclusiveAccessContext* GetExclusiveAccessContext() override;
   void ShowAvatarBubbleFromAvatarButton(

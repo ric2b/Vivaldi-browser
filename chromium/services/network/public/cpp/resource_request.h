@@ -12,13 +12,15 @@
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
 #include "base/unguessable_token.h"
-#include "net/base/network_isolation_key.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "net/base/isolation_info.h"
 #include "net/base/request_priority.h"
 #include "net/cookies/site_for_cookies.h"
 #include "net/http/http_request_headers.h"
 #include "net/url_request/url_request.h"
 #include "services/network/public/cpp/optional_trust_token_params.h"
 #include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/mojom/cookie_access_observer.mojom.h"
 #include "services/network/public/mojom/cors.mojom-shared.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "services/network/public/mojom/referrer_policy.mojom-shared.h"
@@ -41,15 +43,16 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   struct COMPONENT_EXPORT(NETWORK_CPP_BASE) TrustedParams {
     TrustedParams();
     ~TrustedParams();
+    // TODO(altimin): Make this move-only to avoid cloning mojo interfaces.
+    TrustedParams(const TrustedParams& params);
+    TrustedParams& operator=(const TrustedParams& other);
 
-    bool operator==(const TrustedParams& other) const;
+    bool EqualsForTesting(const TrustedParams& trusted_params) const;
 
-    net::NetworkIsolationKey network_isolation_key;
-    mojom::UpdateNetworkIsolationKeyOnRedirect
-        update_network_isolation_key_on_redirect =
-            network::mojom::UpdateNetworkIsolationKeyOnRedirect::kDoNotUpdate;
+    net::IsolationInfo isolation_info;
     bool disable_secure_dns = false;
     bool has_user_activation = false;
+    mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer;
   };
 
   ResourceRequest();
@@ -65,7 +68,7 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   std::string method = net::HttpRequestHeaders::kGetMethod;
   GURL url;
   net::SiteForCookies site_for_cookies;
-  bool attach_same_site_cookies = false;
+  bool force_ignore_site_for_cookies = false;
   bool update_first_party_url_on_redirect = false;
   base::Optional<url::Origin> request_initiator;
   base::Optional<url::Origin> isolated_world_origin;
@@ -89,7 +92,6 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   mojom::CredentialsMode credentials_mode = mojom::CredentialsMode::kInclude;
   mojom::RedirectMode redirect_mode = mojom::RedirectMode::kFollow;
   std::string fetch_integrity;
-  int fetch_request_context_type = 0;
   mojom::RequestDestination destination = mojom::RequestDestination::kEmpty;
   scoped_refptr<ResourceRequestBody> request_body;
   bool keepalive = false;

@@ -16,7 +16,6 @@
 #include "components/favicon_base/favicon_util.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ui/gfx/image/image_png_rep.h"
-#include "url/gurl.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -51,28 +50,6 @@ void RecordFaviconAvailabilityAndLatencyMetric(
   }
 }
 
-void RecordFaviconServerGroupingMetric(
-    HistoryUiFaviconRequestOrigin origin_for_uma,
-    int group_size) {
-  DCHECK_GE(group_size, 0);
-  switch (origin_for_uma) {
-    case HistoryUiFaviconRequestOrigin::kHistory:
-      base::UmaHistogramCounts100(
-          "Sync.RequestGroupSizeForSyncedHistoryFavicons.HISTORY", group_size);
-      break;
-    case HistoryUiFaviconRequestOrigin::kHistorySyncedTabs:
-      base::UmaHistogramCounts100(
-          "Sync.RequestGroupSizeForSyncedHistoryFavicons.SYNCED_TABS",
-          group_size);
-      break;
-    case HistoryUiFaviconRequestOrigin::kRecentTabs:
-      base::UmaHistogramCounts100(
-          "Sync.RequestGroupSizeForSyncedHistoryFavicons.RECENTLY_CLOSED_TABS",
-          group_size);
-      break;
-  }
-}
-
 // Parameter used for local bitmap queries by page url. The url is an origin,
 // and it may not have had a favicon associated with it. A trickier case is when
 // it only has domain-scoped cookies, but visitors are redirected to HTTPS on
@@ -88,12 +65,6 @@ favicon_base::IconTypeSet GetIconTypesForLocalQuery() {
   return {favicon_base::IconType::kFavicon, favicon_base::IconType::kTouchIcon,
           favicon_base::IconType::kTouchPrecomposedIcon,
           favicon_base::IconType::kWebManifestIcon};
-}
-
-GURL GetGroupIdentifier(const GURL& page_url, const GURL& icon_url) {
-  // If it is not possible to find a mapped icon url, identify the group of
-  // |page_url| by itself.
-  return !icon_url.is_empty() ? icon_url : page_url;
 }
 
 }  // namespace
@@ -115,8 +86,7 @@ void HistoryUiFaviconRequestHandlerImpl::GetRawFaviconForPageURL(
     const GURL& page_url,
     int desired_size_in_pixel,
     favicon_base::FaviconRawBitmapCallback callback,
-    HistoryUiFaviconRequestOrigin request_origin_for_uma,
-    const GURL& icon_url_for_uma) {
+    HistoryUiFaviconRequestOrigin request_origin_for_uma) {
 
   // NOTE(espen@vivaldi.com). We can not always fall back to host as it will
   // break favicons for partner bookmarks that are often provided as
@@ -132,15 +102,14 @@ void HistoryUiFaviconRequestHandlerImpl::GetRawFaviconForPageURL(
           &HistoryUiFaviconRequestHandlerImpl::OnBitmapLocalDataAvailable,
           weak_ptr_factory_.GetWeakPtr(), page_url, desired_size_in_pixel,
           /*response_callback=*/std::move(callback), request_origin_for_uma,
-          icon_url_for_uma, base::Time::Now()),
+          base::Time::Now()),
       &cancelable_task_tracker_);
 }
 
 void HistoryUiFaviconRequestHandlerImpl::GetFaviconImageForPageURL(
     const GURL& page_url,
     favicon_base::FaviconImageCallback callback,
-    HistoryUiFaviconRequestOrigin request_origin_for_uma,
-    const GURL& icon_url_for_uma) {
+    HistoryUiFaviconRequestOrigin request_origin_for_uma) {
   // First attempt to find the icon locally.
   favicon_service_->GetFaviconImageForPageURL(
       page_url,
@@ -148,7 +117,7 @@ void HistoryUiFaviconRequestHandlerImpl::GetFaviconImageForPageURL(
           &HistoryUiFaviconRequestHandlerImpl::OnImageLocalDataAvailable,
           weak_ptr_factory_.GetWeakPtr(), page_url,
           /*response_callback=*/std::move(callback), request_origin_for_uma,
-          icon_url_for_uma, base::Time::Now()),
+          base::Time::Now()),
       &cancelable_task_tracker_);
 }
 
@@ -157,7 +126,6 @@ void HistoryUiFaviconRequestHandlerImpl::OnBitmapLocalDataAvailable(
     int desired_size_in_pixel,
     favicon_base::FaviconRawBitmapCallback response_callback,
     HistoryUiFaviconRequestOrigin origin_for_uma,
-    const GURL& icon_url_for_uma,
     base::Time request_start_time_for_uma,
     const favicon_base::FaviconRawBitmapResult& bitmap_result) {
   if (bitmap_result.is_valid()) {
@@ -189,7 +157,7 @@ void HistoryUiFaviconRequestHandlerImpl::OnBitmapLocalDataAvailable(
             base::Unretained(favicon_service_), page_url,
             GetIconTypesForLocalQuery(), desired_size_in_pixel, kFallbackToHost,
             repeating_response_callback, &cancelable_task_tracker_),
-        origin_for_uma, icon_url_for_uma, request_start_time_for_uma);
+        origin_for_uma, request_start_time_for_uma);
     return;
   }
 
@@ -204,7 +172,6 @@ void HistoryUiFaviconRequestHandlerImpl::OnImageLocalDataAvailable(
     const GURL& page_url,
     favicon_base::FaviconImageCallback response_callback,
     HistoryUiFaviconRequestOrigin origin_for_uma,
-    const GURL& icon_url_for_uma,
     base::Time request_start_time_for_uma,
     const favicon_base::FaviconImageResult& image_result) {
   if (!image_result.image.IsEmpty()) {
@@ -237,7 +204,7 @@ void HistoryUiFaviconRequestHandlerImpl::OnImageLocalDataAvailable(
             // doesn't execture the callback if |this| is deleted.
             base::Unretained(favicon_service_), page_url,
             repeating_response_callback, &cancelable_task_tracker_),
-        origin_for_uma, icon_url_for_uma, request_start_time_for_uma);
+        origin_for_uma, request_start_time_for_uma);
     return;
   }
 
@@ -253,7 +220,6 @@ void HistoryUiFaviconRequestHandlerImpl::RequestFromGoogleServer(
     base::OnceClosure empty_response_callback,
     base::OnceClosure local_lookup_callback,
     HistoryUiFaviconRequestOrigin origin_for_uma,
-    const GURL& icon_url_for_uma,
     base::Time request_start_time_for_uma) {
   net::NetworkTrafficAnnotationTag traffic_annotation =
       net::DefineNetworkTrafficAnnotation(
@@ -284,14 +250,6 @@ void HistoryUiFaviconRequestHandlerImpl::RequestFromGoogleServer(
             }
           }
       })");
-  // Increase count of theoretical waiting callbacks in the group of |page_url|.
-  GURL group_identifier = GetGroupIdentifier(page_url, icon_url_for_uma);
-  int group_count =
-      ++group_callbacks_count_[group_identifier];  // Map defaults to 0.
-  // If grouping was implemented, only the first requested page url of a group
-  // would be effectively sent to the server and become responsible for calling
-  // all callbacks in its group once done.
-  GURL group_to_clear = group_count == 1 ? group_identifier : GURL();
   large_icon_service_
       ->GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache(
           page_url,
@@ -301,7 +259,7 @@ void HistoryUiFaviconRequestHandlerImpl::RequestFromGoogleServer(
               &HistoryUiFaviconRequestHandlerImpl::OnGoogleServerDataAvailable,
               weak_ptr_factory_.GetWeakPtr(),
               std::move(empty_response_callback),
-              std::move(local_lookup_callback), origin_for_uma, group_to_clear,
+              std::move(local_lookup_callback), origin_for_uma,
               request_start_time_for_uma));
 }
 
@@ -309,14 +267,8 @@ void HistoryUiFaviconRequestHandlerImpl::OnGoogleServerDataAvailable(
     base::OnceClosure empty_response_callback,
     base::OnceClosure local_lookup_callback,
     HistoryUiFaviconRequestOrigin origin_for_uma,
-    const GURL& group_to_clear,
     base::Time request_start_time_for_uma,
     favicon_base::GoogleFaviconServerRequestStatus status) {
-  if (!group_to_clear.is_empty()) {
-    auto it = group_callbacks_count_.find(group_to_clear);
-    RecordFaviconServerGroupingMetric(origin_for_uma, it->second);
-    group_callbacks_count_.erase(it);
-  }
   // When parallel requests return the same icon url, we get FAILURE_ON_WRITE,
   // since we're trying to write repeated values to the DB. Or if a write
   // operation to that icon url was already completed, we may get status

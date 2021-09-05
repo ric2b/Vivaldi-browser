@@ -18,8 +18,8 @@ cr.define('settings', function() {
    *   osPreferencesSynced: boolean,
    *   syncAllOsDataTypes: boolean,
    *   wallpaperEnabled: boolean,
-   *   wifiConfigurationsRegistered: boolean,
-   *   wifiConfigurationsSynced: boolean,
+   *   osWifiConfigurationsRegistered: boolean,
+   *   osWifiConfigurationsSynced: boolean,
    * }}
    */
   let OsSyncPrefs;
@@ -37,6 +37,11 @@ cr.define('settings', function() {
      * be notified that the sync UI is no longer open.
      */
     didNavigateAwayFromOsSyncPage() {}
+
+    /**
+     * Function to invoke when the WebUI wants an update of the OsSyncPrefs.
+     */
+    sendOsSyncPrefsChanged() {}
 
     /**
      * Sets whether the OS sync feature should be enabled. Sync will not start
@@ -64,6 +69,11 @@ cr.define('settings', function() {
     /** @override */
     didNavigateAwayFromOsSyncPage() {
       chrome.send('DidNavigateAwayFromOsSyncPage');
+    }
+
+    /** @override */
+    sendOsSyncPrefsChanged() {
+      chrome.send('OsSyncPrefsDispatch');
     }
 
     /** @override */

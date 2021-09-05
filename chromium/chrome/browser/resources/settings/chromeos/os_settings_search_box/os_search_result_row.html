@@ -1,7 +1,13 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/cr/ui/focus_row_behavior.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-a11y-announcer/iron-a11y-announcer.html">
+<link rel="import" href="../os_icons.html">
 <link rel="import" href="../os_route.html">
+<link rel="import" href="../search_handler.html">
 <link rel="import" href="../../router.html">
 <link rel="import" href="../../settings_shared_css.html">
 
@@ -9,35 +15,60 @@
   <template>
     <style include="settings-shared">
       :host {
-        display: flex;
-        flex-basis: 100%;
-        height: 40px;
+        width: 100%;
       }
 
-      :host([selected]) #searchResultContainer {
+      :host([selected]) [focus-row-container] {
         background-color: var(--cros-menu-button-bg-color-active);
       }
 
-      :host(:not([selected])) #searchResultContainer:hover {
+      :host(:not([selected])) [focus-row-container]:hover {
         background-color: var(--cros-menu-button-bg-color-hover);
       }
 
+      [focus-row-container] {
+        width: inherit;
+      }
+
       #searchResultContainer {
+        align-items: center;
         display: flex;
-        flex-basis: 100%;
+        height: 40px;
+        justify-content: center;
       }
 
       #resultText {
-        flex-basis: 100%;
+        flex-grow: 1;
+      }
+
+      iron-icon {
+        margin: var(--cr-toolbar-icon-margin);
+        width: var(--cr-toolbar-icon-container-size);
+      }
+
+      /* Bolding occurs in the JS. */
+      b {
+        color: var(--cr-primary-text-color);
       }
     </style>
-    <div id="searchResultContainer" on-click="navigateToSearchResultRoute"
-        focus-row-container>
-      <!-- TODO(crbug/1056909): Focus right hand icon instead; move
-           focus-row-control to that icon when available-->
-      <div id="resultText" focus-row-control selectable
-          on-keypress="onKeyPress_" focus-type="rowWrapper">
-        [[getResultText_(searchResult)]]
+    <div focus-row-container>
+      <!-- The focus-row-control is aria-disabled because the aria-label of
+           this element (:host) will include instructions on how to navigate
+           to a selection.-->
+      <div focus-row-control
+          focus-type="rowWrapper"
+          id="searchResultContainer"
+          on-click="navigateToSearchResultRoute"
+          on-keypress="onKeyPress_"
+          aria-disabled="true"
+          selectable>
+        <iron-icon id="resultIcon" icon="[[getResultIcon_(searchResult)]]">
+        </iron-icon>
+        <div id="resultText" aria-hidden="true"
+            inner-h-t-m-l="[[getResultInnerHtml_(searchResult)]]">
+        </div>
+        <iron-icon id="actionTypeIcon" icon="cr:arrow-forward">
+        </iron-icon>
       </div>
     </div>
   </template>

@@ -29,7 +29,6 @@
 #include "chrome/browser/availability/availability_prober.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/navigation_entry_remover.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -48,6 +47,8 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/web_history_service_factory.h"
 #include "chrome/browser/language/url_language_histogram_factory.h"
+#include "chrome/browser/media/history/media_history_keyed_service.h"
+#include "chrome/browser/media/history/media_history_keyed_service_factory.h"
 #include "chrome/browser/media/media_device_id_salt.h"
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager.h"
@@ -77,6 +78,7 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/browsing_data/content/browsing_data_helper.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -92,7 +94,7 @@
 #include "components/nacl/browser/nacl_browser.h"
 #include "components/nacl/browser/pnacl_host.h"
 #include "components/ntp_snippets/content_suggestions_service.h"
-#include "components/omnibox/browser/omnibox_pref_names.h"
+#include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -119,12 +121,14 @@
 #include "chrome/browser/android/customtabs/origin_verifier.h"
 #include "chrome/browser/android/explore_sites/explore_sites_service_factory.h"
 #include "chrome/browser/android/feed/feed_lifecycle_bridge.h"
+#include "chrome/browser/android/feed/v2/feed_service_factory.h"
 #include "chrome/browser/android/oom_intervention/oom_intervention_decider.h"
 #include "chrome/browser/android/search_permissions/search_permissions_service.h"
 #include "chrome/browser/android/webapps/webapp_registry.h"
 #include "chrome/browser/offline_pages/offline_page_model_factory.h"
 #include "components/cdm/browser/media_drm_storage_impl.h"
 #include "components/feed/buildflags.h"
+#include "components/feed/core/v2/public/feed_service.h"
 #include "components/feed/feed_feature_list.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/offline_pages/core/offline_page_model.h"
@@ -387,7 +391,7 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
   delete_end_ = delete_end;
 
   base::RepeatingCallback<bool(const GURL& url)> filter =
-      filter_builder->BuildGeneralFilter();
+      filter_builder->BuildUrlFilter();
 
   // Some backends support a filter that |is_null()| to make complete deletion
   // more efficient.
@@ -797,7 +801,7 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
 #endif
 
     PermissionDecisionAutoBlockerFactory::GetForProfile(profile_)
-        ->RemoveCountsByUrl(filter);
+        ->RemoveEmbargoAndResetCounts(filter);
 
 #if BUILDFLAG(ENABLE_PLUGINS)
     host_content_settings_map_->ClearSettingsForOneTypeWithPredicate(
@@ -951,6 +955,14 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
     if (content_suggestions_service)
       content_suggestions_service->ClearAllCachedSuggestions();
 
+    media_history::MediaHistoryKeyedService* media_history_service =
+        media_history::MediaHistoryKeyedServiceFactory::GetForProfile(profile_);
+    if (media_history_service) {
+      media_history_service->ResetMediaFeedDueToCacheClearing(
+          delete_begin_, delete_end_, nullable_filter,
+          CreateTaskCompletionClosure(TracingDataType::kMediaFeeds));
+    }
+
 #if defined(OS_ANDROID)
 #if BUILDFLAG(ENABLE_FEED_IN_CHROME)
     if (base::FeatureList::IsEnabled(feed::kInterestFeedContentSuggestions)) {
@@ -960,6 +972,16 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
         feed::FeedLifecycleBridge::ClearCachedData();
       }
     }
+    if (base::FeatureList::IsEnabled(feed::kInterestFeedV2)) {
+      // Don't bridge through if the service isn't present, which means we're
+      // probably running in a native unit test.
+      feed::FeedService* service =
+          feed::FeedServiceFactory::GetForBrowserContext(profile_);
+      if (service) {
+        service->ClearCachedData();
+      }
+    }
+
 #endif  // BUILDFLAG(ENABLE_FEED_IN_CHROME)
 #endif  // defined(OS_ANDROID)
 
@@ -1066,7 +1088,7 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
       if (!user) {
         LOG(WARNING) << "Failed to find user for current profile.";
       } else {
-        chromeos::CryptohomeClient::Get()->TpmAttestationDeleteKeys(
+        chromeos::CryptohomeClient::Get()->TpmAttestationDeleteKeysByPrefix(
             chromeos::attestation::KEY_USER,
             cryptohome::CreateAccountIdentifierFromAccountId(
                 user->GetAccountId()),

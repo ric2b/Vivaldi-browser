@@ -33,14 +33,16 @@ SwitchAccessNavigationManagerTest.prototype = {
   },
 
   findNodeById(id) {
-    const result = new AutomationTreeWalker(
-                       this.desktop, constants.Dir.FORWARD,
-                       {visit: (node) => node.htmlAttributes['id'] === id})
-                       .next()
-                       .node;
+    const treeWalker = new AutomationTreeWalker(
+        this.desktop, constants.Dir.FORWARD,
+        {visit: (node) => node.htmlAttributes['id'] === id});
+    const result = treeWalker.next().node;
     assertTrue(
         result && id === result.htmlAttributes['id'],
-        'Could not find "' + id + '"');
+        'Could not find "' + id + '".');
+    assertTrue(
+        treeWalker.next().node == undefined,
+        'More than one node found with id "' + id + '".');
     return result;
   }
 };
@@ -48,17 +50,23 @@ SwitchAccessNavigationManagerTest.prototype = {
 function moveToPageContents() {
   const navigator = NavigationManager.instance;
   // Start from the desktop node.
-  navigator.group_ = DesktopNode.build(navigator.desktop_);
-  navigator.node_ = navigator.group_.firstChild;
+  navigator.setGroup_(DesktopNode.build(navigator.desktop_));
 
   // The first item should be the browser window.
-  navigator.selectCurrentNode();
+  assertTrue(
+      navigator.node_.isGroup(),
+      'Browser window should be the desktop\'s first child');
+  NavigationManager.enterGroup();
 
+  // Find the page contents in the browser window.
   // The third item in the browser window is the page contents.
   // TODO(anastasi): find the browser window dynamically.
   NavigationManager.moveForward();
   NavigationManager.moveForward();
-  navigator.selectCurrentNode();
+  assertTrue(
+      navigator.node_.isGroup(),
+      'Page contents should be the browser window\'s third child');
+  NavigationManager.enterGroup();
 }
 
 function currentNode() {
@@ -76,11 +84,12 @@ TEST_F('SwitchAccessNavigationManagerTest', 'MoveTo', function() {
   this.runAndSaveDesktop(website, (desktop) => {
     const textFields =
         desktop.findAll({role: chrome.automation.RoleType.TEXT_FIELD});
-    assertEquals(2, textFields.length, 'Should be exactly 2 text fields');
+    assertEquals(2, textFields.length, 'Should be exactly 2 text fields.');
     const omnibar = textFields[0];
     const textInput = textFields[1];
-    const slider = desktop.find({role: chrome.automation.RoleType.SLIDER});
-    assertNotNullNorUndefined(slider, 'Could not find the slider');
+    const sliders = desktop.findAll({role: chrome.automation.RoleType.SLIDER});
+    assertEquals(1, sliders.length, 'Should be exactly 1 slider.');
+    const slider = sliders[0];
     const group = this.findNodeById('group');
     const outerGroup = this.findNodeById('outerGroup');
 
@@ -94,8 +103,7 @@ TEST_F('SwitchAccessNavigationManagerTest', 'MoveTo', function() {
     assertFalse(
         this.navigator.group_.isEquivalentTo(outerGroup),
         'Omnibar is in the outer group in page contents somehow');
-    const grandGroup =
-        this.navigator.groupStack_[this.navigator.groupStack_.length - 1];
+    const grandGroup = this.navigator.history_.peek().group;
     assertFalse(
         grandGroup.isEquivalentTo(group),
         'Group stack contains the group from page contents');
@@ -111,7 +119,7 @@ TEST_F('SwitchAccessNavigationManagerTest', 'MoveTo', function() {
         this.navigator.group_.isEquivalentTo(group),
         'Group node was not successfully populated');
     assertTrue(
-        this.navigator.groupStack_.pop().isEquivalentTo(outerGroup),
+        this.navigator.history_.peek().group.isEquivalentTo(outerGroup),
         'Group stack was not built properly');
 
     this.navigator.moveTo_(slider);
@@ -168,6 +176,7 @@ TEST_F('SwitchAccessNavigationManagerTest', 'JumpTo', function() {
 
 TEST_F('SwitchAccessNavigationManagerTest', 'SelectButton', function() {
   const website = `<button id="test" aria-pressed=false>First Button</button>
+      <button>Second Button</button>
       <script>
         let state = false;
         let button = document.getElementById("test");
@@ -192,10 +201,7 @@ TEST_F('SwitchAccessNavigationManagerTest', 'SelectButton', function() {
               'Checked state changed on unexpected node');
         }));
 
-    chrome.automation.getDesktop(this.newCallback((d) => {
-      NavigationManager.initialize(d);
-      NavigationManager.instance.selectCurrentNode();
-    }));
+    NavigationManager.instance.node_.performAction('select');
   });
 });
 

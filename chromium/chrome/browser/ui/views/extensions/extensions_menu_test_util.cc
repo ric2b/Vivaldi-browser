@@ -31,7 +31,6 @@ class ExtensionsMenuTestUtil::Wrapper {
  public:
   explicit Wrapper(Browser* browser)
       : extensions_container_(new ExtensionsToolbarContainer(browser)) {
-    container_parent_.set_owned_by_client();
     container_parent_.SetSize(gfx::Size(1000, 1000));
     container_parent_.Layout();
     container_parent_.AddChildView(extensions_container_);
@@ -66,7 +65,6 @@ ExtensionsMenuTestUtil::ExtensionsMenuTestUtil(Browser* browser,
   menu_view_ = std::make_unique<ExtensionsMenuView>(
       extensions_container_->extensions_button(), browser_,
       extensions_container_);
-  menu_view_->set_owned_by_client();
 }
 ExtensionsMenuTestUtil::~ExtensionsMenuTestUtil() = default;
 
@@ -150,12 +148,6 @@ bool ExtensionsMenuTestUtil::HidePopup() {
   return !HasPopup();
 }
 
-bool ExtensionsMenuTestUtil::ActionButtonWantsToRun(size_t index) {
-  // TODO(devlin): Investigate if wants-to-run behavior is still necessary.
-  NOTREACHED();
-  return false;
-}
-
 void ExtensionsMenuTestUtil::SetWidth(int width) {
   extensions_container_->SetSize(
       gfx::Size(width, extensions_container_->height()));
@@ -181,6 +173,11 @@ ExtensionsMenuTestUtil::CreateOverflowBar(Browser* browser) {
   return nullptr;
 }
 
+void ExtensionsMenuTestUtil::LayoutForOverflowBar() {
+  // There is no overflow bar with the ExtensionsMenu implementation.
+  NOTREACHED();
+}
+
 gfx::Size ExtensionsMenuTestUtil::GetMinPopupSize() {
   return gfx::Size(ExtensionPopup::kMinWidth, ExtensionPopup::kMinHeight);
 }
@@ -191,12 +188,6 @@ gfx::Size ExtensionsMenuTestUtil::GetMaxPopupSize() {
 
 gfx::Size ExtensionsMenuTestUtil::GetToolbarActionSize() {
   return extensions_container_->GetToolbarActionSize();
-}
-
-bool ExtensionsMenuTestUtil::CanBeResized() {
-  // TODO(https://crbug.com/984654): Implement this.
-  NOTREACHED();
-  return false;
 }
 
 ExtensionsMenuItemView* ExtensionsMenuTestUtil::GetMenuItemViewAtIndex(

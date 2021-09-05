@@ -27,6 +27,7 @@
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
 #include "cc/metrics/begin_main_frame_metrics.h"
+#include "cc/metrics/frame_sequence_tracker.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "components/viz/common/features.h"
@@ -258,7 +259,7 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
 }
 
 Compositor::~Compositor() {
-  TRACE_EVENT0("shutdown", "Compositor::destructor");
+  TRACE_EVENT0("shutdown,viz", "Compositor::destructor");
 
   for (auto& observer : observer_list_)
     observer.OnCompositingShuttingDown(this);
@@ -311,6 +312,7 @@ void Compositor::SetLayerTreeFrameSink(
   // Display properties are reset when the output surface is lost, so update it
   // to match the Compositor's.
   if (display_private_) {
+    disabled_swap_until_resize_ = false;
     display_private_->Resize(size());
     display_private_->SetDisplayVisible(host_->IsVisible());
     display_private_->SetDisplayColorSpaces(display_color_spaces_);
@@ -381,8 +383,12 @@ void Compositor::ScheduleRedrawRect(const gfx::Rect& damage_rect) {
 }
 
 #if defined(OS_WIN)
+void Compositor::SetShouldDisableSwapUntilResize(bool should) {
+  should_disable_swap_until_resize_ = should;
+}
+
 void Compositor::DisableSwapUntilResize() {
-  if (display_private_) {
+  if (should_disable_swap_until_resize_ && display_private_) {
     // Browser needs to block for Viz to receive and process this message.
     // Otherwise when we return from WM_WINDOWPOSCHANGING message handler and
     // receive a WM_WINDOWPOSCHANGED the resize is finalized and any swaps of
@@ -396,7 +402,7 @@ void Compositor::DisableSwapUntilResize() {
 }
 
 void Compositor::ReenableSwap() {
-  if (display_private_)
+  if (should_disable_swap_until_resize_ && display_private_)
     display_private_->Resize(size_);
 }
 #endif
@@ -444,6 +450,16 @@ void Compositor::SetDisplayColorSpaces(
   if (display_color_spaces_ == display_color_spaces)
     return;
   display_color_spaces_ = display_color_spaces;
+  // TODO(crbug.com/1012846): Remove this flag and provision when HDR is fully
+  // supported on ChromeOS.
+#if defined(OS_CHROMEOS)
+  if (display_color_spaces_.SupportsHDR() &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableUseHDRTransferFunction)) {
+    display_color_spaces_ =
+        gfx::DisplayColorSpaces(gfx::ColorSpace::CreateSRGB());
+  }
+#endif
 
   host_->SetRasterColorSpace(display_color_spaces_.GetRasterColorSpace());
   // Always force the ui::Compositor to re-draw all layers, because damage
@@ -598,6 +614,10 @@ void Compositor::IssueExternalBeginFrame(
       args, force, std::move(callback));
 }
 
+ThroughputTracker Compositor::RequestNewThroughputTracker() {
+  return ThroughputTracker(next_throughput_tracker_id_++, this);
+}
+
 void Compositor::DidUpdateLayers() {
   // Dump property trees and layers if run with:
   //   --vmodule=*ui/compositor*=3
@@ -660,6 +680,12 @@ Compositor::GetBeginMainFrameMetrics() {
   return nullptr;
 }
 
+void Compositor::NotifyThroughputTrackerResults(
+    cc::CustomTrackerResults results) {
+  for (auto& pair : results)
+    ReportThroughputForTracker(pair.first, std::move(pair.second));
+}
+
 void Compositor::DidReceiveCompositorFrameAck() {
   ++activated_frame_count_;
   for (auto& observer : observer_list_)
@@ -695,6 +721,25 @@ void Compositor::OnFrameTokenChanged(uint32_t frame_token) {
   NOTREACHED();
 }
 
+void Compositor::StartThroughputTracker(
+    TrackerId tracker_id,
+    ThroughputTrackerHost::ReportCallback callback) {
+  DCHECK(!base::Contains(throughput_tracker_map_, tracker_id));
+  throughput_tracker_map_[tracker_id] = std::move(callback);
+  animation_host_->StartThroughputTracking(tracker_id);
+}
+
+void Compositor::StopThroughtputTracker(TrackerId tracker_id) {
+  DCHECK(base::Contains(throughput_tracker_map_, tracker_id));
+  animation_host_->StopThroughputTracking(tracker_id);
+}
+
+void Compositor::CancelThroughtputTracker(TrackerId tracker_id) {
+  DCHECK(base::Contains(throughput_tracker_map_, tracker_id));
+  StopThroughtputTracker(tracker_id);
+  throughput_tracker_map_.erase(tracker_id);
+}
+
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 void Compositor::OnCompleteSwapWithNewSize(const gfx::Size& size) {
   for (auto& observer : observer_list_)
@@ -720,6 +765,17 @@ void Compositor::SetLayerTreeDebugState(
 void Compositor::RequestPresentationTimeForNextFrame(
     PresentationTimeCallback callback) {
   host_->RequestPresentationTimeForNextFrame(std::move(callback));
+}
+
+void Compositor::ReportThroughputForTracker(
+    int tracker_id,
+    cc::FrameSequenceMetrics::ThroughputData throughput) {
+  auto it = throughput_tracker_map_.find(tracker_id);
+  if (it == throughput_tracker_map_.end())
+    return;
+
+  std::move(it->second).Run(std::move(throughput));
+  throughput_tracker_map_.erase(it);
 }
 
 }  // namespace ui

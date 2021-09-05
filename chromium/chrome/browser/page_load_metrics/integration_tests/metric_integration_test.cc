@@ -10,6 +10,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/tracing_controller.h"
+#include "content/public/common/content_switches.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -37,9 +38,9 @@ MetricIntegrationTest::~MetricIntegrationTest() = default;
 void MetricIntegrationTest::SetUpOnMainThread() {
   host_resolver()->AddRule("*", "127.0.0.1");
   embedded_test_server()->ServeFilesFromSourceDirectory(
-      "third_party/blink/web_tests/external/wpt");
-  embedded_test_server()->ServeFilesFromSourceDirectory(
       "chrome/browser/page_load_metrics/integration_tests/data");
+  embedded_test_server()->ServeFilesFromSourceDirectory(
+      "third_party/blink/web_tests/external/wpt");
   content::SetupCrossSiteRedirector(embedded_test_server());
 
   ukm_recorder_.emplace();
@@ -110,6 +111,7 @@ WebContents* MetricIntegrationTest::web_contents() const {
 void MetricIntegrationTest::SetUpCommandLine(CommandLine* command_line) {
   // Set a default window size for consistency.
   command_line->AppendSwitchASCII(switches::kWindowSize, "800,600");
+  command_line->AppendSwitch(switches::kEnableExperimentalWebPlatformFeatures);
 }
 
 std::unique_ptr<HttpResponse> MetricIntegrationTest::HandleRequest(
@@ -136,4 +138,34 @@ void MetricIntegrationTest::ExpectUKMPageLoadMetric(StringPiece metric_name,
   const auto& kv = merged_entries.begin();
   TestUkmRecorder::ExpectEntryMetric(kv->second.get(), metric_name,
                                      expected_value);
+}
+
+void MetricIntegrationTest::ExpectUKMPageLoadMetricNear(StringPiece metric_name,
+                                                        double expected_value,
+                                                        double epsilon) {
+  std::map<ukm::SourceId, ukm::mojom::UkmEntryPtr> merged_entries =
+      ukm_recorder().GetMergedEntriesByName(PageLoad::kEntryName);
+
+  EXPECT_EQ(1ul, merged_entries.size());
+  const auto& kv = merged_entries.begin();
+  const int64_t* recorded =
+      TestUkmRecorder::GetEntryMetric(kv->second.get(), metric_name);
+  EXPECT_NE(recorded, nullptr);
+  EXPECT_NEAR(*recorded, expected_value, epsilon);
+}
+
+void MetricIntegrationTest::ExpectUniqueUMAPageLoadMetricNear(
+    StringPiece metric_name,
+    double expected_value) {
+  EXPECT_EQ(histogram_tester_->GetAllSamples(metric_name).size(), 1u)
+      << "There should be one sample for " << metric_name.data();
+  // UMA uses integer buckets so check that the value is in the bucket of
+  // |expected_value| or in the bucket of |expected_value| +- 1.
+  EXPECT_TRUE(
+      histogram_tester_->GetBucketCount(metric_name, expected_value) == 1 ||
+      histogram_tester_->GetBucketCount(metric_name, expected_value + 1.0) ==
+          1 ||
+      histogram_tester_->GetBucketCount(metric_name, expected_value - 1.0) == 1)
+      << "The sample for " << metric_name.data()
+      << " is not near the expected value!";
 }

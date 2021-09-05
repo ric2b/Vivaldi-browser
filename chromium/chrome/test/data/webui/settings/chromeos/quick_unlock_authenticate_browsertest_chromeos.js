@@ -16,7 +16,7 @@ cr.define('settings_people_page_quick_unlock', function() {
     while (element) {
       if (element.offsetWidth <= 0 || element.offsetHeight <= 0 ||
           element.hidden ||
-          window.getComputedStyle(element).visibility == 'hidden') {
+          window.getComputedStyle(element).visibility === 'hidden') {
         return false;
       }
 
@@ -26,9 +26,9 @@ cr.define('settings_people_page_quick_unlock', function() {
         // cr-dialog itself will always be 0x0. It's the inner native <dialog>
         // that has actual dimensions.
         // (The same about PIN-KEYBOARD.)
-        if (element.tagName == 'CR-DIALOG') {
+        if (element.tagName === 'CR-DIALOG') {
           element = element.getNative();
-        } else if (element.tagName == 'PIN-KEYBOARD') {
+        } else if (element.tagName === 'PIN-KEYBOARD') {
           element = element.$.root;
         }
       }
@@ -158,7 +158,7 @@ cr.define('settings_people_page_quick_unlock', function() {
         assertEquals(
             0,
             fakeUma.getHistogramValue(
-                LockScreenProgress.ENTER_PASSWORD_CORRECTLY));
+                settings.LockScreenProgress.ENTER_PASSWORD_CORRECTLY));
         assertFalse(authTokenObtainedFired);
       });
 
@@ -173,7 +173,7 @@ cr.define('settings_people_page_quick_unlock', function() {
         assertEquals(
             1,
             fakeUma.getHistogramValue(
-                LockScreenProgress.ENTER_PASSWORD_CORRECTLY));
+                settings.LockScreenProgress.ENTER_PASSWORD_CORRECTLY));
         assertTrue(authTokenObtainedFired);
       });
 
@@ -220,7 +220,7 @@ cr.define('settings_people_page_quick_unlock', function() {
        */
       function assertRadioButtonChecked(radioButton) {
         function doAssert(element, name) {
-          if (radioButton == element) {
+          if (radioButton === element) {
             assertTrue(element.checked, 'Expected ' + name + ' to be checked');
           } else {
             assertFalse(
@@ -428,7 +428,7 @@ cr.define('settings_people_page_quick_unlock', function() {
         assertEquals(
             0,
             fakeUma.getHistogramValue(
-                LockScreenProgress.CHOOSE_PIN_OR_PASSWORD));
+                settings.LockScreenProgress.CHOOSE_PIN_OR_PASSWORD));
         assertRadioButtonChecked(passwordRadioButton);
 
         pinPasswordRadioButton.click();
@@ -443,7 +443,7 @@ cr.define('settings_people_page_quick_unlock', function() {
         assertEquals(
             1,
             fakeUma.getHistogramValue(
-                LockScreenProgress.CHOOSE_PIN_OR_PASSWORD));
+                settings.LockScreenProgress.CHOOSE_PIN_OR_PASSWORD));
       });
     });
   }
@@ -647,19 +647,23 @@ cr.define('settings_people_page_quick_unlock', function() {
         // Entering the same (even weak) pin twice calls the quick unlock API
         // and sets up a PIN.
         assertEquals(
-            0, fakeUma.getHistogramValue(LockScreenProgress.ENTER_PIN));
+            0,
+            fakeUma.getHistogramValue(settings.LockScreenProgress.ENTER_PIN));
         assertEquals(
-            0, fakeUma.getHistogramValue(LockScreenProgress.CONFIRM_PIN));
+            0,
+            fakeUma.getHistogramValue(settings.LockScreenProgress.CONFIRM_PIN));
         pinKeyboard.value = '1111';
         continueButton.click();
         assertEquals(
-            1, fakeUma.getHistogramValue(LockScreenProgress.ENTER_PIN));
+            1,
+            fakeUma.getHistogramValue(settings.LockScreenProgress.ENTER_PIN));
 
         pinKeyboard.value = '1111';
         continueButton.click();
 
         assertEquals(
-            1, fakeUma.getHistogramValue(LockScreenProgress.CONFIRM_PIN));
+            1,
+            fakeUma.getHistogramValue(settings.LockScreenProgress.CONFIRM_PIN));
         assertDeepEquals(['PIN'], quickUnlockPrivateApi.activeModes);
         assertDeepEquals(['1111'], quickUnlockPrivateApi.credentials);
       });

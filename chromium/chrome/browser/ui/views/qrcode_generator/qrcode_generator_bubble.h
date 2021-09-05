@@ -50,6 +50,10 @@ class QRCodeGeneratorBubble : public QRCodeGeneratorBubbleView,
   // QRCodeGeneratorBubbleView:
   void Hide() override;
 
+  // Returns a suggested download filename for a given URL.
+  // e.g.: www.foo.com may suggest qrcode_foo.png.
+  static const base::string16 GetQRCodeFilenameForURL(const GURL& url);
+
  private:
   ~QRCodeGeneratorBubble() override;
 
@@ -58,6 +62,9 @@ class QRCodeGeneratorBubble : public QRCodeGeneratorBubbleView,
 
   // Updates the central QR code image with |qr_image|.
   void UpdateQRImage(gfx::ImageSkia qr_image);
+
+  // Updates the central QR code image with a placeholder.
+  void DisplayPlaceholderImage();
 
   // LocationBarBubbleDelegateView:
   View* GetInitiallyFocusedView() override;
@@ -97,6 +104,7 @@ class QRCodeGeneratorBubble : public QRCodeGeneratorBubbleView,
   views::TooltipIcon* tooltip_icon_ = nullptr;
 
   QRCodeGeneratorBubbleController* controller_;  // weak.
+  content::WebContents* web_contents_;           // weak.
 
   DISALLOW_COPY_AND_ASSIGN(QRCodeGeneratorBubble);
 };

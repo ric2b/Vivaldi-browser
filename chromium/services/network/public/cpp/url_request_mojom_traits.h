@@ -24,6 +24,7 @@
 #include "services/network/public/cpp/resource_request_body.h"
 #include "services/network/public/cpp/site_for_cookies_mojom_traits.h"
 #include "services/network/public/mojom/chunked_data_pipe_getter.mojom.h"
+#include "services/network/public/mojom/cookie_access_observer.mojom.h"
 #include "services/network/public/mojom/data_pipe_getter.mojom.h"
 #include "services/network/public/mojom/trust_tokens.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom-shared.h"
@@ -53,14 +54,9 @@ template <>
 struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
     StructTraits<network::mojom::TrustedUrlRequestParamsDataView,
                  network::ResourceRequest::TrustedParams> {
-  static const net::NetworkIsolationKey& network_isolation_key(
+  static const net::IsolationInfo& isolation_info(
       const network::ResourceRequest::TrustedParams& trusted_params) {
-    return trusted_params.network_isolation_key;
-  }
-  static network::mojom::UpdateNetworkIsolationKeyOnRedirect
-  update_network_isolation_key_on_redirect(
-      const network::ResourceRequest::TrustedParams& trusted_params) {
-    return trusted_params.update_network_isolation_key_on_redirect;
+    return trusted_params.isolation_info;
   }
   static bool disable_secure_dns(
       const network::ResourceRequest::TrustedParams& trusted_params) {
@@ -69,6 +65,15 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
   static bool has_user_activation(
       const network::ResourceRequest::TrustedParams& trusted_params) {
     return trusted_params.has_user_activation;
+  }
+  static mojo::PendingRemote<network::mojom::CookieAccessObserver>
+  cookie_observer(
+      const network::ResourceRequest::TrustedParams& trusted_params) {
+    if (!trusted_params.cookie_observer)
+      return mojo::NullRemote();
+    return std::move(
+        const_cast<network::ResourceRequest::TrustedParams&>(trusted_params)
+            .cookie_observer);
   }
 
   static bool Read(network::mojom::TrustedUrlRequestParamsDataView data,
@@ -88,9 +93,9 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
       const network::ResourceRequest& request) {
     return request.site_for_cookies;
   }
-  static bool attach_same_site_cookies(
+  static bool force_ignore_site_for_cookies(
       const network::ResourceRequest& request) {
-    return request.attach_same_site_cookies;
+    return request.force_ignore_site_for_cookies;
   }
   static bool update_first_party_url_on_redirect(
       const network::ResourceRequest& request) {
@@ -167,10 +172,6 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
   static const std::string& fetch_integrity(
       const network::ResourceRequest& request) {
     return request.fetch_integrity;
-  }
-  static int32_t fetch_request_context_type(
-      const network::ResourceRequest& request) {
-    return request.fetch_request_context_type;
   }
   static network::mojom::RequestDestination destination(
       const network::ResourceRequest& request) {

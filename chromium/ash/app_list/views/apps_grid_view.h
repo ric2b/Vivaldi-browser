@@ -292,6 +292,13 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // view hierarchy.
   const AppListConfig& GetAppListConfig() const;
 
+  // Helper functions to toggle the Apps Grid Cardified state. The cardified
+  // state scales down apps and is shown when the user drags an app in the
+  // AppList.
+  void StartAppsGridCardifiedView();
+  void EndAppsGridCardifiedView();
+  void AnimateCardifiedState();
+
   // Return the view model.
   views::ViewModelT<AppListItemView>* view_model() { return &view_model_; }
 
@@ -323,6 +330,10 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   void set_page_flip_delay_in_ms_for_testing(int page_flip_delay_in_ms) {
     page_flip_delay_in_ms_ = page_flip_delay_in_ms;
+  }
+
+  views::BoundsAnimator* bounds_animator_for_testing() {
+    return bounds_animator_.get();
   }
 
  private:
@@ -487,7 +498,6 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   void OnListItemMoved(size_t from_index,
                        size_t to_index,
                        AppListItem* item) override;
-  void OnAppListItemHighlight(size_t index, bool highlight) override;
 
   // Overridden from PaginationModelObserver:
   void TotalPagesChanged(int previous_page_count, int new_page_count) override;
@@ -736,6 +746,11 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   AppListItemView* drag_view_ = nullptr;
 
+  // Set while apps grid items have layers to handle app list item drag
+  // operation. It's reset when the app list bounds animations requested after
+  // drag state is cleared complete.
+  bool items_need_layer_for_drag_ = false;
+
   // The index of the drag_view_ when the drag starts.
   GridIndex drag_view_init_index_;
 
@@ -842,6 +857,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   // If true, Layout() does nothing. See where set for details.
   bool ignore_layout_ = false;
+
+  // True if the AppList is in cardified state.
+  bool cardified_state_ = false;
 
   // Records smoothness of pagination animation.
   std::unique_ptr<AppListAnimationMetricsRecorder> pagination_metrics_recorder_;

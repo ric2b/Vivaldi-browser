@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
 
 #include "cc/layers/surface_layer.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom-blink.h"
@@ -16,6 +17,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy_manager.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/remote_dom_window.h"
@@ -39,6 +41,7 @@
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/heap_allocator.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher_properties.h"
@@ -49,6 +52,16 @@
 namespace blink {
 
 namespace {
+
+// Maintain a global (statically-allocated) hash map indexed by the the result
+// of hashing the |frame_token| passed on creation of a RemoteFrame object.
+typedef HeapHashMap<uint64_t, WeakMember<RemoteFrame>> RemoteFramesByTokenMap;
+static RemoteFramesByTokenMap& GetRemoteFramesMap() {
+  DEFINE_STATIC_LOCAL(Persistent<RemoteFramesByTokenMap>, map,
+                      (MakeGarbageCollected<RemoteFramesByTokenMap>()));
+  return *map;
+}
+
 FloatRect DeNormalizeRect(const gfx::RectF& normalized, const IntRect& base) {
   FloatRect result(normalized);
   result.Scale(base.Width(), base.Height());
@@ -58,18 +71,32 @@ FloatRect DeNormalizeRect(const gfx::RectF& normalized, const IntRect& base) {
 
 }  // namespace
 
+// static
+RemoteFrame* RemoteFrame::FromFrameToken(
+    const base::UnguessableToken& frame_token) {
+  RemoteFramesByTokenMap& remote_frames_map = GetRemoteFramesMap();
+  auto it = remote_frames_map.find(base::UnguessableTokenHash()(frame_token));
+  return it == remote_frames_map.end() ? nullptr : it->value.Get();
+}
+
 RemoteFrame::RemoteFrame(
     RemoteFrameClient* client,
     Page& page,
     FrameOwner* owner,
+    const base::UnguessableToken& frame_token,
     WindowAgentFactory* inheriting_agent_factory,
     InterfaceRegistry* interface_registry,
     AssociatedInterfaceProvider* associated_interface_provider)
     : Frame(client,
             page,
             owner,
+            frame_token,
             MakeGarbageCollected<RemoteWindowProxyManager>(*this),
             inheriting_agent_factory) {
+  auto frame_tracking_result = GetRemoteFramesMap().insert(
+      base::UnguessableTokenHash()(frame_token), this);
+  CHECK(frame_tracking_result.stored_value) << "Inserting a duplicate item.";
+
   dom_window_ = MakeGarbageCollected<RemoteDOMWindow>(*this);
 
   interface_registry->AddAssociatedInterface(WTF::BindRepeating(
@@ -130,10 +157,7 @@ void RemoteFrame::Navigate(FrameLoadRequest& frame_request,
                           : nullptr;
   MixedContentChecker::UpgradeInsecureRequest(
       frame_request.GetResourceRequest(), fetch_client_settings_object,
-      frame_request.OriginDocument()
-          ? frame_request.OriginDocument()->ToExecutionContext()
-          : nullptr,
-      frame_request.GetFrameType(),
+      frame ? frame->DomWindow() : nullptr, frame_request.GetFrameType(),
       frame ? frame->GetContentSettingsClient() : nullptr);
 
   // Navigations in portal contexts do not create back/forward entries.
@@ -141,6 +165,9 @@ void RemoteFrame::Navigate(FrameLoadRequest& frame_request,
       frame_load_type == WebFrameLoadType::kStandard) {
     frame_load_type = WebFrameLoadType::kReplaceCurrentItem;
   }
+
+  WebLocalFrame* initiator_frame =
+      frame ? frame->Client()->GetWebFrame() : nullptr;
 
   bool is_opener_navigation = false;
   bool initiator_frame_has_download_sandbox_flag = false;
@@ -151,19 +178,21 @@ void RemoteFrame::Navigate(FrameLoadRequest& frame_request,
     initiator_frame_has_download_sandbox_flag =
         frame->GetSecurityContext() &&
         frame->GetSecurityContext()->IsSandboxed(
-            mojom::blink::WebSandboxFlags::kDownloads);
+            network::mojom::blink::WebSandboxFlags::kDownloads);
     initiator_frame_is_ad = frame->IsAdSubframe();
     if (frame_request.ClientRedirectReason() != ClientNavigationReason::kNone) {
       probe::FrameRequestedNavigation(frame, this, url,
-                                      frame_request.ClientRedirectReason());
+                                      frame_request.ClientRedirectReason(),
+                                      kNavigationPolicyCurrentTab);
     }
   }
 
-  Client()->Navigate(frame_request.GetResourceRequest(),
+  Client()->Navigate(frame_request.GetResourceRequest(), initiator_frame,
                      frame_load_type == WebFrameLoadType::kReplaceCurrentItem,
                      is_opener_navigation,
                      initiator_frame_has_download_sandbox_flag,
-                     initiator_frame_is_ad, frame_request.GetBlobURLToken());
+                     initiator_frame_is_ad, frame_request.GetBlobURLToken(),
+                     frame_request.Impression());
 }
 
 void RemoteFrame::DetachImpl(FrameDetachType type) {
@@ -323,7 +352,7 @@ void RemoteFrame::SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
 }
 
 void RemoteFrame::SetReplicatedSandboxFlags(
-    mojom::blink::WebSandboxFlags flags) {
+    network::mojom::blink::WebSandboxFlags flags) {
   security_context_.ResetAndEnforceSandboxFlags(flags);
 }
 
@@ -564,8 +593,8 @@ void RemoteFrame::IntrinsicSizingInfoOfChildChanged(
 // ensure that sandbox flags and feature policy are inherited properly if this
 // proxy ever parents a local frame.
 void RemoteFrame::DidSetFramePolicyHeaders(
-    mojom::blink::WebSandboxFlags sandbox_flags,
-    const Vector<ParsedFeaturePolicyDeclaration>& parsed_feature_policy) {
+    network::mojom::blink::WebSandboxFlags sandbox_flags,
+    const WTF::Vector<ParsedFeaturePolicyDeclaration>& parsed_feature_policy) {
   SetReplicatedSandboxFlags(sandbox_flags);
   // Convert from WTF::Vector<ParsedFeaturePolicyDeclaration>
   // to std::vector<ParsedFeaturePolicyDeclaration>, since ParsedFeaturePolicy
@@ -620,7 +649,7 @@ bool RemoteFrame::IsIgnoredForHitTest() const {
   if (!owner || !owner->GetLayoutObject())
     return false;
 
-  return owner->OwnerType() == FrameOwnerElementType::kPortal ||
+  return owner->OwnerType() == mojom::blink::FrameOwnerElementType::kPortal ||
          !visible_to_hit_testing_;
 }
 

@@ -84,6 +84,7 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   static BrowserAccessibility* FromAXPlatformNodeDelegate(
       ui::AXPlatformNodeDelegate* delegate);
 
+  BrowserAccessibility();
   ~BrowserAccessibility() override;
 
   // Called only once, immediately after construction. The constructor doesn't
@@ -175,6 +176,7 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
         BrowserAccessibility,
         &BrowserAccessibility::PlatformGetNextSibling,
         &BrowserAccessibility::PlatformGetPreviousSibling,
+        &BrowserAccessibility::PlatformGetFirstChild,
         &BrowserAccessibility::PlatformGetLastChild>
         platform_iterator;
   };
@@ -287,29 +289,11 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   BrowserAccessibility* ApproximateHitTest(
       const gfx::Point& blink_screen_point);
 
-  // Marks this object for deletion, releases our reference to it, and
-  // nulls out the pointer to the underlying AXNode.  May not delete
-  // the object immediately due to reference counting.
-  //
-  // Reference counting is used on some platforms because the
-  // operating system may hold onto a reference to a BrowserAccessibility
-  // object even after we're through with it. When a BrowserAccessibility
-  // has had Destroy() called but its reference count is not yet zero,
-  // instance_active() returns false and queries on this object return failure.
-  virtual void Destroy();
-
-  // Subclasses should override this to support platform reference counting.
-  virtual void NativeAddReference() {}
-
-  // Subclasses should override this to support platform reference counting.
-  virtual void NativeReleaseReference();
-
   //
   // Accessors
   //
 
   BrowserAccessibilityManager* manager() const { return manager_; }
-  bool instance_active() const { return node_ && manager_; }
   ui::AXNode* node() const { return node_; }
 
   // These access the internal unignored accessibility tree, which doesn't
@@ -327,6 +311,7 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
       BrowserAccessibility,
       &BrowserAccessibility::InternalGetNextSibling,
       &BrowserAccessibility::InternalGetPreviousSibling,
+      &BrowserAccessibility::InternalGetFirstChild,
       &BrowserAccessibility::InternalGetLastChild>;
   InternalChildIterator InternalChildrenBegin() const;
   InternalChildIterator InternalChildrenEnd() const;
@@ -338,11 +323,6 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
 
   typedef base::StringPairs HtmlAttributes;
   const HtmlAttributes& GetHtmlAttributes() const;
-
-  // Returns true if this is a native platform-specific object, vs a
-  // cross-platform generic object. Don't call ToBrowserAccessibilityXXX if
-  // IsNative returns false.
-  virtual bool IsNative() const;
 
   // Accessing accessibility attributes:
   //
@@ -595,6 +575,8 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   base::Optional<int> GetPosInSet() const override;
   base::Optional<int> GetSetSize() const override;
   bool IsInListMarker() const;
+  bool IsCollapsedMenuListPopUpButton() const;
+  BrowserAccessibility* GetCollapsedMenuListPopUpButtonAncestor() const;
 
   // Returns true if:
   // 1. This node is a list, AND
@@ -615,8 +597,6 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
       ui::AXRange<BrowserAccessibilityPositionInstance::element_type>;
 
   virtual ui::TextAttributeList ComputeTextAttributes() const;
-
-  BrowserAccessibility();
 
   // The manager of this tree of accessibility objects.
   BrowserAccessibilityManager* manager_ = nullptr;

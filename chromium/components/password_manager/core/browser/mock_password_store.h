@@ -23,10 +23,10 @@ class MockPasswordStore : public PasswordStore {
   MockPasswordStore();
 
   MOCK_METHOD1(RemoveLogin, void(const autofill::PasswordForm&));
+  MOCK_METHOD2(Unblacklist,
+               void(const PasswordStore::FormDigest&, base::OnceClosure));
   MOCK_METHOD2(GetLogins,
                void(const PasswordStore::FormDigest&, PasswordStoreConsumer*));
-  MOCK_METHOD2(GetLoginsByPassword,
-               void(const base::string16&, PasswordStoreConsumer*));
   MOCK_METHOD1(AddLogin, void(const autofill::PasswordForm&));
   MOCK_METHOD1(UpdateLogin, void(const autofill::PasswordForm&));
   MOCK_METHOD2(UpdateLoginWithPrimaryKey,
@@ -81,8 +81,16 @@ class MockPasswordStore : public PasswordStore {
                bool(const std::string&,
                     const base::string16&,
                     RemoveCompromisedCredentialsReason));
+  MOCK_METHOD4(RemoveCompromisedCredentialsByCompromiseTypeImpl,
+               bool(const std::string&,
+                    const base::string16&,
+                    const CompromiseType&,
+                    RemoveCompromisedCredentialsReason));
   MOCK_METHOD0(GetAllCompromisedCredentialsImpl,
                std::vector<CompromisedCredentials>());
+  MOCK_METHOD1(
+      GetMatchingCompromisedCredentialsImpl,
+      std::vector<CompromisedCredentials>(const std::string& signon_realm));
   MOCK_METHOD3(RemoveCompromisedCredentialsByUrlAndTimeImpl,
                bool(const base::RepeatingCallback<bool(const GURL&)>&,
                     base::Time,

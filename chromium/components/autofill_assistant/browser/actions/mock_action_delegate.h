@@ -65,12 +65,13 @@ class MockActionDelegate : public ActionDelegate {
   MOCK_METHOD0(GetBubbleMessage, std::string());
   MOCK_METHOD3(ClickOrTapElement,
                void(const Selector& selector,
-                    ClickAction::ClickType click_type,
+                    ClickType click_type,
                     base::OnceCallback<void(const ClientStatus&)> callback));
 
-  MOCK_METHOD3(Prompt,
+  MOCK_METHOD4(Prompt,
                void(std::unique_ptr<std::vector<UserAction>> user_actions,
                     bool disable_force_expand_sheet,
+                    base::OnceCallback<void()> end_on_navigation_callback,
                     bool browse_mode));
   MOCK_METHOD0(CleanUpAfterPrompt, void());
   MOCK_METHOD1(SetBrowseDomainsWhitelist,
@@ -134,6 +135,7 @@ class MockActionDelegate : public ActionDelegate {
   MOCK_METHOD1(
       WriteUserData,
       void(base::OnceCallback<void(UserData*, UserData::FieldChange*)>));
+  MOCK_METHOD1(WriteUserModel, void(base::OnceCallback<void(UserModel*)>));
 
   MOCK_METHOD1(OnGetFullCard,
                void(base::OnceCallback<void(const autofill::CreditCard& card,
@@ -228,9 +230,9 @@ class MockActionDelegate : public ActionDelegate {
   MOCK_METHOD0(Restart, void());
   MOCK_CONST_METHOD0(GetUserData, UserData*());
   MOCK_METHOD0(GetPersonalDataManager, autofill::PersonalDataManager*());
-  MOCK_METHOD0(GetWebsiteLoginFetcher, WebsiteLoginFetcher*());
+  MOCK_METHOD0(GetWebsiteLoginManager, WebsiteLoginManager*());
   MOCK_METHOD0(GetWebContents, content::WebContents*());
-  MOCK_METHOD0(GetAccountEmailAddress, std::string());
+  MOCK_METHOD0(GetEmailAddressForAccessTokenAccount, std::string());
   MOCK_METHOD0(GetLocale, std::string());
   MOCK_METHOD1(SetDetails, void(std::unique_ptr<Details> details));
   MOCK_METHOD1(SetInfoBox, void(const InfoBox& info_box));

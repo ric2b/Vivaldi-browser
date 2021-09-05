@@ -65,7 +65,7 @@ class BrowserLiveTabContext : public sessions::LiveTabContext {
       bool pin,
       bool from_last_session,
       const sessions::PlatformSpecificTabData* storage_namespace,
-      const std::string& user_agent_override,
+      const sessions::SerializedUserAgentOverride& user_agent_override,
       const std::string& ext_data) override;
   sessions::LiveTab* ReplaceRestoredTab(
       const std::vector<sessions::SerializedNavigationEntry>& navigations,
@@ -74,7 +74,7 @@ class BrowserLiveTabContext : public sessions::LiveTabContext {
       bool from_last_session,
       const std::string& extension_app_id,
       const sessions::PlatformSpecificTabData* tab_platform_data,
-      const std::string& user_agent_override,
+      const sessions::SerializedUserAgentOverride& user_agent_override,
       const std::string& ext_data) override;
   void CloseTab() override;
 

@@ -349,6 +349,7 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
             compositor_keyframe_value_(
                 MakeGarbageCollected<CompositorKeyframeDouble>(offset)) {}
       bool IsNeutral() const final { return true; }
+      bool IsRevert() const final { return false; }
       PropertySpecificKeyframe* CloneWithOffset(double) const final {
         NOTREACHED();
         return nullptr;
@@ -616,11 +617,14 @@ TEST_P(AnimationCompositorAnimationsTest,
   RegisterProperty(GetDocument(), "--bar", "<length>", "10px", false);
   RegisterProperty(GetDocument(), "--loo", "<color>", "rgb(0, 0, 0)", false);
   RegisterProperty(GetDocument(), "--x", "<number>", "0", false);
+  RegisterProperty(GetDocument(), "--y", "<number>", "200", false);
+  RegisterProperty(GetDocument(), "--z", "<number>", "200", false);
   SetCustomProperty("--foo", "10");
   SetCustomProperty("--bar", "10px");
   SetCustomProperty("--loo", "rgb(0, 255, 0)");
   SetCustomProperty("--x", "5");
 
+  UpdateAllLifecyclePhasesForTest();
   auto style = GetDocument().EnsureStyleResolver().StyleForElement(element_);
   EXPECT_TRUE(style->NonInheritedVariables());
   EXPECT_TRUE(style->NonInheritedVariables()
@@ -635,6 +639,8 @@ TEST_P(AnimationCompositorAnimationsTest,
   EXPECT_TRUE(style->NonInheritedVariables()
                   ->GetData(AtomicString("--x"))
                   .value_or(nullptr));
+  EXPECT_TRUE(style->GetVariableData("--y"));
+  EXPECT_TRUE(style->GetVariableData("--z"));
 
   NiceMock<MockCSSPaintImageGenerator>* mock_generator =
       MakeGarbageCollected<NiceMock<MockCSSPaintImageGenerator>>();
@@ -648,6 +654,8 @@ TEST_P(AnimationCompositorAnimationsTest,
   mock_generator->AddCustomProperty("--foo");
   mock_generator->AddCustomProperty("--bar");
   mock_generator->AddCustomProperty("--loo");
+  mock_generator->AddCustomProperty("--y");
+  mock_generator->AddCustomProperty("--z");
   auto* ident = MakeGarbageCollected<CSSCustomIdentValue>("foopainter");
   CSSPaintValue* paint_value = MakeGarbageCollected<CSSPaintValue>(ident);
   paint_value->CreateGeneratorForTesting(GetDocument());
@@ -694,6 +702,18 @@ TEST_P(AnimationCompositorAnimationsTest,
   EXPECT_EQ(
       DuplicateSingleKeyframeAndTestIsCandidateOnResult(non_used_keyframe),
       CompositorAnimations::kUnsupportedCSSProperty);
+
+  // Implicitly initial values are supported.
+  StringKeyframe* y_keyframe = CreateReplaceOpKeyframe("--y", "1000");
+  EXPECT_EQ(DuplicateSingleKeyframeAndTestIsCandidateOnResult(y_keyframe),
+            CompositorAnimations::kNoFailure);
+
+  // Implicitly initial values are not supported when the property
+  // has been referenced.
+  SetCustomProperty("opacity", "var(--z)");
+  StringKeyframe* z_keyframe = CreateReplaceOpKeyframe("--z", "1000");
+  EXPECT_EQ(DuplicateSingleKeyframeAndTestIsCandidateOnResult(z_keyframe),
+            CompositorAnimations::kUnsupportedCSSProperty);
 }
 
 TEST_P(AnimationCompositorAnimationsTest,
@@ -2021,7 +2041,7 @@ TEST_P(AnimationCompositorAnimationsTest,
   const cc::PictureLayer* layer =
       composited_layer_mapping->MainGraphicsLayer()->CcLayer();
   ASSERT_NE(nullptr, layer);
-  EXPECT_TRUE(layer->double_sided());
+  EXPECT_FALSE(layer->should_check_backface_visibility());
 
   // Change the backface visibility, while the compositor animation is
   // happening.
@@ -2030,7 +2050,7 @@ TEST_P(AnimationCompositorAnimationsTest,
   // Make sure the setting made it to both blink and all the way to CC.
   EXPECT_EQ(transform->GetBackfaceVisibilityForTesting(),
             TransformPaintPropertyNode::BackfaceVisibility::kHidden);
-  EXPECT_FALSE(layer->double_sided())
+  EXPECT_TRUE(layer->should_check_backface_visibility())
       << "Change to hidden did not get propagated to CC";
   // Make sure the animation state is initialized in paint properties after
   // blink pushing new paint properties without animation state change.

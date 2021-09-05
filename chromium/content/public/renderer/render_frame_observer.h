@@ -21,7 +21,6 @@
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "third_party/blink/public/mojom/use_counter/css_property_id.mojom.h"
-#include "third_party/blink/public/mojom/web_client_hints/web_client_hints_types.mojom.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
@@ -178,6 +177,13 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   // after an input or scroll occurred in the associated document.
   virtual void DidObserveLayoutShift(double score, bool after_input_or_scroll) {
   }
+
+  // Reports the number of LayoutBlock creation, and LayoutObject::UpdateLayout
+  // calls. All values are deltas since the last calls of this function.
+  virtual void DidObserveLayoutNg(uint32_t all_block_count,
+                                  uint32_t ng_block_count,
+                                  uint32_t all_call_count,
+                                  uint32_t ng_call_count) {}
 
   // Reports lazy loaded behavior when the frame or image is fully deferred or
   // if the frame or image is loaded after being deferred by lazy load.

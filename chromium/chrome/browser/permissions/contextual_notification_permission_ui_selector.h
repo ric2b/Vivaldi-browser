@@ -50,12 +50,12 @@ class ContextualNotificationPermissionUiSelector
   ContextualNotificationPermissionUiSelector& operator=(
       const ContextualNotificationPermissionUiSelector&) = delete;
 
-  void EvaluateCrowdDenyTrigger(url::Origin origin);
+  void EvaluatePerSiteTriggers(const url::Origin& origin);
   void OnSafeBrowsingVerdictReceived(
+      Decision candidate_decision,
       CrowdDenySafeBrowsingRequest::Verdict verdict);
-  void OnCrowdDenyTriggerEvaluated(UiToUse ui_to_use);
-
-  void Notify(UiToUse ui_to_use, base::Optional<QuietUiReason> quiet_ui_reason);
+  void OnPerSiteTriggersEvaluated(Decision decision);
+  void Notify(const Decision& decision);
 
   Profile* profile_;
 

@@ -16,6 +16,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
+#include "net/base/isolation_info.h"
 #include "net/base/load_flags.h"
 #include "net/cert/x509_util.h"
 #include "net/test/cert_test_util.h"
@@ -49,7 +50,8 @@ class DeferringURLLoaderThrottle final : public blink::URLLoaderThrottle {
       const network::mojom::URLResponseHead& /* response_head */,
       bool* defer,
       std::vector<std::string>* /* to_be_removed_headers */,
-      net::HttpRequestHeaders* /* modified_headers */) override {
+      net::HttpRequestHeaders* /* modified_headers */,
+      net::HttpRequestHeaders* /* modified_cors_exempt_headers */) override {
     will_redirect_request_called_ = true;
     *defer = true;
   }
@@ -86,8 +88,9 @@ class MockURLLoader final : public network::mojom::URLLoader {
       : receiver_(this, std::move(url_loader_receiver)) {}
   ~MockURLLoader() override = default;
 
-  MOCK_METHOD3(FollowRedirect,
+  MOCK_METHOD4(FollowRedirect,
                void(const std::vector<std::string>&,
+                    const net::HttpRequestHeaders&,
                     const net::HttpRequestHeaders&,
                     const base::Optional<GURL>&));
   MOCK_METHOD2(SetPriority,
@@ -223,16 +226,15 @@ class SignedExchangeCertFetcherTest : public testing::Test {
             &mock_loader_factory_),
         std::move(throttles_), url, force_fetch, std::move(callback),
         nullptr /* devtools_proxy */, nullptr /* reporter */,
-        base::nullopt /* throttling_profile_id */,
-        base::nullopt /* network_isolation_key */);
+        base::nullopt /* throttling_profile_id */, net::IsolationInfo());
   }
 
   void CallOnReceiveResponse() {
     auto response_head = network::mojom::URLResponseHead::New();
     response_head->headers =
         base::MakeRefCounted<net::HttpResponseHeaders>("HTTP/1.1 200 OK");
-    response_head->headers->AddHeader(
-        "Content-Type: application/cert-chain+cbor");
+    response_head->headers->SetHeader("Content-Type",
+                                      "application/cert-chain+cbor");
     response_head->mime_type = "application/cert-chain+cbor";
     mock_loader_factory_.client_remote()->OnReceiveResponse(
         std::move(response_head));
@@ -482,7 +484,7 @@ TEST_F(SignedExchangeCertFetcherTest, WrongMimeType) {
   auto response_head = network::mojom::URLResponseHead::New();
   response_head->headers =
       base::MakeRefCounted<net::HttpResponseHeaders>("HTTP/1.1 200 OK");
-  response_head->headers->AddHeader("Content-Type: application/octet-stream");
+  response_head->headers->SetHeader("Content-Type", "application/octet-stream");
   response_head->mime_type = "application/octet-stream";
   mock_loader_factory_.client_remote()->OnReceiveResponse(
       std::move(response_head));

@@ -42,7 +42,6 @@ class VivaldiDataSourcesAPI
   enum UrlKind {
     PATH_MAPPING_URL = 0,
     THUMBNAIL_URL = 1,
-    NOTES_ATTACHMENT_URL = 2,
   };
 
   static constexpr int kUrlKindCount = 3;
@@ -140,14 +139,15 @@ class VivaldiDataSourcesAPI
   void CollectUsedUrlsOnUIThread();
   void RemoveUnusedUrlDataOnFileThread(UsedIds used_ids);
 
-  void SetCacheOnIOThread(UrlKind url_kind, std::string id,
-                          scoped_refptr<base::RefCountedMemory> data);
-  void ClearCacheOnIOThread(UrlKind url_kind, std::string id);
+  void SetCache(UrlKind url_kind,
+                std::string id,
+                scoped_refptr<base::RefCountedMemory> data);
+  void ClearCache(UrlKind url_kind, std::string id);
   void GetDataForIdOnFileThread(
       UrlKind url_kind,
       std::string id,
       content::URLDataSource::GotDataCallback callback);
-  void FinishGetDataForIdOnIOThread(
+  void FinishGetDataForIdOnUIThread(
       UrlKind url_kind,
       std::string id,
       scoped_refptr<base::RefCountedMemory> data,
@@ -193,10 +193,8 @@ class VivaldiDataSourcesAPI
   // RemoveUnusedUrlData. This must be accessed only from sequence_task_runner_.
   std::vector<std::string> file_thread_newborn_ids_[kUrlKindCount];
 
-  // Outside constructor or destructor this must be accessed only from the IO
-  // thread.
   std::map<std::string, scoped_refptr<base::RefCountedMemory>>
-      io_thread_data_cache_[kUrlKindCount];
+      data_cache_[kUrlKindCount];
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiDataSourcesAPI);
 };

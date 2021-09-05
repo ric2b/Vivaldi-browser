@@ -280,6 +280,13 @@ bool VaapiVideoEncodeAccelerator::Initialize(const Config& config,
 
   VLOGF(2) << "Initializing VAVEA, " << config.AsHumanReadableString();
 
+  // VaapiVEA doesn't support temporal layers but we let it pass here to support
+  // simulcast.
+  if (config.HasSpatialLayer()) {
+    VLOGF(1) << "Spatial layer encoding is supported";
+    return false;
+  }
+
   client_ptr_factory_.reset(new base::WeakPtrFactory<Client>(client));
   client_ = client_ptr_factory_->GetWeakPtr();
 
@@ -444,7 +451,9 @@ void VaapiVideoEncodeAccelerator::InitializeTask(const Config& config) {
                      num_frames_in_flight_, expected_input_coded_size_,
                      output_buffer_byte_size_));
 
-  encoder_info_.scaling_settings = encoder_->GetScalingSettings();
+  // TODO(crbug.com/1034686): Set ScalingSettings causes getStats() hangs.
+  // Investigate and fix the issue.
+  // encoder_info_.scaling_settings = encoder_->GetScalingSettings();
 
   // TODO(crbug.com/1030199): VaapiVideoEncodeAccelerator doesn't support either
   // temporal-SVC or spatial-SVC. Update |fps_allocation| properly once they are

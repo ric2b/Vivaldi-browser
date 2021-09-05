@@ -527,7 +527,8 @@ class MediaStreamManager::DeviceRequest {
         requesting_process_id, requesting_frame_id, page_request_id,
         salt_and_origin.origin.GetURL(), user_gesture, request_type_,
         requested_audio_device_id, requested_video_device_id, audio_type_,
-        video_type_, controls.disable_local_echo));
+        video_type_, controls.disable_local_echo,
+        controls.request_pan_tilt_zoom_permission));
   }
 
   // Creates a tab capture specific MediaStreamRequest object that is used by
@@ -540,7 +541,8 @@ class MediaStreamManager::DeviceRequest {
     ui_request_.reset(new MediaStreamRequest(
         target_render_process_id, target_render_frame_id, page_request_id,
         salt_and_origin.origin.GetURL(), user_gesture, request_type_, "", "",
-        audio_type_, video_type_, controls.disable_local_echo));
+        audio_type_, video_type_, controls.disable_local_echo,
+        /*request_pan_tilt_zoom_permission=*/false));
   }
 
   bool HasUIRequest() const { return ui_request_.get() != nullptr; }
@@ -1945,6 +1947,8 @@ void MediaStreamManager::Opened(
     for (MediaStreamDevice& device : request->devices) {
       if (device.type == stream_type &&
           device.session_id() == capture_session_id) {
+        if (request->state(device.type) == MEDIA_REQUEST_STATE_DONE)
+          continue;
         CHECK_EQ(request->state(device.type), MEDIA_REQUEST_STATE_OPENING);
         // We've found a matching request.
         request->SetState(device.type, MEDIA_REQUEST_STATE_DONE);

@@ -184,8 +184,7 @@ class TabStrip : public views::AccessiblePaneView,
   // Needed to ensure display and focus order of the group header view.
   void OnGroupMoved(const tab_groups::TabGroupId& group);
 
-  // Destroys the views associated with a recently deleted tab group. The
-  // associated view mappings are erased in OnGroupCloseAnimationCompleted().
+  // Destroys the views associated with a recently deleted tab group.
   void OnGroupClosed(const tab_groups::TabGroupId& group);
 
   // Attempts to move the specified group to the left.
@@ -211,7 +210,6 @@ class TabStrip : public views::AccessiblePaneView,
   void SetTabNeedsAttention(int model_index, bool attention);
 
   // Retrieves the ideal bounds for the Tab at the specified index.
-  // TODO(958173): The notion of ideal bounds is going away. Delete this.
   const gfx::Rect& ideal_bounds(int tab_data_index) const {
     return tabs_.ideal_bounds(tab_data_index);
   }
@@ -292,7 +290,7 @@ class TabStrip : public views::AccessiblePaneView,
   void OnMouseEventInTab(views::View* source,
                          const ui::MouseEvent& event) override;
   void UpdateHoverCard(Tab* tab) override;
-  bool ShowDomainInHoverCard(const Tab* tab) const override;
+  bool ShowDomainInHoverCards() const override;
   bool HoverCardIsShowingForTab(Tab* tab) override;
   int GetBackgroundOffset() const override;
   int GetStrokeThickness() const override;
@@ -326,6 +324,7 @@ class TabStrip : public views::AccessiblePaneView,
   void Layout() override;
   void PaintChildren(const views::PaintInfo& paint_info) override;
   const char* GetClassName() const override;
+  gfx::Size GetMinimumSize() const override;
   gfx::Size CalculatePreferredSize() const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   views::View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
@@ -402,17 +401,6 @@ class TabStrip : public views::AccessiblePaneView,
     DISALLOW_COPY_AND_ASSIGN(DropArrow);
   };
 
-  // Specifies how to handle tabs that are midway through closing when falling
-  // back from |layout_helper_| to |bounds_animator_|.
-  enum class ClosingTabsBehavior {
-    // Keep the tabs alive, because responsibilities for destroying them lie
-    // with |bounds_animator_|.
-    kTransferOwnership,
-    // Destroy the tabs, because responsibilities for destroying them lie with
-    // |layout_helper_|.
-    kDestroy
-  };
-
   void Init();
 
   views::ViewModelT<Tab>* tabs_view_model() { return &tabs_; }
@@ -428,8 +416,6 @@ class TabStrip : public views::AccessiblePaneView,
 
   // Animates the removal of the tab at |model_index| using the old animation
   // style.
-  // TODO(958173): Delete this once all animations have been migrated to the
-  // new animation style.
   void StartFallbackRemoveTabAnimation(int model_index, bool was_active);
 
   // Invoked from |MoveTab| after |tab_data_| has been updated to animate the
@@ -439,9 +425,12 @@ class TabStrip : public views::AccessiblePaneView,
   // Animates all the views to their ideal bounds.
   // NOTE: this does *not* invoke UpdateIdealBounds, it uses the bounds
   // currently set in ideal_bounds.
-  // TODO(958173): The notion of ideal bounds is going away. Delete this.
-  void AnimateToIdealBounds(ClosingTabsBehavior closing_tabs_behavior =
-                                ClosingTabsBehavior::kDestroy);
+  void AnimateToIdealBounds();
+
+  // Teleports the tabs to their ideal bounds.
+  // NOTE: this does *not* invoke UpdateIdealBounds, it uses the bounds
+  // currently set in ideal_bounds.
+  void SnapToIdealBounds();
 
   void ExitTabClosingMode();
 
@@ -462,9 +451,6 @@ class TabStrip : public views::AccessiblePaneView,
   // Invoked from Layout if the size changes or layout is really needed.
   void CompleteAnimationAndLayout();
 
-  // Invoked to re-layout the tabs as animations progress.
-  void LayoutToCurrentBounds();
-
   // Sets the visibility state of all tabs based on ShouldTabBeVisible().
   void SetTabVisibility();
 
@@ -483,6 +469,10 @@ class TabStrip : public views::AccessiblePaneView,
   // button.
   int GetTabAreaWidth() const;
 
+  // Returns the width of the area right of the tabs reserved for the new tab
+  // button and the frame grab area.
+  int GetRightSideReservedWidth() const;
+
   // Returns the X coordinate the new tab button should be placed at.  Requires
   // |tabs_| to have correct ideal bounds.
   int GetNewTabButtonIdealX() const;
@@ -498,16 +488,15 @@ class TabStrip : public views::AccessiblePaneView,
                             base::Optional<int> from_model_index,
                             int to_model_index) const;
 
+  // Closes the tab at |model_index|.
+  void CloseTabInternal(int model_index, CloseTabSource source);
+
   // Removes the tab at |index| from |tabs_|.
   void RemoveTabFromViewModel(int index);
 
   // Cleans up the Tab from the TabStrip. This is called from the tab animation
   // code and is not a general-purpose method.
   void OnTabCloseAnimationCompleted(Tab* tab);
-
-  // Cleans up the TabGroupHeader for |group| from the TabStrip. This is called
-  // from the tab animation code and is not a general-purpose method.
-  void OnGroupCloseAnimationCompleted(const tab_groups::TabGroupId& group);
 
   // Invoked from StoppedDraggingTabs to cleanup |view|. If |view| is known
   // |is_first_view| is set to true.
@@ -567,15 +556,20 @@ class TabStrip : public views::AccessiblePaneView,
   void PrepareForAnimation();
 
   // Generates and sets the ideal bounds for each of the tabs as well as the new
-  // tab button.
-  // TODO(958173): The notion of ideal bounds is going away. Delete this.
+  // tab button. Note: Does not animate the tabs to those bounds so callers can
+  // use this information for other purposes - see AnimateToIdealBounds.
   void UpdateIdealBounds();
 
   // Generates and sets the ideal bounds for the pinned tabs. Returns the index
   // to position the first non-pinned tab and sets |first_non_pinned_index| to
   // the index of the first non-pinned tab.
-  // TODO(958173): The notion of ideal bounds is going away. Delete this.
   int UpdateIdealBoundsForPinnedTabs(int* first_non_pinned_index);
+
+  // Gets the width that our parent view can allot to the tabstrip.
+  int GetAvailableWidthForTabstrip();
+
+  // Calculates the width that can be occupied by the tabs in the strip.
+  int CalculateAvailableWidthForTabs();
 
   // Starts various types of TabStrip animations.
   void StartResizeLayoutAnimation();
@@ -618,6 +612,9 @@ class TabStrip : public views::AccessiblePaneView,
   // Updates the border padding for |new_tab_button_|.  This should be called
   // whenever any input of the computation of the border's sizing changes.
   void UpdateNewTabButtonBorder();
+
+  // Called whenever a tab animation has progressed.
+  void OnTabAnimationProgressed();
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -674,8 +671,6 @@ class TabStrip : public views::AccessiblePaneView,
   std::unique_ptr<TabStripLayoutHelper> layout_helper_;
 
   // Responsible for animating tabs in response to model changes.
-  // Deprecated; https://crbug.com/958173 tracks migrating animations from
-  // |bounds_animator_| to |TabStripLayoutHelper::animator_|.
   views::BoundsAnimator bounds_animator_{this};
 
   // The "New Tab" button.
@@ -708,6 +703,12 @@ class TabStrip : public views::AccessiblePaneView,
 
   // Size we last layed out at.
   gfx::Size last_layout_size_;
+
+  // The width available for tabs at the time of last layout.
+  int last_available_width_ = 0;
+
+  // Guard to protect against layout loops.
+  bool is_doing_layout_ = false;
 
   // See description above stacked_layout().
   bool stacked_layout_ = false;

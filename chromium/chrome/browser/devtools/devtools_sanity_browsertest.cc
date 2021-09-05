@@ -85,6 +85,7 @@
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/hit_test_region_observer.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -955,6 +956,8 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
   ASSERT_TRUE(content::ExecuteScript(web_frame_rfh, about_blank_javascript));
 
   web_about_blank_manager.WaitForNavigationFinished();
+  // After navigation, the frame may change.
+  web_frame_rfh = ChildFrameAt(panel_frame_rfh, 2);
 
   EXPECT_EQ(about_blank_url, web_frame_rfh->GetLastCommittedURL());
   EXPECT_EQ(web_url.host(),
@@ -1706,7 +1709,8 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestSettings) {
 }
 
 // Tests that external navigation from inspector page is always handled by
-// DevToolsWindow and results in inspected page navigation.
+// DevToolsWindow and results in inspected page navigation.  See also
+// https://crbug.com/180555.
 IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestDevToolsExternalNavigation) {
   OpenDevToolsWindow(kDebuggerTestPage, true);
   GURL url = spawned_test_server()->GetURL(kNavigateBackTestPage);
@@ -2096,7 +2100,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsPixelOutputTests,
   DispatchAndWait("startTimeline");
 
   for (int i = 0; i < 3; ++i) {
-    SimulateMouseEvent(web_contents, blink::WebInputEvent::kMouseMove,
+    SimulateMouseEvent(web_contents, blink::WebInputEvent::Type::kMouseMove,
                        gfx::Point(30, 60));
     DispatchInPageAndWait("waitForEvent", "mousemove");
   }
@@ -2327,6 +2331,15 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, DisposeEmptyBrowserContext) {
   window_ = DevToolsWindowTesting::OpenDiscoveryDevToolsWindowSync(
       browser()->profile());
   RunTestMethod("testDisposeEmptyBrowserContext");
+  DevToolsWindowTesting::CloseDevToolsWindowSync(window_);
+}
+
+// TODO(1078348): Find a better strategy for testing protocol methods against
+// non-headless Chrome.
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, NewWindowFromBrowserContext) {
+  window_ = DevToolsWindowTesting::OpenDiscoveryDevToolsWindowSync(
+      browser()->profile());
+  RunTestMethod("testNewWindowFromBrowserContext");
   DevToolsWindowTesting::CloseDevToolsWindowSync(window_);
 }
 

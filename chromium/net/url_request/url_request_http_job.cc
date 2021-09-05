@@ -390,8 +390,8 @@ void URLRequestHttpJob::StartTransaction() {
 }
 
 void URLRequestHttpJob::NotifyBeforeStartTransactionCallback(int result) {
-  // Check that there are no callbacks to already canceled requests.
-  DCHECK_NE(URLRequestStatus::CANCELED, GetStatus().status());
+  // The request should not have been cancelled or have already completed.
+  DCHECK(!is_done());
 
   MaybeStartTransactionInternal(result);
 }
@@ -405,10 +405,8 @@ void URLRequestHttpJob::MaybeStartTransactionInternal(int result) {
                                                  "source", "delegate");
     // Don't call back synchronously to the delegate.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&URLRequestHttpJob::NotifyStartError,
-                       weak_factory_.GetWeakPtr(),
-                       URLRequestStatus(URLRequestStatus::FAILED, result)));
+        FROM_HERE, base::BindOnce(&URLRequestHttpJob::NotifyStartError,
+                                  weak_factory_.GetWeakPtr(), result));
   }
 }
 
@@ -531,17 +529,18 @@ void URLRequestHttpJob::AddCookieHeaderAndStart() {
     CookieOptions options;
     options.set_return_excluded_cookies();
     options.set_include_httponly();
-    bool attach_same_site_cookies = request_->attach_same_site_cookies();
+    bool force_ignore_site_for_cookies =
+        request_->force_ignore_site_for_cookies();
     if (cookie_store->cookie_access_delegate() &&
         cookie_store->cookie_access_delegate()
             ->ShouldIgnoreSameSiteRestrictions(request_->url(),
                                                request_->site_for_cookies())) {
-      attach_same_site_cookies = true;
+      force_ignore_site_for_cookies = true;
     }
     options.set_same_site_cookie_context(
         net::cookie_util::ComputeSameSiteContextForRequest(
             request_->method(), request_->url(), request_->site_for_cookies(),
-            request_->initiator(), attach_same_site_cookies));
+            request_->initiator(), force_ignore_site_for_cookies));
     cookie_store->GetCookieListWithOptionsAsync(
         request_->url(), options,
         base::BindOnce(&URLRequestHttpJob::SetCookieHeaderAndStart,
@@ -659,7 +658,7 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
   if (result != OK) {
     request_->net_log().AddEventWithStringParams(NetLogEventType::CANCELLED,
                                                  "source", "delegate");
-    NotifyStartError(URLRequestStatus(URLRequestStatus::FAILED, result));
+    NotifyStartError(result);
     return;
   }
 
@@ -677,16 +676,17 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
 
   CookieOptions options;
   options.set_include_httponly();
-  bool attach_same_site_cookies = request_->attach_same_site_cookies();
+  bool force_ignore_site_for_cookies =
+      request_->force_ignore_site_for_cookies();
   if (cookie_store->cookie_access_delegate() &&
       cookie_store->cookie_access_delegate()->ShouldIgnoreSameSiteRestrictions(
           request_->url(), request_->site_for_cookies())) {
-    attach_same_site_cookies = true;
+    force_ignore_site_for_cookies = true;
   }
   options.set_same_site_cookie_context(
       net::cookie_util::ComputeSameSiteContextForResponse(
           request_->url(), request_->site_for_cookies(), request_->initiator(),
-          attach_same_site_cookies));
+          force_ignore_site_for_cookies));
 
   options.set_return_excluded_cookies();
 
@@ -732,7 +732,7 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
     }
 
     request_->context()->cookie_store()->SetCanonicalCookieAsync(
-        std::move(cookie), request_->url().scheme(), options,
+        std::move(cookie), request_->url(), options,
         base::BindOnce(&URLRequestHttpJob::OnSetCookieResult,
                        weak_factory_.GetWeakPtr(), options, cookie_to_return,
                        cookie_string));
@@ -876,7 +876,7 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
           request_->net_log().AddEventWithStringParams(
               NetLogEventType::CANCELLED, "source", "delegate");
           OnCallToDelegateComplete();
-          NotifyStartError(URLRequestStatus(URLRequestStatus::FAILED, error));
+          NotifyStartError(error);
         }
         return;
       }
@@ -899,15 +899,15 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
     // info (e.g. whether there's a cached copy).
     if (transaction_.get())
       response_info_ = transaction_->GetResponseInfo();
-    NotifyStartError(URLRequestStatus(URLRequestStatus::FAILED, result));
+    NotifyStartError(result);
   }
 }
 
 void URLRequestHttpJob::OnHeadersReceivedCallback(int result) {
-  awaiting_callback_ = false;
+  // The request should not have been cancelled or have already completed.
+  DCHECK(!is_done());
 
-  // Check that there are no callbacks to already canceled requests.
-  DCHECK_NE(URLRequestStatus::CANCELED, GetStatus().status());
+  awaiting_callback_ = false;
 
   SaveCookiesAndNotifyHeadersComplete(result);
 }

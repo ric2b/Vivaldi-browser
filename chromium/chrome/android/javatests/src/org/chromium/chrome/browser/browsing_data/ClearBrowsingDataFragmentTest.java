@@ -14,17 +14,23 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.os.Build;
+import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.LargeTest;
 import android.support.test.filters.MediumTest;
 import android.widget.Button;
 import android.widget.ListView;
+import android.widget.Spinner;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.collection.ArraySet;
+import androidx.fragment.app.Fragment;
 import androidx.preference.CheckBoxPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceScreen;
+import androidx.viewpager.widget.PagerAdapter;
+import androidx.viewpager.widget.ViewPager;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -39,20 +45,22 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.RetryOnFailure;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment.DialogOption;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
 import org.chromium.chrome.browser.settings.SettingsActivity;
+import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
+import org.chromium.components.browser_ui.settings.SpinnerPreference;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.Arrays;
-import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -65,6 +73,13 @@ public class ClearBrowsingDataFragmentTest {
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
             new ChromeActivityTestRule<>(ChromeActivity.class);
+    @Rule
+    public SettingsActivityTestRule<ClearBrowsingDataFragmentAdvanced> mSettingsActivityTestRule =
+            new SettingsActivityTestRule<>(ClearBrowsingDataFragmentAdvanced.class);
+    @Rule
+    public SettingsActivityTestRule<ClearBrowsingDataTabsFragment>
+            mSettingsActivityTabFragmentTestRule =
+                    new SettingsActivityTestRule<>(ClearBrowsingDataTabsFragment.class);
 
     @Rule
     public JniMocker mJniMocker = new JniMocker();
@@ -93,7 +108,7 @@ public class ClearBrowsingDataFragmentTest {
         when(mBrowsingDataBridgeMock.getBrowsingDataDeletionTimePeriod(any(), anyInt()))
                 .thenReturn(DEFAULT_TIME_PERIOD);
 
-        SigninTestUtil.setUpAuthForTest();
+        SigninTestUtil.setUpAuthForTesting();
 
         mActivityTestRule.startMainActivityOnBlankPage();
 
@@ -109,7 +124,7 @@ public class ClearBrowsingDataFragmentTest {
 
     @After
     public void tearDown() {
-        SigninTestUtil.tearDownAuthForTest();
+        SigninTestUtil.tearDownAuthForTesting();
     }
 
     /**  Waits for the progress dialog to disappear from the given CBD preference. */
@@ -127,7 +142,7 @@ public class ClearBrowsingDataFragmentTest {
         }, kDelay, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
 
-    private static void clickClearButton(ClearBrowsingDataFragment preferences) {
+    private static void clickClearButton(Fragment preferences) {
         Button clearButton =
                 preferences.getView().findViewById(org.chromium.chrome.R.id.clear_button);
         Assert.assertNotNull(clearButton);
@@ -136,14 +151,47 @@ public class ClearBrowsingDataFragmentTest {
     }
 
     private SettingsActivity startPreferences() {
-        SettingsActivity settingsActivity = mActivityTestRule.startSettingsActivity(
-                ClearBrowsingDataFragmentAdvanced.class.getName());
+        SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
         ClearBrowsingDataFetcher fetcher = new ClearBrowsingDataFetcher();
-        ClearBrowsingDataFragment fragment =
-                (ClearBrowsingDataFragment) settingsActivity.getMainFragment();
+        ClearBrowsingDataFragment fragment = mSettingsActivityTestRule.getFragment();
         fragment.setClearBrowsingDataFetcher(fetcher);
         TestThreadUtils.runOnUiThreadBlocking(fetcher::fetchImportantSites);
         return settingsActivity;
+    }
+
+    /**
+     * Test that Clear Browsing Data offers two tabs and records a preference when switched.
+     */
+    @Test
+    @MediumTest
+    public void testTabsSwitcher() {
+        setDataTypesToClear(ClearBrowsingDataFragment.getAllOptions().toArray(new Integer[0]));
+        // Set "Advanced" as the user's cached preference.
+        when(mBrowsingDataBridgeMock.getLastClearBrowsingDataTab(any())).thenReturn(1);
+
+        mSettingsActivityTabFragmentTestRule.startSettingsActivity();
+        final ClearBrowsingDataTabsFragment preferences =
+                mSettingsActivityTabFragmentTestRule.getFragment();
+
+        // Verify tab preference is loaded.
+        verify(mBrowsingDataBridgeMock).getLastClearBrowsingDataTab(any());
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            ViewPager viewPager = (ViewPager) preferences.getView().findViewById(
+                    R.id.clear_browsing_data_viewpager);
+            PagerAdapter adapter = viewPager.getAdapter();
+            Assert.assertEquals(2, adapter.getCount());
+            Assert.assertEquals(1, viewPager.getCurrentItem());
+            Assert.assertEquals(InstrumentationRegistry.getTargetContext().getString(
+                                        R.string.clear_browsing_data_basic_tab_title),
+                    adapter.getPageTitle(0));
+            Assert.assertEquals(InstrumentationRegistry.getTargetContext().getString(
+                                        R.string.prefs_section_advanced),
+                    adapter.getPageTitle(1));
+            viewPager.setCurrentItem(0);
+        });
+        // Verify the tab preference is saved.
+        verify(mBrowsingDataBridgeMock).setLastClearBrowsingDataTab(any(), eq(0));
     }
 
     /**
@@ -188,6 +236,50 @@ public class ClearBrowsingDataFragmentTest {
         }
         Arrays.sort(datatypes);
         return datatypes;
+    }
+
+    /**
+     * Tests that changing the time interval for deletion affects the delete request.
+     */
+    @Test
+    @MediumTest
+    public void testClearTimeInterval() {
+        setDataTypesToClear(DialogOption.CLEAR_CACHE);
+
+        final ClearBrowsingDataFragment preferences =
+                (ClearBrowsingDataFragment) startPreferences().getMainFragment();
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            changeTimePeriodTo(preferences, TimePeriod.LAST_HOUR);
+            clickClearButton(preferences);
+        });
+
+        waitForProgressToComplete(preferences);
+
+        // Verify that we got the appropriate call to clear all data.
+        verify(mBrowsingDataBridgeMock)
+                .clearBrowsingData(any(), any(), eq(new int[] {BrowsingDataType.CACHE}),
+                        eq(TimePeriod.LAST_HOUR), any(), any(), any(), any());
+    }
+
+    /**
+     * Selects the specified time for browsing data removal.
+     */
+    private void changeTimePeriodTo(ClearBrowsingDataFragment preferences, @TimePeriod int time) {
+        SpinnerPreference spinnerPref = (SpinnerPreference) preferences.findPreference(
+                ClearBrowsingDataFragment.PREF_TIME_RANGE);
+        Spinner spinner = spinnerPref.getSpinnerForTesting();
+        int itemCount = spinner.getAdapter().getCount();
+        for (int i = 0; i < itemCount; i++) {
+            ClearBrowsingDataFragment.TimePeriodSpinnerOption option =
+                    (ClearBrowsingDataFragment.TimePeriodSpinnerOption) spinner.getAdapter()
+                            .getItem(i);
+            if (option.getTimePeriod() == time) {
+                spinner.setSelection(i);
+                return;
+            }
+        }
+        Assert.fail("Failed to find time period " + time);
     }
 
     /**
@@ -351,27 +443,16 @@ public class ClearBrowsingDataFragmentTest {
      */
     private void waitForImportantDialogToShow(
             final ClearBrowsingDataFragment preferences, final int numImportantSites) {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                Assert.assertNotNull(preferences);
-                if (preferences.getImportantSitesDialogFragment() == null
-                        || !preferences.getImportantSitesDialogFragment().getDialog().isShowing()) {
-                    updateFailureReason("Dialog was null or not shown.");
-                    return false;
-                }
-                ListView sitesList = preferences.getImportantSitesDialogFragment().getSitesList();
-                if (sitesList.getAdapter().getCount() != numImportantSites) {
-                    updateFailureReason(
-                            String.format(Locale.US, "Adapter item count, %d, did not match %d",
-                                    sitesList.getAdapter().getCount(), numImportantSites));
-                    return false;
-                }
-                updateFailureReason(
-                        String.format(Locale.US, "ListView child count, %d, expected to be >= %d",
-                                sitesList.getChildCount(), numImportantSites));
-                return sitesList.getChildCount() >= numImportantSites;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Assert.assertNotNull(preferences);
+            Assert.assertNotNull(preferences.getImportantSitesDialogFragment());
+            Assert.assertTrue(
+                    preferences.getImportantSitesDialogFragment().getDialog().isShowing());
+
+            ListView sitesList = preferences.getImportantSitesDialogFragment().getSitesList();
+            Assert.assertEquals(numImportantSites, sitesList.getAdapter().getCount());
+            Assert.assertThat(
+                    sitesList.getChildCount(), Matchers.greaterThanOrEqualTo(numImportantSites));
         });
     }
 

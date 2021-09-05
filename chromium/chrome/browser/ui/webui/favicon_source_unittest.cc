@@ -23,6 +23,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension_builder.h"
@@ -53,20 +54,18 @@ class MockHistoryUiFaviconRequestHandler
   MockHistoryUiFaviconRequestHandler() = default;
   ~MockHistoryUiFaviconRequestHandler() override = default;
 
-  MOCK_METHOD5(
+  MOCK_METHOD4(
       GetRawFaviconForPageURL,
       void(const GURL& page_url,
            int desired_size_in_pixel,
            favicon_base::FaviconRawBitmapCallback callback,
-           favicon::HistoryUiFaviconRequestOrigin request_origin_for_uma,
-           const GURL& icon_url_for_uma));
+           favicon::HistoryUiFaviconRequestOrigin request_origin_for_uma));
 
-  MOCK_METHOD4(
+  MOCK_METHOD3(
       GetFaviconImageForPageURL,
       void(const GURL& page_url,
            favicon_base::FaviconImageCallback callback,
-           favicon::HistoryUiFaviconRequestOrigin request_origin_for_uma,
-           const GURL& icon_url_for_uma));
+           favicon::HistoryUiFaviconRequestOrigin request_origin_for_uma));
 };
 
 class TestFaviconSource : public FaviconSource {
@@ -127,9 +126,9 @@ class FaviconSourceTestBase : public testing::Test {
           return kDummyTaskId;
         });
     ON_CALL(*mock_history_ui_favicon_request_handler_,
-            GetRawFaviconForPageURL(_, _, _, _, _))
+            GetRawFaviconForPageURL(_, _, _, _))
         .WillByDefault([](auto, auto,
-                          favicon_base::FaviconRawBitmapCallback callback, auto,
+                          favicon_base::FaviconRawBitmapCallback callback,
                           auto) {
           std::move(callback).Run(favicon_base::FaviconRawBitmapResult());
         });
@@ -146,6 +145,7 @@ class FaviconSourceTestBase : public testing::Test {
  protected:
   const scoped_refptr<base::RefCountedBytes> kDummyIconBytes;
   content::BrowserTaskEnvironment task_environment_;
+  content::RenderViewHostTestEnabler test_render_host_factories_;
   ui::TestNativeTheme theme_;
   TestingProfile profile_;
   MockHistoryUiFaviconRequestHandler* mock_history_ui_favicon_request_handler_;
@@ -171,14 +171,14 @@ TEST_F(FaviconSourceTestWithLegacyFormat, DarkDefault) {
   SetDarkMode(true);
   EXPECT_CALL(*source(), LoadIconBytes(_, IDR_DEFAULT_FAVICON_DARK));
   source()->StartDataRequest(GURL(kDummyPrefix), test_web_contents_getter_,
-                             base::BindRepeating(&Noop));
+                             base::BindOnce(&Noop));
 }
 
 TEST_F(FaviconSourceTestWithLegacyFormat, LightDefault) {
   SetDarkMode(false);
   EXPECT_CALL(*source(), LoadIconBytes(_, IDR_DEFAULT_FAVICON));
   source()->StartDataRequest(GURL(kDummyPrefix), test_web_contents_getter_,
-                             base::BindRepeating(&Noop));
+                             base::BindOnce(&Noop));
 }
 
 TEST_F(FaviconSourceTestWithLegacyFormat,
@@ -192,7 +192,7 @@ TEST_F(FaviconSourceTestWithLegacyFormat,
 
   source()->StartDataRequest(
       GURL(base::StrCat({kDummyPrefix, "size/16@1x/https://www.google.com"})),
-      test_web_contents_getter_, base::BindRepeating(&Noop));
+      test_web_contents_getter_, base::BindOnce(&Noop));
 }
 
 TEST_F(FaviconSourceTestWithLegacyFormat,
@@ -225,7 +225,7 @@ TEST_F(FaviconSourceTestWithFavicon2Format,
   base::HistogramTester tester;
   source()->StartDataRequest(
       GURL(base::StrCat({kDummyPrefix, "size/16@1x/https://www.google.com"})),
-      test_web_contents_getter_, base::BindRepeating(&Noop));
+      test_web_contents_getter_, base::BindOnce(&Noop));
   std::unique_ptr<base::HistogramSamples> samples(
       tester.GetHistogramSamplesSinceCreation(
           "Extensions.FaviconResourceUsed"));
@@ -237,14 +237,14 @@ TEST_F(FaviconSourceTestWithFavicon2Format, DarkDefault) {
   SetDarkMode(true);
   EXPECT_CALL(*source(), LoadIconBytes(_, IDR_DEFAULT_FAVICON_DARK));
   source()->StartDataRequest(GURL(kDummyPrefix), test_web_contents_getter_,
-                             base::BindRepeating(&Noop));
+                             base::BindOnce(&Noop));
 }
 
 TEST_F(FaviconSourceTestWithFavicon2Format, LightDefault) {
   SetDarkMode(false);
   EXPECT_CALL(*source(), LoadIconBytes(_, IDR_DEFAULT_FAVICON));
   source()->StartDataRequest(GURL(kDummyPrefix), test_web_contents_getter_,
-                             base::BindRepeating(&Noop));
+                             base::BindOnce(&Noop));
 }
 
 TEST_F(FaviconSourceTestWithFavicon2Format,
@@ -261,7 +261,7 @@ TEST_F(FaviconSourceTestWithFavicon2Format,
           {kDummyPrefix,
            "?size=16&scale_factor=1x&page_url=https%3A%2F%2Fwww.google."
            "com&allow_google_server_fallback=0"})),
-      test_web_contents_getter_, base::BindRepeating(&Noop));
+      test_web_contents_getter_, base::BindOnce(&Noop));
 }
 
 TEST_F(FaviconSourceTestWithFavicon2Format,
@@ -278,7 +278,7 @@ TEST_F(FaviconSourceTestWithFavicon2Format,
           {kDummyPrefix,
            "?size=16&scale_factor=1x&page_url=https%3A%2F%2Fwww.google."
            "com&allow_google_server_fallback=1"})),
-      test_web_contents_getter_, base::BindRepeating(&Noop));
+      test_web_contents_getter_, base::BindOnce(&Noop));
 }
 
 TEST_F(
@@ -287,9 +287,8 @@ TEST_F(
   content::WebContentsTester::For(test_web_contents_.get())
       ->SetLastCommittedURL(GURL(chrome::kChromeUIHistoryURL));
 
-  EXPECT_CALL(
-      *mock_history_ui_favicon_request_handler_,
-      GetRawFaviconForPageURL(GURL("https://www.google.com"), _, _, _, _))
+  EXPECT_CALL(*mock_history_ui_favicon_request_handler_,
+              GetRawFaviconForPageURL(GURL("https://www.google.com"), _, _, _))
       .Times(1);
 
   source()->StartDataRequest(
@@ -297,5 +296,5 @@ TEST_F(
           {kDummyPrefix,
            "?size=16&scale_factor=1x&page_url=https%3A%2F%2Fwww.google."
            "com&allow_google_server_fallback=1"})),
-      test_web_contents_getter_, base::BindRepeating(&Noop));
+      test_web_contents_getter_, base::BindOnce(&Noop));
 }

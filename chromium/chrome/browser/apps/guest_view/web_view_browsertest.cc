@@ -64,7 +64,6 @@
 #include "content/public/browser/ax_event_notification_details.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/gpu_data_manager.h"
-#include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -76,6 +75,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/fake_speech_recognition_manager.h"
@@ -296,7 +296,7 @@ class LeftMouseClick {
  public:
   explicit LeftMouseClick(content::WebContents* web_contents)
       : web_contents_(web_contents),
-        mouse_event_(blink::WebInputEvent::kMouseDown,
+        mouse_event_(blink::WebInputEvent::Type::kMouseDown,
                      blink::WebInputEvent::kNoModifiers,
                      blink::WebInputEvent::GetStaticTimeStampForTests()) {
     mouse_event_.button = blink::WebMouseEvent::Button::kLeft;
@@ -309,7 +309,7 @@ class LeftMouseClick {
   void Click(const gfx::Point& point, int duration_ms) {
     DCHECK(click_completed_);
     click_completed_ = false;
-    mouse_event_.SetType(blink::WebInputEvent::kMouseDown);
+    mouse_event_.SetType(blink::WebInputEvent::Type::kMouseDown);
     mouse_event_.SetPositionInWidget(point.x(), point.y());
     const gfx::Rect offset = web_contents_->GetContainerBounds();
     mouse_event_.SetPositionInScreen(point.x() + offset.x(),
@@ -335,7 +335,7 @@ class LeftMouseClick {
 
  private:
   void SendMouseUp() {
-    mouse_event_.SetType(blink::WebInputEvent::kMouseUp);
+    mouse_event_.SetType(blink::WebInputEvent::Type::kMouseUp);
     web_contents_->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
         mouse_event_);
     click_completed_ = true;
@@ -806,13 +806,14 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
 
   void OpenContextMenu(content::WebContents* web_contents) {
     blink::WebMouseEvent mouse_event(
-        blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
+        blink::WebInputEvent::Type::kMouseDown,
+        blink::WebInputEvent::kNoModifiers,
         blink::WebInputEvent::GetStaticTimeStampForTests());
     mouse_event.button = blink::WebMouseEvent::Button::kRight;
     mouse_event.SetPositionInWidget(1, 1);
     web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
         mouse_event);
-    mouse_event.SetType(blink::WebInputEvent::kMouseUp);
+    mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
     web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
         mouse_event);
   }
@@ -3390,15 +3391,9 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, TestPlugin) {
   TestHelper("testPlugin", "web_view/shim", NEEDS_TEST_SERVER);
 }
 
-#if defined(OS_WIN)
-// Test is disabled on Windows because it times out often.
+// Test is disabled because it times out often.
 // http://crbug.com/403325
-#define MAYBE_WebViewInBackgroundPage \
-    DISABLED_WebViewInBackgroundPage
-#else
-#define MAYBE_WebViewInBackgroundPage WebViewInBackgroundPage
-#endif
-IN_PROC_BROWSER_TEST_F(WebViewTest, MAYBE_WebViewInBackgroundPage) {
+IN_PROC_BROWSER_TEST_F(WebViewTest, DISABLED_WebViewInBackgroundPage) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("platform_apps/web_view/background"))
       << message_;
@@ -3781,7 +3776,7 @@ IN_PROC_BROWSER_TEST_F(WebViewAccessibilityTest, DISABLED_TouchAccessibility) {
   // Send an accessibility touch event to the main WebContents, but
   // positioned on top of the button inside the inner WebView.
   blink::WebMouseEvent accessibility_touch_event(
-      blink::WebInputEvent::kMouseMove,
+      blink::WebInputEvent::Type::kMouseMove,
       blink::WebInputEvent::kIsTouchAccessibility,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   accessibility_touch_event.SetPositionInWidget(95, 55);
@@ -3862,7 +3857,7 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTest, TestGuestWheelScrollsBubble) {
     gfx::Vector2dF expected_offset(0.f, scroll_magnitude);
 
     content::SimulateMouseEvent(embedder_contents,
-                                blink::WebInputEvent::kMouseMove,
+                                blink::WebInputEvent::Type::kMouseMove,
                                 embedder_scroll_location);
     content::SimulateMouseWheelEvent(embedder_contents,
                                      embedder_scroll_location,
@@ -3886,7 +3881,7 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTest, TestGuestWheelScrollsBubble) {
                                      guest_rect.y());
 
     content::SimulateMouseEvent(embedder_contents,
-                                blink::WebInputEvent::kMouseMove,
+                                blink::WebInputEvent::Type::kMouseMove,
                                 guest_scroll_location);
     content::SimulateMouseWheelEvent(embedder_contents, guest_scroll_location,
                                      gfx::Vector2d(0, scroll_magnitude),
@@ -3926,7 +3921,7 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTest,
   // When the guest is already scrolled to the top, scroll up so that we bubble
   // scroll.
   blink::WebGestureEvent scroll_begin(
-      blink::WebGestureEvent::kGestureScrollBegin,
+      blink::WebGestureEvent::Type::kGestureScrollBegin,
       blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests(),
       blink::WebGestureDevice::kTouchpad);
@@ -3939,16 +3934,16 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTest,
 
   content::InputEventAckWaiter update_waiter(
       guest_contents->GetRenderViewHost()->GetWidget(),
-      base::BindRepeating([](content::InputEventAckSource,
-                             content::InputEventAckState state,
+      base::BindRepeating([](blink::mojom::InputEventResultSource,
+                             blink::mojom::InputEventResultState state,
                              const blink::WebInputEvent& event) {
         return event.GetType() ==
-                   blink::WebGestureEvent::kGestureScrollUpdate &&
-               state != content::INPUT_EVENT_ACK_STATE_CONSUMED;
+                   blink::WebGestureEvent::Type::kGestureScrollUpdate &&
+               state != blink::mojom::InputEventResultState::kConsumed;
       }));
 
   blink::WebGestureEvent scroll_update(
-      blink::WebGestureEvent::kGestureScrollUpdate,
+      blink::WebGestureEvent::Type::kGestureScrollUpdate,
       blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests(),
       scroll_begin.SourceDevice());

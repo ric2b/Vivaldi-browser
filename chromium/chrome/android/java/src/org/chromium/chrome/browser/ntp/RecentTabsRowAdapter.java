@@ -34,7 +34,7 @@ import org.chromium.chrome.browser.signin.SyncPromoView;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.DefaultFaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
-import org.chromium.chrome.browser.ui.favicon.RoundedIconGenerator;
+import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.ui.base.DeviceFormFactor;

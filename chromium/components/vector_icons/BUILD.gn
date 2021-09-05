@@ -18,6 +18,7 @@ aggregate_vector_icons("components_vector_icons") {
     "business.icon",
     "call.icon",
     "certificate.icon",
+    "camera_pan_tilt_zoom.icon",
     "check_circle.icon",
     "close.icon",
     "close_rounded.icon",
@@ -27,6 +28,7 @@ aggregate_vector_icons("components_vector_icons") {
     "devices.icon",
     "edit.icon",
     "error.icon",
+    "error_outline.icon",
     "ethernet.icon",
     "extension.icon",
     "file_download.icon",
@@ -45,8 +47,6 @@ aggregate_vector_icons("components_vector_icons") {
     "lightbulb_outline.icon",
     "location_on.icon",
     "lock.icon",
-    "media_enter_pip.icon",
-    "media_exit_pip.icon",
     "media_next_track.icon",
     "media_previous_track.icon",
     "media_router_active.icon",
@@ -82,6 +82,7 @@ aggregate_vector_icons("components_vector_icons") {
     "vr_headset.icon",
     "warning.icon",
     "wifi_add.icon",
+    "window_placement.icon",
   ]
 }
 

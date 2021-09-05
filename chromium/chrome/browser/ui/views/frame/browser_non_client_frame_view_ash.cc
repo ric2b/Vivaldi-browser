@@ -44,8 +44,6 @@
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/service_manager_connection.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -161,8 +159,11 @@ void BrowserNonClientFrameViewAsh::Init() {
   if (frame()->ShouldDrawFrameHeader())
     frame_header_ = CreateFrameHeader();
 
-  if (browser_view()->IsBrowserTypeWebApp())
-    SetUpForWebApp();
+  if (browser_view()->IsBrowserTypeWebApp() && !browser->is_type_app_popup()) {
+    // Add the container for extra web app buttons (e.g app menu button).
+    set_web_app_frame_toolbar(AddChildView(
+        std::make_unique<WebAppFrameToolbarView>(frame(), browser_view())));
+  }
 
   browser_view()->immersive_mode_controller()->AddObserver(this);
 }
@@ -320,6 +321,11 @@ void BrowserNonClientFrameViewAsh::UpdateWindowIcon() {
 void BrowserNonClientFrameViewAsh::UpdateWindowTitle() {
   if (!frame()->IsFullscreen() && frame_header_)
     frame_header_->SchedulePaintForTitle();
+
+  frame()->GetNativeWindow()->SetProperty(
+      ash::kWindowOverviewTitleKey,
+      browser_view()->browser()->GetWindowTitleForCurrentTab(
+          /*include_app_name=*/false));
 }
 
 void BrowserNonClientFrameViewAsh::SizeConstraintsChanged() {}
@@ -549,11 +555,19 @@ void BrowserNonClientFrameViewAsh::OnWindowDestroying(aura::Window* window) {
 void BrowserNonClientFrameViewAsh::OnWindowPropertyChanged(aura::Window* window,
                                                            const void* key,
                                                            intptr_t old) {
-  if (key == aura::client::kShowStateKey && frame_header_) {
+  if (key == ash::kIsShowingInOverviewKey) {
+    OnAddedToOrRemovedFromOverview();
+    return;
+  }
+
+  if (!frame_header_)
+    return;
+
+  if (key == aura::client::kShowStateKey) {
     frame_header_->OnShowStateChanged(
         window->GetProperty(aura::client::kShowStateKey));
-  } else if (key == ash::kIsShowingInOverviewKey) {
-    OnAddedToOrRemovedFromOverview();
+  } else if (key == ash::kFrameRestoreLookKey) {
+    frame_header_->view()->InvalidateLayout();
   }
 }
 
@@ -684,12 +698,6 @@ BrowserNonClientFrameViewAsh::CreateFrameHeader() {
   header->SetBackButton(back_button_);
   header->SetLeftHeaderView(window_icon_);
   return header;
-}
-
-void BrowserNonClientFrameViewAsh::SetUpForWebApp() {
-  // Add the container for extra web app buttons (e.g app menu button).
-  set_web_app_frame_toolbar(AddChildView(
-      std::make_unique<WebAppFrameToolbarView>(frame(), browser_view())));
 }
 
 void BrowserNonClientFrameViewAsh::UpdateTopViewInset() {

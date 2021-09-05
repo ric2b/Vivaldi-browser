@@ -102,6 +102,23 @@ const breadCrumbTemplate = `
       width: 36px;
     }
 
+    button.dropdown-item {
+      position: relative;
+    }
+
+    :host-context(:root.pointer-active) button.dropdown-item:active {
+      background-color: rgba(0, 0, 0, 4%);
+    }
+
+    :host-context(:root:not(.pointer-active)) button.dropdown-item > paper-ripple {
+      display: none;
+    }
+
+    button.dropdown-item > paper-ripple {
+      --paper-ripple-opacity: 8%;
+      color: black;
+    }
+
     button:not([disabled]):not(:active):hover {
       background-color: rgba(0, 0, 0, 4%);
     }
@@ -124,19 +141,15 @@ const breadCrumbTemplate = `
       background-color: rgba(0, 0, 0, 12%);
     }
 
-    /**
-     * Drop-down menu button style: match non-file-ng menu item
-     * style until all app menus have been updated to files-ng.
-     */
     #elider-menu button {
-      border: 1px solid transparent;
-      border-radius: 0;
+      border: unset;
       color: rgb(51, 51, 51);
       display: block;
       font-family: 'Roboto';
       font-size: 13px;
-      min-width: 14em;  /* menu width */
-      max-width: 14em;
+      min-width: 192px;  /* menu width */
+      max-width: 288px;
+      padding: 0 16px;
       text-align: start;
     }
 
@@ -289,13 +302,15 @@ class BreadCrumb extends HTMLElement {
 
     elider.hidden = parts.length <= 4;
     if (elider.hidden) {
+      this.shadowRoot.querySelector('cr-action-menu').innerHTML = '';
       elider.previousElementSibling.hidden = true;
       return;
     }
 
     let elidedParts = '';
     for (let i = 1; i < parts.length - 2; ++i) {
-      elidedParts += `<button class='dropdown-item'>${parts[i]}</button>`;
+      elidedParts += `<button class='dropdown-item'>${
+          parts[i]}<paper-ripple></paper-ripple></button>`;
     }
 
     const menu = this.shadowRoot.querySelector('cr-action-menu');
@@ -310,8 +325,9 @@ class BreadCrumb extends HTMLElement {
    * its parts, which are stored in the <button>.textContent.
    *
    * @return {!Array<HTMLButtonElement>}
+   * @private
    */
-  getBreadcrumbButtons() {
+  getBreadcrumbButtons_() {
     const parts = this.shadowRoot.querySelectorAll('button[id]:not([hidden])');
     if (this.parts_.length <= 4) {
       return Array.from(parts);
@@ -331,11 +347,23 @@ class BreadCrumb extends HTMLElement {
    *    attribute on the returned buttons.
    */
   getEllipsisButtons() {
-    return this.getBreadcrumbButtons().filter(button => {
+    return this.getBreadcrumbButtons_().filter(button => {
       if (!button.hasAttribute('has-tooltip') && button.offsetWidth) {
         return button.offsetWidth < button.scrollWidth;
       }
     });
+  }
+
+  /**
+   * Returns breadcrumb buttons that have a 'has-tooltip' attribute. Note the
+   * elider button is excluded since it has an i18n aria-label.
+   *
+   * @return {!Array<HTMLButtonElement>} buttons Caller could remove the tool
+   *    tip event listeners from the returned buttons.
+   */
+  getToolTipButtons() {
+    const hasToolTip = 'button:not([elider])[has-tooltip]';
+    return Array.from(this.shadowRoot.querySelectorAll(hasToolTip));
   }
 
   /**
@@ -362,7 +390,7 @@ class BreadCrumb extends HTMLElement {
     }
 
     if (element instanceof HTMLButtonElement) {
-      const parts = this.getBreadcrumbButtons();
+      const parts = this.getBreadcrumbButtons_();
       this.signal_(parts.indexOf(element));
     }
   }
@@ -423,14 +451,14 @@ class BreadCrumb extends HTMLElement {
     // Show drop-down below the elider button.
     const menu = this.shadowRoot.querySelector('cr-action-menu');
     const top = elider.offsetTop + elider.offsetHeight + 4;
-    menu.showAt(elider, {top: top});
+    !window.UNIT_TEST && menu.showAt(elider, {top: top});
 
     // Style drop-down and horizontal position.
-    const dialog = menu.getDialog();
+    const dialog = !window.UNIT_TEST ? menu.getDialog() : {style: {}};
     dialog.style['left'] = position + 'px';
     dialog.style['right'] = position + 'px';
     dialog.style['overflow'] = 'hidden auto';
-    dialog.style['max-height'] = '40vh';
+    dialog.style['max-height'] = '272px';
 
     // Update global <html> and |this| element state.
     document.documentElement.classList.add('breadcrumb-elider-expanded');
@@ -455,7 +483,7 @@ class BreadCrumb extends HTMLElement {
 
     // Close the drop-down <dialog> if needed.
     const menu = this.shadowRoot.querySelector('cr-action-menu');
-    if (menu.getDialog().hasAttribute('open')) {
+    if (!window.UNIT_TEST && menu.getDialog().hasAttribute('open')) {
       menu.close();
     }
   }

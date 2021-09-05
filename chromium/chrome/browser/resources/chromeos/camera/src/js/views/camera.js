@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import {browserProxy} from '../browser_proxy/browser_proxy.js';
-import {assert} from '../chrome_util.js';
+import {assert, assertInstanceof} from '../chrome_util.js';
 import {
   PhotoConstraintsPreferrer,  // eslint-disable-line no-unused-vars
   VideoConstraintsPreferrer,  // eslint-disable-line no-unused-vars
@@ -24,6 +24,7 @@ import * as toast from '../toast.js';
 import {
   Facing,
   Mode,
+  ViewName,
 } from '../type.js';
 import * as util from '../util.js';
 
@@ -36,7 +37,7 @@ import {
 import {Options} from './camera/options.js';
 import {Preview} from './camera/preview.js';
 import * as timertick from './camera/timertick.js';
-import {View, ViewName} from './view.js';
+import {View} from './view.js';
 
 /**
  * Thrown when app window suspended during stream reconfiguration.
@@ -145,6 +146,12 @@ export class Camera extends View {
     this.facingMode_ = Facing.UNKNOWN;
 
     /**
+     * @type {!metrics.ShutterType}
+     * @protected
+     */
+    this.shutterType_ = metrics.ShutterType.UNKNOWN;
+
+    /**
      * @type {boolean}
      * @private
      */
@@ -173,12 +180,50 @@ export class Camera extends View {
      */
     this.take_ = null;
 
-    document.querySelectorAll('#start-takephoto, #start-recordvideo')
-        .forEach(
-            (btn) => btn.addEventListener('click', () => this.beginTake_()));
+    /**
+     * Gets type of ways to trigger shutter from click event.
+     * @param {!MouseEvent} e
+     * @return {!metrics.ShutterType}
+     */
+    const getShutterType = (e) => {
+      if (e.clientX === 0 && e.clientY === 0) {
+        return metrics.ShutterType.KEYBOARD;
+      }
+      return e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents ?
+          metrics.ShutterType.TOUCH :
+          metrics.ShutterType.MOUSE;
+    };
 
-    document.querySelectorAll('#stop-takephoto, #stop-recordvideo')
-        .forEach((btn) => btn.addEventListener('click', () => this.endTake_()));
+    document.querySelector('#start-takephoto')
+        .addEventListener('click', (e) => {
+          const mouseEvent = assertInstanceof(e, MouseEvent);
+          this.beginTake_(getShutterType(mouseEvent));
+        });
+
+    document.querySelector('#stop-takephoto')
+        .addEventListener('click', () => this.endTake_());
+
+    const videoShutter = document.querySelector('#recordvideo');
+    videoShutter.addEventListener('click', (e) => {
+      if (!state.get(state.State.TAKING)) {
+        this.beginTake_(getShutterType(assertInstanceof(e, MouseEvent)));
+      } else {
+        this.endTake_();
+      }
+    });
+
+    // TODO(shik): Tune the timing for playing video shutter button
+    // animation. Currently the |TAKING| state is ended when the file is saved.
+    state.addObserver(state.State.TAKING, (taking) => {
+      if (!state.get(Mode.VIDEO)) {
+        return;
+      }
+      const label =
+          taking ? 'record_video_stop_button' : 'record_video_start_button';
+      videoShutter.setAttribute('i18n-label', label);
+      videoShutter.setAttribute(
+          'aria-label', browserProxy.getI18nMessage(label));
+    });
 
     // Monitor the states to stop camera when locked/minimized.
     ChromeHelper.getInstance().addOnLockListener((isLocked) => {
@@ -189,15 +234,25 @@ export class Camera extends View {
     });
     chrome.app.window.current().onMinimized.addListener(() => this.start());
 
-    document.addEventListener('visibilitychange', async () => {
-      const isTabletBackground = await this.isTabletBackground_();
+    document.addEventListener('visibilitychange', () => {
       const recording = state.get(state.State.TAKING) && state.get(Mode.VIDEO);
-      if (isTabletBackground && !recording) {
+      if (this.isTabletBackground_() && !recording) {
         this.start();
       }
     });
 
     this.configuring_ = null;
+  }
+
+  /**
+   * Initializes camera view.
+   * @return {!Promise}
+   */
+  async initialize() {
+    const setTablet = (isTablet) => state.set(state.State.TABLET, isTablet);
+    const isTablet =
+        await ChromeHelper.getInstance().initTabletModeMonitor(setTablet);
+    setTablet(isTablet);
   }
 
   /**
@@ -210,22 +265,20 @@ export class Camera extends View {
   }
 
   /**
-   * @return {!Promise<boolean>} Resolved to boolean value indicating whether
-   * window is put to background in tablet mode.
+   * @return {boolean} Whether window is put to background in tablet mode.
    * @private
    */
-  async isTabletBackground_() {
-    const isTabletMode = await ChromeHelper.getInstance().isTabletMode();
-    return isTabletMode && !this.isVisible_;
+  isTabletBackground_() {
+    return state.get(state.State.TABLET) && !this.isVisible_;
   }
 
   /**
    * Whether app window is suspended.
-   * @return {!Promise<boolean>}
+   * @return {boolean}
    */
-  async isSuspended() {
+  isSuspended() {
     return this.locked_ || chrome.app.window.current().isMinimized() ||
-        state.get(state.State.SUSPEND) || await this.isTabletBackground_();
+        state.get(state.State.SUSPEND) || this.isTabletBackground_();
   }
 
   /**
@@ -239,16 +292,19 @@ export class Camera extends View {
 
   /**
    * Begins to take photo or recording with the current options, e.g. timer.
+   * @param {metrics.ShutterType} shutterType The shutter is triggered by which
+   *     shutter type.
    * @return {?Promise} Promise resolved when take action completes. Returns
    *     null if CCA can't start take action.
    * @protected
    */
-  beginTake_() {
+  beginTake_(shutterType) {
     if (!state.get(state.State.STREAMING) || state.get(state.State.TAKING)) {
       return null;
     }
 
     state.set(state.State.TAKING, true);
+    this.shutterType_ = shutterType;
     this.focus();  // Refocus the visible shutter button for ChromeVox.
     this.take_ = (async () => {
       let hasError = false;
@@ -292,7 +348,8 @@ export class Camera extends View {
   async doSavePhoto_(result, name) {
     metrics.log(
         metrics.Type.CAPTURE, this.facingMode_, /* length= */ 0,
-        result.resolution, metrics.IntentResultType.NOT_INTENT);
+        result.resolution, metrics.IntentResultType.NOT_INTENT,
+        this.shutterType_);
     try {
       await this.resultSaver_.savePhoto(result.blob, name);
     } catch (e) {
@@ -304,16 +361,16 @@ export class Camera extends View {
   /**
    * Handles captured video result.
    * @param {!VideoResult} result Captured video result.
-   * @param {string} name Name of the video result to be saved as.
    * @return {!Promise} Promise for the operation.
    * @protected
    */
-  async doSaveVideo_(result, name) {
+  async doSaveVideo_(result) {
     metrics.log(
         metrics.Type.CAPTURE, this.facingMode_, result.duration,
-        result.resolution, metrics.IntentResultType.NOT_INTENT);
+        result.resolution, metrics.IntentResultType.NOT_INTENT,
+        this.shutterType_);
     try {
-      await this.resultSaver_.finishSaveVideo(result.videoSaver, name);
+      await this.resultSaver_.finishSaveVideo(result.videoSaver);
     } catch (e) {
       toast.show('error_msg_save_file_failed');
       throw e;
@@ -333,6 +390,15 @@ export class Camera extends View {
   handlingKey(key) {
     if (key === 'Ctrl-R') {
       toast.show(this.preview_.toString());
+      return true;
+    }
+    if ((key === 'AudioVolumeUp' || key === 'AudioVolumeDown') &&
+        state.get(state.State.TABLET) && state.get(state.State.STREAMING)) {
+      if (state.get(state.State.TAKING)) {
+        this.endTake_();
+      } else {
+        this.beginTake_(metrics.ShutterType.VOLUME_KEY);
+      }
       return true;
     }
     return false;
@@ -388,18 +454,20 @@ export class Camera extends View {
       }
     }
     if (resolCandidates === null) {
-      resolCandidates =
-          await this.modes_.getResolutionCandidatesV1(mode, deviceId);
+      resolCandidates = this.modes_.getResolutionCandidatesV1(mode, deviceId);
     }
     for (const {resolution: captureR, previewCandidates} of resolCandidates) {
       for (const constraints of previewCandidates) {
-        if (await this.isSuspended()) {
+        if (this.isSuspended()) {
           throw new CameraSuspendedError();
         }
         try {
           if (deviceOperator !== null) {
             assert(deviceId !== null);
-            await deviceOperator.setFpsRange(deviceId, constraints);
+            const optConfigs =
+                mode === Mode.VIDEO ? {} : {stillCaptureResolution: captureR};
+            await deviceOperator.setStreamConfig(
+                deviceId, constraints, optConfigs);
             await deviceOperator.setCaptureIntent(
                 deviceId, this.modes_.getCaptureIntent(mode));
           }
@@ -448,7 +516,7 @@ export class Camera extends View {
   async start_() {
     try {
       await this.infoUpdater_.lockDeviceInfo(async () => {
-        if (!await this.isSuspended()) {
+        if (!this.isSuspended()) {
           for (const id of await this.options_.videoDeviceIds()) {
             if (await this.startWithDevice_(id)) {
               // Make the different active camera announced by screen reader.

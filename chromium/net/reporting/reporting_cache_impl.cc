@@ -29,17 +29,19 @@ ReportingCacheImpl::~ReportingCacheImpl() {
   }
 }
 
-void ReportingCacheImpl::AddReport(const GURL& url,
-                                   const std::string& user_agent,
-                                   const std::string& group_name,
-                                   const std::string& type,
-                                   std::unique_ptr<const base::Value> body,
-                                   int depth,
-                                   base::TimeTicks queued,
-                                   int attempts) {
-  auto report = std::make_unique<ReportingReport>(url, user_agent, group_name,
-                                                  type, std::move(body), depth,
-                                                  queued, attempts);
+void ReportingCacheImpl::AddReport(
+    const NetworkIsolationKey& network_isolation_key,
+    const GURL& url,
+    const std::string& user_agent,
+    const std::string& group_name,
+    const std::string& type,
+    std::unique_ptr<const base::Value> body,
+    int depth,
+    base::TimeTicks queued,
+    int attempts) {
+  auto report = std::make_unique<ReportingReport>(
+      network_isolation_key, url, user_agent, group_name, type, std::move(body),
+      depth, queued, attempts);
 
   auto inserted = reports_.insert(std::move(report));
   DCHECK(inserted.second);
@@ -84,6 +86,9 @@ base::Value ReportingCacheImpl::GetReportsAsValue() const {
   std::vector<base::Value> report_list;
   for (const ReportingReport* report : sorted_reports) {
     base::Value report_dict(base::Value::Type::DICTIONARY);
+    report_dict.SetKey(
+        "network_isolation_key",
+        base::Value(report->network_isolation_key.ToDebugString()));
     report_dict.SetKey("url", base::Value(report->url.spec()));
     report_dict.SetKey("group", base::Value(report->group));
     report_dict.SetKey("type", base::Value(report->type));
@@ -215,12 +220,11 @@ bool ReportingCacheImpl::IsReportDoomedForTesting(
 }
 
 void ReportingCacheImpl::OnParsedHeader(
+    const NetworkIsolationKey& network_isolation_key,
     const url::Origin& origin,
     std::vector<ReportingEndpointGroup> parsed_header) {
   SanityCheckClients();
 
-  // TODO(chlily): Respect NetworkIsolationKey.
-  NetworkIsolationKey network_isolation_key = NetworkIsolationKey::Todo();
   Client new_client(network_isolation_key, origin);
   base::Time now = clock().Now();
   new_client.last_used = now;
@@ -234,11 +238,8 @@ void ReportingCacheImpl::OnParsedHeader(
     // Creates an endpoint group and sets its |last_used| to |now|.
     CachedReportingEndpointGroup new_group(parsed_endpoint_group, now);
 
-    // TODO(chlily): This DCHECK passes right now because the groups have their
-    // NIK set to an empty NIK by the header parser, and we also set the
-    // client's NIK to an empty NIK above. Eventually it should pass because the
-    // header parser should provide the NIK it used for the groups so that the
-    // client can be created using the same NIK.
+    // Consistency check: the new client should have the same NIK and origin as
+    // all groups parsed from this header.
     DCHECK_EQ(new_group.group_key.network_isolation_key,
               new_client.network_isolation_key);
     DCHECK_EQ(new_group.group_key.origin, new_client.origin);

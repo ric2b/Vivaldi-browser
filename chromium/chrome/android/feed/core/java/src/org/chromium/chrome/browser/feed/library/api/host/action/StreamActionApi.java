@@ -40,6 +40,9 @@ public interface StreamActionApi extends ActionApi {
     void handleNotInterestedIn(List<StreamDataOperation> dataOperations, UndoAction undoAction,
             ActionPayload payload, int interestType);
 
+    /** Handles the block content action. **/
+    void handleBlockContent(List<StreamDataOperation> dataOperations, ActionPayload payload);
+
     /** Called when a client action has been performed. */
     void onClientAction(@ActionType int actionType);
 
@@ -105,4 +108,16 @@ public interface StreamActionApi extends ActionApi {
      * token to it.
      */
     void openUrlInNewWindow(String url, String consistencyTokenQueryParamName);
+
+    /**
+     * Reports that a particular view with corresponding content and action payload has become
+     * visible.
+     */
+    void reportViewVisible(View view, String contentId, ActionPayload payload);
+
+    /**
+     * Reports that a particular view with corresponding content and action payload has become
+     * hidden.
+     */
+    void reportViewHidden(View view, String contentId);
 }

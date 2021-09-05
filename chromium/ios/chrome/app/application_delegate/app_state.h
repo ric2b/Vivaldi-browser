@@ -25,6 +25,9 @@
 - (void)appState:(AppState*)appState
     firstSceneActivated:(SceneState*)sceneState;
 
+// Called after the app exits safe mode.
+- (void)appStateDidExitSafeMode:(AppState*)appState;
+
 @end
 
 // Represents the application state and responds to application state changes
@@ -43,9 +46,9 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 // application has been woken up by the system for background work.
 @property(nonatomic, readonly) BOOL userInteracted;
 
-// Window for the application, it is not set during the initialization method.
-// Set the property before calling methods related to it.
-@property(nonatomic, weak) UIWindow* window;
+// Current foreground active for the application, if any. Some scene's window
+// otherwise. For legacy use cases only, use scene windows instead.
+@property(nonatomic, readonly) UIWindow* window;
 
 // When multiwindow is unavailable, this is the only scene state. It is created
 // by the app delegate.
@@ -95,6 +98,9 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 // UIKit should make followup delegate calls such as
 // -performActionForShortcutItem or -openURL.
 - (void)launchFromURLHandled:(BOOL)URLHandled;
+
+// Returns the foreground and active scene, if there is one.
+- (SceneState*)foregroundActiveScene;
 
 // Returns a list of all connected scenes.
 - (NSArray<SceneState*>*)connectedScenes;

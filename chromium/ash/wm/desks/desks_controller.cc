@@ -25,9 +25,10 @@
 #include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/window_util.h"
 #include "base/auto_reset.h"
+#include "base/check_op.h"
 #include "base/containers/unique_ptr_adapters.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/numerics/ranges.h"
 #include "base/stl_util.h"
 #include "ui/aura/window_tree_host.h"
@@ -580,6 +581,9 @@ bool DesksController::ActivateAdjacentDesk(bool going_left,
   // these animations, or cancelling the on-going ones and start over.
   // TODO(afakhry): Discuss with UX.
   if (AreDesksBeingModified())
+    return false;
+
+  if (Shell::Get()->session_controller()->IsUserSessionBlocked())
     return false;
 
   const Desk* desk_to_activate = going_left ? GetPreviousDesk() : GetNextDesk();

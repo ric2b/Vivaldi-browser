@@ -40,6 +40,10 @@
 #include "services/viz/privileged/mojom/viz_main.mojom.h"
 #include "url/gurl.h"
 
+#if defined(OS_WIN)
+#include "services/viz/privileged/mojom/gl/info_collection_gpu_service.mojom.h"
+#endif
+
 namespace gfx {
 struct FontRenderParams;
 }
@@ -90,10 +94,6 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost {
         mojo::PendingReceiver<service_manager::mojom::Service> receiver) = 0;
 #if defined(USE_OZONE)
     virtual void TerminateGpuProcess(const std::string& message) = 0;
-
-    // TODO(https://crbug.com/806092): Remove this when legacy IPC-based Ozone
-    // is removed.
-    virtual void SendGpuProcessMessage(IPC::Message* message) = 0;
 #endif
 
    protected:
@@ -120,6 +120,9 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost {
 
     // Task runner corresponding to the main thread.
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner;
+
+    // Whether this GPU process is used for GPU info collection only.
+    bool info_collection_gpu_process = false;
   };
 
   enum class EstablishChannelStatus {
@@ -179,6 +182,10 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost {
       mojo::PendingReceiver<service_manager::mojom::Service> receiver);
 
   mojom::GpuService* gpu_service();
+
+#if defined(OS_WIN)
+  mojom::InfoCollectionGpuService* info_collection_gpu_service();
+#endif
 
   bool wake_up_gpu_before_drawing() const {
     return wake_up_gpu_before_drawing_;
@@ -245,6 +252,10 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost {
   scoped_refptr<base::SingleThreadTaskRunner> host_thread_task_runner_;
 
   mojo::Remote<mojom::GpuService> gpu_service_remote_;
+#if defined(OS_WIN)
+  mojo::Remote<mojom::InfoCollectionGpuService>
+      info_collection_gpu_service_remote_;
+#endif
   mojo::Receiver<mojom::GpuHost> gpu_host_receiver_{this};
   gpu::GpuProcessHostActivityFlags activity_flags_;
 

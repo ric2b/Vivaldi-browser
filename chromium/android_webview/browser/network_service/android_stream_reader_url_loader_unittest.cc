@@ -136,10 +136,7 @@ class TestResponseDelegate
       return;
     }
     headers->ReplaceStatusLine(custom_status_);
-    std::string header_line(custom_header_name_);
-    header_line.append(": ");
-    header_line.append(custom_header_value_);
-    headers->AddHeader(header_line);
+    headers->AddHeader(custom_header_name_, custom_header_value_);
   }
 
  private:
@@ -178,7 +175,8 @@ class AndroidStreamReaderURLLoaderTest : public ::testing::Test {
     return new AndroidStreamReaderURLLoader(
         request, client->CreateRemote(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
-        std::make_unique<TestResponseDelegate>(std::move(input_stream)));
+        std::make_unique<TestResponseDelegate>(std::move(input_stream)),
+        base::nullopt);
   }
 
   // helper method for creating loaders given a stream and MIME type
@@ -191,7 +189,8 @@ class AndroidStreamReaderURLLoaderTest : public ::testing::Test {
         request, client->CreateRemote(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
         std::make_unique<TestResponseDelegate>(std::move(input_stream),
-                                               custom_mime_type));
+                                               custom_mime_type),
+        base::nullopt);
   }
 
   // helper method for creating loaders given a stream and response header
@@ -208,7 +207,8 @@ class AndroidStreamReaderURLLoaderTest : public ::testing::Test {
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
         std::make_unique<TestResponseDelegate>(
             std::move(input_stream), custom_status, custom_header_name,
-            custom_header_value));
+            custom_header_value),
+        base::nullopt);
   }
 
   // Extracts the body data that is present in the consumer pipe

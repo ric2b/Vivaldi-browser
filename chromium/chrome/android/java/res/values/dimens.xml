@@ -4,14 +4,6 @@
      found in the LICENSE file. -->
 
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Connection info popup dimensions -->
-    <dimen name="connection_info_padding_thin">16dp</dimen>
-
-    <!-- Page Info Popup Dimensions -->
-    <dimen name="page_info_popup_padding_sides">16dp</dimen>
-    <dimen name="page_info_popup_button_padding_sides">8dp</dimen>
-    <dimen name="page_info_popup_permission_icon_size">24dp</dimen>
-
     <!-- Accessibility tab switcher -->
     <dimen name="accessibility_tab_height">65dp</dimen>
     <dimen name="accessibility_tab_switcher_top_padding">8dp</dimen>
@@ -160,6 +152,7 @@
     <dimen name="badge_position_x">26dp</dimen>
     <dimen name="badge_position_y">20dp</dimen>
     <dimen name="badge_border_size">1.3dp</dimen>
+    <dimen name="badge_size">20dp</dimen>
 
     <!-- First Run Experience dimensions -->
     <dimen name="fre_content_margin">24dp</dimen>
@@ -225,7 +218,6 @@
     <dimen name="toolbar_tab_count_text_size_1_digit">12dp</dimen>
     <dimen name="toolbar_tab_count_text_size_2_digit">10dp</dimen>
     <dimen name="toolbar_height_no_shadow">56dp</dimen>
-    <dimen name="toolbar_shadow_height">8dp</dimen>
     <dimen name="toolbar_progress_bar_height">2dp</dimen>
     <dimen name="toolbar_button_width">48dp</dimen>
     <dimen name="toolbar_identity_disc_size">24dp</dimen>
@@ -290,6 +282,10 @@
     <dimen name="start_surface_toolbar_button_padding_to_edge">16dp</dimen>
 
     <!-- Omnibox suggestions -->
+    <dimen name="omnibox_suggestion_header_margin_start">
+        @dimen/omnibox_suggestion_24dp_icon_margin_start
+    </dimen>
+    <dimen name="omnibox_suggestion_header_height">48dp</dimen>
     <dimen name="omnibox_suggestion_comfortable_height">60dp</dimen>
     <dimen name="omnibox_suggestion_semicompact_height">56dp</dimen>
     <dimen name="omnibox_suggestion_compact_height">52dp</dimen>
@@ -312,7 +308,7 @@
     <dimen name="omnibox_suggestion_entity_icon_size">36dp</dimen>
     <dimen name="omnibox_suggestion_icon_area_size">56dp</dimen>
 
-    <dimen name="omnibox_suggestion_refine_width">48dp</dimen>
+    <dimen name="omnibox_suggestion_action_icon_width">48dp</dimen>
     <dimen name="omnibox_suggestion_text_vertical_padding">5dp</dimen>
     <dimen name="omnibox_suggestion_refine_view_modern_end_padding">4dp</dimen>
 
@@ -367,19 +363,14 @@
          (matches toolbar_height_no_shadow). -->
     <dimen name="ntp_search_box_bounds_vertical_inset_modern">-4dp</dimen>
     <dimen name="ntp_wide_card_lateral_margins">48dp</dimen>
-    <dimen name="ntp_progress_indicator_diameter">56dp</dimen>
-    <dimen name="snippets_thumbnail_size">124dp</dimen>
     <dimen name="snippets_article_header_height">40dp</dimen>
-    <dimen name="snippets_publisher_margin_top">8dp</dimen>
     <!-- This is in sp because we want the icon to scale with the TextView it sits alongside. -->
-    <dimen name="snippets_offline_icon_size">18sp</dimen>
-    <dimen name="ntp_suggestions_footer_vertical_padding">24dp</dimen>
     <dimen name="content_suggestions_card_modern_margin">12dp</dimen>
-    <!-- Used to offset content_suggestions_card_modern_margin applied to the bottom of the
-         last card. -->
-    <dimen name="content_suggestions_action_modern_margin_top">-16dp</dimen>
     <dimen name="md_incognito_ntp_line_spacing">6sp</dimen>
     <dimen name="md_incognito_ntp_padding_left">16dp</dimen>
+
+    <!-- NTP Feed dimensions -->
+    <dimen name="feed_header_menu_max_width">225dp</dimen>
 
     <!-- Explore sites page -->
     <dimen name="explore_sites_category_padding_vertical">20dp</dimen>
@@ -521,7 +512,6 @@
     <dimen name="pref_autofill_dropdown_bottom_margin">16dp</dimen>
     <dimen name="pref_autofill_touch_target_padding">15dp</dimen>
 
-    <dimen name="pref_icon_padding">4.6dp</dimen>
     <dimen name="pref_list_padding_kitkat">16dp</dimen>
     <dimen name="pref_spinner_padding_end">8dp</dimen>
 
@@ -627,4 +617,9 @@
     <dimen name="tab_indicator_height">3dp</dimen>
     <dimen name="tab_indicator_radius">3dp</dimen>
     <dimen name="tab_indicator_padding">2dp</dimen>
+
+    <!-- Status indicator dimensions -->
+    <dimen name="status_indicator_min_height">21dp</dimen>
+    <dimen name="status_indicator_icon_padding">8dp</dimen>
+    <dimen name="status_indicator_icon_size">12dp</dimen>
 </resources>

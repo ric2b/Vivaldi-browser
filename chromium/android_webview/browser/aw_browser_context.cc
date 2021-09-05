@@ -22,6 +22,7 @@
 #include "android_webview/browser/safe_browsing/aw_safe_browsing_whitelist_manager.h"
 #include "android_webview/browser_jni_headers/AwBrowserContext_jni.h"
 #include "android_webview/common/aw_features.h"
+#include "android_webview/common/crash_reporter/crash_keys.h"
 #include "base/base_paths_posix.h"
 #include "base/bind.h"
 #include "base/feature_list.h"
@@ -73,7 +74,7 @@ const void* const kDownloadManagerDelegateKey = &kDownloadManagerDelegateKey;
 AwBrowserContext* g_browser_context = NULL;
 
 crash_reporter::CrashKeyString<1> g_web_view_compat_crash_key(
-    "WEBLAYER_WEB_VIEW_COMPAT_MODE");
+    crash_keys::kWeblayerWebViewCompatMode);
 
 // Empty method to skip origin security check as DownloadManager will set its
 // own method.
@@ -157,8 +158,6 @@ AwBrowserContext::AwBrowserContext()
 
   g_browser_context = this;
   SimpleKeyMap::GetInstance()->Associate(this, &simple_factory_key_);
-
-  BrowserContext::Initialize(this, context_storage_path_);
 
   CreateUserPrefService();
 
@@ -457,14 +456,13 @@ void AwBrowserContext::SetExtendedReportingAllowed(bool allowed) {
       ::prefs::kSafeBrowsingExtendedReportingOptInAllowed, allowed);
 }
 
-// TODO(amalova): Make sure NetworkContext is configured correctly when
+// TODO(amalova): Make sure NetworkContextParams is configured correctly when
 // off-the-record
-network::mojom::NetworkContextParamsPtr
-AwBrowserContext::GetNetworkContextParams(
+void AwBrowserContext::ConfigureNetworkContextParams(
     bool in_memory,
-    const base::FilePath& relative_partition_path) {
-  network::mojom::NetworkContextParamsPtr context_params =
-      network::mojom::NetworkContextParams::New();
+    const base::FilePath& relative_partition_path,
+    network::mojom::NetworkContextParams* context_params,
+    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
   context_params->user_agent = android_webview::GetUserAgent();
 
   // TODO(ntfschr): set this value to a proper value based on the user's
@@ -516,14 +514,12 @@ AwBrowserContext::GetNetworkContextParams(
 
   // Update the cors_exempt_header_list to include internally-added headers, to
   // avoid triggering CORS checks.
-  content::UpdateCorsExemptHeader(context_params.get());
-  variations::UpdateCorsExemptHeaderForVariations(context_params.get());
+  content::UpdateCorsExemptHeader(context_params);
+  variations::UpdateCorsExemptHeaderForVariations(context_params);
 
   // Add proxy settings
   AwProxyConfigMonitor::GetInstance()->AddProxyToNetworkContextParams(
       context_params);
-
-  return context_params;
 }
 
 base::android::ScopedJavaLocalRef<jobject> JNI_AwBrowserContext_GetDefaultJava(

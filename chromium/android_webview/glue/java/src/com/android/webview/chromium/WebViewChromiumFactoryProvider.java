@@ -56,6 +56,7 @@ import org.chromium.base.metrics.ScopedSysTraceEvent;
 import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.components.autofill.AutofillProviderImpl;
 import org.chromium.components.embedder_support.application.ClassLoaderContextWrapperFactory;
+import org.chromium.components.embedder_support.application.FirebaseConfig;
 import org.chromium.content_public.browser.LGEmailActionModeWorkaround;
 
 import java.io.File;
@@ -102,6 +103,9 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
     private static WebViewChromiumFactoryProvider sSingleton;
     // Used to indicate if WebLayer and WebView are running in the same process.
     private static boolean sWebLayerRunningInSameProcess;
+    // Used to detect if we enter initialization for a second time, e.g. because an app caught and
+    // discarded an exception thrown by a previous failed initialization attempt.
+    private static volatile boolean sInitAlreadyStarted = false;
 
     private final WebViewChromiumRunQueue mRunQueue = new WebViewChromiumRunQueue(
             () -> { return WebViewChromiumFactoryProvider.this.mAwInit.hasStarted(); });
@@ -243,6 +247,10 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         long startTime = SystemClock.elapsedRealtime();
         try (ScopedSysTraceEvent e1 =
                         ScopedSysTraceEvent.scoped("WebViewChromiumFactoryProvider.initialize")) {
+            RecordHistogram.recordBooleanHistogram(
+                    "Android.WebView.Startup.InitAlreadyStarted", sInitAlreadyStarted);
+            sInitAlreadyStarted = true;
+
             PackageInfo packageInfo;
             try (ScopedSysTraceEvent e2 = ScopedSysTraceEvent.scoped(
                          "WebViewChromiumFactoryProvider.getLoadedPackageInfo")) {
@@ -316,8 +324,12 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
             }
 
             String webViewPackageName = AwBrowserProcess.getWebViewPackageName();
+            long developerModeStart = SystemClock.elapsedRealtime();
             boolean isDeveloperModeEnabled =
                     DeveloperModeUtils.isDeveloperModeEnabled(webViewPackageName);
+            long developerModeEnd = SystemClock.elapsedRealtime();
+            RecordHistogram.recordTimesHistogram("Android.WebView.DevUi.DeveloperModeBlockingTime",
+                    developerModeEnd - developerModeStart);
             RecordHistogram.recordBooleanHistogram(
                     "Android.WebView.DevUi.DeveloperModeEnabled", isDeveloperModeEnabled);
             if (isDeveloperModeEnabled) {
@@ -340,6 +352,8 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
             ThreadUtils.setWillOverrideUiThread(true);
             BuildInfo.setBrowserPackageInfo(packageInfo);
+            BuildInfo.setFirebaseAppId(
+                    FirebaseConfig.getFirebaseAppIdForPackage(packageInfo.packageName));
 
             try (StrictModeContext ignored = StrictModeContext.allowDiskWrites()) {
                 try (ScopedSysTraceEvent e2 = ScopedSysTraceEvent.scoped(
@@ -611,7 +625,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
     AutofillProvider createAutofillProvider(Context context, ViewGroup containerView) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null;
-        return new AutofillProviderImpl(context, containerView);
+        return new AutofillProviderImpl(context, containerView, "Android WebView");
     }
 
     void startYourEngines(boolean onMainThread) {

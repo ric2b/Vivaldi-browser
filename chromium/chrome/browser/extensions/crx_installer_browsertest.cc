@@ -41,6 +41,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/test_utils.h"
@@ -79,6 +80,9 @@ namespace {
 const char kAppUrl[] = "http://www.google.com";
 const char kAppTitle[] = "Test title";
 const char kAppDescription[] = "Test description";
+const char kShortcutItemName[] = "shortcut";
+const char kShortcutUrl[] = "http://www.google.com/shortcut";
+const char kShortcutIconUrl[] = "http://www.google.com/shortcut/icon.png";
 
 }  // anonymous namespace
 
@@ -112,7 +116,6 @@ class MockPromptProxy {
   std::unique_ptr<ExtensionInstallPrompt> CreatePrompt();
 
  private:
-
   // Data used to create a prompt.
   content::WebContents* web_contents_;
 
@@ -136,14 +139,25 @@ SkBitmap CreateSquareBitmap(int size) {
 WebApplicationInfo CreateWebAppInfo(const char* title,
                                     const char* description,
                                     const char* app_url,
-                                    int size) {
+                                    int size,
+                                    bool create_with_shortcuts) {
   WebApplicationInfo web_app_info;
   web_app_info.title = base::UTF8ToUTF16(title);
   web_app_info.description = base::UTF8ToUTF16(description);
   web_app_info.app_url = GURL(app_url);
   web_app_info.scope = GURL(app_url);
   web_app_info.icon_bitmaps[size] = CreateSquareBitmap(size);
-
+  if (create_with_shortcuts) {
+    WebApplicationShortcutInfo shortcut_item;
+    WebApplicationIconInfo icon;
+    shortcut_item.name = base::UTF8ToUTF16(kShortcutItemName);
+    shortcut_item.url = GURL(kShortcutUrl);
+    icon.url = GURL(kShortcutIconUrl);
+    icon.square_size_px = size;
+    shortcut_item.shortcut_icon_infos.push_back(std::move(icon));
+    shortcut_item.shortcut_icon_bitmaps[size] = CreateSquareBitmap(size);
+    web_app_info.shortcut_infos.push_back(std::move(shortcut_item));
+  }
   return web_app_info;
 }
 
@@ -262,9 +276,7 @@ class ExtensionCrxInstallerTest : public ExtensionBrowserTest {
     const base::FilePath full_path = directory.Append(relative_path);
     if (!CreateDirectory(full_path.DirName()))
       return false;
-    const int result =
-        base::WriteFile(full_path, content.data(), content.size());
-    return (static_cast<size_t>(result) == content.size());
+    return base::WriteFile(full_path, content);
   }
 
   void AddExtension(const std::string& extension_id,
@@ -404,7 +416,17 @@ class ExtensionCrxInstallerTest : public ExtensionBrowserTest {
         CrxInstaller::CreateSilent(extension_service()));
     crx_installer->set_error_on_unsupported_requirements(true);
     crx_installer->InstallWebApp(
-        CreateWebAppInfo(kAppTitle, kAppDescription, kAppUrl, 64));
+        CreateWebAppInfo(kAppTitle, kAppDescription, kAppUrl, 64, false));
+    EXPECT_TRUE(WaitForCrxInstallerDone());
+    ASSERT_TRUE(crx_installer->extension());
+  }
+
+  void InstallWebAppWithShortcutsAndVerifyNoErrors() {
+    scoped_refptr<CrxInstaller> crx_installer(
+        CrxInstaller::CreateSilent(extension_service()));
+    crx_installer->set_error_on_unsupported_requirements(true);
+    crx_installer->InstallWebApp(
+        CreateWebAppInfo(kAppTitle, kAppDescription, kAppUrl, 64, true));
     EXPECT_TRUE(WaitForCrxInstallerDone());
     ASSERT_TRUE(crx_installer->extension());
   }
@@ -1079,6 +1101,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, ManagementPolicy) {
 
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, InstallWebApp) {
   InstallWebAppAndVerifyNoErrors();
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, InstallWebAppWithShortcuts) {
+  InstallWebAppWithShortcutsAndVerifyNoErrors();
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,

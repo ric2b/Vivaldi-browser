@@ -6,7 +6,8 @@
 
 #include "base/android/build_info.h"
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/surface_layer.h"
 #include "cc/trees/layer_tree_host.h"
@@ -109,15 +110,22 @@ void DelegatedFrameHostAndroid::CopyFromCompositingSurface(
     base::OnceCallback<void(const SkBitmap&)> callback) {
   DCHECK(CanCopyFromCompositingSurface());
 
+  std::unique_ptr<ui::WindowAndroidCompositor::ReadbackRef> readback_ref;
+  if (view_->GetWindowAndroid() && view_->GetWindowAndroid()->GetCompositor()) {
+    readback_ref =
+        view_->GetWindowAndroid()->GetCompositor()->TakeReadbackRef();
+  }
   std::unique_ptr<viz::CopyOutputRequest> request =
       std::make_unique<viz::CopyOutputRequest>(
           viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
           base::BindOnce(
               [](base::OnceCallback<void(const SkBitmap&)> callback,
+                 std::unique_ptr<ui::WindowAndroidCompositor::ReadbackRef>
+                     readback_ref,
                  std::unique_ptr<viz::CopyOutputResult> result) {
                 std::move(callback).Run(result->AsSkBitmap());
               },
-              std::move(callback)));
+              std::move(callback), std::move(readback_ref)));
 
   if (!src_subrect.IsEmpty())
     request->set_area(src_subrect);

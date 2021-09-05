@@ -8,6 +8,7 @@
 
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "media/gpu/windows/d3d11_com_defs.h"
+#include "media/gpu/windows/display_helper.h"
 
 namespace media {
 
@@ -81,11 +82,25 @@ bool CopyingTexture2DWrapper::ProcessTexture(
       output_texture_, 0, copy_color_space, mailbox_dest, output_color_space);
 }
 
-bool CopyingTexture2DWrapper::Init(GetCommandBufferHelperCB get_helper_cb) {
+bool CopyingTexture2DWrapper::Init(
+    scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner,
+    GetCommandBufferHelperCB get_helper_cb) {
   if (!video_processor_->Init(size_.width(), size_.height()))
     return false;
 
-  return output_texture_wrapper_->Init(std::move(get_helper_cb));
+  return output_texture_wrapper_->Init(std::move(gpu_task_runner),
+                                       std::move(get_helper_cb));
+}
+
+void CopyingTexture2DWrapper::SetStreamHDRMetadata(
+    const HDRMetadata& stream_metadata) {
+  auto dxgi_stream_metadata = DisplayHelper::HdrMetadataToDXGI(stream_metadata);
+  video_processor_->SetStreamHDRMetadata(dxgi_stream_metadata);
+}
+
+void CopyingTexture2DWrapper::SetDisplayHDRMetadata(
+    const DXGI_HDR_METADATA_HDR10& dxgi_display_metadata) {
+  video_processor_->SetDisplayHDRMetadata(dxgi_display_metadata);
 }
 
 }  // namespace media

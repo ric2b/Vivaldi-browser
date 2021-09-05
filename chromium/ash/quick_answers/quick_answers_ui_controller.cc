@@ -4,7 +4,7 @@
 
 #include "ash/quick_answers/quick_answers_ui_controller.h"
 
-#include "ash/public/cpp/assistant/assistant_interface_binder.h"
+#include "ash/public/cpp/assistant/controller/assistant_interaction_controller.h"
 #include "ash/quick_answers/quick_answers_controller_impl.h"
 #include "ash/quick_answers/ui/quick_answers_view.h"
 #include "ash/quick_answers/ui/user_consent_view.h"
@@ -34,31 +34,32 @@ QuickAnswersUiController::~QuickAnswersUiController() {
 
 void QuickAnswersUiController::CreateQuickAnswersView(
     const gfx::Rect& bounds,
-    const std::string& title) {
+    const std::string& title,
+    const std::string& query) {
   DCHECK(!quick_answers_view_);
   DCHECK(!user_consent_view_);
-  SetActiveQuery(title);
+  SetActiveQuery(query);
   quick_answers_view_ = new QuickAnswersView(bounds, title, this);
   quick_answers_view_->GetWidget()->ShowInactive();
 }
 
 void QuickAnswersUiController::OnQuickAnswersViewPressed() {
-  CloseQuickAnswersView();
-  mojo::Remote<chromeos::assistant::mojom::AssistantController>
-      assistant_controller;
-  ash::AssistantInterfaceBinder::GetInstance()->BindController(
-      assistant_controller.BindNewPipeAndPassReceiver());
-  assistant_controller->StartTextInteraction(
+  // Route dismissal through |controller_| for logging impressions.
+  controller_->DismissQuickAnswers(/*is_active=*/true);
+
+  ash::AssistantInteractionController::Get()->StartTextInteraction(
       query_, /*allow_tts=*/false,
       chromeos::assistant::mojom::AssistantQuerySource::kQuickAnswers);
   controller_->OnQuickAnswerClick();
 }
 
-void QuickAnswersUiController::CloseQuickAnswersView() {
+bool QuickAnswersUiController::CloseQuickAnswersView() {
   if (quick_answers_view_) {
     quick_answers_view_->GetWidget()->Close();
     quick_answers_view_ = nullptr;
+    return true;
   }
+  return false;
 }
 
 void QuickAnswersUiController::OnRetryLabelPressed() {
@@ -104,11 +105,13 @@ void QuickAnswersUiController::CreateUserConsentView(
   user_consent_view_->GetWidget()->ShowInactive();
 }
 
-void QuickAnswersUiController::CloseUserConsentView() {
+bool QuickAnswersUiController::CloseUserConsentView() {
   if (user_consent_view_) {
     user_consent_view_->GetWidget()->Close();
     user_consent_view_ = nullptr;
+    return true;
   }
+  return false;
 }
 
 void QuickAnswersUiController::OnConsentGrantedButtonPressed() {
@@ -121,11 +124,9 @@ void QuickAnswersUiController::OnManageSettingsButtonPressed() {
 }
 
 void QuickAnswersUiController::OnDogfoodButtonPressed() {
-  // Close Quick-Answers related views and open the Dogfood link.
-  if (quick_answers_view_)
-    CloseQuickAnswersView();
-  if (user_consent_view_)
-    CloseUserConsentView();
+  // Route dismissal through |controller_| for logging impressions.
+  controller_->DismissQuickAnswers(/*is_active=*/true);
+
   controller_->OpenQuickAnswersDogfoodLink();
 }
 

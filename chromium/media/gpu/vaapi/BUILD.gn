@@ -109,7 +109,6 @@ source_set("vaapi") {
   }
 
   if (use_x11) {
-    configs += [ "//build/config/linux:x11" ]
     deps += [ "//ui/gfx/x" ]
     sources += [
       "vaapi_picture_tfp.cc",
@@ -167,7 +166,6 @@ source_set("common") {
   }
 
   if (use_x11) {
-    configs += [ "//build/config/linux:x11" ]
     deps += [ "//ui/gfx/x" ]
   }
 
@@ -195,6 +193,7 @@ source_set("unit_test") {
     "h264_encoder_unittest.cc",
     "vaapi_image_decode_accelerator_worker_unittest.cc",
     "vaapi_video_decode_accelerator_unittest.cc",
+    "vaapi_video_encode_accelerator_unittest.cc",
   ]
   deps = [
     ":common",
@@ -285,6 +284,7 @@ test("vaapi_unittest") {
     ":common",
     ":vaapi_utils_unittest",
     "//base",
+    "//base/test:test_support",
     "//media/gpu/test:helpers",
     "//testing/gtest",
   ]

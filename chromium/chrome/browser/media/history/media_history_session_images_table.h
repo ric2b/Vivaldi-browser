@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/strings/string_util.h"
 #include "chrome/browser/media/history/media_history_table_base.h"
 #include "sql/init_status.h"
 #include "url/gurl.h"
@@ -30,7 +31,7 @@ class MediaHistorySessionImagesTable : public MediaHistoryTableBase {
   static const char kTableName[];
 
  private:
-  friend class MediaHistoryStoreInternal;
+  friend class MediaHistoryStore;
 
   explicit MediaHistorySessionImagesTable(
       scoped_refptr<base::UpdateableSequencedTaskRunner> db_task_runner);

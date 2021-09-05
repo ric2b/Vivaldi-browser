@@ -6,9 +6,9 @@
 #include <memory>
 #include <string>
 
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_function.h"
 #include "extensions/schema/contacts.h"
 
 #include "contact/contact_model_observer.h"

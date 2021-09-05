@@ -19,9 +19,11 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_app_button.h"
 #include "ash/shelf/shelf_layout_manager.h"
+#include "ash/shelf/shelf_menu_model_adapter.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shelf/shelf_widget.h"
+#include "ash/shelf/test/widget_animation_waiter.h"
 #include "ash/shell.h"
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desks_controller.h"
@@ -35,10 +37,11 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
-#include "chrome/browser/apps/launch_service/launch_service.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/speech_monitor.h"
@@ -50,6 +53,7 @@
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
+#include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
 #include "chrome/browser/ui/ash/launcher/browser_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_test_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
@@ -70,6 +74,7 @@
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/components/app_shortcut_manager.h"
+#include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
@@ -81,11 +86,13 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_mock_cert_verifier.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -102,6 +109,7 @@
 #include "ui/aura/window.h"
 #include "ui/base/base_window.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/compositor/layer_animation_observer.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
@@ -109,6 +117,7 @@
 #include "ui/events/event.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/events/types/event_type.h"
+#include "ui/views/controls/menu/menu_item_view.h"
 
 using ash::Shelf;
 using content::WebContents;
@@ -179,9 +188,19 @@ void ExtendHotseat(Browser* browser) {
   // Swipe up for a small distance to bring up the hotseat.
   gfx::Point end_point(start_point.x(), start_point.y() - 80);
 
+  ash::ShelfView* shelf_view = controller->shelf()->GetShelfViewForTesting();
+
+  // Observe hotseat animation before animation starts. Because
+  // ash::WidgetAnimationWaiter only reacts to completion of the animation whose
+  // animation scheduling is recorded in ash::WidgetAnimationWaiter.
+  ash::WidgetAnimationWaiter waiter(shelf_view->GetWidget());
+
   ui::test::EventGenerator event_generator(controller->GetRootWindow());
   event_generator.GestureScrollSequence(
       start_point, end_point, base::TimeDelta::FromMilliseconds(500), 4);
+
+  // Wait until hotseat bounds animation completes.
+  waiter.WaitForAnimation();
 
   EXPECT_EQ(ash::HotseatState::kExtended,
             controller->shelf()->shelf_layout_manager()->hotseat_state());
@@ -1525,10 +1544,12 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTestNoDefaultBrowser,
   const Extension* extension = extension_registry()->GetExtensionById(
       last_loaded_extension_id(), extensions::ExtensionRegistry::ENABLED);
   EXPECT_TRUE(extension);
-  apps::LaunchService::Get(profile())->OpenApplication(apps::AppLaunchParams(
-      extension->id(), extensions::LaunchContainer::kLaunchContainerTab,
-      WindowOpenDisposition::NEW_WINDOW,
-      apps::mojom::AppLaunchSource::kSourceTest));
+  apps::AppServiceProxyFactory::GetForProfile(profile())
+      ->BrowserAppLauncher()
+      .LaunchAppWithParams(apps::AppLaunchParams(
+          extension->id(), extensions::LaunchContainer::kLaunchContainerTab,
+          WindowOpenDisposition::NEW_WINDOW,
+          apps::mojom::AppLaunchSource::kSourceTest));
 
   EXPECT_EQ(++browsers, NumberOfDetectedLauncherBrowsers(false));
   EXPECT_EQ(++tabs, NumberOfDetectedLauncherBrowsers(true));
@@ -2273,6 +2294,52 @@ IN_PROC_BROWSER_TEST_P(ShelfWebAppBrowserTest,
       ChromeLauncherController::instance()->shelf_model()->active_shelf_id());
 }
 
+IN_PROC_BROWSER_TEST_P(ShelfWebAppBrowserTest, WebAppPolicy) {
+  // Install web app.
+  GURL app_url = GURL("https://example.org/");
+  web_app::AppId app_id = InstallWebApp(app_url);
+  web_app::ExternallyInstalledWebAppPrefs web_app_prefs(
+      browser()->profile()->GetPrefs());
+  web_app_prefs.Insert(app_url, app_id,
+                       web_app::ExternalInstallSource::kExternalPolicy);
+  apps::AppServiceProxyFactory::GetForProfile(profile())
+      ->FlushMojoCallsForTesting();
+
+  // Set policy to pin the web app.
+  base::DictionaryValue entry;
+  entry.SetKey(kPinnedAppsPrefAppIDKey, base::Value(app_url.spec()));
+  base::ListValue policy_value;
+  policy_value.Append(std::move(entry));
+  profile()->GetPrefs()->Set(prefs::kPolicyPinnedLauncherApps, policy_value);
+
+  // Check web app is pinned and fixed.
+  EXPECT_EQ(shelf_model()->item_count(), 2);
+  EXPECT_EQ(shelf_model()->items()[0].type, ash::TYPE_BROWSER_SHORTCUT);
+  EXPECT_EQ(shelf_model()->items()[1].type, ash::TYPE_PINNED_APP);
+  EXPECT_EQ(shelf_model()->items()[1].id.app_id, app_id);
+  EXPECT_EQ(AppListControllerDelegate::PIN_FIXED,
+            GetPinnableForAppID(app_id, profile()));
+}
+
+IN_PROC_BROWSER_TEST_P(ShelfWebAppBrowserTest, WebAppPolicyNonExistentApp) {
+  // Don't install the web app.
+  GURL app_url = GURL("https://example.org/");
+  web_app::AppId app_id = web_app::GenerateAppIdFromURL(app_url);
+
+  // Set policy to pin the non existent web app.
+  base::DictionaryValue entry;
+  entry.SetKey(kPinnedAppsPrefAppIDKey, base::Value(app_url.spec()));
+  base::ListValue policy_value;
+  policy_value.Append(std::move(entry));
+  profile()->GetPrefs()->Set(prefs::kPolicyPinnedLauncherApps, policy_value);
+
+  // Check web app policy is ignored.
+  EXPECT_EQ(shelf_model()->item_count(), 1);
+  EXPECT_EQ(shelf_model()->items()[0].type, ash::TYPE_BROWSER_SHORTCUT);
+  EXPECT_EQ(AppListControllerDelegate::PIN_EDITABLE,
+            GetPinnableForAppID(app_id, profile()));
+}
+
 // Test that "Close" is shown in the context menu when there are opened browsers
 // windows.
 IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest,
@@ -2318,6 +2385,51 @@ class HotseatShelfAppBrowserTest : public ShelfAppBrowserTest {
 
   DISALLOW_COPY_AND_ASSIGN(HotseatShelfAppBrowserTest);
 };
+
+// Verifies that hotseat should be hidden after launching the browser from
+// a context menu (https://crbug.com/1072043).
+IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, LaunchAppFromContextMenu) {
+  ash::Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
+
+  ash::RootWindowController* controller =
+      ash::Shell::GetRootWindowControllerWithDisplayId(
+          display::Screen::GetScreen()->GetPrimaryDisplay().id());
+  ash::ShelfView* shelf_view = controller->shelf()->GetShelfViewForTesting();
+
+  ash::ShelfModel* model = shelf_view->model();
+  EXPECT_EQ(1, model->item_count());
+
+  ExtendHotseat(browser());
+
+  const ash::ShelfID browser_icon_id = model->items()[0].id;
+  views::View* browser_icon = shelf_view->GetShelfAppButton(browser_icon_id);
+
+  ash::ShelfViewTestAPI test_api(shelf_view);
+  base::RunLoop run_loop;
+  test_api.SetShelfContextMenuCallback(run_loop.QuitClosure());
+
+  ui::test::EventGenerator event_generator(controller->GetRootWindow());
+  event_generator.MoveMouseTo(browser_icon->GetBoundsInScreen().CenterPoint());
+  event_generator.PressRightButton();
+
+  // Wait until the context menu shows.
+  run_loop.Run();
+
+  ash::ShelfMenuModelAdapter* shelf_menu_model_adapter =
+      shelf_view->shelf_menu_model_adapter_for_testing();
+  ASSERT_TRUE(shelf_menu_model_adapter->IsShowingMenu());
+
+  // Click at the menu item whose command is ash::MENU_NEW_WINDOW.
+  event_generator.MoveMouseTo(shelf_menu_model_adapter->root_for_testing()
+                                  ->GetMenuItemByID(ash::MENU_NEW_WINDOW)
+                                  ->GetBoundsInScreen()
+                                  .CenterPoint());
+  event_generator.ClickLeftButton();
+
+  // Verify that hotseat is hidden.
+  EXPECT_EQ(ash::HotseatState::kHidden,
+            controller->shelf()->shelf_layout_manager()->hotseat_state());
+}
 
 // crbug.com/1021011: Disable on ChromeOS
 #if defined(OS_CHROMEOS)
@@ -2372,9 +2484,9 @@ IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, EnableChromeVox) {
   chromeos::SpeechMonitor speech_monitor;
 
   // Enable ChromeVox.
-    ASSERT_FALSE(
-        chromeos::AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
-    chromeos::AccessibilityManager::Get()->EnableSpokenFeedback(true);
+  ASSERT_FALSE(
+      chromeos::AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
+  chromeos::AccessibilityManager::Get()->EnableSpokenFeedback(true);
 
   ash::RootWindowController* controller =
       ash::Shell::GetRootWindowControllerWithDisplayId(
@@ -2382,6 +2494,14 @@ IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, EnableChromeVox) {
   views::View* home_button = ash::ShelfTestApi().GetHomeButton();
   ui::test::EventGenerator event_generator(controller->GetRootWindow());
   auto* generator_ptr = &event_generator;
+
+  // There is a mouse move event being dispatched at the beginning of test
+  // that confuses ChromeVox. This brings back ChromeVox state so that
+  // GestureTapAt at home button could successfully change ChromeVox focus.
+  event_generator.MoveMouseTo(home_button->GetBoundsInScreen().CenterPoint());
+
+  // AccessibilityManager sends an empty warmup utterance first.
+  speech_monitor.ExpectSpeech("");
 
   // Wait for ChromeVox to start reading anything.
   speech_monitor.ExpectSpeechPattern("*");
@@ -2409,7 +2529,7 @@ IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, EnableChromeVox) {
     ASSERT_EQ(ash::HotseatState::kExtended,
               controller->shelf()->shelf_layout_manager()->hotseat_state());
   });
-
+  
   speech_monitor.Call([generator_ptr]() {
     // Press the search + right. Expects that the browser icon receives the
     // accessibility focus and the hotseat remains in kExtended state.

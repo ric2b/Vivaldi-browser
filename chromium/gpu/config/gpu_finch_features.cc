@@ -16,6 +16,10 @@ namespace features {
 // Used only by webview to disable SurfaceControl.
 const base::Feature kDisableSurfaceControlForWebview{
     "DisableSurfaceControlForWebview", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Used to limit GL version to 2.0 for skia raster on Android.
+const base::Feature kUseGles2ForOopR{"UseGles2ForOopR",
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Enable GPU Rasterization by default. This can still be overridden by
@@ -79,17 +83,15 @@ const base::Feature kGpuWatchdogV2NewTimeout{"GpuWatchdogV2NewTimeout",
 const base::Feature kMetal{"Metal", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
+// Turns on skia deferred display list for out of process raster.
+const base::Feature kOopRasterizationDDL{"OopRasterizationDDL",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Causes us to use the SharedImageManager, removing support for the old
 // mailbox system. Any consumers of the GPU process using the old mailbox
 // system will experience undefined results.
 const base::Feature kSharedImageManager{"SharedImageManager",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
-
-// For Windows only. Use overlay swapchain to present software protected videos
-// for all GPUs
-const base::Feature kUseDCOverlaysForSoftwareProtectedVideo{
-    "UseDCOverlaysForSoftwareProtectedVideo",
-    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls the decode acceleration of JPEG images (as opposed to camera
 // captures) in Chrome OS using the VA-API.

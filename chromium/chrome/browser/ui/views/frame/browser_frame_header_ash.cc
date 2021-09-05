@@ -10,7 +10,7 @@
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/cpp/window_state_type.h"
-#include "base/logging.h"
+#include "base/check.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -154,11 +154,12 @@ void BrowserFrameHeaderAsh::DoPaintHeader(gfx::Canvas* canvas) {
 
 views::CaptionButtonLayoutSize BrowserFrameHeaderAsh::GetButtonLayoutSize()
     const {
-  return target_widget()->IsMaximized() || target_widget()->IsFullscreen() ||
-                 (ash::TabletMode::Get() &&
-                  ash::TabletMode::Get()->InTabletMode())
-             ? views::CaptionButtonLayoutSize::kBrowserCaptionMaximized
-             : views::CaptionButtonLayoutSize::kBrowserCaptionRestored;
+  if (ash::TabletMode::Get() && ash::TabletMode::Get()->InTabletMode())
+    return views::CaptionButtonLayoutSize::kBrowserCaptionMaximized;
+
+  return ash::ShouldUseRestoreFrame(target_widget())
+             ? views::CaptionButtonLayoutSize::kBrowserCaptionRestored
+             : views::CaptionButtonLayoutSize::kBrowserCaptionMaximized;
 }
 
 SkColor BrowserFrameHeaderAsh::GetTitleColor() const {

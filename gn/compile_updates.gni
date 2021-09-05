@@ -1,16 +1,12 @@
 import("//build/config/chrome_build.gni")
 import("//vivaldi/gn/config/version.gni")
+import("//vivaldi/installer/win/extras.gni")
 
 if (is_win) {
   if (is_official_build) {
     update_template_instance("//components/viz/test:test_support") {
       cflags = [ "/wd4723" ]  # potential divide by 0.
     }
-  }
-
-  update_target("//third_party/angle:copy_compiler_dll") {
-    sources -= ["$windows_sdk_path/Redist/D3D/$target_cpu/d3dcompiler_47.dll"]
-    sources += ["$windows_sdk_path/bin/10.0.17134.0/$target_cpu/d3dcompiler_47.dll"]
   }
 }
 

@@ -105,6 +105,29 @@
   public <init>();
 }
 
+# AndroidX classes that are inflated via reflection.
+-keep public class androidx.preference.Preference {
+    public <init>(android.content.Context, android.util.AttributeSet);
+}
+-keep public class androidx.preference.PreferenceScreen {
+    public <init>(android.content.Context, android.util.AttributeSet);
+}
+-keep public class androidx.preference.PreferenceCategory {
+    public <init>(android.content.Context, android.util.AttributeSet);
+}
+-keep public class androidx.preference.ListPreference {
+    public <init>(android.content.Context, android.util.AttributeSet);
+}
+
+# SearchView is used in website_preferences_menu.xml and is constructed by
+# Android using reflection.
+-keep class androidx.appcompat.widget.SearchView {
+  public <init>(...);
+}
+
+# Referenced by android.support.v7.preference.PreferenceInflater.
+-keep public class androidx.preference.SwitchPreference {}
+
 # Don't obfuscate Parcelables as they might be marshalled outside Chrome.
 # If we annotated all Parcelables that get put into Bundles other than
 # for saveInstanceState (e.g. PendingIntents), then we could actually keep the
@@ -154,11 +177,6 @@
   public boolean requiresSignIn();
 }
 
-# Protobuf java lite runtime uses reflection
--keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite {
-  <fields>;
-}
-
 ################################################################################
 # ../../base/android/proguard/chromium_code.flags
 ################################################################################
@@ -198,13 +216,13 @@
 -keep @org.chromium.base.annotations.UsedByReflection class ** {}
 
 # Keeps for method level annotations.
--keepclasseswithmembers class ** {
+-keepclasseswithmembers,allowaccessmodification class ** {
   @org.chromium.base.annotations.AccessedByNative <fields>;
 }
--keepclasseswithmembers,includedescriptorclasses class ** {
+-keepclasseswithmembers,includedescriptorclasses,allowaccessmodification class ** {
   @org.chromium.base.annotations.CalledByNative <methods>;
 }
--keepclasseswithmembers,includedescriptorclasses class ** {
+-keepclasseswithmembers,includedescriptorclasses,allowaccessmodification class ** {
   @org.chromium.base.annotations.CalledByNativeUnchecked <methods>;
 }
 -keepclasseswithmembers class ** {
@@ -271,15 +289,6 @@
 -repackageclasses ''
 
 ################################################################################
-# ../../build/android/buildhooks/proguard/build_hooks_android_impl.flags
-################################################################################
-# Copyright 2018 The Chromium Authors. All rights reserved.
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
-
--keep class org.chromium.build.BuildHooksAndroidImpl
-
-################################################################################
 # ../../build/android/dcheck_is_off.flags
 ################################################################################
 # Copyright 2019 The Chromium Authors. All rights reserved.
@@ -342,25 +351,8 @@
 
 # Every fragment must have an empty constructor, so it can be instantiated when
 # restoring its activity's state.
--keep public class org.chromium.chrome.browser.** extends androidx.fragment.app.Fragment {
+-keep public class org.chromium.** extends androidx.fragment.app.Fragment {
   public <init>();
-}
-
-# Referenced by android.support.v7.preference.PreferenceInflater
--keep public class androidx.preference.SwitchPreference {}
-
-# Inflated via reflection
--keep public class androidx.preference.Preference {
-    public <init>(android.content.Context, android.util.AttributeSet);
-}
--keep public class androidx.preference.PreferenceScreen {
-    public <init>(android.content.Context, android.util.AttributeSet);
-}
--keep public class androidx.preference.PreferenceCategory {
-    public <init>(android.content.Context, android.util.AttributeSet);
-}
--keep public class androidx.preference.ListPreference {
-    public <init>(android.content.Context, android.util.AttributeSet);
 }
 
 # These classes aren't themselves referenced, but __ProcessService[0,1,2...] are
@@ -387,12 +379,6 @@
 # TODO(bjoyce): Remove after verifying AndroidX migration is sound.
 -keepclassmembers class android.support.design.internal.BottomNavigationMenuView {
     boolean mShiftingMode;
-}
-
-# SearchView is used in website_preferences_menu.xml and is constructed by
-# Android using reflection.
--keep class androidx.appcompat.widget.SearchView {
-  public <init>(...);
 }
 
 # This class member is referenced in BottomSheetBottomNav as a temporary
@@ -545,13 +531,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Ensure that reflectively-loaded inflater is not obfuscated. This can be
-# removed when we stop supporting AAPT1 builds.
--keepnames class androidx.appcompat.app.AppCompatViewInflater
-
 # aapt is not able to read app::actionViewClass and app:actionProviderClass to produce proguard
 # keep rules. Add a commonly used SearchView to the keep list until b/109831488 is resolved.
 -keep class androidx.appcompat.widget.SearchView { <init>(...); }
+
+# Never inline methods, but allow shrinking and obfuscation.
+-keepclassmembernames,allowobfuscation,allowshrinking class androidx.appcompat.widget.AppCompatTextViewAutoSizeHelper$Impl* {
+  <methods>;
+}
 
 ################################################################################
 # obj/third_party/android_deps/androidx_media_media_java/proguard.txt
@@ -605,6 +592,27 @@
 }
 
 ################################################################################
+# obj/third_party/android_deps/androidx_savedstate_savedstate_java/proguard.txt
+################################################################################
+# Copyright (C) 2019 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+-keepclassmembers,allowobfuscation class * implements androidx.savedstate.SavedStateRegistry$AutoRecreated {
+    <init>();
+}
+
+################################################################################
 # obj/third_party/android_deps/androidx_transition_transition_java/proguard.txt
 ################################################################################
 # Copyright (C) 2017 The Android Open Source Project
@@ -652,19 +660,19 @@
 ################################################################################
 # obj/third_party/android_deps/androidx_versionedparcelable_versionedparcelable_java/proguard.txt
 ################################################################################
--keep public class * extends androidx.versionedparcelable.VersionedParcelable
+-keep public class * implements androidx.versionedparcelable.VersionedParcelable
 -keep public class android.support.**Parcelizer { *; }
 -keep public class androidx.**Parcelizer { *; }
 -keep public class androidx.versionedparcelable.ParcelImpl
 
 ################################################################################
-# obj/third_party/android_deps/com_android_support_support_compat_java_orig/proguard.txt
+# obj/third_party/android_deps/com_android_support_support_compat_java/proguard.txt
 ################################################################################
 # aapt2 is not (yet) keeping FQCNs defined in the appComponentFactory <application> attribute
 -keep class android.support.v4.app.CoreComponentFactory
 
 ################################################################################
-# obj/third_party/android_deps/com_android_support_versionedparcelable_java_orig/proguard.txt
+# obj/third_party/android_deps/com_android_support_versionedparcelable_java/proguard.txt
 ################################################################################
 -keep public class * extends androidx.versionedparcelable.VersionedParcelable
 -keep public class android.support.**Parcelizer { *; }

@@ -30,6 +30,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
+#include "services/network/public/mojom/trust_tokens.mojom-shared.h"
 #include "third_party/blink/public/common/blob/blob_utils.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink-forward.h"
@@ -47,6 +48,7 @@
 #include "third_party/blink/renderer/core/editing/serializers/serialization.h"
 #include "third_party/blink/renderer/core/events/progress_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/fetch/trust_token_issuance_authorization.h"
 #include "third_party/blink/renderer/core/fetch/trust_token_to_mojom.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/fileapi/file.h"
@@ -56,6 +58,7 @@
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/forms/form_data.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
@@ -307,7 +310,8 @@ XMLHttpRequest::~XMLHttpRequest() {
 }
 
 Document* XMLHttpRequest::GetDocument() const {
-  return Document::From(GetExecutionContext());
+  DCHECK(IsA<LocalDOMWindow>(GetExecutionContext()));
+  return To<LocalDOMWindow>(GetExecutionContext())->document();
 }
 
 XMLHttpRequest::State XMLHttpRequest::readyState() const {
@@ -1155,7 +1159,7 @@ void XMLHttpRequest::CreateRequest(scoped_refptr<EncodedFormData> http_body,
                                                    resource_loader_options);
   loader_->SetTimeout(timeout_);
   base::TimeTicks start_time = base::TimeTicks::Now();
-  loader_->Start(request);
+  loader_->Start(std::move(request));
 
   if (!async_) {
     base::TimeDelta blocking_time = base::TimeTicks::Now() - start_time;
@@ -1473,6 +1477,17 @@ void XMLHttpRequest::setTrustToken(const TrustToken* trust_token,
     return;
   }
 
+  if (params->type ==
+          network::mojom::blink::TrustTokenOperationType::kIssuance &&
+      !IsTrustTokenIssuanceAvailableInExecutionContext(
+          *GetExecutionContext())) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotAllowedError,
+        "Trust Tokens issuance is disabled except in "
+        "contexts with the TrustTokens Origin Trial enabled.");
+    return;
+  }
+
   trust_token_params_ = std::move(params);
 }
 
@@ -1692,6 +1707,12 @@ void XMLHttpRequest::DidFail(const ResourceError& error) {
   if (error.IsTimeout()) {
     HandleDidTimeout();
     return;
+  }
+
+  if (error.TrustTokenOperationError() !=
+      network::mojom::TrustTokenOperationStatus::kOk) {
+    trust_token_operation_error_ =
+        TrustTokenErrorToDOMException(error.TrustTokenOperationError());
   }
 
   HandleNetworkError();
@@ -2082,6 +2103,7 @@ void XMLHttpRequest::Trace(Visitor* visitor) {
   visitor->Trace(upload_);
   visitor->Trace(blob_loader_);
   visitor->Trace(response_text_);
+  visitor->Trace(trust_token_operation_error_);
   XMLHttpRequestEventTarget::Trace(visitor);
   ThreadableLoaderClient::Trace(visitor);
   DocumentParserClient::Trace(visitor);

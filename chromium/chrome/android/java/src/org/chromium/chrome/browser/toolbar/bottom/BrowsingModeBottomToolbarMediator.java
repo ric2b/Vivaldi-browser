@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.toolbar.bottom;
 
+import android.app.Activity;
 import android.graphics.Color;
 import android.view.View;
 
@@ -14,7 +15,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooks;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.ThemeColorProvider.ThemeColorObserver;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
@@ -70,10 +70,9 @@ class BrowsingModeBottomToolbarMediator implements ThemeColorObserver {
      * @param activity An activity to attach the IPH to.
      * @param anchor The view to anchor the IPH to.
      * @param tracker A tracker for IPH.
-     * @param completeRunnable The Runnable to be called if the user tab on the view.
      */
-    void showIPH(@FeatureConstants String feature, ChromeActivity activity, View anchor,
-            Tracker tracker, Runnable completeRunnable) {
+    void showIPH(
+            @FeatureConstants String feature, Activity activity, View anchor, Tracker tracker) {
         if (!tracker.shouldTriggerHelpUI(feature) || !anchor.isShown() || !anchor.isEnabled()) {
             return;
         }
@@ -121,21 +120,21 @@ class BrowsingModeBottomToolbarMediator implements ThemeColorObserver {
             finalScrimColor = Color.TRANSPARENT;
         }
 
-        mFeatureHighlightProvider.buildForView(activity, anchor, titleId,
+        mFeatureHighlightProvider.buildForView((AppCompatActivity) activity, anchor, titleId,
                 FeatureHighlightProvider.TextAlignment.CENTER,
                 R.style.TextAppearance_TextLarge_Primary_Light, descId,
                 FeatureHighlightProvider.TextAlignment.CENTER,
                 R.style.TextAppearance_TextMedium_Primary_Light, innerBackgroundColor,
-                finalOuterColor, finalScrimColor, FeatureHighlightProvider.NO_TIMEOUT, tapToDismiss,
-                completeRunnable);
+                finalOuterColor, finalScrimColor, FeatureHighlightProvider.NO_TIMEOUT,
+                tapToDismiss);
     }
 
     /**
      * Dismiss the IPH bubble for Chrome Duet.
      * @param activity An activity to attach the IPH to.
      */
-    void dismissIPH(AppCompatActivity activity) {
-        mFeatureHighlightProvider.dismiss(activity);
+    void dismissIPH(Activity activity) {
+        mFeatureHighlightProvider.dismiss((AppCompatActivity) activity);
     }
 
     /**

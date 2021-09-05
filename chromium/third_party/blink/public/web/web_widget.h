@@ -39,6 +39,7 @@
 #include "cc/trees/layer_tree_host_client.h"
 #include "third_party/blink/public/common/input/web_menu_source_type.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/public/platform/web_rect.h"
@@ -48,37 +49,47 @@
 #include "third_party/blink/public/web/web_ime_text_span.h"
 #include "third_party/blink/public/web/web_lifecycle_update.h"
 #include "third_party/blink/public/web/web_range.h"
+#include "third_party/blink/public/web/web_swap_result.h"
 
 namespace cc {
-struct ApplyViewportChangesArgs;
-class AnimationHost;
 class LayerTreeHost;
+class TaskGraphRunner;
+class UkmRecorderFactory;
+class LayerTreeSettings;
 }
 
-namespace gfx {
-class Point;
+namespace ui {
+class Cursor;
 }
 
 namespace blink {
 class WebCoalescedInputEvent;
 
+namespace scheduler {
+class WebRenderWidgetSchedulingState;
+}
+
 class WebWidget {
  public:
-  // Called during set up of the WebWidget to declare the layer compositor for
-  // the widget to use. This does not pass ownership, but the caller must keep
-  // the pointers valid until Close() is called.
-  virtual void SetCompositorHosts(cc::LayerTreeHost*, cc::AnimationHost*) = 0;
+  // Initialize compositing. This will create a LayerTreeHost but will not
+  // allocate a frame sink or begin producing frames until SetCompositorVisible
+  // is called.
+  virtual cc::LayerTreeHost* InitializeCompositing(
+      cc::TaskGraphRunner* task_graph_runner,
+      const cc::LayerTreeSettings& settings,
+      std::unique_ptr<cc::UkmRecorderFactory> ukm_recorder_factory) = 0;
 
-  // Adjust the compositor visible state. This does method does not get called
-  // if this widget does not composite.
+  // This method closes and deletes the WebWidget. If a |cleanup_task| is
+  // provided it should run on the |cleanup_runner| after the WebWidget has
+  // added its own tasks to the |cleanup_runner|.
+  virtual void Close(
+      scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner = nullptr,
+      base::OnceCallback<void()> cleanup_task = base::OnceCallback<void()>()) {}
+
+  // Set the compositor as visible. If |visible| is true, then the compositor
+  // will request a new layer frame sink and begin producing frames from the
+  // compositor.
   virtual void SetCompositorVisible(bool visible) = 0;
-
-  // Update the visual state of the page. Updating the document
-  // lifecycle.
-  virtual void UpdateVisualState() = 0;
-
-  // This method closes and deletes the WebWidget.
-  virtual void Close() {}
 
   // Returns the current size of the WebWidget.
   virtual WebSize Size() { return WebSize(); }
@@ -89,53 +100,6 @@ class WebWidget {
   // Called to notify the WebWidget of entering/exiting fullscreen mode.
   virtual void DidEnterFullscreen() {}
   virtual void DidExitFullscreen() {}
-
-  // Called to update imperative animation state. This should be called before
-  // paint, although the client can rate-limit these calls.
-  // |last_frame_time| is in seconds.
-  virtual void BeginFrame(base::TimeTicks last_frame_time) {}
-
-  // Called after UpdateAllLifecyclePhases has run in response to a BeginFrame.
-  virtual void DidBeginFrame() {}
-
-  // Called when main frame metrics are desired. The local frame's UKM
-  // aggregator must be informed that collection is starting for the
-  // frame.
-  virtual void RecordStartOfFrameMetrics() {}
-
-  // Called when a main frame time metric should be emitted, along with
-  // any metrics that depend upon the main frame total time.
-  virtual void RecordEndOfFrameMetrics(
-      base::TimeTicks frame_begin_time,
-      cc::ActiveFrameSequenceTrackers trackers) {}
-
-  // Return metrics information for the stages of BeginMainFrame. This is
-  // ultimately implemented by Blink's LocalFrameUKMAggregator. It must be a
-  // distinct call from the FrameMetrics above because the BeginMainFrameMetrics
-  // for compositor latency must be gathered before the layer tree is
-  // committed to the compositor, which is before the call to
-  // RecordEndOfFrameMetrics.
-  virtual std::unique_ptr<cc::BeginMainFrameMetrics>
-  GetBeginMainFrameMetrics() {
-    return nullptr;
-  }
-
-
-  // Methods called to mark the beginning and end of the
-  // LayerTreeHost::UpdateLayers method. Only called when gathering main frame
-  // UMA and UKM. That is, when RecordStartOfFrameMetrics has been called, and
-  // before RecordEndOfFrameMetrics has been called.
-  virtual void BeginUpdateLayers() {}
-  virtual void EndUpdateLayers() {}
-
-  // Methods called to mark the beginning and end of a commit to the impl
-  // thread for a frame. Only called when gathering main frame
-  // UMA and UKM. That is, when RecordStartOfFrameMetrics has been called, and
-  // before RecordEndOfFrameMetrics has been called.
-  virtual void BeginCommitCompositorFrame() {}
-  virtual void EndCommitCompositorFrame(base::TimeTicks) {}
-
-  virtual void WillBeginCompositorFrame() {}
 
   // Called to run through the entire set of document lifecycle phases needed
   // to render a frame of the web widget. This MUST be called before Paint,
@@ -161,7 +125,7 @@ class WebWidget {
   virtual void ThemeChanged() {}
 
   // Do a hit test at given point and return the WebHitTestResult.
-  virtual WebHitTestResult HitTestResultAt(const gfx::Point&) = 0;
+  virtual WebHitTestResult HitTestResultAt(const gfx::PointF&) = 0;
 
   // Called to inform the WebWidget of an input event.
   virtual WebInputEventResult HandleInputEvent(const WebCoalescedInputEvent&) {
@@ -178,26 +142,15 @@ class WebWidget {
   // Called to inform the WebWidget of the mouse cursor's visibility.
   virtual void SetCursorVisibilityState(bool is_visible) {}
 
-  // Inform WebWidget fallback cursor mode toggled.
-  virtual void OnFallbackCursorModeToggled(bool is_on) {}
-
-  // Applies viewport related properties during a commit from the compositor
-  // thread.
-  virtual void ApplyViewportChanges(const cc::ApplyViewportChangesArgs& args) {}
-
-  virtual void RecordManipulationTypeCounts(cc::ManipulationInfo info) {}
-
-  virtual void SendOverscrollEventFromImplSide(
-      const gfx::Vector2dF& overscroll_delta,
-      cc::ElementId scroll_latched_element_id) {}
-  virtual void SendScrollEndEventFromImplSide(
-      cc::ElementId scroll_latched_element_id) {}
-
   // Called to inform the WebWidget that mouse capture was lost.
   virtual void MouseCaptureLost() {}
 
   // Called to inform the WebWidget that it has gained or lost keyboard focus.
   virtual void SetFocus(bool) {}
+
+  // Sets the display mode, which comes from the top-level browsing context and
+  // is applied to all widgets.
+  virtual void SetDisplayMode(mojom::DisplayMode) {}
 
   // Returns the anchor and focus bounds of the current selection.
   // If the selection range is empty, it returns the caret bounds.
@@ -218,6 +171,10 @@ class WebWidget {
   // Called by client to request showing the context menu.
   virtual void ShowContextMenu(WebMenuSourceType) {}
 
+  // Accessor to the WebWidget scheduing state.
+  virtual scheduler::WebRenderWidgetSchedulingState*
+  RendererWidgetSchedulingState() = 0;
+
   // When the WebWidget is part of a frame tree, returns the active url for
   // main frame of that tree, if the main frame is local in that tree. When
   // the WebWidget is of a different kind (e.g. a popup) it returns the active
@@ -226,6 +183,8 @@ class WebWidget {
   // remote in that frame tree, then the url is not known, and an empty url is
   // returned.
   virtual WebURL GetURLForDebugTrace() = 0;
+
+  virtual void SetCursor(const ui::Cursor& cursor) = 0;
 
  protected:
   ~WebWidget() = default;

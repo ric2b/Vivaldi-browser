@@ -104,7 +104,8 @@ class AssociatedUserValidator {
     MISSING_PASSWORD_RECOVERY_INFO,
     INVALID_TOKEN_HANDLE,
     ONLINE_LOGIN_STALE,
-    UPLOAD_DEVICE_DETAILS_FAILED
+    UPLOAD_DEVICE_DETAILS_FAILED,
+    ONLINE_LOGIN_ENFORCED
   };
 
   // Returns the reason for enforcing authentication for the provided |sid|.
@@ -123,9 +124,6 @@ class AssociatedUserValidator {
   bool DenySigninForUsersWithInvalidTokenHandles(
       CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus,
       const std::vector<base::string16>& reauth_sids);
-
-  // Returns true if any associated user is enforced to reauth via google.
-  bool IsAuthEnforcedOnAssociatedUsers();
 
   // Restores the access for a user that was denied access (if applicable).
   // Returns S_OK on success, failure otherwise.

@@ -34,8 +34,8 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/page_info/page_info_infobar_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/webui/recent_site_settings_helper.h"
-#include "chrome/browser/ui/webui/site_settings_helper.h"
+#include "chrome/browser/ui/webui/settings/recent_site_settings_helper.h"
+#include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -511,8 +511,8 @@ void SiteSettingsHandler::RegisterMessages() {
 
 void SiteSettingsHandler::OnJavascriptAllowed() {
   ObserveSourcesForProfile(profile_);
-  if (profile_->HasOffTheRecordProfile())
-    ObserveSourcesForProfile(profile_->GetOffTheRecordProfile());
+  if (profile_->HasPrimaryOTRProfile())
+    ObserveSourcesForProfile(profile_->GetPrimaryOTRProfile());
 
   // Here we only subscribe to the HostZoomMap for the default storage partition
   // since we don't allow the user to manage the zoom levels for apps.
@@ -568,8 +568,8 @@ void SiteSettingsHandler::OnGetUsageInfo() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   // Site Details Page does not display the number of cookies for the origin.
   const CookieTreeNode* root = cookies_tree_model_->GetRoot();
-  std::string usage_string = "";
-  std::string cookie_string = "";
+  std::string usage_string;
+  std::string cookie_string;
   for (const auto& site : root->children()) {
     std::string title = base::UTF16ToUTF8(site->GetTitle());
     if (title != usage_host_)
@@ -767,9 +767,9 @@ void SiteSettingsHandler::HandleGetAllSites(const base::ListValue* args) {
   // Incognito contains incognito content settings plus non-incognito content
   // settings. Thus if it exists, just get exceptions for the incognito profile.
   Profile* profile = profile_;
-  if (profile_->HasOffTheRecordProfile() &&
-      profile_->GetOffTheRecordProfile() != profile_) {
-    profile = profile_->GetOffTheRecordProfile();
+  if (profile_->HasPrimaryOTRProfile() &&
+      profile_->GetPrimaryOTRProfile() != profile_) {
+    profile = profile_->GetPrimaryOTRProfile();
   }
   DCHECK(profile);
   HostContentSettingsMap* map =
@@ -977,26 +977,23 @@ void SiteSettingsHandler::HandleGetExceptionList(const base::ListValue* args) {
 
   std::unique_ptr<base::ListValue> exceptions(new base::ListValue);
 
-  HostContentSettingsMap* map =
-      HostContentSettingsMapFactory::GetForProfile(profile_);
   const auto* extension_registry = extensions::ExtensionRegistry::Get(profile_);
   AddExceptionsGrantedByHostedApps(profile_, APIPermissionFromGroupName(type),
                                    exceptions.get());
-  site_settings::GetExceptionsFromHostContentSettingsMap(
-      map, content_type, extension_registry, web_ui(), /*incognito=*/false,
-      /*filter=*/nullptr, exceptions.get());
+  site_settings::GetExceptionsForContentType(
+      content_type, profile_, extension_registry, web_ui(), /*incognito=*/false,
+      exceptions.get());
 
-  Profile* incognito = profile_->HasOffTheRecordProfile()
-                           ? profile_->GetOffTheRecordProfile()
+  Profile* incognito = profile_->HasPrimaryOTRProfile()
+                           ? profile_->GetPrimaryOTRProfile()
                            : nullptr;
   // On Chrome OS in Guest mode the incognito profile is the primary profile,
   // so do not fetch an extra copy of the same exceptions.
   if (incognito && incognito != profile_) {
-    map = HostContentSettingsMapFactory::GetForProfile(incognito);
     extension_registry = extensions::ExtensionRegistry::Get(incognito);
-    site_settings::GetExceptionsFromHostContentSettingsMap(
-        map, content_type, extension_registry, web_ui(), /*incognito=*/true,
-        /*filter=*/nullptr, exceptions.get());
+    site_settings::GetExceptionsForContentType(
+        content_type, incognito, extension_registry, web_ui(),
+        /*incognito=*/true, exceptions.get());
   }
 
   ResolveJavascriptCallback(*callback_id, *exceptions.get());
@@ -1100,7 +1097,7 @@ void SiteSettingsHandler::HandleSetOriginPermissions(
     // Clear any existing embargo status if the new setting isn't block.
     if (setting != CONTENT_SETTING_BLOCK) {
       PermissionDecisionAutoBlockerFactory::GetForProfile(profile_)
-          ->RemoveEmbargoByUrl(origin, content_type);
+          ->RemoveEmbargoAndResetCounts(origin, content_type);
     }
     map->SetContentSettingDefaultScope(origin, origin, content_type,
                                        std::string(), setting);
@@ -1167,9 +1164,9 @@ void SiteSettingsHandler::HandleResetCategoryPermissionForPattern(
 
   Profile* profile = nullptr;
   if (incognito) {
-    if (!profile_->HasOffTheRecordProfile())
+    if (!profile_->HasPrimaryOTRProfile())
       return;
-    profile = profile_->GetOffTheRecordProfile();
+    profile = profile_->GetPrimaryOTRProfile();
   } else {
     profile = profile_;
   }
@@ -1202,6 +1199,11 @@ void SiteSettingsHandler::HandleResetCategoryPermissionForPattern(
           "SoundContentSetting.UnmuteBy.PatternException"));
     }
   }
+
+  // End embargo if currently active.
+  PermissionDecisionAutoBlockerFactory::GetForProfile(profile)
+      ->RemoveEmbargoAndResetCounts(GURL(primary_pattern_string), content_type);
+
   content_settings::LogWebSiteSettingsPermissionChange(
       content_type, ContentSetting::CONTENT_SETTING_DEFAULT);
 }
@@ -1227,9 +1229,9 @@ void SiteSettingsHandler::HandleSetCategoryPermissionForPattern(
 
   Profile* profile = nullptr;
   if (incognito) {
-    if (!profile_->HasOffTheRecordProfile())
+    if (!profile_->HasPrimaryOTRProfile())
       return;
-    profile = profile_->GetOffTheRecordProfile();
+    profile = profile_->GetPrimaryOTRProfile();
   } else {
     profile = profile_;
   }
@@ -1319,7 +1321,7 @@ void SiteSettingsHandler::HandleIsPatternValidForType(
   std::string type;
   CHECK(args->GetString(2, &type));
 
-  std::string reason = "";
+  std::string reason;
   bool is_valid =
       IsPatternValidForType(pattern_string, type, profile_, &reason);
 
@@ -1333,7 +1335,7 @@ void SiteSettingsHandler::HandleUpdateIncognitoStatus(
     const base::ListValue* args) {
   AllowJavascript();
   FireWebUIListener("onIncognitoStatusChanged",
-                    base::Value(profile_->HasOffTheRecordProfile()));
+                    base::Value(profile_->HasPrimaryOTRProfile()));
 }
 
 void SiteSettingsHandler::HandleFetchZoomLevels(const base::ListValue* args) {

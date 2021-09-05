@@ -187,20 +187,20 @@ DeepScanningDialogViews::DeepScanningDialogViews(
     std::unique_ptr<DeepScanningDialogDelegate> delegate,
     content::WebContents* web_contents,
     DeepScanAccessPoint access_point,
-    bool is_file_scan)
+    int files_count)
     : content::WebContentsObserver(web_contents),
       delegate_(std::move(delegate)),
       web_contents_(web_contents),
       access_point_(std::move(access_point)),
-      is_file_scan_(is_file_scan) {
+      files_count_(files_count) {
+  if (observer_for_testing)
+    observer_for_testing->ConstructorCalled(this, base::TimeTicks::Now());
+
   // Show the pending dialog after a delay in case the response is fast enough.
   base::PostDelayedTask(FROM_HERE, {content::BrowserThread::UI},
                         base::BindOnce(&DeepScanningDialogViews::Show,
                                        weak_ptr_factory_.GetWeakPtr()),
                         GetInitialUIDelay());
-
-  if (observer_for_testing)
-    observer_for_testing->ConstructorCalled(this);
 }
 
 base::string16 DeepScanningDialogViews::GetWindowTitle() const {
@@ -223,7 +223,59 @@ bool DeepScanningDialogViews::ShouldShowCloseButton() const {
 }
 
 views::View* DeepScanningDialogViews::GetContentsView() {
-  return contents_view_.get();
+  if (!contents_view_) {
+    contents_view_ = new views::View();  // Owned by caller.
+
+    // Create layout
+    views::GridLayout* layout =
+        contents_view_->SetLayoutManager(std::make_unique<views::GridLayout>());
+    views::ColumnSet* columns = layout->AddColumnSet(0);
+    columns->AddColumn(
+        /*h_align=*/views::GridLayout::FILL,
+        /*v_align=*/views::GridLayout::FILL,
+        /*resize_percent=*/1.0,
+        /*size_type=*/views::GridLayout::ColumnSize::kUsePreferred,
+        /*fixed_width=*/0,
+        /*min_width=*/0);
+
+    // Add the top image.
+    layout->StartRow(views::GridLayout::kFixedSize, 0);
+    image_ = layout->AddView(std::make_unique<DeepScanningTopImageView>(this));
+
+    // Add padding to distance the top image from the icon and message.
+    layout->AddPaddingRow(views::GridLayout::kFixedSize, 16);
+
+    // Add the side icon and message row.
+    layout->StartRow(views::GridLayout::kFixedSize, 0);
+    auto icon_and_message_row = std::make_unique<views::View>();
+    auto* row_layout = icon_and_message_row->SetLayoutManager(
+        std::make_unique<views::BoxLayout>(
+            views::BoxLayout::Orientation::kHorizontal,
+            kMessageAndIconRowInsets, kSideIconBetweenChildSpacing));
+    row_layout->set_main_axis_alignment(
+        views::BoxLayout::MainAxisAlignment::kStart);
+    row_layout->set_cross_axis_alignment(
+        views::BoxLayout::CrossAxisAlignment::kCenter);
+
+    // Add the side icon.
+    icon_and_message_row->AddChildView(CreateSideIcon());
+
+    // Add the message.
+    auto label = std::make_unique<DeepScanningMessageView>(this);
+    label->SetText(GetDialogMessage());
+    label->SetLineHeight(kLineHeight);
+    label->SetMultiLine(true);
+    label->SetVerticalAlignment(gfx::ALIGN_MIDDLE);
+    label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    message_ = icon_and_message_row->AddChildView(std::move(label));
+
+    layout->AddView(std::move(icon_and_message_row));
+
+    // Add padding to distance the message from the button(s).
+    layout->AddPaddingRow(views::GridLayout::kFixedSize, 10);
+  }
+
+  return contents_view_;
 }
 
 views::Widget* DeepScanningDialogViews::GetWidget() {
@@ -313,12 +365,12 @@ void DeepScanningDialogViews::UpdateDialog() {
   // Update the message's text.
   message_->SetText(GetDialogMessage());
 
-  // Resize the dialog's height. This is needed since the button might be
-  // removed (in the success case) and the text might take fewer or more lines.
+  // Resize the dialog's height. This is needed since the text might take more
+  // lines after changing.
   int text_height = message_->GetRequiredLines() * message_->GetLineHeight();
   int row_height = message_->parent()->height();
   int height_to_add = std::max(text_height - row_height, 0);
-  if (is_success() || (height_to_add > 0))
+  if (height_to_add > 0)
     Resize(height_to_add);
 
   // Update the dialog.
@@ -355,7 +407,7 @@ void DeepScanningDialogViews::Resize(int height_to_add) {
   if (is_success()) {
     DCHECK(contents_view_->parent());
     DCHECK_EQ(contents_view_->parent()->children().size(), 2ul);
-    DCHECK_EQ(contents_view_->parent()->children()[0], contents_view_.get());
+    DCHECK_EQ(contents_view_->parent()->children()[0], contents_view_);
 
     views::View* button_row_view = contents_view_->parent()->children()[1];
     new_height -= button_row_view->GetContentsBounds().height();
@@ -419,22 +471,16 @@ void DeepScanningDialogViews::SetupButtons() {
 }
 
 base::string16 DeepScanningDialogViews::GetDialogMessage() const {
-  int text_id;
   switch (dialog_status_) {
     case DeepScanningDialogStatus::PENDING:
-      text_id = GetPendingMessageId();
-      break;
+      return GetPendingMessage();
     case DeepScanningDialogStatus::FAILURE:
-      text_id = GetFailureMessageId();
-      break;
+      return GetFailureMessage();
     case DeepScanningDialogStatus::SUCCESS:
-      text_id = IDS_DEEP_SCANNING_DIALOG_SUCCESS_MESSAGE;
-      break;
+      return GetSuccessMessage();
     case DeepScanningDialogStatus::WARNING:
-      text_id = GetWarningMessageId();
-      break;
+      return GetWarningMessage();
   }
-  return l10n_util::GetStringUTF16(text_id);
 }
 
 base::string16 DeepScanningDialogViews::GetCancelButtonText() const {
@@ -472,56 +518,6 @@ void DeepScanningDialogViews::Show() {
   first_shown_timestamp_ = base::TimeTicks::Now();
 
   SetupButtons();
-
-  contents_view_ = std::make_unique<views::View>();
-  contents_view_->set_owned_by_client();
-
-  // Create layout
-  views::GridLayout* layout =
-      contents_view_->SetLayoutManager(std::make_unique<views::GridLayout>());
-  views::ColumnSet* columns = layout->AddColumnSet(0);
-  columns->AddColumn(/*h_align=*/views::GridLayout::FILL,
-                     /*v_align=*/views::GridLayout::FILL,
-                     /*resize_percent=*/1.0,
-                     /*size_type=*/views::GridLayout::SizeType::USE_PREF,
-                     /*fixed_width=*/0,
-                     /*min_width=*/0);
-
-  // Add the top image.
-  layout->StartRow(views::GridLayout::kFixedSize, 0);
-  image_ = layout->AddView(std::make_unique<DeepScanningTopImageView>(this));
-
-  // Add padding to distance the top image from the icon and message.
-  layout->AddPaddingRow(views::GridLayout::kFixedSize, 16);
-
-  // Add the side icon and message row.
-  layout->StartRow(views::GridLayout::kFixedSize, 0);
-  auto icon_and_message_row = std::make_unique<views::View>();
-  auto* row_layout =
-      icon_and_message_row->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kHorizontal, kMessageAndIconRowInsets,
-          kSideIconBetweenChildSpacing));
-  row_layout->set_main_axis_alignment(
-      views::BoxLayout::MainAxisAlignment::kStart);
-  row_layout->set_cross_axis_alignment(
-      views::BoxLayout::CrossAxisAlignment::kCenter);
-
-  // Add the side icon.
-  icon_and_message_row->AddChildView(CreateSideIcon());
-
-  // Add the message.
-  auto label = std::make_unique<DeepScanningMessageView>(this);
-  label->SetText(GetDialogMessage());
-  label->SetLineHeight(kLineHeight);
-  label->SetMultiLine(true);
-  label->SetVerticalAlignment(gfx::ALIGN_MIDDLE);
-  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  message_ = icon_and_message_row->AddChildView(std::move(label));
-
-  layout->AddView(std::move(icon_and_message_row));
-
-  // Add padding to distance the message from the button(s).
-  layout->AddPaddingRow(views::GridLayout::kFixedSize, 10);
 
   constrained_window::ShowWebModalDialogViews(this, web_contents_);
 
@@ -587,76 +583,49 @@ int DeepScanningDialogViews::GetUploadImageId(bool use_dark) const {
   return use_dark ? IDR_UPLOAD_VIOLATION_DARK : IDR_UPLOAD_VIOLATION;
 }
 
-int DeepScanningDialogViews::GetPendingMessageId() const {
+base::string16 DeepScanningDialogViews::GetPendingMessage() const {
   DCHECK(is_pending());
-  switch (access_point_) {
-    case DeepScanAccessPoint::DOWNLOAD:
-      // This dialog should not appear on the download path. If it somehow does,
-      // treat it as an upload.
-      NOTREACHED();
-      FALLTHROUGH;
-    case DeepScanAccessPoint::UPLOAD:
-      return IDS_DEEP_SCANNING_DIALOG_UPLOAD_PENDING_MESSAGE;
-    case DeepScanAccessPoint::PASTE:
-      return IDS_DEEP_SCANNING_DIALOG_PASTE_PENDING_MESSAGE;
-    case DeepScanAccessPoint::DRAG_AND_DROP:
-      return is_file_scan_ ? IDS_DEEP_SCANNING_DIALOG_DRAG_FILES_PENDING_MESSAGE
-                           : IDS_DEEP_SCANNING_DIALOG_DRAG_DATA_PENDING_MESSAGE;
-  }
+  return l10n_util::GetPluralStringFUTF16(
+      IDS_DEEP_SCANNING_DIALOG_UPLOAD_PENDING_MESSAGE, files_count_);
 }
 
-int DeepScanningDialogViews::GetFailureMessageId() const {
+base::string16 DeepScanningDialogViews::GetFailureMessage() const {
   DCHECK(is_failure());
 
   if (final_result_ ==
       DeepScanningDialogDelegate::DeepScanningFinalResult::LARGE_FILES) {
-    return IDS_DEEP_SCANNING_DIALOG_LARGE_FILE_FAILURE_MESSAGE;
+    return l10n_util::GetPluralStringFUTF16(
+        IDS_DEEP_SCANNING_DIALOG_LARGE_FILE_FAILURE_MESSAGE, files_count_);
   }
 
   if (final_result_ ==
       DeepScanningDialogDelegate::DeepScanningFinalResult::ENCRYPTED_FILES) {
-    return IDS_DEEP_SCANNING_DIALOG_ENCRYPTED_FILE_FAILURE_MESSAGE;
+    return l10n_util::GetPluralStringFUTF16(
+        IDS_DEEP_SCANNING_DIALOG_ENCRYPTED_FILE_FAILURE_MESSAGE, files_count_);
   }
 
-  switch (access_point_) {
-    case DeepScanAccessPoint::DOWNLOAD:
-      // This dialog should not appear on the download path. If it somehow does,
-      // treat it as an upload.
-      NOTREACHED();
-      FALLTHROUGH;
-    case DeepScanAccessPoint::UPLOAD:
-      return IDS_DEEP_SCANNING_DIALOG_UPLOAD_FAILURE_MESSAGE;
-    case DeepScanAccessPoint::PASTE:
-      return IDS_DEEP_SCANNING_DIALOG_PASTE_FAILURE_MESSAGE;
-    case DeepScanAccessPoint::DRAG_AND_DROP:
-      return is_file_scan_ ? IDS_DEEP_SCANNING_DIALOG_DRAG_FILES_FAILURE_MESSAGE
-                           : IDS_DEEP_SCANNING_DIALOG_DRAG_DATA_FAILURE_MESSAGE;
-  }
+  return l10n_util::GetPluralStringFUTF16(
+      IDS_DEEP_SCANNING_DIALOG_UPLOAD_FAILURE_MESSAGE, files_count_);
 }
 
-int DeepScanningDialogViews::GetWarningMessageId() const {
+base::string16 DeepScanningDialogViews::GetWarningMessage() const {
   DCHECK(is_warning());
-  switch (access_point_) {
-    case DeepScanAccessPoint::DOWNLOAD:
-      // This dialog should not appear on the download path. If it somehow does,
-      // treat it as an upload.
-      NOTREACHED();
-      FALLTHROUGH;
-    case DeepScanAccessPoint::UPLOAD:
-      return IDS_DEEP_SCANNING_DIALOG_UPLOAD_WARNING_MESSAGE;
-    case DeepScanAccessPoint::PASTE:
-      return IDS_DEEP_SCANNING_DIALOG_PASTE_WARNING_MESSAGE;
-    case DeepScanAccessPoint::DRAG_AND_DROP:
-      return is_file_scan_ ? IDS_DEEP_SCANNING_DIALOG_DRAG_FILES_WARNING_MESSAGE
-                           : IDS_DEEP_SCANNING_DIALOG_DRAG_DATA_WARNING_MESSAGE;
-  }
+  return l10n_util::GetPluralStringFUTF16(
+      IDS_DEEP_SCANNING_DIALOG_UPLOAD_WARNING_MESSAGE, files_count_);
+}
+
+base::string16 DeepScanningDialogViews::GetSuccessMessage() const {
+  DCHECK(is_success());
+  return l10n_util::GetPluralStringFUTF16(
+      IDS_DEEP_SCANNING_DIALOG_SUCCESS_MESSAGE, files_count_);
 }
 
 const gfx::ImageSkia* DeepScanningDialogViews::GetTopImage() const {
   const bool use_dark = color_utils::IsDark(GetBackgroundColor(GetWidget()));
   const bool treat_as_text_paste =
       access_point_ == DeepScanAccessPoint::PASTE ||
-      (access_point_ == DeepScanAccessPoint::DRAG_AND_DROP && !is_file_scan_);
+      (access_point_ == DeepScanAccessPoint::DRAG_AND_DROP &&
+       files_count_ == 0);
 
   int image_id = treat_as_text_paste ? GetPasteImageId(use_dark)
                                      : GetUploadImageId(use_dark);

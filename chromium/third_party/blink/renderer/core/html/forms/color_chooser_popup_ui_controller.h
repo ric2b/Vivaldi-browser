@@ -29,11 +29,14 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser_ui_controller.h"
 #include "third_party/blink/renderer/core/page/page_popup_client.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 
 namespace blink {
 
 class ChromeClient;
 class ColorChooserClient;
+class Page;
 class PagePopup;
 class PagePopupController;
 
@@ -62,7 +65,7 @@ class CORE_EXPORT ColorChooserPopupUIController final
   void CancelPopup() override;
   Element& OwnerElement() override;
   void DidClosePopup() override;
-  PagePopupController* CreatePagePopupController(PagePopup&) override;
+  PagePopupController* CreatePagePopupController(Page&, PagePopup&) override;
 
   void OpenEyeDropper();
   void EyeDropperResponseHandler(bool success, uint32_t color);
@@ -78,7 +81,9 @@ class CORE_EXPORT ColorChooserPopupUIController final
   Member<ChromeClient> chrome_client_;
   PagePopup* popup_;
   Locale& locale_;
-  mojo::Remote<mojom::blink::EyeDropperChooser> eye_dropper_chooser_;
+  HeapMojoRemote<mojom::blink::EyeDropperChooser,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
+      eye_dropper_chooser_;
 };
 
 }  // namespace blink

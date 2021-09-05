@@ -8,33 +8,25 @@
  */
 
 // clang-format off
-// #import {addSingletonGetter} from 'chrome://resources/js/cr.m.js';
+import {addSingletonGetter} from 'chrome://resources/js/cr.m.js';
 // clang-format on
 
-cr.define('settings', function() {
-  /** @interface */
-  class PrintingBrowserProxy {
-    /**
-     * Open the native print system dialog.
-     */
-    openSystemPrintDialog() {}
-  }
-
+/** @interface */
+class PrintingBrowserProxy {
   /**
-   * @implements {settings.PrintingBrowserProxy}
+   * Open the native print system dialog.
    */
-  /* #export */ class PrintingBrowserProxyImpl {
-    /** @override */
-    openSystemPrintDialog() {
-      chrome.send('openSystemPrintDialog');
-    }
+  openSystemPrintDialog() {}
+}
+
+/**
+ * @implements {PrintingBrowserProxy}
+ */
+export class PrintingBrowserProxyImpl {
+  /** @override */
+  openSystemPrintDialog() {
+    chrome.send('openSystemPrintDialog');
   }
+}
 
-  cr.addSingletonGetter(PrintingBrowserProxyImpl);
-
-  // #cr_define_end
-  return {
-    PrintingBrowserProxy: PrintingBrowserProxy,
-    PrintingBrowserProxyImpl: PrintingBrowserProxyImpl,
-  };
-});
+addSingletonGetter(PrintingBrowserProxyImpl);

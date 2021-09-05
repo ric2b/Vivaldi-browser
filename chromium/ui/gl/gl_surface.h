@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -44,7 +45,8 @@ class EGLTimestampClient;
 
 // Encapsulates a surface that can be rendered to with GL, hiding platform
 // specific management.
-class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
+class GL_EXPORT GLSurface : public base::RefCounted<GLSurface>,
+                            public base::SupportsWeakPtr<GLSurface> {
  public:
   GLSurface();
 
@@ -297,6 +299,7 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
   virtual void SetGpuVSyncEnabled(bool enabled);
 
   virtual void SetDisplayTransform(gfx::OverlayTransform transform) {}
+  virtual void SetFrameRate(float frame_rate) {}
 
   static GLSurface* GetCurrent();
 
@@ -394,6 +397,7 @@ class GL_EXPORT GLSurfaceAdapter : public GLSurface {
   bool SupportsGpuVSync() const override;
   void SetGpuVSyncEnabled(bool enabled) override;
   void SetDisplayTransform(gfx::OverlayTransform transform) override;
+  void SetFrameRate(float frame_rate) override;
   void SetCurrent() override;
   bool IsCurrent() override;
 

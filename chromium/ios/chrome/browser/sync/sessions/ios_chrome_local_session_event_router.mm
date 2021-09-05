@@ -7,7 +7,7 @@
 #include <stddef.h>
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/sync_sessions/sync_sessions_client.h"
@@ -48,15 +48,6 @@ IOSChromeLocalSessionEventRouter::IOSChromeLocalSessionEventRouter(
       TabParentingGlobalObserver::GetInstance()->RegisterCallback(
           base::Bind(&IOSChromeLocalSessionEventRouter::OnTabParented,
                      base::Unretained(this)));
-
-  history::HistoryService* history_service =
-      ios::HistoryServiceFactory::GetForBrowserState(
-          browser_state, ServiceAccessType::EXPLICIT_ACCESS);
-  if (history_service) {
-    favicon_changed_subscription_ = history_service->AddFaviconsChangedCallback(
-        base::Bind(&IOSChromeLocalSessionEventRouter::OnFaviconsChanged,
-                   base::Unretained(this)));
-  }
 
   for (TabModel* tab_model in TabModelList::GetTabModelsForChromeBrowserState(
            browser_state_)) {
@@ -198,13 +189,6 @@ void IOSChromeLocalSessionEventRouter::OnWebStateChange(
     flare_.Run(syncer::SESSIONS);
     flare_.Reset();
   }
-}
-
-void IOSChromeLocalSessionEventRouter::OnFaviconsChanged(
-    const std::set<GURL>& page_urls,
-    const GURL& icon_url) {
-  if (handler_ && !page_urls.empty())
-    handler_->OnFaviconsChanged(page_urls, icon_url);
 }
 
 void IOSChromeLocalSessionEventRouter::StartRoutingTo(

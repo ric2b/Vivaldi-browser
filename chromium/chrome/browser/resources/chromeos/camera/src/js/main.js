@@ -13,6 +13,7 @@ import {
   VideoConstraintsPreferrer,
 } from './device/constraints_preferrer.js';
 import {DeviceInfoUpdater} from './device/device_info_updater.js';
+import * as error from './error.js';
 import {GalleryButton} from './gallerybutton.js';
 import * as metrics from './metrics.js';
 import * as filesystem from './models/filesystem.js';
@@ -20,7 +21,7 @@ import * as nav from './nav.js';
 import {PerfEvent} from './perf.js';
 import * as state from './state.js';
 import * as tooltip from './tooltip.js';
-import {Mode} from './type.js';
+import {Mode, ViewName} from './type.js';
 import * as util from './util.js';
 import {Camera} from './views/camera.js';
 import {CameraIntent} from './views/camera_intent.js';
@@ -30,7 +31,7 @@ import {
   MasterSettings,
   ResolutionSettings,
 } from './views/settings.js';
-import {View, ViewName} from './views/view.js';
+import {View} from './views/view.js';
 import {Warning} from './views/warning.js';
 
 /**
@@ -174,6 +175,7 @@ export class App {
    * @return {!Promise}
    */
   async start() {
+    await this.cameraView_.initialize();
     let ackMigrate = false;
     filesystem
         .initialize(() => {
@@ -265,7 +267,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   assert(window['backgroundOps'] !== undefined);
   const /** !BackgroundOps */ bgOps = window['backgroundOps'];
 
-  metrics.initMetrics(bgOps.isTesting());
+  const testErrorCallback = bgOps.getTestingErrorCallback();
+  metrics.initMetrics(testErrorCallback !== null);
+  // TODO(crbug/1082585): Initializes it before any other javascript loaded.
+  error.initialize(testErrorCallback);
 
   const perfLogger = bgOps.getPerfLogger();
 

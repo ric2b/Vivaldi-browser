@@ -33,49 +33,53 @@ class NET_EXPORT CookieOptions {
       COUNT
     };
 
-    // Used for when, and in what direction, same-site requests and responses
-    // are made in a cross-scheme context. Currently only used for metrics
-    // gathering and does not affect cookie behavior.
-    enum class CrossSchemeness {
-      NONE,
-      INSECURE_SECURE,  // Insecure site-for-cookies, secure request/response
-      SECURE_INSECURE   // Secure site-for-cookies, insecure request/response
-    };
+    SameSiteCookieContext()
+        : SameSiteCookieContext(ContextType::CROSS_SITE,
+                                ContextType::CROSS_SITE) {}
+    explicit SameSiteCookieContext(ContextType same_site_context)
+        : SameSiteCookieContext(same_site_context, same_site_context) {}
 
-    SameSiteCookieContext() : SameSiteCookieContext(ContextType::CROSS_SITE) {}
-    explicit SameSiteCookieContext(
-        ContextType same_site_context,
-        CrossSchemeness cross_schemeness = CrossSchemeness::NONE)
-        : context(same_site_context), cross_schemeness(cross_schemeness) {}
+    SameSiteCookieContext(ContextType same_site_context,
+                          ContextType schemeful_same_site_context)
+        : context_(same_site_context),
+          schemeful_context_(schemeful_same_site_context) {
+      DCHECK_LE(schemeful_context_, context_);
+    }
 
     // Convenience method which returns a SameSiteCookieContext with the most
-    // inclusive context. This allows access to all SameSite cookies.
+    // inclusive contexts. This allows access to all SameSite cookies.
     static SameSiteCookieContext MakeInclusive();
 
-    // The following functions are for conversion to the previous style of
-    // SameSiteCookieContext for metrics usage. This may be removed when the
-    // metrics using them are also removed.
+    // Convenience method which returns a SameSiteCookieContext with the most
+    // inclusive contexts for set. This allows setting all SameSite cookies.
+    static SameSiteCookieContext MakeInclusiveForSet();
 
-    // Used as the "COUNT" entry in a histogram enum.
-    static constexpr int64_t MetricCount() {
-      return (static_cast<int>(ContextType::SAME_SITE_STRICT) |
-              kToInsecureMask) +
-             1;
+    // Returns the context for determining SameSite cookie inclusion.
+    ContextType GetContextForCookieInclusion() const;
+
+    // If you're just trying to determine if a cookie is accessible you likely
+    // want to use GetContextForCookieInclusion() which will return the correct
+    // context regardless the status of same-site features.
+    ContextType context() const { return context_; }
+    void set_context(ContextType context) { context_ = context; }
+
+    ContextType schemeful_context() const { return schemeful_context_; }
+    void set_schemeful_context(ContextType schemeful_context) {
+      schemeful_context_ = schemeful_context;
     }
-    int64_t ConvertToMetricsValue() const;
 
-    ContextType context;
-
-    CrossSchemeness cross_schemeness;
+    NET_EXPORT friend bool operator==(
+        const CookieOptions::SameSiteCookieContext& lhs,
+        const CookieOptions::SameSiteCookieContext& rhs);
+    NET_EXPORT friend bool operator!=(
+        const CookieOptions::SameSiteCookieContext& lhs,
+        const CookieOptions::SameSiteCookieContext& rhs);
 
    private:
-    // The following variables are for conversion to the previous style of
-    // SameSiteCookieContext for metrics usage. This may be removed when the
-    // metrics using them are also removed.
-    // Mask indicating insecure site-for-cookies and secure request/response.
-    static const int kToSecureMask = 1 << 5;
-    // Mask indicating secure site-for-cookies and insecure request/response.
-    static const int kToInsecureMask = kToSecureMask << 1;
+
+    ContextType context_;
+
+    ContextType schemeful_context_;
   };
 
   // Creates a CookieOptions object which:
@@ -88,8 +92,7 @@ class NET_EXPORT CookieOptions {
   // These settings can be altered by calling:
   //
   // * |set_{include,exclude}_httponly()|
-  // * |set_same_site_cookie_context(
-  //        CookieOptions::SameSiteCookieContext::SAME_SITE_STRICT)|
+  // * |set_same_site_cookie_context()|
   // * |set_do_not_update_access_time()|
   CookieOptions();
 
@@ -103,7 +106,6 @@ class NET_EXPORT CookieOptions {
     same_site_cookie_context_ = context;
   }
 
-  // Strips off the cross-scheme bits to only return the same-site context.
   SameSiteCookieContext same_site_cookie_context() const {
     return same_site_cookie_context_;
   }
@@ -130,12 +132,6 @@ class NET_EXPORT CookieOptions {
   bool update_access_time_;
   bool return_excluded_cookies_;
 };
-
-NET_EXPORT bool operator==(const CookieOptions::SameSiteCookieContext& lhs,
-                           const CookieOptions::SameSiteCookieContext& rhs);
-
-NET_EXPORT bool operator!=(const CookieOptions::SameSiteCookieContext& lhs,
-                           const CookieOptions::SameSiteCookieContext& rhs);
 
 }  // namespace net
 

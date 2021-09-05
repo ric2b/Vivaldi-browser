@@ -749,7 +749,12 @@ void InspectorNetworkAgent::DidBlockRequest(
     const FetchInitiatorInfo& initiator_info,
     ResourceRequestBlockedReason reason,
     ResourceType resource_type) {
-  uint64_t identifier = CreateUniqueIdentifier();
+  uint64_t identifier = request.InspectorId();
+  if (identifier == 0UL) {
+    NOTREACHED();
+    // Defensively create a valid identifier.
+    identifier = CreateUniqueIdentifier();
+  }
   InspectorPageAgent::ResourceType type =
       InspectorPageAgent::ToResourceType(resource_type);
 
@@ -783,6 +788,7 @@ void InspectorNetworkAgent::WillSendRequestInternal(
     const ResourceResponse& redirect_response,
     const FetchInitiatorInfo& initiator_info,
     InspectorPageAgent::ResourceType type) {
+  CHECK_EQ(identifier, request.InspectorId());
   String loader_id = IdentifiersFactory::LoaderId(loader);
   String request_id = IdentifiersFactory::RequestId(loader, identifier);
   NetworkResourcesData::ResourceData const* data =
@@ -880,6 +886,19 @@ void InspectorNetworkAgent::WillSendNavigationRequest(
                                    InspectorPageAgent::kDocumentResource);
 }
 
+// This method was pulled out of PrepareRequest(), because we want to be able
+// to create DevTools issues before the PrepareRequest() call. We need these
+// IDs to be set, to properly create a DevTools issue.
+void InspectorNetworkAgent::SetDevToolsIds(ResourceRequest& request) {
+  request.SetDevToolsToken(devtools_token_);
+
+  // The loader parameter is for generating a browser generated ID for a browser
+  // initiated request. We pass it null here because we are reporting a renderer
+  // generated ID for a renderer initiated request.
+  request.SetDevToolsId(IdentifiersFactory::RequestId(/* loader */ nullptr,
+                                                      request.InspectorId()));
+}
+
 void InspectorNetworkAgent::PrepareRequest(
     DocumentLoader* loader,
     ResourceRequest& request,
@@ -893,7 +912,7 @@ void InspectorNetworkAgent::PrepareRequest(
     for (const WTF::String& key : extra_request_headers_.Keys()) {
       const WTF::String& value = extra_request_headers_.Get(key);
       AtomicString header_name = AtomicString(key);
-      // When overriding referer, also override referrer policy
+      // When overriding referrer, also override referrer policy
       // for this request to assure the request will be allowed.
       // TODO: Should we store the referrer header somewhere other than
       // |extra_request_headers_|?
@@ -908,8 +927,6 @@ void InspectorNetworkAgent::PrepareRequest(
 
   request.SetReportRawHeaders(true);
 
-  request.SetDevToolsToken(devtools_token_);
-
   if (cache_disabled_.Get()) {
     if (LoadsFromCacheOnly(request) &&
         request.GetRequestContext() != mojom::RequestContextType::INTERNAL) {
@@ -921,12 +938,6 @@ void InspectorNetworkAgent::PrepareRequest(
   }
   if (bypass_service_worker_.Get())
     request.SetSkipServiceWorker(true);
-
-  // The loader parameter is for generating a browser generated ID for a browser
-  // initiated request. We pass it null here because we are reporting a renderer
-  // generated ID for a renderer initiated request.
-  request.SetDevToolsId(IdentifiersFactory::RequestId(/* loader */ nullptr,
-                                                      request.InspectorId()));
 }
 
 void InspectorNetworkAgent::WillSendRequest(
@@ -1195,29 +1206,46 @@ InspectorNetworkAgent::BuildInitiatorObject(
     Document* document,
     const FetchInitiatorInfo& initiator_info,
     int max_async_depth) {
-  if (!initiator_info.imported_module_referrer.IsEmpty()) {
+  if (initiator_info.is_imported_module && !initiator_info.referrer.IsEmpty()) {
     std::unique_ptr<protocol::Network::Initiator> initiator_object =
         protocol::Network::Initiator::create()
             .setType(protocol::Network::Initiator::TypeEnum::Script)
             .build();
-    initiator_object->setUrl(initiator_info.imported_module_referrer);
+    initiator_object->setUrl(initiator_info.referrer);
     initiator_object->setLineNumber(
         initiator_info.position.line_.ZeroBasedInt());
     return initiator_object;
   }
 
-  std::unique_ptr<v8_inspector::protocol::Runtime::API::StackTrace>
-      current_stack_trace =
-          SourceLocation::Capture(document ? document->GetExecutionContext()
-                                           : nullptr)
-              ->BuildInspectorObject(max_async_depth);
-  if (current_stack_trace) {
+  bool was_requested_by_stylesheet =
+      initiator_info.name == fetch_initiator_type_names::kCSS ||
+      initiator_info.name == fetch_initiator_type_names::kUacss;
+  if (was_requested_by_stylesheet && !initiator_info.referrer.IsEmpty()) {
     std::unique_ptr<protocol::Network::Initiator> initiator_object =
         protocol::Network::Initiator::create()
-            .setType(protocol::Network::Initiator::TypeEnum::Script)
+            .setType(protocol::Network::Initiator::TypeEnum::Parser)
             .build();
-    initiator_object->setStack(std::move(current_stack_trace));
+    initiator_object->setUrl(initiator_info.referrer);
     return initiator_object;
+  }
+
+  // We skip stack checking for stylesheet-initiated requests as it may
+  // represent the cause of a style recalculation rather than the actual
+  // resources themselves. See crbug.com/918196.
+  if (!was_requested_by_stylesheet) {
+    std::unique_ptr<v8_inspector::protocol::Runtime::API::StackTrace>
+        current_stack_trace =
+            SourceLocation::Capture(document ? document->GetExecutionContext()
+                                             : nullptr)
+                ->BuildInspectorObject(max_async_depth);
+    if (current_stack_trace) {
+      std::unique_ptr<protocol::Network::Initiator> initiator_object =
+          protocol::Network::Initiator::create()
+              .setType(protocol::Network::Initiator::TypeEnum::Script)
+              .build();
+      initiator_object->setStack(std::move(current_stack_trace));
+      return initiator_object;
+    }
   }
 
   while (document && !document->GetScriptableDocumentParser())

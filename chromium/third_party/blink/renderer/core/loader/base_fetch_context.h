@@ -40,6 +40,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       ResourceRequest::RedirectStatus) const override;
   base::Optional<ResourceRequestBlockedReason> CheckCSPForRequest(
       mojom::RequestContextType,
+      network::mojom::RequestDestination request_destination,
       const KURL&,
       const ResourceLoaderOptions&,
       ReportingDisposition,
@@ -66,8 +67,10 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   virtual std::unique_ptr<WebSocketHandshakeThrottle>
   CreateWebSocketHandshakeThrottle() = 0;
 
-  bool CalculateIfAdSubresource(const ResourceRequest& resource_request,
-                                ResourceType type) override;
+  bool CalculateIfAdSubresource(
+      const ResourceRequest& resource_request,
+      ResourceType type,
+      const FetchInitiatorInfo& initiator_info) override;
 
   // Returns whether a request to |url| is a conversion registration request.
   // Conversion registration requests are redirects to a well-known conversion
@@ -98,10 +101,11 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   virtual bool ShouldBypassMainWorldCSP() const = 0;
   virtual bool IsSVGImageChromeClient() const = 0;
   virtual bool ShouldBlockFetchByMixedContentCheck(
-      mojom::RequestContextType,
-      ResourceRequest::RedirectStatus,
-      const KURL&,
-      ReportingDisposition) const = 0;
+      mojom::blink::RequestContextType request_context,
+      ResourceRequest::RedirectStatus redirect_status,
+      const KURL& url,
+      ReportingDisposition reporting_disposition,
+      const base::Optional<String>& devtools_id) const = 0;
   virtual bool ShouldBlockFetchAsCredentialedSubresource(const ResourceRequest&,
                                                          const KURL&) const = 0;
   virtual const KURL& Url() const = 0;
@@ -127,6 +131,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
 
   base::Optional<ResourceRequestBlockedReason> CheckCSPForRequestInternal(
       mojom::RequestContextType,
+      network::mojom::RequestDestination request_destination,
       const KURL&,
       const ResourceLoaderOptions&,
       ReportingDisposition,

@@ -237,13 +237,14 @@ bool ThreadHeap::ShouldRegisterMovingAddress() {
 }
 
 void ThreadHeap::FlushNotFullyConstructedObjects() {
-  if (!not_fully_constructed_worklist_->IsGlobalEmpty()) {
-    not_fully_constructed_worklist_->FlushToGlobal(
-        WorklistTaskId::MutatorThread);
+  NotFullyConstructedWorklist::View view(not_fully_constructed_worklist_.get(),
+                                         WorklistTaskId::MutatorThread);
+  if (!view.IsLocalViewEmpty()) {
+    view.FlushToGlobal();
     previously_not_fully_constructed_worklist_->MergeGlobalPool(
         not_fully_constructed_worklist_.get());
   }
-  DCHECK(not_fully_constructed_worklist_->IsGlobalEmpty());
+  DCHECK(view.IsLocalViewEmpty());
 }
 
 void ThreadHeap::MarkNotFullyConstructedObjects(MarkingVisitor* visitor) {
@@ -424,6 +425,7 @@ bool ThreadHeap::AdvanceConcurrentMarking(ConcurrentMarkingVisitor* visitor,
         [visitor](const MarkingItem& item) {
           HeapObjectHeader* header =
               HeapObjectHeader::FromPayload(item.base_object_payload);
+          PageFromObject(header)->SynchronizedLoad();
           DCHECK(!ConcurrentMarkingVisitor::IsInConstruction(header));
           item.callback(visitor, item.base_object_payload);
           visitor->AccountMarkedBytesSafe(header);
@@ -435,6 +437,7 @@ bool ThreadHeap::AdvanceConcurrentMarking(ConcurrentMarkingVisitor* visitor,
     finished = DrainWorklistWithDeadline(
         deadline, write_barrier_worklist_.get(),
         [visitor](HeapObjectHeader* header) {
+          PageFromObject(header)->SynchronizedLoad();
           DCHECK(!ConcurrentMarkingVisitor::IsInConstruction(header));
           GCInfo::From(header->GcInfoIndex()).trace(visitor, header->Payload());
           visitor->AccountMarkedBytesSafe(header);
@@ -459,7 +462,7 @@ void ThreadHeap::WeakProcessing(MarkingVisitor* visitor) {
 
   // Call weak callbacks on objects that may now be pointing to dead objects.
   CustomCallbackItem item;
-  WeakCallbackInfo broker;
+  LivenessBroker broker = internal::LivenessBrokerFactory::Create();
   while (weak_callback_worklist_->Pop(WorklistTaskId::MutatorThread, &item)) {
     item.callback(broker, item.parameter);
   }

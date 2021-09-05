@@ -162,7 +162,7 @@ void RecursivelyGenerateFrameState(
 // ancestor chain is detected, otherwise true.
 bool InSameTreePosition(FrameTreeNode* frame_tree_node,
                         NavigationEntryImpl::TreeNode* node) {
-  FrameTreeNode* ftn = frame_tree_node->parent();
+  FrameTreeNode* ftn = FrameTreeNode::From(frame_tree_node->parent());
   NavigationEntryImpl::TreeNode* current_node = node->parent;
   while (ftn && current_node) {
     if (!current_node->MatchesFrame(ftn))
@@ -173,7 +173,7 @@ bool InSameTreePosition(FrameTreeNode* frame_tree_node,
       return false;
     }
 
-    ftn = ftn->parent();
+    ftn = FrameTreeNode::From(ftn->parent());
     current_node = current_node->parent;
   }
   return true;
@@ -221,7 +221,26 @@ void RecursivelyInitRestoredTreeNode(BrowserContext* browser_context,
     RecursivelyInitRestoredTreeNode(browser_context, child.get());
 }
 
+void RegisterOriginsRecursive(NavigationEntryImpl::TreeNode* node,
+                              const url::Origin& origin) {
+  if (node->frame_entry->committed_origin().has_value()) {
+    const url::Origin node_origin =
+        node->frame_entry->committed_origin().value();
+    SiteInstanceImpl* site_instance = node->frame_entry->site_instance();
+    if (site_instance && origin == node_origin)
+      site_instance->PreventOptInOriginIsolation(node_origin);
+  }
+
+  for (auto& child : node->children)
+    RegisterOriginsRecursive(child.get(), origin);
+}
+
 }  // namespace
+
+void NavigationEntryImpl::RegisterExistingOriginToPreventOptInIsolation(
+    const url::Origin& origin) {
+  return RegisterOriginsRecursive(root_node(), origin);
+}
 
 NavigationEntryImpl::TreeNode::TreeNode(
     TreeNode* parent,
@@ -524,6 +543,11 @@ const base::string16& NavigationEntryImpl::GetTitleForDisplay() {
     base::string16::size_type slashpos = title.rfind('/', lastpos);
     if (slashpos != base::string16::npos)
       title = title.substr(slashpos + 1);
+
+  } else if (GetURL().SchemeIs(kChromeUIUntrustedScheme)) {
+    // For chrome-untrusted:// URLs, leave title blank until the page loads.
+    title = base::string16();
+
   } else if (base::i18n::StringContainsStrongRTLChars(title)) {
     // Wrap the URL in an LTR embedding for proper handling of RTL characters.
     // (RFC 3987 Section 4.1 states that "Bidirectional IRIs MUST be rendered in
@@ -604,8 +628,8 @@ const GURL& NavigationEntryImpl::GetOriginalRequestURL() {
   return original_request_url_;
 }
 
-void NavigationEntryImpl::SetIsOverridingUserAgent(bool override) {
-  is_overriding_user_agent_ = override;
+void NavigationEntryImpl::SetIsOverridingUserAgent(bool override_ua) {
+  is_overriding_user_agent_ = override_ua;
 }
 
 bool NavigationEntryImpl::GetIsOverridingUserAgent() {
@@ -883,7 +907,7 @@ void NavigationEntryImpl::AddOrUpdateFrameEntry(
   // We should already have a TreeNode for the parent node by the time this node
   // commits.  Find it first.
   NavigationEntryImpl::TreeNode* parent_node =
-      GetTreeNode(frame_tree_node->parent());
+      GetTreeNode(FrameTreeNode::From(frame_tree_node->parent()));
   if (!parent_node) {
     // The renderer should not send a commit for a subframe before its parent.
     // TODO(creis): Kill the renderer if we get here.

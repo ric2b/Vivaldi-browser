@@ -7,6 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/i18n/number_formatting.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -18,7 +19,9 @@ namespace chromeos {
 
 namespace {
 
-const int MAX_CANDIDATE_SIZE = 5;
+const int kMaxCandidateSize = 5;
+const char kSpaceChar = ' ';
+const char kDefaultEngine[] = "default_engine";
 const base::FilePath::CharType kEmojiMapFilePath[] =
     FILE_PATH_LITERAL("/emoji/emoji-map.csv");
 
@@ -41,10 +44,10 @@ std::vector<std::string> SplitString(const std::string& str,
 }
 
 std::string GetLastWord(const std::string& str) {
-  size_t last_pos_to_search = str.length() - 1;
-  // Search from second last char if last char is a white space.
-  if (base::IsAsciiWhitespace(str.back()))
-    last_pos_to_search = str.length() - 2;
+  // We only suggest if last char is a white space so search for last word from
+  // second last char.
+  DCHECK_EQ(kSpaceChar, str.back());
+  size_t last_pos_to_search = str.length() - 2;
 
   const auto space_before_last_word = str.find_last_of(" ", last_pos_to_search);
 
@@ -60,7 +63,7 @@ std::string GetLastWord(const std::string& str) {
 InputMethodEngine::CandidateWindowProperty CreateProperty(int candidates_size) {
   InputMethodEngine::CandidateWindowProperty properties_out;
   properties_out.is_cursor_visible = true;
-  properties_out.page_size = std::min(candidates_size, MAX_CANDIDATE_SIZE);
+  properties_out.page_size = std::min(candidates_size, kMaxCandidateSize);
   properties_out.show_window_at_composition = false;
   properties_out.is_vertical = true;
   properties_out.is_auxiliary_text_visible = false;
@@ -80,6 +83,10 @@ void EmojiSuggester::LoadEmojiMap() {
       FROM_HERE, {base::MayBlock()}, base::BindOnce(&ReadEmojiDataFromFile),
       base::BindOnce(&EmojiSuggester::OnEmojiDataLoaded,
                      weak_factory_.GetWeakPtr()));
+}
+
+void EmojiSuggester::LoadEmojiMapForTesting(const std::string& emoji_data) {
+  OnEmojiDataLoaded(emoji_data);
 }
 
 void EmojiSuggester::OnEmojiDataLoaded(const std::string& emoji_data) {
@@ -127,7 +134,7 @@ SuggestionStatus EmojiSuggester::HandleKeyEvent(
         : candidate_id_ = static_cast<int>(candidates_.size()) - 1;
     engine_->SetCursorPosition(context_id_, candidate_id_, &error);
     status = SuggestionStatus::kBrowsing;
-  } else {
+  } else if (event.key == "Esc") {
     DismissSuggestion();
     suggestion_shown_ = false;
     status = SuggestionStatus::kDismiss;
@@ -139,18 +146,19 @@ SuggestionStatus EmojiSuggester::HandleKeyEvent(
 }
 
 bool EmojiSuggester::Suggest(const base::string16& text) {
-  if (emoji_map_.empty())
+  if (emoji_map_.empty() || text[text.length() - 1] != kSpaceChar)
     return false;
   std::string last_word = GetLastWord(base::UTF16ToUTF8(text));
   if (!last_word.empty() && emoji_map_.count(last_word)) {
     ShowSuggestion(last_word);
-    suggestion_shown_ = true;
+    return true;
   }
-  return suggestion_shown_;
+  return false;
 }
 
 void EmojiSuggester::ShowSuggestion(const std::string& text) {
   std::string error;
+  suggestion_shown_ = true;
   candidates_.clear();
   const std::vector<std::string>& candidates = emoji_map_.at(text);
   for (size_t i = 0; i < candidates.size(); i++) {
@@ -163,7 +171,7 @@ void EmojiSuggester::ShowSuggestion(const std::string& text) {
 
   candidate_id_ = 0;
   engine_->SetCandidateWindowProperty(
-      CreateProperty(static_cast<int>(candidates_.size())));
+      kDefaultEngine, CreateProperty(static_cast<int>(candidates_.size())));
   engine_->SetCandidateWindowVisible(true, &error);
   engine_->SetCursorPosition(context_id_, candidate_id_, &error);
   if (!error.empty()) {
@@ -173,6 +181,7 @@ void EmojiSuggester::ShowSuggestion(const std::string& text) {
 
 void EmojiSuggester::DismissSuggestion() {
   std::string error;
+  suggestion_shown_ = false;
   engine_->SetCandidateWindowVisible(false, &error);
   if (!error.empty()) {
     LOG(ERROR) << "Failed to dismiss suggestion. " << error;

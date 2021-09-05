@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "components/feed/core/proto/v2/store.pb.h"
+#include "components/feed/core/v2/types.h"
 #include "components/leveldb_proto/public/proto_database.h"
 #include "components/leveldb_proto/public/proto_database_provider.h"
 
@@ -26,12 +27,12 @@ class FeedStore {
     ~LoadStreamResult();
     LoadStreamResult(LoadStreamResult&&);
     LoadStreamResult& operator=(LoadStreamResult&&);
-    LoadStreamResult(const LoadStreamResult&) = delete;
-    LoadStreamResult& operator=(const LoadStreamResult&) = delete;
 
     bool read_error = false;
     feedstore::StreamData stream_data;
     std::vector<feedstore::StreamStructureSet> stream_structures;
+    // These are sorted by increasing ID.
+    std::vector<feedstore::StoredAction> pending_actions;
   };
 
   explicit FeedStore(
@@ -43,10 +44,24 @@ class FeedStore {
 
   void Initialize(base::OnceClosure initialize_complete);
 
+  // Erase all data in the store.
+  void ClearAll(base::OnceCallback<void(bool)> callback);
+
   void LoadStream(base::OnceCallback<void(LoadStreamResult)> callback);
 
-  void SaveFullStream(std::unique_ptr<StreamModelUpdateRequest> update_request,
-                      base::OnceCallback<void(bool)> callback);
+  // Stores the content of |update_request| in place of any existing stream
+  // data.
+  void OverwriteStream(std::unique_ptr<StreamModelUpdateRequest> update_request,
+                       base::OnceCallback<void(bool)> callback);
+
+  // Stores the content of |update_request| as an update to existing stream
+  // data.
+  void SaveStreamUpdate(
+      int32_t structure_set_sequence_number,
+      std::unique_ptr<StreamModelUpdateRequest> update_request,
+      base::OnceCallback<void(bool)> callback);
+
+  void ClearStreamData(base::OnceCallback<void(bool)> callback);
 
   void WriteOperations(int32_t sequence_number,
                        std::vector<feedstore::DataOperation> operations);
@@ -65,11 +80,20 @@ class FeedStore {
                               std::vector<feedstore::StreamSharedState>)>
           content_callback);
 
-  void ReadNextStreamState(
-      base::OnceCallback<
-          void(std::unique_ptr<feedstore::StreamAndContentState>)> callback);
+  void ReadActions(
+      base::OnceCallback<void(std::vector<feedstore::StoredAction>)> callback);
+  void WriteActions(std::vector<feedstore::StoredAction> actions,
+                    base::OnceCallback<void(bool)> callback);
+  void UpdateActions(std::vector<feedstore::StoredAction> actions_to_update,
+                     std::vector<LocalActionId> ids_to_remove,
+                     base::OnceCallback<void(bool)> callback);
+  void RemoveActions(std::vector<LocalActionId> ids,
+                     base::OnceCallback<void(bool)> callback);
 
-  // TODO(iwells): implement reading stored actions
+  void ReadMetadata(
+      base::OnceCallback<void(std::unique_ptr<feedstore::Metadata>)> callback);
+  void WriteMetadata(feedstore::Metadata metadata,
+                     base::OnceCallback<void(bool)> callback);
 
   // TODO(iwells): implement this
   // Deletes old records that are no longer needed
@@ -77,13 +101,25 @@ class FeedStore {
 
   bool IsInitializedForTesting() const;
 
+  leveldb_proto::ProtoDatabase<feedstore::Record>* GetDatabaseForTesting() {
+    return database_.get();
+  }
+
+  base::WeakPtr<FeedStore> GetWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
+
  private:
   void OnDatabaseInitialized(leveldb_proto::Enums::InitStatus status);
   bool IsInitialized() const;
+  // Overwrites all stream data with |updates|.
+  void UpdateFullStreamData(
+      std::unique_ptr<std::vector<std::pair<std::string, feedstore::Record>>>
+          updates,
+      base::OnceCallback<void(bool)> callback);
 
   void Write(std::vector<feedstore::Record> records,
              base::OnceCallback<void(bool)> callback);
-
   void ReadSingle(
       const std::string& key,
       base::OnceCallback<void(bool, std::unique_ptr<feedstore::Record>)>
@@ -105,13 +141,15 @@ class FeedStore {
           callback,
       bool success,
       std::unique_ptr<std::vector<feedstore::Record>> records);
-  void OnReadNextStreamStateFinished(
-      base::OnceCallback<
-          void(std::unique_ptr<feedstore::StreamAndContentState>)> callback,
+  void OnReadActionsFinished(
+      base::OnceCallback<void(std::vector<feedstore::StoredAction>)> callback,
       bool success,
-      std::unique_ptr<feedstore::Record> record);
-
+      std::unique_ptr<std::vector<feedstore::Record>> records);
   void OnWriteFinished(base::OnceCallback<void(bool)> callback, bool success);
+  void OnReadMetadataFinished(
+      base::OnceCallback<void(std::unique_ptr<feedstore::Metadata>)> callback,
+      bool read_ok,
+      std::unique_ptr<feedstore::Record> record);
 
   // TODO(iwells): implement
   // bool OldRecordFilter(const std::string& key);

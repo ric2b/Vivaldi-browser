@@ -45,6 +45,7 @@
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/network_service_util.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -100,14 +101,11 @@ void SimulateNetworkChange(network::mojom::ConnectionType type) {
 
 ClientConfig CreateConfigForServer(const net::EmbeddedTestServer& server) {
   net::HostPortPair host_port_pair = server.host_port_pair();
-  return CreateConfig(kSessionKey, 1000, 0, ProxyServer_ProxyScheme_HTTP,
-                      host_port_pair.host(), host_port_pair.port(),
-                      ProxyServer_ProxyScheme_HTTP, "fallback.net", 80, 0.5f,
-                      false);
+  return CreateClientConfig(kSessionKey, 1000, 0);
 }
 
 ClientConfig CreateEmptyConfig() {
-  return CreateEmptyProxyConfig(kSessionKey, 1000, 0, 0.5f, false);
+  return CreateClientConfig(kSessionKey, 1000, 0);
 }
 
 class TestSettingsObserver : public DataReductionProxySettingsObserver {
@@ -198,11 +196,9 @@ class DataReductionProxyBrowsertestBase : public InProcessBrowserTest {
 
   void SetConfig(const ClientConfig& config) {
     config_ = config;
-    // Config is not fetched if the holdback group is enabled and lite page
+    // Config is not fetched if the lite page
     // redirect previews are not enabled. So, return early.
-    if (data_reduction_proxy::params::IsIncludedInHoldbackFieldTrial() &&
-        !previews::params::IsLitePageServerPreviewsEnabled() &&
-        !params::ForceEnableClientConfigServiceForAllDataSaverUsers()) {
+    if (!params::ForceEnableClientConfigServiceForAllDataSaverUsers()) {
       return;
     }
   }
@@ -231,9 +227,7 @@ class DataReductionProxyBrowsertestBase : public InProcessBrowserTest {
   }
 
   void WaitForConfig() {
-    if (data_reduction_proxy::params::IsIncludedInHoldbackFieldTrial() &&
-        !previews::params::IsLitePageServerPreviewsEnabled() &&
-        !params::ForceEnableClientConfigServiceForAllDataSaverUsers()) {
+    if (!params::ForceEnableClientConfigServiceForAllDataSaverUsers()) {
       return;
     }
 
@@ -252,12 +246,9 @@ class DataReductionProxyBrowsertestBase : public InProcessBrowserTest {
   // Called when |config_server_| receives a request for config fetch.
   std::unique_ptr<net::test_server::HttpResponse> GetConfigResponse(
       const net::test_server::HttpRequest& request) {
-    // Config should be fetched only when holdback is disabled or lite page
+    // Config should be fetched only when lite page
     // redirect previews are enabled.
-    EXPECT_TRUE(
-        !data_reduction_proxy::params::IsIncludedInHoldbackFieldTrial() ||
-        previews::params::IsLitePageServerPreviewsEnabled() ||
-        params::ForceEnableClientConfigServiceForAllDataSaverUsers());
+    EXPECT_TRUE(params::ForceEnableClientConfigServiceForAllDataSaverUsers());
 
     auto response = std::make_unique<net::test_server::BasicHttpResponse>();
     response->set_content(config_.SerializeAsString());
@@ -720,43 +711,26 @@ IN_PROC_BROWSER_TEST_F(DataReductionProxyBrowsertest,
 }
 
 // Test that enabling the holdback disables the proxy and that the client config
-// is fetched when lite page redirect preview is enabled.
+// is fetched when it is force enabled.
 class DataReductionProxyWithHoldbackBrowsertest
-    : public ::testing::WithParamInterface<std::tuple<bool, bool, bool>>,
+    : public ::testing::WithParamInterface<bool>,
       public DataReductionProxyBrowsertest {
  public:
   DataReductionProxyWithHoldbackBrowsertest()
-      :  // Consider the holdback as enabled if holdback is enabled or the
-         // |enable_config_service_fetches_| is enabled.
-        data_reduction_proxy_holdback_enabled_(std::get<2>(GetParam()) ||
-                                               std::get<0>(GetParam())),
-        lite_page_redirect_previews_enabled_(std::get<1>(GetParam())),
-        enable_config_service_fetches_(std::get<2>(GetParam())) {}
+      : enable_config_service_fetches_(GetParam()) {}
 
   void SetUp() override {
-    data_reduction_proxy_holdback_feature_list_.InitWithFeatureState(
-        data_reduction_proxy::features::kDataReductionProxyHoldback,
-        data_reduction_proxy_holdback_enabled_);
-
     fetch_client_config_feature_list_.InitWithFeatureState(
         data_reduction_proxy::features::kFetchClientConfig,
         enable_config_service_fetches_);
 
-    previews_lite_page_redirect_feature_list_.InitWithFeatureState(
-        previews::features::kLitePageServerPreviews,
-        lite_page_redirect_previews_enabled_);
-
     InProcessBrowserTest::SetUp();
   }
 
-  const bool data_reduction_proxy_holdback_enabled_;
-  const bool lite_page_redirect_previews_enabled_;
   const bool enable_config_service_fetches_;
 
  private:
-  base::test::ScopedFeatureList data_reduction_proxy_holdback_feature_list_;
   base::test::ScopedFeatureList fetch_client_config_feature_list_;
-  base::test::ScopedFeatureList previews_lite_page_redirect_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_P(DataReductionProxyWithHoldbackBrowsertest,
@@ -771,7 +745,7 @@ IN_PROC_BROWSER_TEST_P(DataReductionProxyWithHoldbackBrowsertest,
   SimulateNetworkChange(network::mojom::ConnectionType::CONNECTION_3G);
 
   // Ensure that the client config is fetched when lite page redirect preview is
-  // enabled or DRP holdback is disabled.
+  // enabled.
   WaitForConfig();
 
   // Load a webpage in holdback group as well. This ensures that while in
@@ -783,15 +757,10 @@ IN_PROC_BROWSER_TEST_P(DataReductionProxyWithHoldbackBrowsertest,
   EXPECT_NE(GetBody(), kPrimaryProxyResponse);
 }
 
-// First parameter is true if the data reduction proxy holdback should be
-// enabled. Second parameter is true if lite page redirect preview is enabled.
-// Third parameter is true if data reduction proxy config should always be
-// fetched.
+// Parameter is true if data reduction proxy config should always be fetched.
 INSTANTIATE_TEST_SUITE_P(All,
                          DataReductionProxyWithHoldbackBrowsertest,
-                         ::testing::Combine(::testing::Bool(),
-                                            ::testing::Bool(),
-                                            ::testing::Bool()));
+                         ::testing::Bool());
 
 class DataReductionProxyExpBrowsertest : public DataReductionProxyBrowsertest {
  public:

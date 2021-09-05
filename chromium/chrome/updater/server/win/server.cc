@@ -19,91 +19,28 @@
 #include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
-#include "base/sequenced_task_runner.h"
-#include "base/stl_util.h"
 #include "base/system/sys_info.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "base/win/scoped_bstr.h"
-#include "base/win/scoped_com_initializer.h"
-#include "chrome/updater/app/app.h"
 #include "chrome/updater/configurator.h"
-#include "chrome/updater/update_service.h"
+#include "chrome/updater/server/win/com_classes.h"
+#include "chrome/updater/server/win/com_classes_legacy.h"
 #include "chrome/updater/update_service_in_process.h"
 
 namespace updater {
-namespace {
 
-// The COM objects involved in this server are free threaded. Incoming COM calls
-// arrive on COM RPC threads. Outgoing COM calls originating in the server are
-// posted on blocking worker threads in the thread pool. Calls to the update
-// service and update_client calls occur in the main sequence on the main
-// thread.
-//
-// This class is responsible for the lifetime of the COM server, as well as
-// class factory registration.
-class ComServer : public App {
- public:
-  ComServer();
+scoped_refptr<App> AppServerInstance() {
+  return AppInstance<ComServerApp>();
+}
 
-  // Returns the singleton instance of this ComServer.
-  static scoped_refptr<ComServer> Instance() {
-    return static_cast<ComServer*>(AppServerInstance().get());
-  }
-
-  scoped_refptr<base::SequencedTaskRunner> main_task_runner() {
-    return main_task_runner_;
-  }
-  scoped_refptr<UpdateService> service() { return service_; }
-
- private:
-  ~ComServer() override = default;
-
-  // Overrides for App.
-  void InitializeThreadPool() override;
-  void Initialize() override;
-  void FirstTaskRun() override;
-
-  // Registers and unregisters the out-of-process COM class factories.
-  HRESULT RegisterClassObject();
-  void UnregisterClassObject();
-
-  // Waits until the last COM object is released.
-  void WaitForExitSignal();
-
-  // Called when the last object is released.
-  void SignalExit();
-
-  // Creates an out-of-process WRL Module.
-  void CreateWRLModule();
-
-  // Handles object unregistration then triggers program shutdown.
-  void Stop();
-
-  // Identifier of registered class objects used for unregistration.
-  DWORD cookies_[1] = {};
-
-  // While this object lives, COM can be used by all threads in the program.
-  base::win::ScopedCOMInitializer com_initializer_;
-
-  // Task runner bound to the main sequence and the update service instance.
-  scoped_refptr<base::SequencedTaskRunner> main_task_runner_;
-
-  // The UpdateService to use for handling the incoming COM requests. This
-  // instance of the service runs the in-process update service code, which is
-  // delegating to the update_client component.
-  scoped_refptr<UpdateService> service_;
-
-  // The updater's Configurator.
-  scoped_refptr<Configurator> config_;
-};
-
-ComServer::ComServer()
+ComServerApp::ComServerApp()
     : com_initializer_(base::win::ScopedCOMInitializer::kMTA) {}
 
-void ComServer::InitializeThreadPool() {
+ComServerApp::~ComServerApp() = default;
+
+void ComServerApp::InitializeThreadPool() {
   base::ThreadPoolInstance::Create(kThreadPoolName);
 
   // Reuses the logic in base::ThreadPoolInstance::StartWithDefaultParams.
@@ -115,7 +52,7 @@ void ComServer::InitializeThreadPool() {
   base::ThreadPoolInstance::Get()->Start(init_params);
 }
 
-HRESULT ComServer::RegisterClassObject() {
+HRESULT ComServerApp::RegisterClassObjects() {
   auto& module = Microsoft::WRL::Module<Microsoft::WRL::OutOfProc>::GetModule();
 
   Microsoft::WRL::ComPtr<IUnknown> factory;
@@ -129,20 +66,38 @@ HRESULT ComServer::RegisterClassObject() {
     return hr;
   }
 
-  Microsoft::WRL::ComPtr<IClassFactory> class_factory;
-  hr = factory.As(&class_factory);
+  Microsoft::WRL::ComPtr<IClassFactory> class_factory_updater;
+  hr = factory.As(&class_factory_updater);
+  if (FAILED(hr)) {
+    LOG(ERROR) << "IClassFactory object creation failed; hr: " << hr;
+    return hr;
+  }
+  factory.Reset();
+
+  hr = Microsoft::WRL::Details::CreateClassFactory<
+      Microsoft::WRL::SimpleClassFactory<LegacyOnDemandImpl>>(
+      &flags, nullptr, __uuidof(IClassFactory), &factory);
+  if (FAILED(hr)) {
+    LOG(ERROR) << "Factory creation failed; hr: " << hr;
+    return hr;
+  }
+
+  Microsoft::WRL::ComPtr<IClassFactory> class_factory_legacy_ondemand;
+  hr = factory.As(&class_factory_legacy_ondemand);
   if (FAILED(hr)) {
     LOG(ERROR) << "IClassFactory object creation failed; hr: " << hr;
     return hr;
   }
 
   // The pointer in this array is unowned. Do not release it.
-  IClassFactory* class_factories[] = {class_factory.Get()};
+  IClassFactory* class_factories[] = {class_factory_updater.Get(),
+                                      class_factory_legacy_ondemand.Get()};
   static_assert(
       std::extent<decltype(cookies_)>() == base::size(class_factories),
       "Arrays cookies_ and class_factories must be the same size.");
 
-  IID class_ids[] = {__uuidof(UpdaterClass)};
+  IID class_ids[] = {__uuidof(UpdaterClass),
+                     __uuidof(GoogleUpdate3WebUserClass)};
   DCHECK_EQ(base::size(cookies_), base::size(class_ids));
   static_assert(std::extent<decltype(cookies_)>() == base::size(class_ids),
                 "Arrays cookies_ and class_ids must be the same size.");
@@ -157,7 +112,7 @@ HRESULT ComServer::RegisterClassObject() {
   return hr;
 }
 
-void ComServer::UnregisterClassObject() {
+void ComServerApp::UnregisterClassObjects() {
   auto& module = Microsoft::WRL::Module<Microsoft::WRL::OutOfProc>::GetModule();
   const HRESULT hr =
       module.UnregisterCOMObject(nullptr, cookies_, base::size(cookies_));
@@ -165,22 +120,22 @@ void ComServer::UnregisterClassObject() {
     LOG(ERROR) << "UnregisterCOMObject failed; hr: " << hr;
 }
 
-void ComServer::CreateWRLModule() {
-  Microsoft::WRL::Module<Microsoft::WRL::OutOfProc>::Create(this,
-                                                            &ComServer::Stop);
+void ComServerApp::CreateWRLModule() {
+  Microsoft::WRL::Module<Microsoft::WRL::OutOfProc>::Create(
+      this, &ComServerApp::Stop);
 }
 
-void ComServer::Stop() {
+void ComServerApp::Stop() {
   VLOG(2) << __func__ << ": COM server is shutting down.";
-  UnregisterClassObject();
+  UnregisterClassObjects();
   Shutdown(0);
 }
 
-void ComServer::Initialize() {
+void ComServerApp::Initialize() {
   config_ = base::MakeRefCounted<Configurator>();
 }
 
-void ComServer::FirstTaskRun() {
+void ComServerApp::FirstTaskRun() {
   if (!com_initializer_.Succeeded()) {
     PLOG(ERROR) << "Failed to initialize COM";
     Shutdown(-1);
@@ -189,83 +144,9 @@ void ComServer::FirstTaskRun() {
   main_task_runner_ = base::SequencedTaskRunnerHandle::Get();
   service_ = base::MakeRefCounted<UpdateServiceInProcess>(config_);
   CreateWRLModule();
-  HRESULT hr = RegisterClassObject();
+  HRESULT hr = RegisterClassObjects();
   if (FAILED(hr))
     Shutdown(hr);
-}
-
-}  // namespace
-
-STDMETHODIMP CompleteStatusImpl::get_statusCode(LONG* code) {
-  DCHECK(code);
-
-  *code = code_;
-  return S_OK;
-}
-
-STDMETHODIMP CompleteStatusImpl::get_statusMessage(BSTR* message) {
-  DCHECK(message);
-
-  *message = base::win::ScopedBstr(message_).Release();
-  return S_OK;
-}
-
-HRESULT UpdaterImpl::CheckForUpdate(const base::char16* app_id) {
-  return E_NOTIMPL;
-}
-
-HRESULT UpdaterImpl::Register(const base::char16* app_id,
-                              const base::char16* brand_code,
-                              const base::char16* tag,
-                              const base::char16* version,
-                              const base::char16* existence_checker_path) {
-  return E_NOTIMPL;
-}
-
-HRESULT UpdaterImpl::Update(const base::char16* app_id) {
-  return E_NOTIMPL;
-}
-
-// Called by the COM RPC runtime on one of its threads.
-HRESULT UpdaterImpl::UpdateAll(IUpdaterObserver* observer) {
-  using IUpdaterObserverPtr = Microsoft::WRL::ComPtr<IUpdaterObserver>;
-
-  // Invoke the in-process |update_service| on the main sequence.
-  auto com_server = ComServer::Instance();
-  com_server->main_task_runner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          [](scoped_refptr<UpdateService> update_service,
-             IUpdaterObserverPtr observer) {
-            update_service->UpdateAll(
-                base::DoNothing(),
-                base::BindOnce(
-                    [](IUpdaterObserverPtr observer,
-                       UpdateService::Result result) {
-                      // The COM RPC outgoing call blocks and it must be posted
-                      // through the thread pool.
-                      // TODO(sorin) investigate if base::Bind can be fixed to
-                      // bind stdcall COM invocations on the x86 architecture.
-                      base::ThreadPool::PostTaskAndReplyWithResult(
-                          FROM_HERE, {base::MayBlock()},
-                          base::BindOnce(
-                              &IUpdaterObserver::OnComplete, observer,
-                              Microsoft::WRL::Make<CompleteStatusImpl>(
-                                  static_cast<int>(result), L"Test")),
-                          base::BindOnce([](HRESULT hr) {
-                            VLOG(2) << "IUpdaterObserver::OnComplete returned "
-                                    << std::hex << hr;
-                          }));
-                    },
-                    observer));
-          },
-          com_server->service(), IUpdaterObserverPtr(observer)));
-
-  return S_OK;
-}
-
-scoped_refptr<App> AppServerInstance() {
-  return AppInstance<ComServer>();
 }
 
 }  // namespace updater

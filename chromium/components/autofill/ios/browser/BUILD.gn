@@ -24,6 +24,8 @@ source_set("browser") {
     "form_suggestion.h",
     "form_suggestion.mm",
     "form_suggestion_provider.h",
+    "form_suggestion_provider_query.h",
+    "form_suggestion_provider_query.mm",
     "js_autofill_manager.h",
     "js_autofill_manager.mm",
     "js_suggestion_manager.h",
@@ -77,7 +79,10 @@ source_set("test_support") {
 source_set("unit_tests") {
   testonly = true
   configs += [ "//build/config/compiler:enable_arc" ]
-  sources = [ "autofill_agent_unittests.mm" ]
+  sources = [
+    "autofill_agent_unittests.mm",
+    "form_suggestion_provider_query_unittests.mm",
+  ]
   deps = [
     ":browser",
     "//base",

@@ -1,7 +1,7 @@
 // Copyright 2019 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
+#include "build/build_config.h"
 #include "ui/color/color_mixers.h"
 
 #include "ui/color/color_mixer.h"
@@ -12,7 +12,7 @@
 
 namespace ui {
 
-void AddUiColorMixers(ColorProvider* provider) {
+void AddUiColorMixer(ColorProvider* provider) {
   ColorMixer& mixer = provider->AddMixer();
 
   mixer[kColorBubbleBackground] = {kColorPrimaryBackground};
@@ -35,6 +35,7 @@ void AddUiColorMixers(ColorProvider* provider) {
   mixer[kColorFocusableBorderFocused] = SetAlpha(kColorAccent, 0x4D);
   mixer[kColorFocusableBorderUnfocused] = {kColorBorderAndSeparatorForeground};
   mixer[kColorIcon] = {kColorSecondaryForeground};
+  mixer[kColorMenuIcon] = {kColorIcon};
   mixer[kColorLabelDisabledForeground] = {kColorDisabledForeground};
   mixer[kColorLabelForeground] = {kColorPrimaryForeground};
   mixer[kColorLabelSecondaryForeground] = {kColorSecondaryForeground};

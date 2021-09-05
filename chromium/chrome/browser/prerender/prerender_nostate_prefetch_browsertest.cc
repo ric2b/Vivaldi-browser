@@ -40,6 +40,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/no_renderer_crashes_assertion.h"
 #include "content/public/test/url_loader_monitor.h"
@@ -186,8 +187,8 @@ class NoStatePrefetchBrowserTest
         new content::AppCacheInfoCollection();
     appcache_service->GetAllAppCacheInfo(
         info_collection.get(),
-        base::Bind(ProcessAppCacheInfo, manifest_url, callback, found_manifest,
-                   info_collection));
+        base::BindOnce(ProcessAppCacheInfo, manifest_url, callback,
+                       found_manifest, info_collection));
   }
 
   // Look through |info_collection| for an entry matching |target_manifest|,

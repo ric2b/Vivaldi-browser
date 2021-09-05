@@ -42,6 +42,9 @@ class OptimizationGuideWebContentsObserver
   void UpdateSessionTimingStatistics(
       const page_load_metrics::mojom::PageLoadTiming& timing);
 
+  // Notifies |this| to flush |last_navigation_data| so metrics are recorded.
+  void FlushLastNavigationData();
+
  private:
   friend class content::WebContentsUserData<
       OptimizationGuideWebContentsObserver>;
@@ -61,8 +64,7 @@ class OptimizationGuideWebContentsObserver
   // finished.
   void NotifyNavigationFinish(
       int64_t navigation_id,
-      const std::vector<GURL>& navigation_redirect_chain,
-      bool has_committed);
+      const std::vector<GURL>& navigation_redirect_chain);
 
   // The data related to a given navigation ID.
   base::flat_map<int64_t, std::unique_ptr<OptimizationGuideNavigationData>>

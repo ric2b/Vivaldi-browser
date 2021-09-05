@@ -13,7 +13,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
-#include "chrome/browser/apps/launch_service/launch_service.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/launch_util.h"
@@ -327,9 +329,11 @@ void LaunchWebApp(const web_app::AppId& app_id, Profile* profile) {
   if (display_mode == blink::mojom::DisplayMode::kBrowser)
     launch_container = apps::mojom::LaunchContainer::kLaunchContainerTab;
 
-  apps::LaunchService::Get(profile)->OpenApplication(apps::AppLaunchParams(
-      app_id, launch_container, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      apps::mojom::AppLaunchSource::kSourceManagementApi));
+  apps::AppServiceProxyFactory::GetForProfile(profile)
+      ->BrowserAppLauncher()
+      .LaunchAppWithParams(apps::AppLaunchParams(
+          app_id, launch_container, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+          apps::mojom::AppLaunchSource::kSourceManagementApi));
 }
 
 void OnWebAppInstallCompleted(InstallOrLaunchWebAppCallback callback,
@@ -359,8 +363,9 @@ void OnWebAppInstallabilityChecked(
     case InstallableCheckResult::kInstallable:
       content::WebContents* containing_contents = web_contents.get();
       chrome::ScopedTabbedBrowserDisplayer displayer(profile);
+      const GURL& url = web_contents->GetURL();
       chrome::AddWebContents(
-          displayer.browser(), nullptr, std::move(web_contents),
+          displayer.browser(), nullptr, std::move(web_contents), url,
           WindowOpenDisposition::NEW_FOREGROUND_TAB, gfx::Rect());
       web_app::CreateWebAppFromManifest(
           containing_contents, WebappInstallSource::MANAGEMENT_API,
@@ -389,10 +394,12 @@ void ChromeManagementAPIDelegate::LaunchAppFunctionDelegate(
   extensions::LaunchContainer launch_container =
       GetLaunchContainer(extensions::ExtensionPrefs::Get(context), extension);
   Profile* profile = Profile::FromBrowserContext(context);
-  apps::LaunchService::Get(profile)->OpenApplication(apps::AppLaunchParams(
-      extension->id(), launch_container,
-      WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      apps::mojom::AppLaunchSource::kSourceManagementApi));
+  apps::AppServiceProxyFactory::GetForProfile(profile)
+      ->BrowserAppLauncher()
+      .LaunchAppWithParams(apps::AppLaunchParams(
+          extension->id(), launch_container,
+          WindowOpenDisposition::NEW_FOREGROUND_TAB,
+          apps::mojom::AppLaunchSource::kSourceManagementApi));
 
 #if defined(OS_CHROMEOS)
   chromeos::DemoSession::RecordAppLaunchSourceIfInDemoMode(
@@ -592,8 +599,10 @@ void ChromeManagementAPIDelegate::EnableExtension(
   // for, and received parent permission to install the extension.
   SupervisedUserService* supervised_user_service =
       SupervisedUserServiceFactory::GetForBrowserContext(context);
-  supervised_user_service->AddOrUpdateExtensionApproval(*extension);
-#endif
+  supervised_user_service->AddExtensionApproval(*extension);
+  supervised_user_service->RecordExtensionEnablementUmaMetrics(
+      /*enabled=*/true);
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
   // If the extension was disabled for a permissions increase, the Management
   // API will have displayed a re-enable prompt to the user, so we know it's
@@ -608,6 +617,12 @@ void ChromeManagementAPIDelegate::DisableExtension(
     const extensions::Extension* source_extension,
     const std::string& extension_id,
     extensions::disable_reason::DisableReason disable_reason) const {
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  SupervisedUserService* supervised_user_service =
+      SupervisedUserServiceFactory::GetForBrowserContext(context);
+  supervised_user_service->RecordExtensionEnablementUmaMetrics(
+      /*enabled=*/false);
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
   extensions::ExtensionSystem::Get(context)
       ->extension_service()
       ->DisableExtensionWithSource(source_extension, extension_id,

@@ -7,10 +7,10 @@
 #include <utility>
 #include <vector>
 
-#include "ash/assistant/assistant_controller.h"
-#include "ash/assistant/assistant_ui_controller.h"
+#include "ash/assistant/assistant_controller_impl.h"
 #include "ash/public/cpp/assistant/assistant_client.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
+#include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/mojom/assistant_controller.mojom.h"
@@ -180,14 +180,12 @@ ax::mojom::AssistantStructurePtr CloneAssistantStructure(
 }  // namespace
 
 AssistantScreenContextController::AssistantScreenContextController(
-    AssistantController* assistant_controller)
+    AssistantControllerImpl* assistant_controller)
     : assistant_controller_(assistant_controller) {
-  assistant_controller_->AddObserver(this);
+  assistant_controller_observer_.Add(AssistantController::Get());
 }
 
-AssistantScreenContextController::~AssistantScreenContextController() {
-  assistant_controller_->RemoveObserver(this);
-}
+AssistantScreenContextController::~AssistantScreenContextController() = default;
 
 void AssistantScreenContextController::BindReceiver(
     mojo::PendingReceiver<mojom::AssistantScreenContextController> receiver) {
@@ -228,13 +226,13 @@ void AssistantScreenContextController::RequestScreenshot(
 }
 
 void AssistantScreenContextController::OnAssistantControllerConstructed() {
-  assistant_controller_->ui_controller()->AddModelObserver(this);
+  AssistantUiController::Get()->AddModelObserver(this);
   assistant_controller_->view_delegate()->AddObserver(this);
 }
 
 void AssistantScreenContextController::OnAssistantControllerDestroying() {
   assistant_controller_->view_delegate()->RemoveObserver(this);
-  assistant_controller_->ui_controller()->RemoveModelObserver(this);
+  AssistantUiController::Get()->RemoveModelObserver(this);
 }
 
 void AssistantScreenContextController::OnUiVisibilityChanged(

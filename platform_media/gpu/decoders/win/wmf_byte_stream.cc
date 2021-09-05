@@ -16,6 +16,150 @@
 
 namespace media {
 
+namespace {
+
+int CheckReadLength(ULONG length) {
+  if (length == 0 || length > static_cast<ULONG>(kMaxSharedMemorySize)) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " (E_INVALIDARG) invalid_length length=" << length;
+    return -1;
+  }
+  return static_cast<int>(length);
+}
+
+// Helper to hold a temporary state during AsyncRead. It copies enough
+// information from a WMFByteStream instance so it can run repeated read
+// attempts from the main thread without changing anything in the instance. Then
+// in EndRead when we are back to the worker thread we copy updated values back
+// to the instance.
+class WMFReadRequest
+    : public Microsoft::WRL::RuntimeClass<
+          Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>,
+          IUnknown> {
+ public:
+  WMFReadRequest(bool is_streaming)
+      : is_streaming_(is_streaming),
+
+        // Unretained is safe as the reference count for async_result_ that owns
+        // us is manually managed and can only be decreased after the last read
+        // is done, see BeginRead below.
+        read_cb_(base::BindRepeating(&WMFReadRequest::OnReadData,
+                                     base::Unretained(this))) {
+  }
+
+  ~WMFReadRequest() override {
+    VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this
+            << " initial_position=" << initial_position_
+            << " all_read=" << (total_read_ == length_);
+  }
+
+  int remaining_bytes() const { return length_ - total_read_; }
+
+  void StartReadOnWorkerThread(
+      int64_t initial_position,
+      BYTE* memory,
+      int length,
+      const scoped_refptr<base::SingleThreadTaskRunner>& main_task_runner,
+      ipc_data_source::Buffer source_buffer,
+      IMFAsyncResult* async_result) {
+    DCHECK_GE(initial_position, 0);
+    DCHECK(memory);
+    DCHECK(length > 0);
+
+    initial_position_ = initial_position;
+    memory_ = memory;
+    length_ = length;
+    received_eos_ = false;
+    total_read_ = 0;
+    source_buffer_ = std::move(source_buffer);
+    async_result_ = async_result;
+
+    // See comments before read_cb_ initializer in the constructor why
+    // Unretained is safe.
+    main_task_runner->PostTask(FROM_HERE,
+                               base::BindOnce(&WMFReadRequest::ReadOnMainThread,
+                                              base::Unretained(this)));
+  }
+
+  void ReadOnMainThread() {
+    VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this
+            << " initial_position=" << initial_position_
+            << " total_read=" << total_read_
+            << " remaining_bytes=" << remaining_bytes()
+            << " is_streaming=" << is_streaming_;
+    int to_read = std::min(remaining_bytes(), source_buffer_.GetCapacity());
+    source_buffer_.SetReadRange(initial_position_ + total_read_, to_read);
+    ipc_data_source::Buffer::Read(std::move(source_buffer_), read_cb_);
+  }
+
+  void OnReadData(ipc_data_source::Buffer source_buffer) {
+    // We are called on the main thread here.
+    source_buffer_ = std::move(source_buffer);
+
+    HRESULT status = S_OK;
+    do {
+      int bytes_read = source_buffer_.GetReadSize();
+      if (bytes_read < 0) {
+        LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                     << " read_error=" << bytes_read
+                     << " remaining_bytes=" << remaining_bytes();
+        status = E_FAIL;
+        break;
+      }
+      if (bytes_read == 0) {
+        received_eos_ = true;
+        VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " received_eos"
+                << " position=" << initial_position_
+                << " total_read=" << total_read_
+                << " remaining_bytes=" << remaining_bytes();
+        if (total_read_ == 0) {
+          // Report an empty read as an error.
+          status = E_INVALIDARG;
+        }
+        break;
+      }
+
+      // Ensure that the caller did all the memory safety checks.
+      CHECK(bytes_read <= remaining_bytes());
+      memcpy(memory_ + total_read_, source_buffer_.GetReadData(), bytes_read);
+      total_read_ += bytes_read;
+
+      if (total_read_ == length_)
+        break;
+
+      if (is_streaming_) {
+        bool halfway_done = (total_read_ >= remaining_bytes());
+        if (!halfway_done) {
+          VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                  << " Finishing Incomplete Read, bytes still missing : "
+                  << remaining_bytes();
+          break;
+        }
+      }
+
+      ReadOnMainThread();
+      return;
+
+    } while (false);
+
+    async_result_->SetStatus(status);
+    MFInvokeCallback(async_result_);
+  }
+
+  int64_t initial_position_ = 0;
+  BYTE* memory_ = nullptr;
+  int length_ = 0;
+  const bool is_streaming_;
+  bool received_eos_ = false;
+  int total_read_ = 0;
+
+  // the owner
+  IMFAsyncResult* async_result_ = nullptr;
+  ipc_data_source::Buffer source_buffer_;
+  const base::RepeatingCallback<void(ipc_data_source::Buffer)> read_cb_;
+};
+
+}  // namespace
 
 WMFByteStream::WMFByteStream() {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this;
@@ -27,7 +171,7 @@ WMFByteStream::~WMFByteStream() {
 
 void WMFByteStream::Initialize(
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
-    ipc_data_source::Reader source_reader,
+    ipc_data_source::Buffer source_buffer,
     bool is_streaming,
     int64_t stream_length) {
   VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
@@ -35,7 +179,7 @@ void WMFByteStream::Initialize(
           << " is_streaming=" << is_streaming;
 
   main_task_runner_ = std::move(main_task_runner);
-  source_reader_ = std::move(source_reader);
+  source_buffer_ = std::move(source_buffer);
 
   // The Media Framework expects exactly -1 when the size is unknown.
   stream_length_ = std::max(stream_length, -1LL);
@@ -100,59 +244,51 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::IsEndOfStream(BOOL* end_of_stream) {
   return S_OK;
 }
 
-namespace {
-
-int CheckReadLength(ULONG length) {
-  if (length == 0 || length > static_cast<ULONG>(kMaxSharedMemorySize)) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " (E_INVALIDARG) invalid_length length=" << length;
-    return -1;
-  }
-  return static_cast<int>(length);
-}
-
-void BlockingReadDone(BYTE* buff,
-                      int max_read,
-                      int* bytes_read_out,
-                      base::WaitableEvent* read_done,
-                      int bytes_read,
-                      const uint8_t* data) {
-  if (bytes_read > 0) {
-    // Ensure that the caller did all memory checks.
-    CHECK(bytes_read <= max_read);
-    memcpy(buff, data, bytes_read);
-  }
-  *bytes_read_out = bytes_read;
-  read_done->Signal();
-}
-
-}  // namespace
-
 HRESULT STDMETHODCALLTYPE WMFByteStream::Read(BYTE* buff,
                                               ULONG len,
                                               ULONG* read) {
+  *read = 0;
   int max_read = CheckReadLength(len);
   if (max_read < 0)
       return E_INVALIDARG;
 
+  if (!source_buffer_) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " (E_FAIL) Attempt to read while another read is pending";
+    return E_FAIL;
+  }
+
+  source_buffer_.SetReadRange(stream_position_,
+                              std::min(max_read, source_buffer_.GetCapacity()));
+
+  auto blocking_read_done = [](ipc_data_source::Buffer* buffer_ptr,
+                               base::WaitableEvent* read_done,
+                               ipc_data_source::Buffer buffer) {
+    *buffer_ptr = std::move(buffer);
+    read_done->Signal();
+  };
+
+  // source_buffer_ must be modified only on the worker thread. So use a
+  // temporary to receive the buffer with the result on the main thread while
+  // this thread waits below for read_done signal.
+  ipc_data_source::Buffer result_buffer;
   base::WaitableEvent read_done(
       base::WaitableEvent::ResetPolicy::MANUAL,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
-  int bytes_read = 0;
-
   main_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(source_reader_, stream_position_, max_read,
-                     base::BindOnce(&BlockingReadDone, buff, max_read,
-                                    &bytes_read, &read_done)));
+      base::BindOnce(
+          &ipc_data_source::Buffer::Read, std::move(source_buffer_),
+          base::BindOnce(blocking_read_done, &result_buffer, &read_done)));
 
   // Wait until the callback is called from the main thread.
   read_done.Wait();
+  source_buffer_ = std::move(result_buffer);
+  int bytes_read = source_buffer_.GetReadSize();
   if (bytes_read < 0) {
     LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
                  << " (E_FAIL) Stream sync read error bytes_read="
                  << bytes_read;
-    *read = 0;
     return E_FAIL;
   }
 
@@ -161,151 +297,14 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::Read(BYTE* buff,
               << " no_data_read received_eos"
               << " remaining_bytes=" << len;
     received_eos_ = true;
+  } else {
+    CHECK(bytes_read <= max_read);
+    memcpy(buff, source_buffer_.GetReadData(), bytes_read);
+    stream_position_ += bytes_read;
   }
-  stream_position_ += bytes_read;
   *read = static_cast<ULONG>(bytes_read);
   return S_OK;
 }
-
-namespace {
-
-// Helper to hold a temporary state during AsyncRead. It copies enough
-// information from a WMFByteStream instance so it can run repeated read
-// attempts from the main thread without changing anything in the instance. Then
-// in EndRead when we are back to the worker thread we copy updated values back
-// to the instance.
-class WMFReadRequest
-    : public Microsoft::WRL::RuntimeClass<
-          Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>,
-          IUnknown> {
- public:
-  WMFReadRequest(ipc_data_source::Reader source_reader,
-                 int64_t position,
-                 BYTE* buffer,
-                 int length,
-                 bool is_streaming)
-      : source_reader_(std::move(source_reader)),
-        initial_position_(position),
-        buffer_(buffer),
-        length_(length),
-        is_streaming_(is_streaming),
-        received_eos_(false),
-        total_read_(0) {
-    DCHECK(length > 0);
-  }
-
-  ~WMFReadRequest() override {
-    VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this
-            << " initial_position=" << initial_position_
-            << " all_read=" << (total_read_ == length_);
-  }
-
-  int remaining_bytes() const { return length_ - total_read_; }
-
-  static void OnReadData(IMFAsyncResult* async_result,
-                         int size,
-                         const uint8_t* data);
-
-  void StartReadOnWorkerThread(
-      const scoped_refptr<base::SingleThreadTaskRunner>& main_task_runner,
-      IMFAsyncResult* async_result) {
-    DCHECK(total_read_ == 0);
-    VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this
-            << " initial_position=" << initial_position_
-            << " remaining_bytes=" << remaining_bytes()
-            << " is_streaming=" << is_streaming_;
-    // Unretained is safe as the reference count for async_result is manually
-    // managed, see BeginRead below.
-    main_task_runner->PostTask(
-        FROM_HERE,
-        base::BindOnce(source_reader_, initial_position_, length_,
-                       base::BindOnce(&WMFReadRequest::OnReadData,
-                                      base::Unretained(async_result))));
-  }
-
- void ContinueReadOnMainThread(IMFAsyncResult* async_result) {
-   VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this
-           << " initial_position=" << initial_position_
-           << " total_read=" << total_read_
-           << " remaining_bytes=" << remaining_bytes()
-           << " is_streaming=" << is_streaming_;
-   // Unretained is safe as the reference count for async_result is manually
-   // managed, see BeginRead below.
-   source_reader_.Run(initial_position_ + total_read_, remaining_bytes(),
-                      base::BindOnce(&WMFReadRequest::OnReadData,
-                                     base::Unretained(async_result)));
-  }
-
-  ipc_data_source::Reader source_reader_;
-  const int64_t initial_position_;
-  BYTE* const buffer_;
-  const int length_;
-  const bool is_streaming_;
-  bool received_eos_;
-  int total_read_;
-};
-
-// static
-void WMFReadRequest::OnReadData(IMFAsyncResult* async_result,
-                                int bytes_read,
-                                const uint8_t* data) {
-  // We are called on the main thread here.
-  DCHECK(async_result);
-
-  HRESULT status = S_OK;
-  do {
-    Microsoft::WRL::ComPtr<IUnknown> unknown;
-    HRESULT hr = async_result->GetObjectW(unknown.GetAddressOf());
-    WMFReadRequest* read_request = static_cast<WMFReadRequest*>(unknown.Get());
-
-    if (FAILED(hr) || bytes_read < 0 || !read_request) {
-      LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                   << " read_error=" << bytes_read
-                   << " remaining_bytes=" << read_request->remaining_bytes();
-      status = E_FAIL;
-      break;
-    }
-    if (bytes_read == 0) {
-      read_request->received_eos_ = true;
-      VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " received_eos"
-              << " position=" << read_request->initial_position_
-              << " total_read=" << read_request->total_read_
-              << " remaining_bytes=" << read_request->remaining_bytes();
-      if (read_request->total_read_ == 0) {
-        // Report an empty read as an error.
-        status = E_INVALIDARG;
-      }
-      break;
-    }
-
-    // Ensure that the caller did all the memory safety checks.
-    CHECK(bytes_read <= read_request->remaining_bytes());
-    memcpy(read_request->buffer_ + read_request->total_read_, data, bytes_read);
-    read_request->total_read_ += bytes_read;
-
-    if (read_request->total_read_ == read_request->length_)
-      break;
-
-    if (read_request->is_streaming_) {
-      bool halfway_done =
-          (read_request->total_read_ >= read_request->remaining_bytes());
-      if (!halfway_done) {
-        VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                << " Finishing Incomplete Read, bytes still missing : "
-                << read_request->remaining_bytes();
-        break;
-      }
-    }
-
-    read_request->ContinueReadOnMainThread(async_result);
-    return;
-  } while (false);
-
-  async_result->SetStatus(status);
-  MFInvokeCallback(async_result);
-}
-
-}  // namespace
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::BeginRead(BYTE* buff,
                                                    ULONG len,
@@ -317,9 +316,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::BeginRead(BYTE* buff,
       return E_INVALIDARG;
 
   Microsoft::WRL::ComPtr<WMFReadRequest> read_request(
-      Microsoft::WRL::Make<WMFReadRequest>(source_reader_,
-                                           stream_position_,
-                                           buff, max_read, is_streaming_));
+      Microsoft::WRL::Make<WMFReadRequest>(is_streaming_));
 
   // async_result is released in EndRead.
   IMFAsyncResult* async_result = nullptr;
@@ -331,7 +328,9 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::BeginRead(BYTE* buff,
     return E_ABORT;
   }
 
-  read_request->StartReadOnWorkerThread(main_task_runner_, async_result);
+  read_request->StartReadOnWorkerThread(
+      stream_position_, buff, max_read, main_task_runner_,
+      std::move(source_buffer_), async_result);
   return S_OK;
 }
 
@@ -339,29 +338,27 @@ HRESULT STDMETHODCALLTYPE
 WMFByteStream::EndRead(IMFAsyncResult* result, ULONG* read) {
   HRESULT hresult;
   Microsoft::WRL::ComPtr<IUnknown> unknown;
-  if (FAILED(result->GetObjectW(unknown.GetAddressOf())) || !unknown) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " (E_INVALIDARG) Stream has failed";
-    *read = 0;
-    hresult = E_INVALIDARG;
-  } else {
-    WMFReadRequest* read_request = static_cast<WMFReadRequest*>(unknown.Get());
-    *read = read_request->total_read_;
-    stream_position_ =
-        read_request->initial_position_ + read_request->total_read_;
-    if (read_request->received_eos_) {
-      received_eos_ = true;
-    }
-    hresult = result->GetStatus();
-    VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " initial_position=" << read_request->initial_position_
-            << " all_read="
-            << (read_request->total_read_ == read_request->length_)
-            << " total_read=" << read_request->total_read_
-            << " remaining_bytes=" << read_request->remaining_bytes()
-            << " received_eos_=" << read_request->received_eos_
-            << " is_streaming=" << is_streaming_ << " hresult=" << hresult;
+
+  // Do not recover from memory errors.
+  CHECK(SUCCEEDED(result->GetObjectW(unknown.GetAddressOf())) && unknown);
+
+  WMFReadRequest* read_request = static_cast<WMFReadRequest*>(unknown.Get());
+  source_buffer_ = std::move(read_request->source_buffer_);
+  *read = read_request->total_read_;
+  stream_position_ =
+      read_request->initial_position_ + read_request->total_read_;
+  if (read_request->received_eos_) {
+    received_eos_ = true;
   }
+  hresult = result->GetStatus();
+  VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " initial_position=" << read_request->initial_position_
+          << " all_read="
+          << (read_request->total_read_ == read_request->length_)
+          << " total_read=" << read_request->total_read_
+          << " remaining_bytes=" << read_request->remaining_bytes()
+          << " received_eos_=" << read_request->received_eos_
+          << " is_streaming=" << is_streaming_ << " hresult=" << hresult;
 
   // was acquired by a call to MFCreateAsyncResult in BeginRead
   result->Release();

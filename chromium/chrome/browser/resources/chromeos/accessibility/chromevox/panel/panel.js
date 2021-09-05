@@ -153,12 +153,12 @@ Panel = class {
      * @type {boolean}
      * @private
      */
-    Panel.menuSearchEnabled_ = false;
+    Panel.menuSearchEnabled_ = true;
 
     chrome.commandLinePrivate.hasSwitch(
-        'enable-experimental-accessibility-chromevox-search-menus',
-        function(enabled) {
-          Panel.menuSearchEnabled_ = enabled;
+        'disable-experimental-accessibility-chromevox-search-menus',
+        (enabled) => {
+          Panel.menuSearchEnabled_ = !enabled;
         });
   }
 
@@ -321,6 +321,7 @@ Panel = class {
       Panel.clearMenus();
       Panel.pendingCallback_ = null;
 
+      // Build the top-level menus.
       const searchMenu = (Panel.menuSearchEnabled_) ?
           Panel.addSearchMenu('panel_search_menu') :
           null;
@@ -476,7 +477,8 @@ Panel = class {
         {menuTitle: 'role_table', predicate: AutomationPredicate.table}
       ];
 
-      const node = bkgnd.ChromeVoxState.instance.getCurrentRange().start.node;
+      const range = bkgnd.ChromeVoxState.instance.getCurrentRange();
+      const node = range ? range.start.node : null;
       for (let i = 0; i < roleListMenuMapping.length; ++i) {
         const menuTitle = roleListMenuMapping[i].menuTitle;
         const predicate = roleListMenuMapping[i].predicate;
@@ -487,7 +489,7 @@ Panel = class {
         Panel.addNodeMenu(menuTitle, node, predicate, async);
       }
 
-      if (node.standardActions) {
+      if (node && node.standardActions) {
         for (let i = 0; i < node.standardActions.length; i++) {
           const standardAction = node.standardActions[i];
           const actionMsg = Panel.ACTION_TO_MSG_ID[standardAction];
@@ -502,7 +504,7 @@ Panel = class {
         }
       }
 
-      if (node.customActions) {
+      if (node && node.customActions) {
         for (let i = 0; i < node.customActions.length; i++) {
           const customAction = node.customActions[i];
           actionsMenu.addMenuItem(

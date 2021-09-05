@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_INLINE_NG_INLINE_ITEM_RESULT_H_
 
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_positioned_float.h"
@@ -31,6 +32,7 @@ struct CORE_EXPORT NGInlineItemResult {
   DISALLOW_NEW();
 
  public:
+  NGTextOffset TextOffset() const { return {start_offset, end_offset}; }
   unsigned Length() const {
     DCHECK_GT(end_offset, start_offset);
     return end_offset - start_offset;

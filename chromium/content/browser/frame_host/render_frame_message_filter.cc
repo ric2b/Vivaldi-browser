@@ -45,8 +45,8 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
 #include "storage/browser/blob/blob_storage_context.h"
-#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
 #include "url/gurl.h"
@@ -70,14 +70,15 @@ namespace {
 void CreateChildFrameOnUI(
     int process_id,
     int parent_routing_id,
-    blink::WebTreeScopeType scope,
+    blink::mojom::TreeScopeType scope,
     const std::string& frame_name,
     const std::string& frame_unique_name,
     bool is_created_by_script,
+    const base::UnguessableToken& frame_token,
     const base::UnguessableToken& devtools_frame_token,
     const blink::FramePolicy& frame_policy,
     const blink::mojom::FrameOwnerProperties& frame_owner_properties,
-    blink::FrameOwnerElementType owner_type,
+    blink::mojom::FrameOwnerElementType owner_type,
     int new_routing_id,
     mojo::ScopedMessagePipeHandle interface_provider_receiver_handle,
     mojo::ScopedMessagePipeHandle browser_interface_broker_handle) {
@@ -93,7 +94,7 @@ void CreateChildFrameOnUI(
             std::move(interface_provider_receiver_handle)),
         mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>(
             std::move(browser_interface_broker_handle)),
-        scope, frame_name, frame_unique_name, is_created_by_script,
+        scope, frame_name, frame_unique_name, is_created_by_script, frame_token,
         devtools_frame_token, frame_policy, frame_owner_properties, owner_type);
   }
 }
@@ -279,6 +280,7 @@ void RenderFrameMessageFilter::OnCreateChildFrame(
   params_reply->browser_interface_broker_handle =
       browser_interface_broker.PassPipe().release();
 
+  params_reply->frame_token = base::UnguessableToken::Create();
   params_reply->devtools_frame_token = base::UnguessableToken::Create();
 
   base::PostTask(
@@ -286,9 +288,10 @@ void RenderFrameMessageFilter::OnCreateChildFrame(
       base::BindOnce(
           &CreateChildFrameOnUI, render_process_id_, params.parent_routing_id,
           params.scope, params.frame_name, params.frame_unique_name,
-          params.is_created_by_script, params_reply->devtools_frame_token,
-          params.frame_policy, params.frame_owner_properties,
-          params.frame_owner_element_type, params_reply->child_routing_id,
+          params.is_created_by_script, params_reply->frame_token,
+          params_reply->devtools_frame_token, params.frame_policy,
+          params.frame_owner_properties, params.frame_owner_element_type,
+          params_reply->child_routing_id,
           interface_provider_receiver.PassPipe(),
           browser_interface_broker_receiver.PassPipe()));
 }

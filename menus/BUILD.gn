@@ -16,6 +16,8 @@ static_library("menus") {
     "menu_service_factory.h",
     "menu_storage.cc",
     "menu_storage.h",
+    "menu_upgrade.cc",
+    "menu_upgrade.h",
     "menu_model_loaded_observer.cc",
     "menu_model_loaded_observer.h",
   ]

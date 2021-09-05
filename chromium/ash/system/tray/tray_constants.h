@@ -97,6 +97,9 @@ constexpr float kUnifiedMenuBackgroundBlur = 30.f;
 // Threshold to ignore update on the slider value.
 constexpr float kAudioSliderIgnoreUpdateThreshold = 0.01;
 
+// Duration for the collapse / expand animation in ms.
+constexpr int kSystemMenuCollapseExpandAnimationDurationMs = 500;
+
 constexpr gfx::Insets kUnifiedMenuItemPadding(0, 16, 16, 16);
 constexpr gfx::Insets kUnifiedSystemInfoViewPadding(0, 16, 16, 16);
 constexpr gfx::Insets kUnifiedManagedDeviceViewPadding(4, 19, 4, 16);
@@ -127,6 +130,7 @@ constexpr int kUnifiedNotificationMinimumHeight = 40;
 constexpr gfx::Insets kUnifiedTopShortcutPadding(0, 16);
 constexpr gfx::Insets kUnifiedNotificationHiddenPadding(6, 16);
 constexpr gfx::Insets kUnifiedCircularButtonFocusPadding(4);
+constexpr gfx::Insets kTrayBackgroundFocusPadding(1);
 constexpr gfx::Insets kStackingNotificationClearAllButtonPadding(8, 16);
 
 // Size of an icon drawn inside top shortcut buttons.

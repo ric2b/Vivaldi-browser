@@ -37,11 +37,13 @@ LogoutConfirmationDialog::LogoutConfirmationDialog(
     LogoutConfirmationController* controller,
     base::TimeTicks logout_time)
     : controller_(controller), logout_time_(logout_time) {
-  DialogDelegate::SetButtonLabel(
-      ui::DIALOG_BUTTON_OK,
-      l10n_util::GetStringUTF16(IDS_ASH_LOGOUT_CONFIRMATION_BUTTON));
-  DialogDelegate::SetAcceptCallback(base::BindOnce(
-      &LogoutConfirmationDialog::OnDialogAccepted, base::Unretained(this)));
+  SetTitle(l10n_util::GetStringUTF16(IDS_ASH_LOGOUT_CONFIRMATION_TITLE));
+  SetShowCloseButton(false);
+
+  SetButtonLabel(ui::DIALOG_BUTTON_OK,
+                 l10n_util::GetStringUTF16(IDS_ASH_LOGOUT_CONFIRMATION_BUTTON));
+  SetAcceptCallback(base::BindOnce(&LogoutConfirmationDialog::OnDialogAccepted,
+                                   base::Unretained(this)));
 
   SetLayoutManager(std::make_unique<views::FillLayout>());
   SetBorder(views::CreateEmptyBorder(
@@ -82,14 +84,6 @@ void LogoutConfirmationDialog::ControllerGone() {
 
 ui::ModalType LogoutConfirmationDialog::GetModalType() const {
   return ui::MODAL_TYPE_SYSTEM;
-}
-
-base::string16 LogoutConfirmationDialog::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(IDS_ASH_LOGOUT_CONFIRMATION_TITLE);
-}
-
-bool LogoutConfirmationDialog::ShouldShowCloseButton() const {
-  return false;
 }
 
 void LogoutConfirmationDialog::WindowClosing() {

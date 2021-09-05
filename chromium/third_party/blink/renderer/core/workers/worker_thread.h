@@ -58,6 +58,7 @@ namespace blink {
 
 class ConsoleMessageStorage;
 class InspectorTaskRunner;
+class InspectorIssueStorage;
 class WorkerBackingThread;
 class WorkerInspectorController;
 class WorkerOrWorkletGlobalScope;
@@ -161,6 +162,9 @@ class CORE_EXPORT WorkerThread : public Thread::TaskObserver {
   virtual void ClearWorkerBackingThread() = 0;
   ConsoleMessageStorage* GetConsoleMessageStorage() const {
     return console_message_storage_.Get();
+  }
+  InspectorIssueStorage* GetInspectorIssueStorage() const {
+    return inspector_issue_storage_.Get();
   }
   v8::Isolate* GetIsolate();
 
@@ -436,6 +440,7 @@ class CORE_EXPORT WorkerThread : public Thread::TaskObserver {
   Platform::NestedMessageLoopRunner* nested_runner_ = nullptr;
 
   CrossThreadPersistent<ConsoleMessageStorage> console_message_storage_;
+  CrossThreadPersistent<InspectorIssueStorage> inspector_issue_storage_;
   CrossThreadPersistent<WorkerOrWorkletGlobalScope> global_scope_;
   CrossThreadPersistent<WorkerInspectorController> worker_inspector_controller_;
 

@@ -134,8 +134,10 @@ enum MetricEnrollment {
   kMetricEnrollmentRegisterConsumerAccountWithPackagedLicense = 58,
   // Device was not pre-provisioned for Zero-Touch.
   kMetricEnrollmentDeviceNotPreProvisioned = 59,
+  // Enrollment failed: Enterprise TOS has not been accepted.
+  kMetricEnrollmentRegisterEnterpriseTosHasNotBeenAccepted = 61,
   // Max value for use with enumeration histogram UMA functions.
-  kMaxValue = kMetricEnrollmentDeviceNotPreProvisioned
+  kMaxValue = kMetricEnrollmentRegisterEnterpriseTosHasNotBeenAccepted
 };
 
 // Events related to policy refresh.

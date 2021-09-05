@@ -7,6 +7,7 @@
 #include "chrome/test/payments/payment_request_platform_browsertest_base.h"
 #include "components/payments/core/features.h"
 #include "components/payments/core/journey_logger.h"
+#include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace payments {
@@ -74,18 +75,18 @@ IN_PROC_BROWSER_TEST_F(PaymentHandlerJustInTimeInstallationTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PaymentHandlerJustInTimeInstallationTest,
-                       DoNotInstallPaymentAppWithMissingIcon) {
+                       DoNotInstallPaymentAppWithInvalidPaymentMethod) {
   ResetEventWaiterForSingleEvent(TestEvent::kNotSupportedError);
   EXPECT_TRUE(content::ExecJs(GetActiveWebContents(),
                               "testPaymentMethods([{supportedMethods: "
                               "'https://henrypay.com/webpay'}])"));
   WaitForObservedEvent();
 
-  // show() should get rejected since the JIT installable app does not have an
-  // icon.
+  // show() should get rejected since the JIT installable app
+  // that uses invalid payment method.
   ExpectBodyContains(
-      "Failed to download or decode a non-empty icon for payment app with "
-      "\"https://henrypay.com/app.json\" manifest.");
+      "\nBob Pay and Cards Test\nInstallable App\nThe payment method "
+      "\"https://henrypay.com/webpay\" is not supported.\n\n\n\n\n");
 }
 
 class AlwaysAllowJustInTimePaymentAppTest

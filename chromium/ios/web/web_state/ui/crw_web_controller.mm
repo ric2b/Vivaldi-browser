@@ -596,12 +596,6 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
          web::IsContentTypeHtml(self.webState->GetContentsMimeType());
 }
 
-// Returns YES if the current live view is a web view with an image MIME type.
-- (BOOL)contentIsImage {
-  return self.webView &&
-         web::IsContentTypeImage(self.webState->GetContentsMimeType());
-}
-
 - (GURL)currentURLWithTrustLevel:(web::URLVerificationTrustLevel*)trustLevel {
   DCHECK(trustLevel) << "Verification of the trustLevel state is mandatory";
 
@@ -889,6 +883,12 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
     if (base::ios::IsRunningOnIOS13OrLater() && oldDocumentURL.IsAboutBlank() &&
         !self.webStateImpl->GetNavigationManager()->GetLastCommittedItem() &&
         !self.webView.loading) {
+      return;
+    }
+
+    // Ignore mismatches triggered by a WKWebView out-of-sync back forward list.
+    if (![self.webView.backForwardList.currentItem.URL
+            isEqual:self.webView.URL]) {
       return;
     }
 
@@ -1322,11 +1322,18 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
       [[CRWWebControllerContainerView alloc] initWithDelegate:self];
 
   // This will be resized later, but matching the final frame will minimize
-  // re-rendering. Use the screen size because the application's key window
-  // may still be nil.
-  _containerView.frame = UIApplication.sharedApplication.keyWindow
-                             ? UIApplication.sharedApplication.keyWindow.bounds
-                             : UIScreen.mainScreen.bounds;
+  // re-rendering.
+  UIView* browserContainer = self.webStateImpl->GetWebViewContainer();
+  if (browserContainer) {
+    _containerView.frame = browserContainer.bounds;
+  } else {
+    // Use the screen size because the application's key window and the
+    // container may still be nil.
+    _containerView.frame =
+        UIApplication.sharedApplication.keyWindow
+            ? UIApplication.sharedApplication.keyWindow.bounds
+            : UIScreen.mainScreen.bounds;
+  }
 
   DCHECK(!CGRectIsEmpty(_containerView.frame));
 
@@ -1396,13 +1403,12 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   // Do not attach the context menu controller immediately as the JavaScript
   // delegate must be specified.
   web::UserAgentType defaultUserAgent =
-      base::FeatureList::IsEnabled(
-          web::features::kUseDefaultUserAgentInWebClient)
+      web::features::UseWebClientDefaultUserAgent()
           ? web::UserAgentType::AUTOMATIC
           : web::UserAgentType::MOBILE;
   web::NavigationItem* item = self.currentNavItem;
   web::UserAgentType userAgentType =
-      item ? item->GetUserAgentType() : defaultUserAgent;
+      item ? item->GetUserAgentType(_containerView) : defaultUserAgent;
   if (userAgentType == web::UserAgentType::AUTOMATIC) {
     userAgentType =
         web::GetWebClient()->GetDefaultUserAgent(_containerView, GURL());

@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <set>
 #include <vector>
 
 #include "base/macros.h"
@@ -51,9 +52,21 @@ class CompositeMatcher {
   explicit CompositeMatcher(MatcherList matchers);
   ~CompositeMatcher();
 
+  const MatcherList& matchers() const { return matchers_; }
+
+  // Returns the set of matchers and resets |matchers_| to an empty vector.
+  MatcherList GetAndResetMatchers();
+
+  // Updates the set of matchers. IDs for all the |matchers| must be unique.
+  void SetMatchers(MatcherList matchers);
+
   // Adds the |new_matcher| to the list of matchers. If a matcher with the
   // corresponding ID is already present, updates the matcher.
   void AddOrUpdateRuleset(std::unique_ptr<RulesetMatcher> new_matcher);
+
+  // Computes and returns the set of static RulesetIDs corresponding to
+  // |matchers_|.
+  std::set<RulesetID> ComputeStaticRulesetIDs() const;
 
   // Returns a RequestAction for the network request specified by |params|, or
   // base::nullopt if there is no matching rule.
@@ -61,15 +74,11 @@ class CompositeMatcher {
       const RequestParams& params,
       PermissionsData::PageAccess page_access) const;
 
-  // Returns the bitmask of headers to remove from the request corresponding to
-  // rules matched from this extension. The bitmask corresponds to
-  // RemoveHeadersMask type. |excluded_remove_headers_mask| denotes the current
-  // mask of headers to be skipped for evaluation and is excluded in the return
-  // value.
-  uint8_t GetRemoveHeadersMask(
-      const RequestParams& params,
-      uint8_t excluded_remove_headers_mask,
-      std::vector<RequestAction>* remove_headers_actions) const;
+  // Returns all matching RequestActions for the request corresponding to
+  // modifyHeaders rules matched from this extension, sorted in descending order
+  // by rule priority.
+  std::vector<RequestAction> GetModifyHeadersActions(
+      const RequestParams& params) const;
 
   // Returns whether this modifies "extraHeaders".
   bool HasAnyExtraHeadersMatcher() const;
@@ -79,8 +88,12 @@ class CompositeMatcher {
   void OnDidFinishNavigation(content::RenderFrameHost* host);
 
  private:
+  // This must be called whenever |matchers_| are modified.
+  void OnMatchersModified();
+
   bool ComputeHasAnyExtraHeadersMatcher() const;
 
+  // The RulesetMatchers, in an arbitrary order.
   MatcherList matchers_;
 
   // Denotes the cached return value for |HasAnyExtraHeadersMatcher|. Care must

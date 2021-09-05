@@ -10,6 +10,7 @@
 <translation id="1030706264415084469"><ph name="URL" /> আপনার ডিভাইসে স্থায়ীভাবে বেশি ডেটা স্টোর করে রাখতে চায়</translation>
 <translation id="1032854598605920125">ঘড়ির কাঁটার দিকে ঘোরান</translation>
 <translation id="1036348656032585052">বন্ধ করুন</translation>
+<translation id="1038106730571050514">সাজেশনগুলি দেখান</translation>
 <translation id="1038842779957582377">অজানা নাম</translation>
 <translation id="1041998700806130099">জব শিট মেসেজ</translation>
 <translation id="1050038467049342496">অন্যান্য অ্যাপ্লিকেশানগুলি বন্ধ করুন</translation>
@@ -160,6 +161,7 @@
 <translation id="161042844686301425">নীলাভ</translation>
 <translation id="1620510694547887537">ক্যামেরা</translation>
 <translation id="1623104350909869708">এই পৃষ্ঠাটিকে অতিরিক্ত কথোপকথন তৈরি করা থেকে বাধা দিন</translation>
+<translation id="1623253368136559158">ক্যামেরার গতিবিধি</translation>
 <translation id="16338877384480380">Architecture-B</translation>
 <translation id="1638780421120290329">ক্রেডিট কার্ড সেভ করা যাচ্ছে না</translation>
 <translation id="1639239467298939599">লোড হচ্ছে</translation>
@@ -195,7 +197,6 @@
 <translation id="1736420071277903564">কম্পিউটার</translation>
 <translation id="1740951997222943430">মেয়াদ শেষ হওয়ার মাসের সঠিক মান লিখুন</translation>
 <translation id="1741613555002899862">DnsOverHttpsMode <ph name="SECURE_DNS_MODE_SECURE" /> হলে অবশ্যই নির্দিষ্ট করে দিতে হবে এবং একটি সঠিক স্ট্রিং হতে হবে।</translation>
-<translation id="1743520634839655729">পরেরবার আরও দ্রুত পেমেন্ট করা জন্য আপনার কার্ড, নাম এবং বিলিং ঠিকানাটি Google অ্যাকাউন্টে এবং এই ডিভাইসে সেভ করে রাখুন।</translation>
 <translation id="1743570585616704562">শনাক্ত করা যায়নি</translation>
 <translation id="1745880797583122200">আপনার ব্রাউজারটি ম্যানেজ করা হচ্ছে</translation>
 <translation id="1746113442205726301">ছবি Y শিফ্ট</translation>
@@ -218,10 +219,11 @@
 <translation id="1838374766361614909">সার্চ সাফ করুন</translation>
 <translation id="1839551713262164453">নীতির মূল্য যাচাইকরণে সমস্যা হওয়ার জন্য যাচাই করা যায়নি</translation>
 <translation id="1842969606798536927">পেমেন্ট করুন</translation>
+<translation id="1852694792039666893">আপনার Google অ্যাকাউন্ট ব্যবহার করে একটি শক্তিশালী পাসওয়ার্ড সাজেস্ট করুন</translation>
 <translation id="1871208020102129563">
 প্রক্সি স্থির প্রক্সি সার্ভারগুলি ব্যবহার করতে সেট করা আছে কোনো .pac স্ক্রিপ্ট URL নয়৷</translation>
 <translation id="1871284979644508959">আবশ্যক ক্ষেত্র</translation>
-<translation id="1875512691959384712">Google ফর্ম</translation>
+<translation id="1875512691959384712">Google Forms</translation>
 <translation id="187918866476621466">শুরুর পৃষ্ঠাগুলি খুলুন</translation>
 <translation id="1883255238294161206">তালিকা সঙ্কুচিত করুন</translation>
 <translation id="1898423065542865115">ফিল্টার হচ্ছে</translation>
@@ -269,6 +271,7 @@
 <translation id="2094505752054353250">ডোমেন মেলেনি</translation>
 <translation id="2096368010154057602">বিভাগ</translation>
 <translation id="2099652385553570808">বাঁদিকে ট্রিপল স্টেপল</translation>
+<translation id="2101225219012730419">ভার্সন:</translation>
 <translation id="2102134110707549001">শক্তিশালী পাসওয়ার্ড সাজেস্ট করুন…</translation>
 <translation id="2107021941795971877">প্রিন্ট সংক্রান্ত সহায়তা</translation>
 <translation id="2108755909498034140">আপনার কম্পিউটার পুনরায় চালু করুন</translation>
@@ -401,11 +404,13 @@
 <translation id="2666092431469916601">শীর্ষ</translation>
 <translation id="2666117266261740852">অন্যান্য ট্যাব বা অ্যাপ্লিকেশানগুলি বন্ধ করুন</translation>
 <translation id="2674170444375937751">আপনি কি আপনার ইতিহাস থেকে এই পৃষ্ঠাগুলি মোছার বিষয়ে নিশ্চিত?</translation>
+<translation id="2674804415323431591">সাজেশন মেনু লুকান</translation>
 <translation id="2676271551327853224">Roc-8K</translation>
 <translation id="2677748264148917807">ছেড়ে চলে যান</translation>
 <translation id="2684561033061424857">11x12</translation>
 <translation id="2687555958734450033">সবচেয়ে মানানসই</translation>
 <translation id="2691924980723297736">নিরাপত্তা সম্পর্কিত সতর্কতা</translation>
+<translation id="2696268945573510710">আপনার Google অ্যাকাউন্টে স্টোর করা পাসওয়ার্ড ব্যবহার করুন</translation>
 <translation id="2699302886720511147">এই কার্ডগুলি গ্রহণ করা হয়</translation>
 <translation id="2701514975700770343">সামনের দিক নিচে</translation>
 <translation id="2702801445560668637">পড়ার তালিকা</translation>
@@ -443,6 +448,7 @@
 <translation id="2856444702002559011">আক্রমণকারীরা হয়ত <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> থেকে আপনার তথ্য (যেমন পাসওয়ার্ড, মেসেজ বা ক্রেডিট কার্ড) চুরি করার চেষ্টা করছে। <ph name="BEGIN_LEARN_MORE_LINK" />আরও জানুন<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2878197950673342043">পোস্টার ফোল্ড</translation>
 <translation id="2878424575911748999">A1</translation>
+<translation id="2880660355386638022">উইন্ডো প্লেসমেন্ট</translation>
 <translation id="2881276955470682203">কার্ড সেভ করবেন?</translation>
 <translation id="2882949212241984732">ডবল-গেট ফোল্ড</translation>
 <translation id="2903493209154104877">ঠিকানা</translation>
@@ -453,6 +459,7 @@
 <translation id="2915068235268646559"><ph name="CRASH_TIME" />-এ হওয়া ক্র্যাশ</translation>
 <translation id="2916038427272391327">অন্যান্য প্রোগ্রামগুলি বন্ধ করুন</translation>
 <translation id="2922350208395188000">সার্ভারের সার্টিফিকেট চেক করা যাবে না৷</translation>
+<translation id="2924027812781652774">আপনার Google অ্যাকাউন্টে স্টোর করা পাসওয়ার্ড ব্যবহার করতে আবার সাইন-ইন করুন</translation>
 <translation id="2925673989565098301">ডেলিভারির পদ্ধতি</translation>
 <translation id="2928905813689894207">বিলিংয়ের ঠিকানা</translation>
 <translation id="2929525460561903222">{SHIPPING_ADDRESS,plural, =0{<ph name="SHIPPING_ADDRESS_PREVIEW" />}=1{<ph name="SHIPPING_ADDRESS_PREVIEW" /> এবং আরও <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES" />টি}one{<ph name="SHIPPING_ADDRESS_PREVIEW" /> এবং আরও <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES" />টি}other{<ph name="SHIPPING_ADDRESS_PREVIEW" /> এবং আরও <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES" />টি}}</translation>
@@ -642,6 +649,7 @@
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />প্রক্সি, ফায়ারওয়াল এবং ডিএনএস কনফিগারেশন পরীক্ষা করে দেখুন<ph name="END_LINK" /></translation>
 <translation id="372429172604983730">অ্যান্টিভাইরাস, ফায়ারওয়াল এবং ওয়েব-ফিল্টারিং বা প্রক্সি সফ্টওয়্যারের মতো অ্যাপ্লিকেশন এই ধরণের ত্রুটির কারণ হতে পারে।</translation>
 <translation id="373042150751172459">B4 (Envelope)</translation>
+<translation id="3731873414101415120">আপনার ব্রাউজ করা ওয়েবসাইটের বিবরণ এবং নিরাপদ নয় এমন পৃষ্ঠার কন্টেন্ট</translation>
 <translation id="3736520371357197498">আপনি যদি আপনার নিরাপত্তার ঝুঁকিগুলি বুঝতে পারেন, তাহলে ক্ষতিকারক প্রোগ্রাম সরানোর আগে আপনি <ph name="BEGIN_LINK" />বিপজ্জনক সাইটে যেতে পারেন<ph name="END_LINK" />।</translation>
 <translation id="3744899669254331632">এই মূহুর্তে আপনি <ph name="SITE" />-এ যেতে পারবেন না কারণ ওয়েবসাইটি অসংলগ্ন ক্রেডেনশিয়াল পাঠিয়েছে যা Chromium প্রসেস করতে পারেনা৷ নেটওয়ার্ক সমস্যা এবং আক্রমণ সাধারণত অস্থায়ী, তাই এই পৃষ্ঠাটি সম্ভবত পরে কাজ করবে৷</translation>
 <translation id="3745099705178523657">আপনি কনফার্ম করার পর আপনার Google অ্যাকাউন্ট থেকে কার্ডের বিবরণ এই সাইটে শেয়ার করা হবে।</translation>
@@ -873,6 +881,7 @@
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows নেটওয়ার্ক ডায়গনিস্টিক্স চালান<ph name="END_LINK" /></translation>
 <translation id="4726672564094551039">নীতিগুলি রিলোড করুন</translation>
 <translation id="4728558894243024398">প্ল্যাটফর্ম</translation>
+<translation id="4731638775147756694">আপনার অ্যাডমিনিস্ট্রেটর এই অ্যাপ্লিকেশন ব্লক করে দিয়েছেন</translation>
 <translation id="4731967714531604179">Prc2 (Envelope)</translation>
 <translation id="4733082559415072992"><ph name="URL" /> আপনার ডিভাইসের লোকেশন ব্যবহার করতে চায়</translation>
 <translation id="4736825316280949806">Chromium পুনরায় চালু করুন</translation>
@@ -908,6 +917,7 @@
 <translation id="4877083676943085827">{COUNT,plural, =0{একটিও নয়}=1{<ph name="EXAMPLE_DOMAIN_1" />}=2{<ph name="EXAMPLE_DOMAIN_1" />, <ph name="EXAMPLE_DOMAIN_2" />}one{<ph name="EXAMPLE_DOMAIN_1" />, <ph name="EXAMPLE_DOMAIN_2" />, <ph name="AND_MORE" />}other{<ph name="EXAMPLE_DOMAIN_1" />, <ph name="EXAMPLE_DOMAIN_2" />, <ph name="AND_MORE" />}}</translation>
 <translation id="4877422487531841831"><ph name="TEXT" /> সার্চ</translation>
 <translation id="4879491255372875719">অটোমেটিক (ডিফল্ট)</translation>
+<translation id="4879725228911483934">উইন্ডো খুলে আপনার স্ক্রিনে রাখুন</translation>
 <translation id="4880827082731008257">সার্চের ইতিহাস</translation>
 <translation id="4881695831933465202">খুলুন</translation>
 <translation id="4892518386797173871">রিয়ার</translation>
@@ -1074,6 +1084,7 @@
 <translation id="5523118979700054094">নীতি নাম</translation>
 <translation id="55293785478302737">ধারের দিকে সেলাই</translation>
 <translation id="553484882784876924">Prc6 (Envelope)</translation>
+<translation id="5536214594743852365">"<ph name="SECTION" />" বিভাগ দেখুন</translation>
 <translation id="5539243836947087108">র‍্যাফট</translation>
 <translation id="5540224163453853">অনুরোধকৃত নিবন্ধ খুঁজে পাওয়া যায়নি৷</translation>
 <translation id="5541086400771735334">মেলবক্স ৭</translation>
@@ -1217,7 +1228,6 @@
 <translation id="6116338172782435947">ক্লিপবোর্ডে কপি করা টেক্সট এবং ছবি দেখতে</translation>
 <translation id="6120179357481664955">আপনার UPI আইডি মনে আছে?</translation>
 <translation id="6124432979022149706">Chrome Enterprise কানেক্টর</translation>
-<translation id="6135641591018127088">আপনার Google অ্যাকাউন্ট ব্যবহার করে একটি শক্তিশালী পাসওয়ার্ড তৈরি করুন</translation>
 <translation id="6146055958333702838">সব কেবল পরীক্ষা করুন এবং আপনি ব্যবহার করছেন এমন যেকোনো রাউটার, মডেম বা অন্যান্য নেটওয়ার্ক ডিভাইসগুলি আবার চালু করুন।</translation>
 <translation id="614940544461990577">এটি করে দেখুন:</translation>
 <translation id="6150036310511284407">বাঁদিকে ট্রিপল পাঞ্চ</translation>
@@ -1242,6 +1252,7 @@
 <translation id="6263376278284652872"><ph name="DOMAIN" /> বুকমার্কগুলি</translation>
 <translation id="6264485186158353794">সুরক্ষাতে ফিরুন</translation>
 <translation id="6266934640124581640">হালকা টিল</translation>
+<translation id="6272383483618007430">Google আপডেট</translation>
 <translation id="6276112860590028508">পড়ার তালিকার পৃষ্ঠাগুলি এখানে দেখা যাবে</translation>
 <translation id="627746635834430766">পরের বার আরও দ্রুত পেমেন্ট করা জন্য আপনার এই কার্ড এবং বিলিং ঠিকানাটি Google অ্যাকাউন্টে সেভ করে রাখুন।</translation>
 <translation id="6279516281132775660">এক্ষেত্রে নিচে দেওয়া তথ্য Chrome <ph name="BEGIN_EMPHASIS" />সেভ করবে না<ph name="END_EMPHASIS" />:
@@ -1262,7 +1273,6 @@
 <translation id="6328639280570009161">নেটওয়ার্ক পূর্বানুমান নিষ্ক্রিয় করার চেষ্টা করুন</translation>
 <translation id="6328784461820205019">"আপনার কানেকশন গোপন নয়" বা "&lt;span class="error-code"&gt;NET::ERR_CERT_AUTHORITY_INVALID&lt;/span&gt;" বা "&lt;span class="error-code"&gt;ERR_CERT_COMMON_NAME_INVALID&lt;/span&gt;" বা "&lt;span class="error-code"&gt;NET::ERR_CERT_WEAK_SIGNATURE_ALGORITHM&lt;/span&gt;" বা "&lt;span class="error-code"&gt;ERR_CERT_SYMANTEC_LEGACY&lt;/span&gt;" বা "SSL সার্টিফিকেটে সমস্যা"</translation>
 <translation id="6328786501058569169">এই সাইটটি প্রতারণামূলক</translation>
-<translation id="6333334544069706521">আপনার Google অ্যাকাউন্টে স্টোর করা পাসওয়ার্ড ব্যবহার করুন</translation>
 <translation id="6337133576188860026"><ph name="SIZE" />-এর চেয়ে কম জায়গা খালি করে। পরের বার যখন দেখবেন তখন কিছু সাইট লোড হতে দেরি হতে পারে।</translation>
 <translation id="6337534724793800597">নাম অনুসারে ফিল্টারগুলি বাছাই করুন</translation>
 <translation id="6353505687280762741">{COUNT,plural, =0{একটিও নয়}=1{১টি পাসওয়ার্ড (<ph name="DOMAIN_LIST" />-এর জন্য, সিঙ্ক করা হয়েছে)}=2{২টি পাসওয়ার্ড (<ph name="DOMAIN_LIST" />-এর জন্য, সিঙ্ক করা হয়েছে)}one{#টি পাসওয়ার্ড (<ph name="DOMAIN_LIST" />-এর জন্য, সিঙ্ক করা হয়েছে)}other{#টি পাসওয়ার্ড (<ph name="DOMAIN_LIST" />-এর জন্য, সিঙ্ক করা হয়েছে)}}</translation>
@@ -1274,7 +1284,6 @@
 <translation id="6380497234672085559">A0</translation>
 <translation id="6383221683286411806">চালিয়ে গেলে চার্জ দিতে হতে পারে।</translation>
 <translation id="6386120369904791316">{COUNT,plural, =1{আরও ১টি প্রস্তাব}one{অন্যান্য #টি প্রস্তাব}other{অন্যান্য #টি প্রস্তাব}}</translation>
-<translation id="6387754724289022810">পরের বার আরও দ্রুত পেমেন্ট করা জন্য আপনার এই কার্ড এবং বিলিং ঠিকানাটি Google অ্যাকাউন্টে এবং এই ডিভাইসে সেভ করে রাখুন।</translation>
 <translation id="6389470377220713856">কার্ডে থাকা নাম</translation>
 <translation id="6390200185239044127">অর্ধেক জেড-ফোল্ড</translation>
 <translation id="6390662030813198813">Engineering-E</translation>
@@ -1410,6 +1419,7 @@
 <translation id="7050187094878475250">আমি <ph name="DOMAIN" />-এ সংযোগ করার চেষ্টা করেছেন, কিন্তু সার্ভার একটি সার্টিফিকেট উপস্থাপন করেছে যার বৈধতার সময়সীমা এত বেশী যে বিশ্বাসযোগ্য নয়।</translation>
 <translation id="705310974202322020">{NUM_CARDS,plural, =1{এই মুহূর্তে কার্ডটি সেভ করা যাবে না}one{এই মুহূর্তে কার্ডগুলি সেভ করা যাবে না}other{এই মুহূর্তে কার্ডগুলি সেভ করা যাবে না}}</translation>
 <translation id="7053983685419859001">ব্লক করুন</translation>
+<translation id="7058163556978339998"><ph name="ISSUER" /> এই ওয়েবসাইটের সার্টিফিকেট ইস্যু করেছে এবং <ph name="BROWSER" /> সেটি যাচাই করেছে।</translation>
 <translation id="7062635574500127092">নীলচে সবুজ</translation>
 <translation id="7064851114919012435">পরিচিতি তথ্য</translation>
 <translation id="70705239631109039">এই কানেকশন সম্পূর্ণরূপে নিরাপদ নয়</translation>
@@ -1473,6 +1483,7 @@
 <translation id="7313965965371928911"><ph name="BEGIN_LINK" />Safe Browsing<ph name="END_LINK" /> সংক্রান্ত সতর্কতা</translation>
 <translation id="7319430975418800333">A3</translation>
 <translation id="7320336641823683070">কানেকশন সহায়তা</translation>
+<translation id="7323804146520582233">"<ph name="SECTION" />" বিভাগ লুকান</translation>
 <translation id="733354035281974745">ডিভাইসের স্থানীয় অ্যাকাউন্ট ওভাররাইড করা</translation>
 <translation id="7333654844024768166">আপনি এখনই প্রতারণামূলক একটি সাইটে নিজের পাসওয়ার্ড লিখেছেন। Chromium আপনাকে সাজেস্ট করছে যে আপনি <ph name="WEBSITE_1" />, <ph name="WEBSITE_2" />, <ph name="WEBSITE_3" /> এবং অন্যান্য সাইটে যান যেখানে যেখানে আপনি এই পাসওয়ার্ডটি ব্যবহার করেন এবং এখনই সেইসব জায়গায় এটি পরিবর্তন করুন।</translation>
 <translation id="7334320624316649418">&amp;পুনর্বিন্যাসকে আবার করুন</translation>
@@ -1597,7 +1608,6 @@
 <translation id="7763386264682878361">পেমেন্ট ম্যানিফেস্ট বিশ্লেষক</translation>
 <translation id="7764225426217299476">ঠিকানা যোগ করুন</translation>
 <translation id="7766518757692125295">স্কার্ট</translation>
-<translation id="7767271804335921384">আপনার অ্যাডমিনিস্ট্রেটর অ্যাপ্লিকেশনটি ব্লক করে দিয়েছেন</translation>
 <translation id="7770259615151589601">Designated-Long</translation>
 <translation id="7773005668374414287">একই অর্ডার, সামনের দিক উপরে</translation>
 <translation id="777702478322588152">জেলা</translation>
@@ -1626,6 +1636,7 @@
 <translation id="7887885240995164102">'ছবির-মধ্যে-ছবি' মোডে প্রবেশ করুন</translation>
 <translation id="7888575728750733395">প্রিন্ট রেন্ডারিং ইনটেন্ট</translation>
 <translation id="7904208859782148177">C3 (Envelope)</translation>
+<translation id="7923775243649974918">আপনার ক্যামেরা এদিক-ওদিক ঘোরান</translation>
 <translation id="7932579305932748336">কোট</translation>
 <translation id="79338296614623784">একটি সঠিক ফোন নম্বর লিখুন</translation>
 <translation id="7934052535022478634">পেমেন্ট হয়ে গেছে</translation>
@@ -1665,6 +1676,7 @@
 <translation id="8074253406171541171">10x13 (Envelope)</translation>
 <translation id="8078141288243656252">ঘূর্ণনের সময় ব্যাখ্যা করা যাবে না</translation>
 <translation id="8079031581361219619">সাইটটি রিলোড করবেন?</translation>
+<translation id="808089508890593134">Google</translation>
 <translation id="8086971161893892807">ড্রাফ্ট</translation>
 <translation id="8088680233425245692">নিবন্ধ দেখতে ব্যর্থ হয়েছে৷</translation>
 <translation id="808894953321890993">পাসওয়ার্ড পরিবর্তন করুন</translation>
@@ -1781,6 +1793,7 @@
 <translation id="8606726445206553943">আপনার MIDI ডিভাইসসমূহ ব্যবহার করুন</translation>
 <translation id="861775596732816396">সাইজ ৪</translation>
 <translation id="8622948367223941507">Legal-Extra</translation>
+<translation id="8623885649813806493">পাসওয়ার্ড ম্যাচ করছে না। সেভ করা সমস্ত পাসওয়ার্ড ম্যানেজ করুন।</translation>
 <translation id="8625384913736129811">এই ডিভাইসে এই কার্ডটি সেভ করুন</translation>
 <translation id="8663226718884576429">অর্ডারের সারসংক্ষেপ, <ph name="TOTAL_LABEL" />, আরও বিবরণ</translation>
 <translation id="867224526087042813">স্বাক্ষর</translation>

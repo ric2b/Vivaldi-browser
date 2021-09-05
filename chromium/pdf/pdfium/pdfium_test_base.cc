@@ -5,6 +5,7 @@
 #include "pdf/pdfium/pdfium_test_base.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "build/build_config.h"
@@ -24,6 +25,12 @@ bool IsValidLinkForTesting(const std::string& url) {
   return !url.empty();
 }
 
+void SetSelectedTextForTesting(pp::Instance* instance,
+                               const std::string& selected_text) {}
+
+void SetLinkUnderCursorForTesting(pp::Instance* instance,
+                                  const std::string& link_under_cursor) {}
+
 }  // namespace
 
 PDFiumTestBase::PDFiumTestBase() = default;
@@ -41,11 +48,17 @@ bool PDFiumTestBase::IsRunningOnChromeOS() {
 
 void PDFiumTestBase::SetUp() {
   InitializePDFium();
+  PDFiumEngine::OverrideSetSelectedTextFunctionForTesting(
+      &SetSelectedTextForTesting);
+  PDFiumEngine::OverrideSetLinkUnderCursorFunctionForTesting(
+      &SetLinkUnderCursorForTesting);
   PDFiumPage::SetIsValidLinkFunctionForTesting(&IsValidLinkForTesting);
 }
 
 void PDFiumTestBase::TearDown() {
   PDFiumPage::SetIsValidLinkFunctionForTesting(nullptr);
+  PDFiumEngine::OverrideSetLinkUnderCursorFunctionForTesting(nullptr);
+  PDFiumEngine::OverrideSetSelectedTextFunctionForTesting(nullptr);
   FPDF_DestroyLibrary();
 }
 
@@ -107,10 +120,11 @@ PDFiumPage* PDFiumTestBase::GetPDFiumPageForTest(PDFiumEngine* engine,
 PDFiumTestBase::InitializeEngineResult::InitializeEngineResult() = default;
 
 PDFiumTestBase::InitializeEngineResult::InitializeEngineResult(
-    InitializeEngineResult&& other) = default;
+    InitializeEngineResult&& other) noexcept = default;
 
-PDFiumTestBase::InitializeEngineResult& PDFiumTestBase::InitializeEngineResult::
-operator=(InitializeEngineResult&& other) = default;
+PDFiumTestBase::InitializeEngineResult&
+PDFiumTestBase::InitializeEngineResult::operator=(
+    InitializeEngineResult&& other) noexcept = default;
 
 PDFiumTestBase::InitializeEngineResult::~InitializeEngineResult() = default;
 

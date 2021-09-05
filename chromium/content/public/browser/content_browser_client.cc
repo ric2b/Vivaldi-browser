@@ -9,15 +9,16 @@
 // declarations instead of including more headers. If that is infeasible, adjust
 // the limit. For more info, see
 // https://chromium.googlesource.com/chromium/src/+/HEAD/docs/wmax_tokens.md
-#pragma clang max_tokens_here 820000
+#pragma clang max_tokens_here 840000
 
 #include <utility>
 
+#include "base/check.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/guid.h"
-#include "base/logging.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
@@ -36,7 +37,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_utils.h"
 #include "media/audio/audio_manager.h"
-#include "media/media_buildflags.h"
 #include "media/mojo/mojom/media_service.mojom.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "net/ssl/client_cert_identity.h"
@@ -48,6 +48,7 @@
 #include "services/service_manager/public/cpp/manifest.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 #include "storage/browser/quota/quota_manager.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
@@ -125,7 +126,7 @@ bool ContentBrowserClient::ShouldUseMobileFlingCurve() {
 
 bool ContentBrowserClient::ShouldUseProcessPerSite(
     BrowserContext* browser_context,
-    const GURL& effective_url) {
+    const GURL& site_url) {
   DCHECK(browser_context);
   return false;
 }
@@ -146,6 +147,11 @@ bool ContentBrowserClient::DoesSiteRequireDedicatedProcess(
 bool ContentBrowserClient::ShouldLockToOrigin(BrowserContext* browser_context,
                                               const GURL& effective_url) {
   DCHECK(browser_context);
+  return true;
+}
+
+bool ContentBrowserClient::DoesWebUISchemeRequireProcessLock(
+    base::StringPiece scheme) {
   return true;
 }
 
@@ -246,7 +252,6 @@ bool ContentBrowserClient::OverridesAudioManager() {
 
 void ContentBrowserClient::GetHardwareSecureDecryptionCaps(
     const std::string& key_system,
-    const base::flat_set<media::CdmProxy::Protocol>& cdm_proxy_protocols,
     base::flat_set<media::VideoCodec>* video_codecs,
     base::flat_set<media::EncryptionScheme>* encryption_schemes) {}
 
@@ -309,30 +314,30 @@ base::FilePath ContentBrowserClient::GetLoggingFileName(
   return base::FilePath();
 }
 
-bool ContentBrowserClient::AllowAppCache(const GURL& manifest_url,
-                                         const GURL& first_party,
-                                         BrowserContext* context) {
+bool ContentBrowserClient::AllowAppCache(
+    const GURL& manifest_url,
+    const GURL& site_for_cookies,
+    const base::Optional<url::Origin>& top_frame_origin,
+    BrowserContext* context) {
   return true;
 }
 
-bool ContentBrowserClient::AllowServiceWorkerOnIO(
+AllowServiceWorkerResult ContentBrowserClient::AllowServiceWorkerOnIO(
     const GURL& scope,
     const GURL& site_for_cookies,
     const base::Optional<url::Origin>& top_frame_origin,
     const GURL& script_url,
-    ResourceContext* context,
-    base::RepeatingCallback<WebContents*()> wc_getter) {
-  return true;
+    ResourceContext* context) {
+  return AllowServiceWorkerResult::Yes();
 }
 
-bool ContentBrowserClient::AllowServiceWorkerOnUI(
+AllowServiceWorkerResult ContentBrowserClient::AllowServiceWorkerOnUI(
     const GURL& scope,
     const GURL& site_for_cookies,
     const base::Optional<url::Origin>& top_frame_origin,
     const GURL& script_url,
-    BrowserContext* context,
-    base::RepeatingCallback<WebContents*()> wc_getter) {
-  return true;
+    BrowserContext* context) {
+  return AllowServiceWorkerResult::Yes();
 }
 
 bool ContentBrowserClient::AllowSharedWorker(
@@ -430,6 +435,13 @@ void ContentBrowserClient::AllowCertificateError(
     bool strict_enforcement,
     base::OnceCallback<void(CertificateRequestResultType)> callback) {
   std::move(callback).Run(CERTIFICATE_REQUEST_RESULT_TYPE_DENY);
+}
+
+bool ContentBrowserClient::ShouldDenyRequestOnCertificateError(
+    const GURL main_frame_url) {
+  // Generally we shouldn't deny all certificate errors, but individual
+  // subclasses may override this for special cases.
+  return false;
 }
 
 base::OnceClosure ContentBrowserClient::SelectClientCertificate(
@@ -815,20 +827,14 @@ ContentBrowserClient::WillCreateURLLoaderRequestInterceptors(
 void ContentBrowserClient::OnNetworkServiceCreated(
     network::mojom::NetworkService* network_service) {}
 
-mojo::Remote<network::mojom::NetworkContext>
-ContentBrowserClient::CreateNetworkContext(
+void ContentBrowserClient::ConfigureNetworkContextParams(
     BrowserContext* context,
     bool in_memory,
-    const base::FilePath& relative_partition_path) {
-  DCHECK(context);
-  mojo::Remote<network::mojom::NetworkContext> network_context;
-  network::mojom::NetworkContextParamsPtr context_params =
-      network::mojom::NetworkContextParams::New();
-  context_params->user_agent = GetUserAgent();
-  context_params->accept_language = "en-us,en";
-  GetNetworkService()->CreateNetworkContext(
-      network_context.BindNewPipeAndPassReceiver(), std::move(context_params));
-  return network_context;
+    const base::FilePath& relative_partition_path,
+    network::mojom::NetworkContextParams* network_context_params,
+    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
+  network_context_params->user_agent = GetUserAgent();
+  network_context_params->accept_language = "en-us,en";
 }
 
 std::vector<base::FilePath>
@@ -1082,5 +1088,19 @@ XrIntegrationClient* ContentBrowserClient::GetXrIntegrationClient() {
   return nullptr;
 }
 #endif
+
+bool ContentBrowserClient::IsOriginTrialRequiredForAppCache(
+    content::BrowserContext* browser_context) {
+  // In Chrome proper, this also considers Profile preferences.
+  // As a default, only consider the base::Feature.
+  // Compare this with the ChromeContentBrowserClient implementation.
+  return base::FeatureList::IsEnabled(
+      blink::features::kAppCacheRequireOriginTrial);
+}
+
+bool ContentBrowserClient::ShouldInheritCrossOriginEmbedderPolicyImplicitly(
+    const GURL& url) {
+  return false;
+}
 
 }  // namespace content

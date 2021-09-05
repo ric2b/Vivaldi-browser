@@ -32,7 +32,6 @@ class VIEWS_EXPORT VideoProgress: public views::View {
 
   // View overrides
   bool OnMousePressed(const ui::MouseEvent& event) override;
-  void OnGestureEvent(ui::GestureEvent* event) override;
   views::View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
   base::string16 GetTooltipText(const gfx::Point& p) const override;
 
@@ -40,6 +39,8 @@ class VIEWS_EXPORT VideoProgress: public views::View {
       base::RepeatingCallback<void(double, double)> seek_callback) {
     seek_callback_ = std::move(seek_callback);
   }
+
+  bool HandleGestureEvent(ui::GestureEvent* event);
 
 private:
   void SetBarProgress(double progress);

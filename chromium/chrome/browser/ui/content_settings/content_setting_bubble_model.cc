@@ -20,7 +20,7 @@
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings.h"
+#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/download/download_request_limiter.h"
@@ -39,11 +39,12 @@
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model_delegate.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/content_settings_agent.mojom.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/common/content_settings_agent.mojom.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -76,12 +77,15 @@
 
 using base::UserMetricsAction;
 using content::WebContents;
+using content_settings::SETTING_SOURCE_NONE;
+using content_settings::SETTING_SOURCE_USER;
 using content_settings::SettingInfo;
 using content_settings::SettingSource;
-using content_settings::SETTING_SOURCE_USER;
-using content_settings::SETTING_SOURCE_NONE;
+using content_settings::TabSpecificContentSettings;
 
 namespace {
+
+using QuietUiReason = permissions::PermissionRequestManager::QuietUiReason;
 
 #if defined(OS_MACOSX)
 static constexpr char kCameraSettingsURI[] =
@@ -155,7 +159,7 @@ int GetIdForContentType(const ContentSettingsTypeIdEntry* entries,
 }
 
 void SetAllowRunningInsecureContent(content::RenderFrameHost* frame) {
-  mojo::AssociatedRemote<chrome::mojom::ContentSettingsAgent> agent;
+  mojo::AssociatedRemote<content_settings::mojom::ContentSettingsAgent> agent;
   frame->GetRemoteAssociatedInterfaces()->GetInterface(&agent);
   agent->SetAllowRunningInsecureContent();
 }
@@ -389,8 +393,8 @@ ContentSettingRPHBubbleModel::ContentSettingRPHBubbleModel(
       registry_(registry),
       pending_handler_(ProtocolHandler::EmptyProtocolHandler()),
       previous_handler_(ProtocolHandler::EmptyProtocolHandler()) {
-  TabSpecificContentSettings* content_settings =
-      TabSpecificContentSettings::FromWebContents(web_contents);
+  auto* content_settings =
+      chrome::TabSpecificContentSettingsDelegate::FromWebContents(web_contents);
   pending_handler_ = content_settings->pending_protocol_handler();
   previous_handler_ = content_settings->previous_protocol_handler();
 
@@ -440,8 +444,8 @@ void ContentSettingRPHBubbleModel::CommitChanges() {
 
   // The user has one chance to deal with the RPH content setting UI,
   // then we remove it.
-  auto* settings = TabSpecificContentSettings::FromWebContents(web_contents());
-  settings->ClearPendingProtocolHandler();
+  chrome::TabSpecificContentSettingsDelegate::FromWebContents(web_contents())
+      ->ClearPendingProtocolHandler();
   content_settings::UpdateLocationBarUiForWebContents(web_contents());
 }
 
@@ -451,21 +455,21 @@ void ContentSettingRPHBubbleModel::RegisterProtocolHandler() {
   registry_->RemoveIgnoredHandler(pending_handler_);
 
   registry_->OnAcceptRegisterProtocolHandler(pending_handler_);
-  TabSpecificContentSettings::FromWebContents(web_contents())
+  chrome::TabSpecificContentSettingsDelegate::FromWebContents(web_contents())
       ->set_pending_protocol_handler_setting(CONTENT_SETTING_ALLOW);
 }
 
 void ContentSettingRPHBubbleModel::UnregisterProtocolHandler() {
   registry_->OnDenyRegisterProtocolHandler(pending_handler_);
-  auto* settings = TabSpecificContentSettings::FromWebContents(web_contents());
-  settings->set_pending_protocol_handler_setting(CONTENT_SETTING_BLOCK);
+  chrome::TabSpecificContentSettingsDelegate::FromWebContents(web_contents())
+      ->set_pending_protocol_handler_setting(CONTENT_SETTING_BLOCK);
   ClearOrSetPreviousHandler();
 }
 
 void ContentSettingRPHBubbleModel::IgnoreProtocolHandler() {
   registry_->OnIgnoreRegisterProtocolHandler(pending_handler_);
-  auto* settings = TabSpecificContentSettings::FromWebContents(web_contents());
-  settings->set_pending_protocol_handler_setting(CONTENT_SETTING_DEFAULT);
+  chrome::TabSpecificContentSettingsDelegate::FromWebContents(web_contents())
+      ->set_pending_protocol_handler_setting(CONTENT_SETTING_DEFAULT);
   ClearOrSetPreviousHandler();
 }
 
@@ -1620,30 +1624,48 @@ ContentSettingNotificationsBubbleModel::ContentSettingNotificationsBubbleModel(
     : ContentSettingBubbleModel(delegate, web_contents) {
   set_title(l10n_util::GetStringUTF16(
       IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_TITLE));
-  set_done_button_text(l10n_util::GetStringUTF16(
-      IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_ALLOW_BUTTON));
-  set_show_learn_more(false);
 
   // TODO(crbug.com/1030633): This block is more defensive than it needs to be
   // because ContentSettingImageModelBrowserTest exercises it without setting up
   // the correct PermissionRequestManager state. Fix that.
   permissions::PermissionRequestManager* manager =
       permissions::PermissionRequestManager::FromWebContents(web_contents);
-  int message_resource_id =
-      IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_DESCRIPTION;
-  if (manager->ShouldCurrentRequestUseQuietUI() &&
-      manager->ReasonForUsingQuietUi() ==
-          permissions::PermissionRequestManager::QuietUiReason::
-              kTriggeredByCrowdDeny) {
-    message_resource_id =
-        IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_CROWD_DENY_DESCRIPTION;
-    base::RecordAction(
-        base::UserMetricsAction("Notifications.Quiet.StaticIconClicked"));
-  } else {
-    base::RecordAction(
-        base::UserMetricsAction("Notifications.Quiet.AnimatedIconClicked"));
+  if (!manager->ShouldCurrentRequestUseQuietUI())
+    return;
+  switch (manager->ReasonForUsingQuietUi()) {
+    case QuietUiReason::kEnabledInPrefs:
+      set_message(l10n_util::GetStringUTF16(
+          IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_DESCRIPTION));
+      set_done_button_text(l10n_util::GetStringUTF16(
+          IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_ALLOW_BUTTON));
+      set_show_learn_more(false);
+      base::RecordAction(
+          base::UserMetricsAction("Notifications.Quiet.AnimatedIconClicked"));
+      break;
+    case QuietUiReason::kTriggeredByCrowdDeny:
+      set_message(l10n_util::GetStringUTF16(
+          IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_CROWD_DENY_DESCRIPTION));
+      set_done_button_text(l10n_util::GetStringUTF16(
+          IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_ALLOW_BUTTON));
+      set_show_learn_more(false);
+      base::RecordAction(
+          base::UserMetricsAction("Notifications.Quiet.StaticIconClicked"));
+      break;
+    case QuietUiReason::kTriggeredDueToAbusiveRequests:
+      set_message(l10n_util::GetStringUTF16(
+          IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_ABUSIVE_DESCRIPTION));
+      // TODO(crbug.com/1082738): It is rather confusing to have the `Cancel`
+      // button allow the permission, but we want the primary to block.
+      set_cancel_button_text(l10n_util::GetStringUTF16(
+          IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_COMPACT_ALLOW_BUTTON));
+      set_done_button_text(l10n_util::GetStringUTF16(
+          IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_CONTINUE_BLOCKING_BUTTON));
+      set_show_learn_more(true);
+      set_manage_text_style(ManageTextStyle::kNone);
+      base::RecordAction(
+          base::UserMetricsAction("Notifications.Quiet.StaticIconClicked"));
+      break;
   }
-  set_message(l10n_util::GetStringUTF16(message_resource_id));
 }
 
 ContentSettingNotificationsBubbleModel::
@@ -1662,13 +1684,46 @@ void ContentSettingNotificationsBubbleModel::OnManageButtonClicked() {
       base::UserMetricsAction("Notifications.Quiet.ManageClicked"));
 }
 
+void ContentSettingNotificationsBubbleModel::OnLearnMoreClicked() {
+  if (delegate())
+    delegate()->ShowLearnMorePage(ContentSettingsType::NOTIFICATIONS);
+}
+
 void ContentSettingNotificationsBubbleModel::OnDoneButtonClicked() {
   permissions::PermissionRequestManager* manager =
       permissions::PermissionRequestManager::FromWebContents(web_contents());
-  manager->Accept();
 
-  base::RecordAction(
-      base::UserMetricsAction("Notifications.Quiet.ShowForSiteClicked"));
+  DCHECK(manager->ShouldCurrentRequestUseQuietUI());
+  switch (manager->ReasonForUsingQuietUi()) {
+    case QuietUiReason::kEnabledInPrefs:
+    case QuietUiReason::kTriggeredByCrowdDeny:
+      manager->Accept();
+      base::RecordAction(
+          base::UserMetricsAction("Notifications.Quiet.ShowForSiteClicked"));
+      break;
+    case QuietUiReason::kTriggeredDueToAbusiveRequests:
+      manager->Deny();
+      base::RecordAction(base::UserMetricsAction(
+          "Notifications.Quiet.ContinueBlockingClicked"));
+      break;
+  }
+}
+
+void ContentSettingNotificationsBubbleModel::OnCancelButtonClicked() {
+  permissions::PermissionRequestManager* manager =
+      permissions::PermissionRequestManager::FromWebContents(web_contents());
+
+  switch (manager->ReasonForUsingQuietUi()) {
+    case QuietUiReason::kEnabledInPrefs:
+    case QuietUiReason::kTriggeredByCrowdDeny:
+      // No-op.
+      break;
+    case QuietUiReason::kTriggeredDueToAbusiveRequests:
+      manager->Accept();
+      base::RecordAction(
+          base::UserMetricsAction("Notifications.Quiet.ShowForSiteClicked"));
+      break;
+  }
 }
 
 // ContentSettingBubbleModel ---------------------------------------------------

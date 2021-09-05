@@ -97,6 +97,38 @@ crbug.com/1012289 external/wpt/css/css-pseudo/marker-unicode-bidi-normal.html [ 
 crbug.com/591099 external/wpt/css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-017.html [ Failure ]
 
 ### external/wpt/css/css-sizing/
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/auto-margins-001.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-001.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-002.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-003.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-004.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-005.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-006.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-007.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-008.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-009.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-010.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-011.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-012.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-013.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-014.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-015.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-016.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-017.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/block-aspect-ratio-018.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/flex-aspect-ratio-001.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/flex-aspect-ratio-002.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/flex-aspect-ratio-003.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/flex-aspect-ratio-004.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/flex-aspect-ratio-005.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/flex-aspect-ratio-006.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/flex-aspect-ratio-007.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/flex-aspect-ratio-008.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/percentage-resolution-001.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/percentage-resolution-002.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/percentage-resolution-003.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/percentage-resolution-004.tentative.html [ Failure ]
+crbug.com/1045668 external/wpt/css/css-sizing/aspect-ratio/quirks-mode-001.tentative.html [ Failure ]
 crbug.com/591099 external/wpt/css/css-sizing/clone-nowrap-intrinsic-size-bidi.html [ Failure ]
 crbug.com/591099 external/wpt/css/css-sizing/intrinsic-percent-non-replaced-004.html [ Failure ]
 crbug.com/591099 external/wpt/css/css-sizing/intrinsic-percent-non-replaced-005.html [ Failure ]
@@ -187,6 +219,8 @@ crbug.com/1017164 external/wpt/css/css-text/word-break/word-break-break-all-inli
 ### external/wpt/css/css-ui/
 crbug.com/591099 external/wpt/css/css-ui/text-overflow-010.html [ Failure ]
 crbug.com/1063319 external/wpt/css/css-ui/text-overflow-028.html [ Failure ]
+crbug.com/1078539 external/wpt/css/css-ui/outline-025.html [ Failure ]
+crbug.com/1078539 external/wpt/css/css-ui/outline-026.html [ Failure ]
 
 ### external/wpt/css/css-writing-modes/
 crbug.com/591099 external/wpt/css/css-writing-modes/abs-pos-non-replaced-icb-vlr-003.xht [ Failure ]
@@ -312,6 +346,7 @@ crbug.com/1012294 external/wpt/css/css-lists/list-style-type-string-007.html [ P
 
 ### external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/flexbox/
 crbug.com/591099 external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-align-self-horiz-002.xhtml [ Failure ]
+crbug.com/886592 external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/align3/flex-abspos-staticpos-margin-002.html [ Failure ]
 
 ### external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/ib-split/
 crbug.com/591099 external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/ib-split/emptyspan-1.html [ Failure ]
@@ -415,6 +450,8 @@ crbug.com/591099 virtual/compositor_threaded_scrollbar_scrolling/paint/invalidat
 
 crbug.com/591099 external/wpt/css/css-flexbox/flexbox_align-items-stretch-3.html [ Failure ]
 crbug.com/591099 external/wpt/css/css-flexbox/percentage-heights-006.html [ Failure ]
+crbug.com/591099 external/wpt/css/css-flexbox/percentage-heights-014.html [ Failure ]
+crbug.com/591099 external/wpt/css/css-flexbox/flex-minimum-height-flex-items-023.html [ Failure ]
 
 # These would need a rebaseline back from LayoutNGBlockFlow to LayoutBlockFlow
 crbug.com/864567 paint/float/float-under-inline-self-painting-change.html [ Failure ]
@@ -451,7 +488,7 @@ crbug.com/1016759 paint/invalidation/svg/animated-path-inside-transformed-html.x
 crbug.com/1016759 paint/invalidation/svg/circle-move-invalidation.svg [ Failure ]
 
 # display-locking
-crbug.com/591099 wpt_internal/display-lock/css-subtree-visibility/matchable/subtree-visibility-matchable-005.html [ Failure ]
+crbug.com/591099 wpt_internal/display-lock/css-content-visibility/matchable/content-visibility-matchable-005.html [ Failure ]
 
 # 10/02/2019 Mark tests as failing. Mostly shapes, slight image differences
 external/wpt/css/CSS2/text/white-space-bidirectionality-001.xht [ Failure ]
@@ -544,3 +581,9 @@ crbug.com/1035582 tables/mozilla/bugs/bug46368-1.html [ Failure ]
 crbug.com/1035582 tables/mozilla/bugs/bug46368-2.html [ Failure ]
 crbug.com/1035582 tables/mozilla/bugs/bug59354.html [ Failure ]
 crbug.com/1035582 tables/mozilla/bugs/bug7342.html [ Failure ]
+
+crbug.com/845235 external/wpt/quirks/percentage-height-quirk-excludes-flex-grid-001.html [ Failure ]
+crbug.com/845235 external/wpt/css/css-flexbox/hittest-overlapping-order.html [ Failure ]
+
+crbug.com/1074752 editing/selection/selection-color.html [ Failure ]
+

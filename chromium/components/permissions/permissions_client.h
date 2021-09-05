@@ -15,10 +15,6 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "url/origin.h"
 
-#if defined(OS_ANDROID)
-#include "base/android/scoped_java_ref.h"
-#endif
-
 class GURL;
 class HostContentSettingsMap;
 
@@ -85,6 +81,16 @@ class PermissionsClient {
   virtual void AreSitesImportant(
       content::BrowserContext* browser_context,
       std::vector<std::pair<url::Origin, bool>>* origins);
+
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+  // Returns whether cookie deletion is allowed for |browser_context| and
+  // |origin|.
+  // TODO(crbug.com/1081944): Remove this method and all code depending on it
+  // when a proper fix is landed.
+  virtual bool IsCookieDeletionDisabled(
+      content::BrowserContext* browser_context,
+      const GURL& origin);
+#endif
 
   // Retrieves the ukm::SourceId (if any) associated with this |browser_context|
   // and |web_contents|. |web_contents| may be null. |callback| will be called
@@ -163,8 +169,15 @@ class PermissionsClient {
       ContentSettingsType type,
       base::WeakPtr<PermissionPromptAndroid> prompt);
 
-  // Returns a handle to the Java counterpart of this class.
-  virtual base::android::ScopedJavaLocalRef<jobject> GetJavaObject();
+  using PermissionsUpdatedCallback = base::OnceCallback<void(bool)>;
+
+  // Prompts the user to accept system permissions for |content_settings_types|,
+  // after they've already been denied. In Chrome, this shows an infobar.
+  // |callback| will be run with |true| for success and |false| otherwise.
+  virtual void RepromptForAndroidPermissions(
+      content::WebContents* web_contents,
+      const std::vector<ContentSettingsType>& content_settings_types,
+      PermissionsUpdatedCallback callback);
 
   // Converts the given chromium |resource_id| (e.g. IDR_INFOBAR_TRANSLATE) to
   // an Android drawable resource ID. Returns 0 if a mapping wasn't found.

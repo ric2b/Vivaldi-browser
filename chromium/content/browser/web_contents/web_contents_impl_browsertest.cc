@@ -15,6 +15,7 @@
 #include "base/optional.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/pattern.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -26,6 +27,7 @@
 #include "components/url_formatter/url_formatter.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
+#include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -40,6 +42,7 @@
 #include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/load_notification_details.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_types.h"
@@ -51,9 +54,11 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -62,6 +67,9 @@
 #include "content/public/test/test_utils.h"
 #include "content/public/test/url_loader_interceptor.h"
 #include "content/shell/browser/shell.h"
+#include "content/shell/browser/shell_browser_context.h"
+#include "content/shell/browser/shell_content_browser_client.h"
+#include "content/shell/browser/web_test/mock_client_hints_controller_delegate.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "content/test/resource_load_observer.h"
 #include "content/test/test_content_browser_client.h"
@@ -71,7 +79,9 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/mojom/web_client_hints_types.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/blink/public/common/client_hints/client_hints.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "url/gurl.h"
@@ -86,21 +96,13 @@ namespace content {
 
 void ResizeWebContentsView(Shell* shell, const gfx::Size& size,
                            bool set_start_page) {
-  // Shell::SizeTo is not implemented on Aura; WebContentsView::SizeContents
-  // works on Win and ChromeOS but not Linux - we need to resize the shell
-  // window on Linux because if we don't, the next layout of the unchanged shell
-  // window will resize WebContentsView back to the previous size.
-  // SizeContents is a hack and should not be relied on.
-#if defined(OS_MACOSX)
-  shell->SizeTo(size);
-  // If |set_start_page| is true, start with blank page to make sure resize
-  // takes effect.
+  // Resizing the web content directly, independent of the Shell window,
+  // requires the RenderWidgetHostView to exist. So we do a navigation
+  // first if |set_start_page| is true.
   if (set_start_page)
     EXPECT_TRUE(NavigateToURL(shell, GURL(url::kAboutBlankURL)));
-#else
-  static_cast<WebContentsImpl*>(shell->web_contents())->GetView()->
-      SizeContents(size);
-#endif  // defined(OS_MACOSX)
+
+  shell->ResizeWebContentForTests(size);
 }
 
 // Class to test that OverrideWebkitPrefs has been called for all relevant
@@ -1257,13 +1259,12 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   const GURL kViewSourceURL(kViewSourceScheme + std::string(":") + kUrl.spec());
   EXPECT_TRUE(NavigateToURL(shell(), kUrl));
 
-  auto console_delegate = std::make_unique<ConsoleObserverDelegate>(
-      shell()->web_contents(),
+  WebContentsConsoleObserver console_observer(shell()->web_contents());
+  console_observer.SetPattern(
       "Not allowed to load local resource: view-source:*");
-  shell()->web_contents()->SetDelegate(console_delegate.get());
   EXPECT_TRUE(ExecuteScript(shell()->web_contents(),
                             "window.open('" + kViewSourceURL.spec() + "');"));
-  console_delegate->Wait();
+  console_observer.Wait();
   // Original page shouldn't navigate away, no new tab should be opened.
   EXPECT_EQ(kUrl, shell()->web_contents()->GetURL());
   EXPECT_EQ(1u, Shell::windows().size());
@@ -1277,16 +1278,14 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   const GURL kViewSourceURL(kViewSourceScheme + std::string(":") + kUrl.spec());
   EXPECT_TRUE(NavigateToURL(shell(), kUrl));
 
-  std::unique_ptr<ConsoleObserverDelegate> console_delegate(
-      new ConsoleObserverDelegate(
-          shell()->web_contents(),
-          "Not allowed to load local resource: view-source:*"));
-  shell()->web_contents()->SetDelegate(console_delegate.get());
+  WebContentsConsoleObserver console_observer(shell()->web_contents());
+  console_observer.SetPattern(
+      "Not allowed to load local resource: view-source:*");
 
   EXPECT_TRUE(
       ExecuteScript(shell()->web_contents(),
                     "window.location = '" + kViewSourceURL.spec() + "';"));
-  console_delegate->Wait();
+  console_observer.Wait();
   // Original page shouldn't navigate away.
   EXPECT_EQ(kUrl, shell()->web_contents()->GetURL());
   EXPECT_FALSE(shell()
@@ -1550,6 +1549,7 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
 
   void AddNewContents(WebContents* source,
                       std::unique_ptr<WebContents> new_contents,
+                      const GURL& target_url,
                       WindowOpenDisposition disposition,
                       const gfx::Rect& initial_rect,
                       bool user_gesture,
@@ -2191,6 +2191,189 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, UserAgentOverride) {
       "window.domAutomationController.send(document.body.textContent);",
       &header_value));
   EXPECT_EQ(kUserAgentOverride, header_value);
+}
+
+// Changes the WebContents and active entry user agent override from
+// DidStartNavigation().
+// in WebContentsObserver::DidStartNavigation().
+class UserAgentInjector : public WebContentsObserver {
+ public:
+  UserAgentInjector(WebContents* web_contents, const std::string& user_agent)
+      : UserAgentInjector(web_contents,
+                          blink::UserAgentOverride::UserAgentOnly(user_agent),
+                          true) {}
+
+  UserAgentInjector(WebContents* web_contents,
+                    const blink::UserAgentOverride& ua_override,
+                    bool is_overriding_user_agent = true)
+      : WebContentsObserver(web_contents),
+        user_agent_override_(ua_override),
+        is_overriding_user_agent_(is_overriding_user_agent) {}
+
+  // WebContentsObserver:
+  void DidStartNavigation(NavigationHandle* navigation_handle) override {
+    web_contents()->SetUserAgentOverride(user_agent_override_, false);
+    navigation_handle->SetIsOverridingUserAgent(is_overriding_user_agent_);
+  }
+
+ private:
+  const blink::UserAgentOverride user_agent_override_;
+  const bool is_overriding_user_agent_ = true;
+};
+
+// Verifies the user-agent string may be changed in DidStartNavigation().
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       SetUserAgentOverrideFromDidStartNavigation) {
+  net::test_server::ControllableHttpResponse http_response(
+      embedded_test_server(), "", true);
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const std::string user_agent_override = "foo";
+  UserAgentInjector injector(shell()->web_contents(), user_agent_override);
+  shell()->web_contents()->GetController().LoadURLWithParams(
+      NavigationController::LoadURLParams(
+          embedded_test_server()->GetURL("/test.html")));
+  http_response.WaitForRequest();
+  http_response.Send(
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Type: text/html; charset=utf-8\r\n"
+      "\r\n"
+      "<html>");
+  http_response.Done();
+  EXPECT_EQ(user_agent_override, http_response.http_request()->headers.at(
+                                     net::HttpRequestHeaders::kUserAgent));
+  WaitForLoadStop(shell()->web_contents());
+  EXPECT_EQ(user_agent_override,
+            EvalJs(shell()->web_contents(), "navigator.userAgent;"));
+}
+
+// Used by SetIsOverridingUserAgent(), adding assertions unique to it.
+class NoEntryUserAgentInjector : public UserAgentInjector {
+ public:
+  NoEntryUserAgentInjector(WebContents* web_contents,
+                           const std::string& user_agent)
+      : UserAgentInjector(web_contents, user_agent) {}
+
+  // WebContentsObserver:
+  void DidStartNavigation(NavigationHandle* navigation_handle) override {
+    UserAgentInjector::DidStartNavigation(navigation_handle);
+    // DidStartNavigation() should only be called once for this test.
+    ASSERT_FALSE(was_did_start_navigation_called_);
+    was_did_start_navigation_called_ = true;
+
+    // This test expects to exercise the code where thee NavigationRequest is
+    // created before the NavigationEntry.
+    EXPECT_EQ(
+        0, static_cast<NavigationRequest*>(navigation_handle)->nav_entry_id());
+  }
+
+ private:
+  bool was_did_start_navigation_called_ = false;
+};
+
+// Verifies the user-agent string may be changed for a NavigationRequest whose
+// NavigationEntry is created after the NavigationRequest is.
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       SetIsOverridingUserAgentNoEntry) {
+  net::test_server::ControllableHttpResponse http_response1(
+      embedded_test_server(), "", true);
+  net::test_server::ControllableHttpResponse http_response2(
+      embedded_test_server(), "", true);
+  net::test_server::ControllableHttpResponse http_response3(
+      embedded_test_server(), "", true);
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  shell()->web_contents()->GetController().LoadURLWithParams(
+      NavigationController::LoadURLParams(
+          embedded_test_server()->GetURL("/test.html")));
+  http_response1.WaitForRequest();
+  http_response1.Send(net::HTTP_OK, "text/html", "<html>");
+  http_response1.Done();
+  WaitForLoadStop(shell()->web_contents());
+  shell()->web_contents()->GetController().LoadURLWithParams(
+      NavigationController::LoadURLParams(
+          embedded_test_server()->GetURL("/test2.html")));
+  http_response2.WaitForRequest();
+  http_response2.Send(net::HTTP_OK, "text/html", "<html>");
+  http_response2.Done();
+  WaitForLoadStop(shell()->web_contents());
+
+  // Register a WebContentsObserver that changes the user-agent.
+  const std::string user_agent_override = "foo";
+  NoEntryUserAgentInjector injector(shell()->web_contents(),
+                                    user_agent_override);
+
+  // This triggers creating a NavigationRequest without a NavigationEntry. More
+  // specifically back() triggers creating a pending entry, and because back()
+  // does not complete, the reload() call results in a NavigationRequest with no
+  // NavigationEntry.
+  EXPECT_TRUE(ExecuteScript(shell()->web_contents(),
+                            "history.back(); location.reload();"));
+
+  http_response3.WaitForRequest();
+  http_response3.Send(net::HTTP_OK, "text/html", "<html>");
+  http_response3.Done();
+  EXPECT_EQ(user_agent_override, http_response3.http_request()->headers.at(
+                                     net::HttpRequestHeaders::kUserAgent));
+  WaitForLoadStop(shell()->web_contents());
+  auto* controller = &(shell()->web_contents()->GetController());
+  EXPECT_EQ(1, controller->GetLastCommittedEntryIndex());
+  EXPECT_TRUE(shell()
+                  ->web_contents()
+                  ->GetController()
+                  .GetLastCommittedEntry()
+                  ->GetIsOverridingUserAgent());
+  EXPECT_EQ(user_agent_override,
+            EvalJs(shell()->web_contents(), "navigator.userAgent;"));
+}
+
+class WebContentsImplBrowserTestClientHintsEnabled
+    : public WebContentsImplBrowserTest {
+ public:
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(features::kUserAgentClientHint);
+    WebContentsImplBrowserTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Verifies client hints are updated when the user-agent is changed in
+// DidStartNavigation().
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTestClientHintsEnabled,
+                       SetUserAgentOverrideFromDidStartNavigation) {
+  MockClientHintsControllerDelegate client_hints_controller_delegate;
+  ShellContentBrowserClient::Get()
+      ->browser_context()
+      ->set_client_hints_controller_delegate(&client_hints_controller_delegate);
+  net::test_server::ControllableHttpResponse http_response(
+      embedded_test_server(), "", true);
+  ASSERT_TRUE(embedded_test_server()->Start());
+  blink::UserAgentOverride ua_override;
+  ua_override.ua_string_override = "x";
+  ua_override.ua_metadata_override.emplace();
+  ua_override.ua_metadata_override->brand_version_list.emplace_back("x", "y");
+  ua_override.ua_metadata_override->mobile = true;
+  UserAgentInjector injector(shell()->web_contents(), ua_override);
+  shell()->web_contents()->GetController().LoadURLWithParams(
+      NavigationController::LoadURLParams(
+          embedded_test_server()->GetURL("/test.html")));
+  http_response.WaitForRequest();
+  http_response.Send(
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Type: text/html; charset=utf-8\r\n"
+      "\r\n"
+      "<html>");
+  http_response.Done();
+  const std::string mobile_id =
+      blink::kClientHintsHeaderMapping[static_cast<int>(
+          network::mojom::WebClientHintsType::kUAMobile)];
+  ASSERT_TRUE(base::Contains(http_response.http_request()->headers, mobile_id));
+  // "?!" corresponds to "mobile=true".
+  EXPECT_EQ("?1", http_response.http_request()->headers.at(mobile_id));
+  ShellContentBrowserClient::Get()
+      ->browser_context()
+      ->set_client_hints_controller_delegate(nullptr);
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
@@ -3332,7 +3515,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, MouseButtonsNavigate) {
     TestNavigationObserver back_observer(web_contents);
     web_contents->GetRenderWidgetHostWithPageFocus()->ForwardMouseEvent(
         blink::WebMouseEvent(
-            blink::WebInputEvent::kMouseUp, gfx::PointF(51, 50),
+            blink::WebInputEvent::Type::kMouseUp, gfx::PointF(51, 50),
             gfx::PointF(51, 50), blink::WebPointerProperties::Button::kBack, 0,
             blink::WebInputEvent::kNoModifiers, base::TimeTicks::Now()));
     back_observer.Wait();
@@ -3343,7 +3526,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, MouseButtonsNavigate) {
     TestNavigationObserver forward_observer(web_contents);
     web_contents->GetRenderWidgetHostWithPageFocus()->ForwardMouseEvent(
         blink::WebMouseEvent(
-            blink::WebInputEvent::kMouseUp, gfx::PointF(51, 50),
+            blink::WebInputEvent::Type::kMouseUp, gfx::PointF(51, 50),
             gfx::PointF(51, 50), blink::WebPointerProperties::Button::kForward,
             0, blink::WebInputEvent::kNoModifiers, base::TimeTicks::Now()));
     forward_observer.Wait();
@@ -3374,8 +3557,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, MouseButtonsDontNavigate) {
   RenderWidgetHostImpl* render_widget_host =
       web_contents->GetRenderWidgetHostWithPageFocus();
   render_widget_host->ForwardMouseEvent(blink::WebMouseEvent(
-      blink::WebInputEvent::kMouseUp, gfx::PointF(51, 50), gfx::PointF(51, 50),
-      blink::WebPointerProperties::Button::kBack, 0,
+      blink::WebInputEvent::Type::kMouseUp, gfx::PointF(51, 50),
+      gfx::PointF(51, 50), blink::WebPointerProperties::Button::kBack, 0,
       blink::WebInputEvent::kNoModifiers, base::TimeTicks::Now()));
   RunUntilInputProcessed(render_widget_host);
 
@@ -3406,8 +3589,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, MouseButtonsDontNavigate) {
 
   render_widget_host = web_contents->GetRenderWidgetHostWithPageFocus();
   render_widget_host->ForwardMouseEvent(blink::WebMouseEvent(
-      blink::WebInputEvent::kMouseUp, gfx::PointF(51, 50), gfx::PointF(51, 50),
-      blink::WebPointerProperties::Button::kForward, 0,
+      blink::WebInputEvent::Type::kMouseUp, gfx::PointF(51, 50),
+      gfx::PointF(51, 50), blink::WebPointerProperties::Button::kForward, 0,
       blink::WebInputEvent::kNoModifiers, base::TimeTicks::Now()));
   RunUntilInputProcessed(render_widget_host);
   // Wait an action timeout and assert the URL is correct.
@@ -3938,6 +4121,62 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_EQ(0, web_contents_observer.call_count());
   EXPECT_EQ(viz::VerticalScrollDirection::kNull,
             web_contents_observer.last_value());
+}
+
+// Verifies assertions for SetRendererInitiatedUserAgentOverrideOption().
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       RendererInitiatedUserAgentOverride) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  WebContents* web_contents = shell()->web_contents();
+
+  // This url triggers a renderer initiated navigation (redirect).
+  NavigationController::LoadURLParams load_params(
+      embedded_test_server()->GetURL("a.co", "/client_redirect.html"));
+  load_params.override_user_agent = NavigationController::UA_OVERRIDE_TRUE;
+
+  const GURL resulting_url =
+      embedded_test_server()->GetURL("a.co", "/title1.html");
+
+  // Assertions for the default SetRendererInitiatedUserAgentOverrideOption(),
+  // which is UA_OVERRIDE_INHERIT.
+  {
+    // The 2 is because the url redirects.
+    TestNavigationObserver observer(shell()->web_contents(), 2);
+    web_contents->GetController().LoadURLWithParams(load_params);
+    observer.Wait();
+
+    NavigationEntry* resulting_entry =
+        web_contents->GetController().GetLastCommittedEntry();
+    ASSERT_TRUE(resulting_entry);
+    EXPECT_EQ(resulting_url, resulting_entry->GetURL());
+    // The resulting entry should override the user-agent as the previous
+    // entry (as created by |load_params|) was configured to override the
+    // user-agent, and the WebContents was configured with
+    // SetRendererInitiatedUserAgentOverrideOption() of
+    // UA_OVERRIDE_INHERIT.
+    EXPECT_TRUE(resulting_entry->GetIsOverridingUserAgent());
+  }
+
+  // Repeat the above, but with UA_OVERRIDE_FALSE.
+  web_contents->SetRendererInitiatedUserAgentOverrideOption(
+      NavigationController::UA_OVERRIDE_FALSE);
+  {
+    // The 2 is because the url redirects.
+    TestNavigationObserver observer(shell()->web_contents(), 2);
+    web_contents->GetController().LoadURLWithParams(load_params);
+    observer.Wait();
+
+    EXPECT_EQ(2, web_contents->GetController().GetEntryCount());
+    NavigationEntry* resulting_entry =
+        web_contents->GetController().GetLastCommittedEntry();
+    ASSERT_TRUE(resulting_entry);
+    EXPECT_EQ(resulting_url, resulting_entry->GetURL());
+    // Even though |load_params| was configured to override the user-agent, the
+    // NavigationEntry for the redirect gets an override user-agent value of
+    // false because
+    // of SetRendererInitiatedUserAgentOverrideOption(UA_OVERRIDE_FALSE).
+    EXPECT_FALSE(resulting_entry->GetIsOverridingUserAgent());
+  }
 }
 
 }  // namespace content

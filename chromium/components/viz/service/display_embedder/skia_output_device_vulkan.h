@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/util/type_safety/pass_key.h"
+#include "build/build_config.h"
 #include "components/viz/service/display_embedder/skia_output_device.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "gpu/vulkan/vulkan_swap_chain.h"
@@ -39,6 +40,9 @@ class SkiaOutputDeviceVulkan final : public SkiaOutputDevice {
       gpu::MemoryTracker* memory_tracker,
       DidSwapBufferCompleteCallback did_swap_buffer_complete_callback);
 
+#if defined(OS_WIN)
+  gpu::SurfaceHandle GetChildSurfaceHandle();
+#endif
   // SkiaOutputDevice implementation:
   bool Reshape(const gfx::Size& size,
                float device_scale_factor,
@@ -65,7 +69,9 @@ class SkiaOutputDeviceVulkan final : public SkiaOutputDevice {
   };
 
   bool Initialize();
-  void CreateSkSurface();
+  bool RecreateSwapChain(const gfx::Size& size,
+                         sk_sp<SkColorSpace> color_space,
+                         gfx::OverlayTransform transform);
 
   VulkanContextProvider* const context_provider_;
 
@@ -81,7 +87,8 @@ class SkiaOutputDeviceVulkan final : public SkiaOutputDevice {
   // SkSurfaces for swap chain images.
   std::vector<SkSurfaceSizePair> sk_surface_size_pairs_;
 
-  sk_sp<SkColorSpace> sk_color_space_;
+  sk_sp<SkColorSpace> color_space_;
+  bool is_new_swapchain_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(SkiaOutputDeviceVulkan);
 };

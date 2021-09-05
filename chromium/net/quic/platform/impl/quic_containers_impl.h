@@ -11,7 +11,6 @@
 
 #include "base/containers/queue.h"
 #include "base/containers/small_map.h"
-#include "net/base/interval_set.h"
 #include "net/third_party/quiche/src/common/simple_linked_hash_map.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_flags.h"
 
@@ -32,6 +31,9 @@ template <typename Key,
               typename std::unordered_map<Key, Value, Hash>::allocator_type>
 using QuicUnorderedMapImpl = std::unordered_map<Key, Value, Hash, Eq, Alloc>;
 
+template <typename Key, typename Value, typename Hash>
+using QuicHashMapImpl = std::unordered_map<Key, Value, Hash>;
+
 // TODO(mpw): s/std::unordered_set/gtl::node_hash_set/ once node_hash_set is
 //   PG3-compatible.
 template <typename Key,
@@ -40,6 +42,9 @@ template <typename Key,
           typename Alloc =
               typename std::unordered_set<Key, Hash>::allocator_type>
 using QuicUnorderedSetImpl = std::unordered_set<Key, Hash, Eq, Alloc>;
+
+template <typename Key, typename Hash>
+using QuicHashSetImpl = std::unordered_set<Key, Hash>;
 
 // A map which offers insertion-ordered iteration.
 template <typename Key, typename Value, typename Hash>
@@ -50,11 +55,6 @@ using QuicLinkedHashMapImpl = quiche::SimpleLinkedHashMap<Key, Value, Hash>;
 // runs out of space.
 template <typename Key, typename Value, int Size>
 using QuicSmallMapImpl = base::small_map<std::unordered_map<Key, Value>, Size>;
-
-// A data structure used to represent a sorted set of non-empty, non-adjacent,
-// and mutually disjoint intervals.
-template <typename T>
-using QuicIntervalSetImpl = net::IntervalSet<T>;
 
 // Represents a simple queue which may be backed by a list or
 // a flat circular buffer.

@@ -12,13 +12,16 @@ enum RTCCodedVideoFrameType {
 };
 
 // TODO(crbug.com/1052765): Align with WebCodecs definition once it is stable.
-[RuntimeEnabled=RTCInsertableStreams]
-interface RTCEncodedVideoFrame {
+[
+    Exposed=Window,
+    RuntimeEnabled=RTCInsertableStreams
+] interface RTCEncodedVideoFrame {
     readonly attribute RTCCodedVideoFrameType type;
     readonly attribute unsigned long long timestamp;  // microseconds
     attribute ArrayBuffer data;
-    // TODO(crbug.com/1052765): Replace the following fields with a dictionary
-    // with structured data once we have decided what will be exposed.
+    RTCEncodedVideoFrameMetadata getMetadata();
+    // TODO(crbug.com/1052765): Remove the following fields before enabling
+    // by default.
     readonly attribute ArrayBuffer additionalData;
     readonly attribute unsigned long synchronizationSource;
     stringifier;

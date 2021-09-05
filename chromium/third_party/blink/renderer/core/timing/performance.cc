@@ -50,6 +50,7 @@
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/document_load_timing.h"
@@ -88,13 +89,6 @@ const SecurityOrigin* GetSecurityOrigin(ExecutionContext* context) {
   return nullptr;
 }
 
-const Performance::UnifiedClock* DefaultUnifiedClock() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(Performance::UnifiedClock, unified_clock,
-                                  (base::DefaultClock::GetInstance(),
-                                   base::DefaultTickClock::GetInstance()));
-  return &unified_clock;
-}
-
 bool IsMeasureOptionsEmpty(const PerformanceMeasureOptions& options) {
   return !options.hasDetail() && !options.hasEnd() && !options.hasStart() &&
          !options.hasDuration();
@@ -119,7 +113,7 @@ Performance::Performance(
       element_timing_buffer_max_size_(kDefaultElementTimingBufferSize),
       user_timing_(nullptr),
       time_origin_(time_origin),
-      unified_clock_(DefaultUnifiedClock()),
+      tick_clock_(base::DefaultTickClock::GetInstance()),
       observer_filter_options_(PerformanceEntry::kInvalid),
       task_runner_(std::move(task_runner)),
       deliver_observations_timer_(task_runner_,
@@ -128,7 +122,11 @@ Performance::Performance(
       resource_timing_buffer_full_timer_(
           task_runner_,
           this,
-          &Performance::FireResourceTimingBufferFull) {}
+          &Performance::FireResourceTimingBufferFull) {
+  unix_at_zero_monotonic_ = ConvertSecondsToDOMHighResTimeStamp(
+      base::DefaultClock::GetInstance()->Now().ToDoubleT() -
+      tick_clock_->NowTicks().since_origin().InSecondsF());
+}
 
 Performance::~Performance() = default;
 
@@ -148,6 +146,10 @@ MemoryInfo* Performance::memory() const {
   return nullptr;
 }
 
+EventCounts* Performance::eventCounts() {
+  return nullptr;
+}
+
 namespace {
 
 bool IsMeasureMemoryAvailable(ScriptState* script_state) {
@@ -159,11 +161,11 @@ bool IsMeasureMemoryAvailable(ScriptState* script_state) {
   }
   // The window.crossOriginIsolated will be true only for the top-level frame.
   // Until the flag is available we check for the top-level condition manually.
-  ExecutionContext* execution_context = ExecutionContext::From(script_state);
-  if (!execution_context->IsDocument()) {
+  LocalDOMWindow* window = LocalDOMWindow::From(script_state);
+  if (!window) {
     return false;
   }
-  LocalFrame* local_frame = Document::From(execution_context)->GetFrame();
+  LocalFrame* local_frame = window->GetFrame();
   if (!local_frame || !local_frame->IsMainFrame()) {
     return false;
   }
@@ -202,7 +204,7 @@ ScriptPromise Performance::measureMemory(
 
 DOMHighResTimeStamp Performance::timeOrigin() const {
   DCHECK(!time_origin_.is_null());
-  return unified_clock_->GetUnixAtZeroMonotonic() +
+  return unix_at_zero_monotonic_ +
          ConvertTimeTicksToDOMHighResTimeStamp(time_origin_);
 }
 
@@ -278,6 +280,8 @@ PerformanceEntryVector Performance::getEntriesByTypeInternal(
     case PerformanceEntry::kFirstInput:
       UseCounter::Count(GetExecutionContext(),
                         WebFeature::kEventTimingExplicitlyRequested);
+      UseCounter::Count(GetExecutionContext(),
+                        WebFeature::kEventTimingFirstInputExplicitlyRequested);
       if (first_input_timing_)
         entries.push_back(first_input_timing_);
       break;
@@ -739,7 +743,7 @@ PerformanceMark* Performance::mark(ScriptState* script_state,
       (mark_options->hasStartTime() || mark_options->hasDetail())) {
     UseCounter::Count(GetExecutionContext(), WebFeature::kUserTimingL3);
   }
-  PerformanceMark* performance_mark = GetUserTiming().CreatePerformanceMark(
+  PerformanceMark* performance_mark = PerformanceMark::Create(
       script_state, mark_name, mark_options, exception_state);
   if (performance_mark) {
     GetUserTiming().AddMarkToPerformanceTimeline(*performance_mark);
@@ -855,8 +859,7 @@ PerformanceMeasure* Performance::MeasureInternal(
   return MeasureWithDetail(
       script_state, measure_name, converted_start,
       /* duration = */ base::nullopt,
-      end_mark ? StringOrDouble::FromString(*end_mark)
-               : NativeValueTraits<StringOrDouble>::NullValue(),
+      end_mark ? StringOrDouble::FromString(*end_mark) : StringOrDouble(),
       ScriptValue::CreateNull(script_state->GetIsolate()), exception_state);
 }
 
@@ -931,7 +934,8 @@ void Performance::NotifyObserversOfEntry(PerformanceEntry& entry) const {
          RuntimeEnabledFeatures::EventTimingEnabled(GetExecutionContext()));
   bool observer_found = false;
   for (auto& observer : observers_) {
-    if (observer->FilterOptions() & entry.EntryTypeEnum()) {
+    if (observer->FilterOptions() & entry.EntryTypeEnum() &&
+        observer->CanObserve(entry)) {
       observer->EnqueuePerformanceEntry(entry);
       observer_found = true;
     }
@@ -992,14 +996,42 @@ DOMHighResTimeStamp Performance::MonotonicTimeToDOMHighResTimeStamp(
   return ConvertSecondsToDOMHighResTimeStamp(clamped_time_in_seconds);
 }
 
+// static
+base::TimeDelta Performance::MonotonicTimeToTimeDelta(
+    base::TimeTicks time_origin,
+    base::TimeTicks monotonic_time,
+    bool allow_negative_value) {
+  return base::TimeDelta::FromMillisecondsD(MonotonicTimeToDOMHighResTimeStamp(
+      time_origin, monotonic_time, allow_negative_value));
+}
+
 DOMHighResTimeStamp Performance::MonotonicTimeToDOMHighResTimeStamp(
     base::TimeTicks monotonic_time) const {
   return MonotonicTimeToDOMHighResTimeStamp(time_origin_, monotonic_time,
                                             false /* allow_negative_value */);
 }
 
+base::TimeDelta Performance::MonotonicTimeToTimeDelta(
+    base::TimeTicks monotonic_time) const {
+  return MonotonicTimeToTimeDelta(time_origin_, monotonic_time,
+                                  false /* allow_negative_value */);
+}
+
 DOMHighResTimeStamp Performance::now() const {
-  return MonotonicTimeToDOMHighResTimeStamp(unified_clock_->NowTicks());
+  return MonotonicTimeToDOMHighResTimeStamp(tick_clock_->NowTicks());
+}
+
+// static
+bool Performance::CanExposeNode(Node* node) {
+  if (!node || !node->isConnected() || node->IsInShadowTree())
+    return false;
+
+  // Do not expose |node| when the document is not 'fully active'.
+  const Document& document = node->GetDocument();
+  if (!document.IsActive() || !document.GetFrame())
+    return false;
+
+  return true;
 }
 
 ScriptValue Performance::toJSONForBinding(ScriptState* script_state) const {
@@ -1032,25 +1064,13 @@ void Performance::Trace(Visitor* visitor) {
   EventTargetWithInlineData::Trace(visitor);
 }
 
-DOMHighResTimeStamp Performance::UnifiedClock::GetUnixAtZeroMonotonic() const {
-  // When a Performance object is first queried, use the current system time
-  // to calculate what the Unix time would be at the time the monotonic
-  // clock time was zero, assuming no manual changes to the system clock.
-  // This can be calculated as current_unix_time - current_monotonic_time.
-  if (UNLIKELY(!unix_at_zero_monotonic_)) {
-    unix_at_zero_monotonic_ = ConvertSecondsToDOMHighResTimeStamp(
-        clock_->Now().ToDoubleT() -
-        tick_clock_->NowTicks().since_origin().InSecondsF());
-  }
-  return unix_at_zero_monotonic_.value();
-}
-
-base::TimeTicks Performance::UnifiedClock::NowTicks() const {
-  return tick_clock_->NowTicks();
-}
-
-void Performance::SetClocksForTesting(const UnifiedClock* clock) {
-  unified_clock_ = clock;
+void Performance::SetClocksForTesting(const base::Clock* clock,
+                                      const base::TickClock* tick_clock) {
+  tick_clock_ = tick_clock;
+  // Recompute |unix_at_zero_monotonic_|.
+  unix_at_zero_monotonic_ = ConvertSecondsToDOMHighResTimeStamp(
+      clock->Now().ToDoubleT() -
+      tick_clock_->NowTicks().since_origin().InSecondsF());
 }
 
 void Performance::ResetTimeOriginForTesting(base::TimeTicks time_origin) {

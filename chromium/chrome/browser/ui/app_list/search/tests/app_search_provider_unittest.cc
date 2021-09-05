@@ -137,7 +137,7 @@ class AppSearchProviderTest : public AppListTestBase {
     open_tabs_ui_delegate_ =
         std::make_unique<sync_sessions::OpenTabsUIDelegateImpl>(
             &mock_sync_sessions_client_, session_tracker_.get(),
-            /*favicon_cache=*/nullptr, base::DoNothing());
+            base::DoNothing());
     app_search_->set_open_tabs_ui_delegate_for_testing(
         open_tabs_ui_delegate_.get());
   }
@@ -797,7 +797,7 @@ TEST_F(AppSearchProviderTest, FuzzyAppSearchTest) {
   feature_list.InitAndEnableFeature(app_list_features::kEnableFuzzyAppSearch);
   CreateSearch();
   EXPECT_EQ("Packaged App 1,Packaged App 2", RunQuery("pa"));
-  std::string result = RunQuery("packahe");
+  std::string result = RunQuery("ackaged");
   EXPECT_TRUE(result == "Packaged App 1,Packaged App 2" ||
               result == "Packaged App 2,Packaged App 1");
   EXPECT_EQ(kKeyboardShortcutHelperInternalName, RunQuery("Helper"));

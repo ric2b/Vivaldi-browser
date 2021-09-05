@@ -17,7 +17,6 @@
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 
 namespace content {
-
 class ShellBrowserContext;
 class ShellBrowserMainParts;
 
@@ -32,6 +31,13 @@ class ShellContentBrowserClient : public ContentBrowserClient {
 
   ShellContentBrowserClient();
   ~ShellContentBrowserClient() override;
+
+  // The value supplied here is set when creating the NetworkContext.
+  // Specifically
+  // network::mojom::NetworkContext::allow_any_cors_exempt_header_for_browser.
+  static void set_allow_any_cors_exempt_header_for_browser(bool value) {
+    allow_any_cors_exempt_header_for_browser_ = value;
+  }
 
   // ContentBrowserClient overrides.
   std::unique_ptr<BrowserMainParts> CreateBrowserMainParts(
@@ -60,11 +66,20 @@ class ShellContentBrowserClient : public ContentBrowserClient {
                            WebPreferences* prefs) override;
   base::FilePath GetFontLookupTableCacheDir() override;
   DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
+  void ExposeInterfacesToRenderer(
+      service_manager::BinderRegistry* registry,
+      blink::AssociatedInterfaceRegistry* associated_registry,
+      RenderProcessHost* render_process_host) override;
   mojo::Remote<::media::mojom::MediaService> RunSecondaryMediaService()
       override;
+  void RegisterBrowserInterfaceBindersForFrame(
+      RenderFrameHost* render_frame_host,
+      mojo::BinderMapWithContext<RenderFrameHost*>* map) override;
   void OpenURL(SiteInstance* site_instance,
                const OpenURLParams& params,
                base::OnceCallback<void(WebContents*)> callback) override;
+  std::vector<std::unique_ptr<NavigationThrottle>> CreateThrottlesForNavigation(
+      NavigationHandle* navigation_handle) override;
   std::unique_ptr<LoginDelegate> CreateLoginDelegate(
       const net::AuthChallengeInfo& auth_info,
       content::WebContents* web_contents,
@@ -75,27 +90,26 @@ class ShellContentBrowserClient : public ContentBrowserClient {
       bool first_auth_attempt,
       LoginAuthRequiredCallback auth_required_callback) override;
   base::FilePath GetSandboxedStorageServiceDataDirectory() override;
-
   std::string GetUserAgent() override;
   blink::UserAgentMetadata GetUserAgentMetadata() override;
-
   void OverrideURLLoaderFactoryParams(
       BrowserContext* browser_context,
       const url::Origin& origin,
       bool is_for_isolated_world,
       network::mojom::URLLoaderFactoryParams* factory_params) override;
-
 #if defined(OS_LINUX) || defined(OS_ANDROID)
   void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
       int child_process_id,
       content::PosixFileDescriptorInfo* mappings) override;
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
-
-  mojo::Remote<network::mojom::NetworkContext> CreateNetworkContext(
+  void ConfigureNetworkContextParams(
       BrowserContext* context,
       bool in_memory,
-      const base::FilePath& relative_partition_path) override;
+      const base::FilePath& relative_partition_path,
+      network::mojom::NetworkContextParams* network_context_params,
+      network::mojom::CertVerifierCreationParams* cert_verifier_creation_params)
+      override;
   std::vector<base::FilePath> GetNetworkContextsParentDirectory() override;
 
   ShellBrowserContext* browser_context();
@@ -126,6 +140,29 @@ class ShellContentBrowserClient : public ContentBrowserClient {
     url_loader_factory_params_callback_ =
         std::move(url_loader_factory_params_callback);
   }
+  void set_expose_interfaces_to_renderer_callback(
+      base::RepeatingCallback<
+          void(service_manager::BinderRegistry* registry,
+               blink::AssociatedInterfaceRegistry* associated_registry,
+               RenderProcessHost* render_process_host)>
+          expose_interfaces_to_renderer_callback) {
+    expose_interfaces_to_renderer_callback_ =
+        expose_interfaces_to_renderer_callback;
+  }
+  void set_register_browser_interface_binders_for_frame_callback(
+      base::RepeatingCallback<
+          void(RenderFrameHost* render_frame_host,
+               mojo::BinderMapWithContext<RenderFrameHost*>* map)>
+          register_browser_interface_binders_for_frame_callback) {
+    register_browser_interface_binders_for_frame_callback_ =
+        register_browser_interface_binders_for_frame_callback;
+  }
+  void set_create_throttles_for_navigation_callback(
+      base::RepeatingCallback<std::vector<std::unique_ptr<NavigationThrottle>>(
+          NavigationHandle*)> create_throttles_for_navigation_callback) {
+    create_throttles_for_navigation_callback_ =
+        create_throttles_for_navigation_callback;
+  }
 
  protected:
   // Call this if CreateBrowserMainParts() is overridden in a subclass.
@@ -133,12 +170,17 @@ class ShellContentBrowserClient : public ContentBrowserClient {
     shell_browser_main_parts_ = parts;
   }
 
-  // Used by CreateNetworkContext(), and can be overridden to change the
-  // parameters used there.
-  virtual network::mojom::NetworkContextParamsPtr CreateNetworkContextParams(
-      BrowserContext* context);
+  // Used by ConfigureNetworkContextParams(), and can be overridden to change
+  // the parameters used there.
+  virtual void ConfigureNetworkContextParamsForShell(
+      BrowserContext* context,
+      network::mojom::NetworkContextParams* context_params,
+      network::mojom::CertVerifierCreationParams*
+          cert_verifier_creation_params);
 
  private:
+  static bool allow_any_cors_exempt_header_for_browser_;
+
   base::OnceClosure select_client_certificate_callback_;
   base::OnceCallback<bool(const service_manager::Identity&)>
       should_terminate_on_service_quit_callback_;
@@ -147,9 +189,21 @@ class ShellContentBrowserClient : public ContentBrowserClient {
                                const url::Origin&,
                                bool is_for_isolated_world)>
       url_loader_factory_params_callback_;
+  base::RepeatingCallback<void(
+      service_manager::BinderRegistry* registry,
+      blink::AssociatedInterfaceRegistry* associated_registry,
+      RenderProcessHost* render_process_host)>
+      expose_interfaces_to_renderer_callback_;
+  base::RepeatingCallback<void(
+      RenderFrameHost* render_frame_host,
+      mojo::BinderMapWithContext<RenderFrameHost*>* map)>
+      register_browser_interface_binders_for_frame_callback_;
+  base::RepeatingCallback<std::vector<std::unique_ptr<NavigationThrottle>>(
+      NavigationHandle*)>
+      create_throttles_for_navigation_callback_;
 
   // Owned by content::BrowserMainLoop.
-  ShellBrowserMainParts* shell_browser_main_parts_;
+  ShellBrowserMainParts* shell_browser_main_parts_ = nullptr;
 };
 
 // The delay for sending reports when running with --run-web-tests

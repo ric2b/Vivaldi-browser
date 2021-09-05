@@ -6,7 +6,7 @@
 
 #include <stdint.h>
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "build/build_config.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
@@ -161,6 +161,12 @@ gfx::NativeWindow TestScreen::GetWindowAtScreenPoint(const gfx::Point& point) {
   if (!host_ || !host_->window())
     return nullptr;
   return host_->window()->GetEventHandlerForPoint(point);
+}
+
+gfx::NativeWindow TestScreen::GetLocalProcessWindowAtPoint(
+    const gfx::Point& point,
+    const std::set<gfx::NativeWindow>& ignore) {
+  return nullptr;
 }
 
 display::Display TestScreen::GetDisplayNearestWindow(

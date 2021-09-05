@@ -1,78 +1,75 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/crypto.gni")
-import("//build/config/jumbo.gni")
-import("//testing/test.gni")
+import("//net/features.gni")
 
-jumbo_component("cert_verifier") {
+# This target provides a net::CertVerifier that transparently proxies cert
+# verification requests over a Mojo connection to the actual service, which is
+# implemented in terms of concrete implementations of net::CertVerifier.
+source_set("mojo_cert_verifier") {
   sources = [
-    "cert_net_fetcher_url_loader.cc",
-    "cert_net_fetcher_url_loader.h",
+    "mojo_cert_verifier.cc",
+    "mojo_cert_verifier.h",
   ]
 
-  if (use_nss_certs) {
+  deps = [
+    "//base",
+    "//net",
+    "//services/network/public/mojom",
+  ]
+}
+
+source_set("cert_verifier_creation") {
+  sources = [
+    "cert_verifier_creation.cc",
+    "cert_verifier_creation.h",
+  ]
+
+  if (is_chromeos) {
     sources += [
-      "nss_ocsp_session_url_loader.cc",
-      "nss_ocsp_session_url_loader.h",
+      "system_trust_store_provider_chromeos.cc",
+      "system_trust_store_provider_chromeos.h",
+    ]
+  }
+
+  if (trial_comparison_cert_verifier_supported) {
+    sources += [
+      "trial_comparison_cert_verifier_mojo.cc",
+      "trial_comparison_cert_verifier_mojo.h",
     ]
   }
 
   deps = [
     "//base",
-    "//mojo/public/cpp/bindings",
     "//net",
-    "//services/network/public/cpp",
     "//services/network/public/mojom",
   ]
 
-  defines = [ "IS_CERT_VERIFIER_CPP_IMPL" ]
+  public_deps = [ "//services/network/public/mojom" ]
 }
 
-source_set("tests") {
+source_set("cert_verifier_tests") {
   testonly = true
-
   sources = []
 
-  if (!is_ios) {
-    # Need TestServer
-    sources += [ "cert_net_fetcher_url_loader_unittest.cc" ]
-  }
-
-  if (use_nss_certs) {
-    sources += [ "nss_ocsp_session_url_loader_unittest.cc" ]
-  }
-
   deps = [
-    ":cert_verifier",
-    ":test_support",
+    ":cert_verifier_creation",
+    ":mojo_cert_verifier",
     "//base",
-    "//mojo/public/cpp/bindings",
+    "//base/test:test_support",
+    "//mojo/public/cpp/test_support:test_utils",
     "//net",
     "//net:test_support",
-    "//services/network:test_support",
-    "//services/network/public/cpp",
-    "//services/network/public/mojom",
     "//testing/gtest",
   ]
-}
 
-source_set("test_support") {
-  testonly = true
-
-  sources = [
-    "cert_net_fetcher_test.cc",
-    "cert_net_fetcher_test.h",
+  sources += [
+    "cert_verifier_mojom_traits_unittest.cc",
+    "mojo_cert_verifier_unittest.cc",
   ]
 
-  deps = [
-    ":cert_verifier",
-    "//base",
-    "//mojo/public/cpp/bindings",
-    "//net",
-    "//services/network:test_support",
-    "//services/network/public/cpp",
-    "//services/network/public/mojom",
-  ]
+  if (trial_comparison_cert_verifier_supported) {
+    sources += [ "trial_comparison_cert_verifier_mojo_unittest.cc" ]
+  }
 }

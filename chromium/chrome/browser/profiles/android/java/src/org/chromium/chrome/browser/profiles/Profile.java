@@ -4,26 +4,33 @@
 
 package org.chromium.chrome.browser.profiles;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.cookies.CookiesFetcher;
+import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
 import org.chromium.content_public.browser.WebContents;
 
 /**
  * Wrapper that allows passing a Profile reference around in the Java layer.
  */
-public class Profile {
-    /** Whether this wrapper corresponds to an off the record Profile. */
-    private final boolean mIsOffTheRecord;
+public class Profile implements BrowserContextHandle {
+    /** Holds OTRProfileID for OffTheRecord profiles. Is null for regular profiles. */
+    @Nullable
+    private final OTRProfileID mOTRProfileID;
 
     /** Pointer to the Native-side ProfileAndroid. */
     private long mNativeProfileAndroid;
 
     private Profile(long nativeProfileAndroid) {
         mNativeProfileAndroid = nativeProfileAndroid;
-        mIsOffTheRecord = ProfileJni.get().isOffTheRecord(mNativeProfileAndroid, Profile.this);
+        if (ProfileJni.get().isOffTheRecord(mNativeProfileAndroid, Profile.this)) {
+            mOTRProfileID = ProfileJni.get().getOTRProfileID(mNativeProfileAndroid, Profile.this);
+        } else {
+            mOTRProfileID = null;
+        }
     }
 
     /**
@@ -73,13 +80,70 @@ public class Profile {
         return (Profile) ProfileJni.get().getOriginalProfile(mNativeProfileAndroid, Profile.this);
     }
 
+    /**
+     * Returns the primary OffTheRecord profile.
+     *
+     * @deprecated use {@link #getOffTheRecordProfile(OTRProfileID)} or {@link
+     *         #getPrimaryOTRProfile()} instead.
+     */
+    @Deprecated
     public Profile getOffTheRecordProfile() {
-        return (Profile) ProfileJni.get().getOffTheRecordProfile(
-                mNativeProfileAndroid, Profile.this);
+        return getPrimaryOTRProfile();
     }
 
+    /**
+     * Returns the OffTheRecord profile with given OTRProfileiD.
+     *
+     * @param profileID {@link OTRProfileID} object.
+     */
+    public Profile getOffTheRecordProfile(OTRProfileID profileID) {
+        assert profileID != null;
+        return (Profile) ProfileJni.get().getOffTheRecordProfile(
+                mNativeProfileAndroid, Profile.this, profileID);
+    }
+
+    /**
+     * Returns the OffTheRecord profile for incognito tabs.
+     */
+    public Profile getPrimaryOTRProfile() {
+        return (Profile) ProfileJni.get().getPrimaryOTRProfile(mNativeProfileAndroid, Profile.this);
+    }
+
+    /**
+     * Returns the OffTheRecord profile id for OffTheRecord profiles, and null for regular profiles.
+     */
+    @Nullable
+    public OTRProfileID getOTRProfileID() {
+        return mOTRProfileID;
+    }
+
+    /**
+     * Returns if primary OffTheRecord profile exists.
+     *
+     * @deprecated use {@link #hasOffTheRecordProfile(OTRProfileID)} or {@link
+     *         #hasPrimaryOTRProfile()} instead.
+     */
+    @Deprecated
     public boolean hasOffTheRecordProfile() {
-        return ProfileJni.get().hasOffTheRecordProfile(mNativeProfileAndroid, Profile.this);
+        return hasPrimaryOTRProfile();
+    }
+
+    /**
+     * Returns if OffTheRecord profile with given OTRProfileID exists.
+     *
+     * @param profileID {@link OTRProfileID} object.
+     */
+    public boolean hasOffTheRecordProfile(OTRProfileID profileID) {
+        assert profileID != null;
+        return ProfileJni.get().hasOffTheRecordProfile(
+                mNativeProfileAndroid, Profile.this, profileID);
+    }
+
+    /**
+     * Returns if primary OffTheRecord profile exists.
+     */
+    public boolean hasPrimaryOTRProfile() {
+        return ProfileJni.get().hasPrimaryOTRProfile(mNativeProfileAndroid, Profile.this);
     }
 
     public ProfileKey getProfileKey() {
@@ -87,7 +151,7 @@ public class Profile {
     }
 
     public boolean isOffTheRecord() {
-        return mIsOffTheRecord;
+        return mOTRProfileID != null;
     }
 
     /**
@@ -112,6 +176,11 @@ public class Profile {
         return mNativeProfileAndroid != 0;
     }
 
+    @Override
+    public long getNativeBrowserContextPointer() {
+        return ProfileJni.get().getBrowserContextPointer(mNativeProfileAndroid);
+    }
+
     @CalledByNative
     private static Profile create(long nativeProfileAndroid) {
         return new Profile(nativeProfileAndroid);
@@ -121,7 +190,7 @@ public class Profile {
     private void onNativeDestroyed() {
         mNativeProfileAndroid = 0;
 
-        if (mIsOffTheRecord) {
+        if (mOTRProfileID != null) {
             CookiesFetcher.deleteCookiesIfNecessary();
         }
 
@@ -139,11 +208,17 @@ public class Profile {
         Object fromWebContents(WebContents webContents);
         void destroyWhenAppropriate(long nativeProfileAndroid, Profile caller);
         Object getOriginalProfile(long nativeProfileAndroid, Profile caller);
-        Object getOffTheRecordProfile(long nativeProfileAndroid, Profile caller);
-        boolean hasOffTheRecordProfile(long nativeProfileAndroid, Profile caller);
+        Object getOffTheRecordProfile(
+                long nativeProfileAndroid, Profile caller, OTRProfileID otrProfileID);
+        Object getPrimaryOTRProfile(long nativeProfileAndroid, Profile caller);
+        boolean hasOffTheRecordProfile(
+                long nativeProfileAndroid, Profile caller, OTRProfileID otrProfileID);
+        boolean hasPrimaryOTRProfile(long nativeProfileAndroid, Profile caller);
         boolean isOffTheRecord(long nativeProfileAndroid, Profile caller);
         boolean isChild(long nativeProfileAndroid, Profile caller);
         void wipe(long nativeProfileAndroid, Profile caller);
         Object getProfileKey(long nativeProfileAndroid, Profile caller);
+        long getBrowserContextPointer(long nativeProfileAndroid);
+        OTRProfileID getOTRProfileID(long nativeProfileAndroid, Profile caller);
     }
 }

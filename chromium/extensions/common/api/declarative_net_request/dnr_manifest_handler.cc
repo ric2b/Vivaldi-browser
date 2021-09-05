@@ -4,8 +4,11 @@
 
 #include "extensions/common/api/declarative_net_request/dnr_manifest_handler.h"
 
+#include <set>
+
 #include "base/files/file_path.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "extensions/common/api/declarative_net_request.h"
 #include "extensions/common/api/declarative_net_request/constants.h"
 #include "extensions/common/api/declarative_net_request/dnr_manifest_data.h"
@@ -24,6 +27,19 @@ namespace errors = manifest_errors;
 namespace dnr_api = api::declarative_net_request;
 
 namespace declarative_net_request {
+
+namespace {
+
+bool IsEmptyExtensionResource(const ExtensionResource& resource) {
+  // Note that just checking for ExtensionResource::empty() isn't correct since
+  // it checks |ExtensionResource::extension_root()::empty()| which can return
+  // true for a dummy extension created as part of the webstore installation
+  // flow. See crbug.com/1087348.
+  return resource.extension_id().empty() && resource.extension_root().empty() &&
+         resource.relative_path().empty();
+}
+
+}  // namespace
 
 DNRManifestHandler::DNRManifestHandler() = default;
 DNRManifestHandler::~DNRManifestHandler() = default;
@@ -63,14 +79,6 @@ bool DNRManifestHandler::Parse(Extension* extension, base::string16* error) {
     return false;
   }
 
-  // TODO(crbug.com/953894): Extension should be able to specify zero rulesets.
-  if (rulesets.empty()) {
-    *error = ErrorUtils::FormatErrorMessageUTF16(
-        errors::kInvalidDeclarativeRulesFileKey,
-        keys::kDeclarativeNetRequestKey, keys::kDeclarativeRuleResourcesKey);
-    return false;
-  }
-
   if (rulesets.size() >
       static_cast<size_t>(dnr_api::MAX_NUMBER_OF_STATIC_RULESETS)) {
     *error = ErrorUtils::FormatErrorMessageUTF16(
@@ -80,21 +88,43 @@ bool DNRManifestHandler::Parse(Extension* extension, base::string16* error) {
     return false;
   }
 
+  std::set<base::StringPiece> ruleset_ids;
+
   // Validates the ruleset at the given |index|. On success, returns true and
   // populates |info|. On failure, returns false and populates |error|.
-  auto get_ruleset_info = [extension, error, &rulesets](
+  auto get_ruleset_info = [extension, error, &rulesets, &ruleset_ids](
                               int index, DNRManifestData::RulesetInfo* info) {
     // Path validation.
     ExtensionResource resource = extension->GetResource(rulesets[index].path);
-    if (resource.empty() || resource.relative_path().ReferencesParent()) {
+    if (IsEmptyExtensionResource(resource) ||
+        resource.relative_path().ReferencesParent()) {
       *error = ErrorUtils::FormatErrorMessageUTF16(
           errors::kRulesFileIsInvalid, keys::kDeclarativeNetRequestKey,
           keys::kDeclarativeRuleResourcesKey, rulesets[index].path);
       return false;
     }
 
+    // ID validation.
+    const std::string& manifest_id = rulesets[index].id;
+    constexpr char kReservedRulesetIDPrefix = '_';
+
+    // Ensure that the dynamic ruleset ID is reserved.
+    DCHECK_EQ(kReservedRulesetIDPrefix, dnr_api::DYNAMIC_RULESET_ID[0]);
+
+    if (manifest_id.empty() || !ruleset_ids.insert(manifest_id).second ||
+        manifest_id[0] == kReservedRulesetIDPrefix) {
+      *error = ErrorUtils::FormatErrorMessageUTF16(
+          errors::kInvalidRulesetID, keys::kDeclarativeNetRequestKey,
+          keys::kDeclarativeRuleResourcesKey, base::NumberToString(index));
+      return false;
+    }
+
     info->relative_path = resource.relative_path().NormalizePathSeparators();
-    info->id = kMinValidStaticRulesetID + index;
+
+    info->id = RulesetID(kMinValidStaticRulesetID.value() + index);
+
+    info->enabled = rulesets[index].enabled;
+    info->manifest_id = manifest_id;
     return true;
   };
 

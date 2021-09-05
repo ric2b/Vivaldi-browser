@@ -38,7 +38,8 @@ class ReportingCacheImpl : public ReportingCache {
   ~ReportingCacheImpl() override;
 
   // ReportingCache implementation
-  void AddReport(const GURL& url,
+  void AddReport(const NetworkIsolationKey& network_isolation_key,
+                 const GURL& url,
                  const std::string& user_agent,
                  const std::string& group_name,
                  const std::string& type,
@@ -65,6 +66,7 @@ class ReportingCacheImpl : public ReportingCache {
   bool IsReportPendingForTesting(const ReportingReport* report) const override;
   bool IsReportDoomedForTesting(const ReportingReport* report) const override;
   void OnParsedHeader(
+      const NetworkIsolationKey& network_isolation_key,
       const url::Origin& origin,
       std::vector<ReportingEndpointGroup> parsed_header) override;
   std::set<url::Origin> GetAllOrigins() const override;

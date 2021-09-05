@@ -5,6 +5,7 @@
 #ifndef CONTENT_RENDERER_ACCESSIBILITY_RENDER_ACCESSIBILITY_IMPL_H_
 #define CONTENT_RENDERER_ACCESSIBILITY_RENDER_ACCESSIBILITY_IMPL_H_
 
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -18,9 +19,9 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/renderer/accessibility/blink_ax_tree_source.h"
-#include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
 #include "third_party/blink/public/web/web_ax_context.h"
 #include "third_party/blink/public/web/web_ax_object.h"
+#include "ui/accessibility/ax_event.h"
 #include "ui/accessibility/ax_relative_bounds.h"
 #include "ui/accessibility/ax_tree.h"
 #include "ui/accessibility/ax_tree_serializer.h"
@@ -91,10 +92,8 @@ class AXTreeSnapshotterImpl : public AXTreeSnapshotter {
 // representation of that tree whenever it changes. It also handles requests
 // from the browser to perform accessibility actions on nodes in the tree (e.g.,
 // change focus, or click on a button).
-class CONTENT_EXPORT RenderAccessibilityImpl
-    : public RenderAccessibility,
-      public RenderFrameObserver,
-      public blink::mojom::RendererPreferenceWatcher {
+class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
+                                               public RenderFrameObserver {
  public:
   // Request a one-time snapshot of the accessibility tree without
   // enabling accessibility if it wasn't already enabled.
@@ -128,24 +127,18 @@ class CONTENT_EXPORT RenderAccessibilityImpl
   void PerformAction(const ui::AXActionData& data);
   void Reset(int32_t reset_token);
 
-  // blink::mojom::RendererPreferenceObserver implementation.
-  void NotifyUpdate(blink::mojom::RendererPreferencesPtr new_prefs) override;
-
   // Called when an accessibility notification occurs in Blink.
-  void HandleWebAccessibilityEvent(const blink::WebAXObject& obj,
-                                   ax::mojom::Event event,
-                                   ax::mojom::EventFrom event_from);
+  void HandleWebAccessibilityEvent(const ui::AXEvent& event);
   void MarkWebAXObjectDirty(const blink::WebAXObject& obj, bool subtree);
 
-  void HandleAXEvent(
-      const blink::WebAXObject& obj,
-      ax::mojom::Event event,
-      ax::mojom::EventFrom event_from = ax::mojom::EventFrom::kNone,
-      int action_request_id = -1);
+  void HandleAXEvent(const ui::AXEvent& event);
 
   // Returns the main top-level document for this page, or NULL if there's
   // no view or frame.
   blink::WebDocument GetMainDocument();
+
+  // Returns the page language.
+  std::string GetLanguage();
 
  protected:
   // Send queued events from the renderer to the browser.
@@ -210,10 +203,6 @@ class CONTENT_EXPORT RenderAccessibilityImpl
   // Manages the automatic image annotations, if enabled.
   std::unique_ptr<AXImageAnnotator> ax_image_annotator_;
 
-  // The Mojo receiver for this object as a RenderPreferenceWatcher.
-  mojo::Receiver<blink::mojom::RendererPreferenceWatcher>
-      pref_watcher_receiver_{this};
-
   // Events from Blink are collected until they are ready to be
   // sent to the browser.
   std::vector<ui::AXEvent> pending_events_;
@@ -258,6 +247,9 @@ class CONTENT_EXPORT RenderAccessibilityImpl
   // Whether we should highlight annotation results visually on the page
   // for debugging.
   bool image_annotation_debugging_ = false;
+
+  // The specified page language, or empty if unknown.
+  std::string page_language_;
 
   // So we can queue up tasks to be executed later.
   base::WeakPtrFactory<RenderAccessibilityImpl> weak_factory_{this};

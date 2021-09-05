@@ -29,6 +29,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "net/ssl/ssl_info.h"
+#include "net/url_request/url_request_context.h"
 #include "net/websockets/websocket_basic_stream.h"
 #include "net/websockets/websocket_channel.h"
 #include "net/websockets/websocket_errors.h"
@@ -374,7 +375,7 @@ WebSocket::WebSocket(
     const GURL& url,
     const std::vector<std::string>& requested_protocols,
     const net::SiteForCookies& site_for_cookies,
-    const net::NetworkIsolationKey& network_isolation_key,
+    const net::IsolationInfo& isolation_info,
     std::vector<mojom::HttpHeaderPtr> additional_headers,
     int32_t child_id,
     int32_t frame_id,
@@ -405,6 +406,10 @@ WebSocket::WebSocket(
                         mojo::SimpleWatcher::ArmingPolicy::MANUAL,
                         base::ThreadTaskRunnerHandle::Get()) {
   DCHECK(handshake_client_);
+  // If |require_network_isolation_key| is set on the URLRequestContext,
+  // |isolation_info| must not be empty.
+  DCHECK(!factory_->GetURLRequestContext()->require_network_isolation_key() ||
+         !isolation_info.IsEmpty());
   if (auth_handler_) {
     // Make sure the request dies if |auth_handler_| has an error, otherwise
     // requests can hang.
@@ -424,11 +429,11 @@ WebSocket::WebSocket(
         FROM_HERE,
         base::BindOnce(&WebSocket::AddChannel, weak_ptr_factory_.GetWeakPtr(),
                        url, requested_protocols, site_for_cookies,
-                       network_isolation_key, std::move(additional_headers)),
+                       isolation_info, std::move(additional_headers)),
         delay_);
     return;
   }
-  AddChannel(url, requested_protocols, site_for_cookies, network_isolation_key,
+  AddChannel(url, requested_protocols, site_for_cookies, isolation_info,
              std::move(additional_headers));
 }
 
@@ -571,7 +576,7 @@ void WebSocket::AddChannel(
     const GURL& socket_url,
     const std::vector<std::string>& requested_protocols,
     const net::SiteForCookies& site_for_cookies,
-    const net::NetworkIsolationKey& network_isolation_key,
+    const net::IsolationInfo& isolation_info,
     std::vector<mojom::HttpHeaderPtr> additional_headers) {
   DVLOG(3) << "WebSocket::AddChannel @" << reinterpret_cast<void*>(this)
            << " socket_url=\"" << socket_url << "\" requested_protocols=\""
@@ -600,7 +605,7 @@ void WebSocket::AddChannel(
     }
   }
   channel_->SendAddChannelRequest(socket_url, requested_protocols, origin_,
-                                  site_for_cookies, network_isolation_key,
+                                  site_for_cookies, isolation_info,
                                   headers_to_pass);
 }
 

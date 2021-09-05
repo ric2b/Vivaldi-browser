@@ -5,7 +5,6 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -15,6 +14,7 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -147,8 +147,8 @@ class ServiceWorkerFileUploadTest : public testing::WithParamInterface<bool>,
     base::FilePath file_path;
     ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
     ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_dir.GetPath(), &file_path));
-    ASSERT_EQ(static_cast<int>(kFileSize),
-              base::WriteFile(file_path, kFileContent, kFileSize));
+    ASSERT_TRUE(
+        base::WriteFile(file_path, base::StringPiece(kFileContent, kFileSize)));
 
     // Fill out the form to refer to the test file.
     base::RunLoop run_loop;
@@ -394,8 +394,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerFileUploadTest, Subresource) {
   base::FilePath file_path;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_dir.GetPath(), &file_path));
-  ASSERT_EQ(static_cast<int>(kFileSize),
-            base::WriteFile(file_path, kFileContent, kFileSize));
+  ASSERT_TRUE(
+      base::WriteFile(file_path, base::StringPiece(kFileContent, kFileSize)));
 
   std::string result;
   RunSubresourceTest(file_path, &result);
@@ -419,8 +419,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerFileUploadTest,
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   base::FilePath file_path = temp_dir.GetPath().Append(nonAsciiFilename);
-  ASSERT_EQ(static_cast<int>(kFileSize),
-            base::WriteFile(file_path, kFileContent, kFileSize));
+  ASSERT_TRUE(
+      base::WriteFile(file_path, base::StringPiece(kFileContent, kFileSize)));
 
   std::string result;
   RunSubresourceTest(file_path, &result);

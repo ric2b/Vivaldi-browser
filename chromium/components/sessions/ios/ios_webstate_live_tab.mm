@@ -61,9 +61,10 @@ int IOSWebStateLiveTab::GetEntryCount() {
   return navigation_manager()->GetItemCount();
 }
 
-const std::string& IOSWebStateLiveTab::GetUserAgentOverride() {
+sessions::SerializedUserAgentOverride
+IOSWebStateLiveTab::GetUserAgentOverride() {
   // Dynamic user agent overrides are not supported on iOS.
-  return user_agent_override_;
+  return sessions::SerializedUserAgentOverride();
 }
 
 const web::WebState* IOSWebStateLiveTab::GetWebState() const {

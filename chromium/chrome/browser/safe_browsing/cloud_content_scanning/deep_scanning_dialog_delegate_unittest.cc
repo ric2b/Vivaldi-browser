@@ -11,15 +11,20 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/fake_deep_scanning_dialog_delegate.h"
 #include "chrome/browser/safe_browsing/dm_token_utils.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -29,6 +34,7 @@
 #include "components/safe_browsing/core/features.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace safe_browsing {
@@ -120,6 +126,18 @@ class BaseTest : public testing::Test {
         DeepScanAccessPoint::UPLOAD);
   }
 
+  void CreateFilesForTest(
+      const std::vector<base::FilePath::StringType>& file_names,
+      DeepScanningDialogDelegate::Data* data) {
+    ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+    for (const auto& file_name : file_names) {
+      base::FilePath path = temp_dir_.GetPath().Append(file_name);
+      base::File file(path, base::File::FLAG_CREATE | base::File::FLAG_WRITE);
+      file.WriteAtCurrentPos("content", 7);
+      data->paths.emplace_back(path);
+    }
+  }
+
   void SetUp() override {
     // Always set this so DeepScanningDialogDelegate::ShowForWebContents waits
     // for the verdict before running its callback.
@@ -134,6 +152,7 @@ class BaseTest : public testing::Test {
   TestingPrefServiceSimple pref_service_;
   TestingProfileManager profile_manager_;
   TestingProfile* profile_;
+  base::ScopedTempDir temp_dir_;
 };
 
 }  // namespace
@@ -146,7 +165,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoFeatureNoDMTokenNoPref) {
       policy::DMToken::CreateInvalidTokenForTesting());
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -157,7 +178,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoDMTokenNoPref) {
       policy::DMToken::CreateInvalidTokenForTesting());
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -170,7 +193,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoDMToken) {
       policy::DMToken::CreateInvalidTokenForTesting());
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -181,7 +206,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoFeatureNoPref) {
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -194,7 +221,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoFeatureNoDMToken) {
       policy::DMToken::CreateInvalidTokenForTesting());
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -207,7 +236,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoFeature) {
   SetMalwarePolicy(SEND_UPLOADS_AND_DOWNLOADS);
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -218,7 +249,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpNoPref) {
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -230,7 +263,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpNoPref2) {
   SetDlpPolicy(CHECK_NONE);
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -242,7 +277,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpNoPref3) {
   SetDlpPolicy(CHECK_DOWNLOADS);
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -254,7 +291,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpEnabled) {
   SetDlpPolicy(CHECK_UPLOADS);
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_TRUE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -266,7 +305,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpEnabled2) {
   SetDlpPolicy(CHECK_UPLOADS_AND_DOWNLOADS);
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_TRUE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -279,7 +320,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpEnabledWithUrl) {
   GURL url(kTestUrl);
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_TRUE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
   EXPECT_EQ(kTestUrl, data.url);
@@ -294,7 +337,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpDisabledByList) {
   AddUrlToList(prefs::kURLsToNotCheckComplianceOfUploadedContent, url);
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -323,65 +368,79 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpDisabledByListWithPatterns) {
   DeepScanningDialogDelegate::Data data;
 
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://example.com"), &data));
+      profile(), GURL("http://example.com"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com"), &data));
+      profile(), GURL("http://google.com"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_TRUE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("https://google.com"), &data));
+      profile(), GURL("https://google.com"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("custom://google.com"), &data));
+      profile(), GURL("custom://google.com"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_TRUE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("chrome://version/"), &data));
+      profile(), GURL("chrome://version/"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("custom://version"), &data));
+      profile(), GURL("custom://version"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_TRUE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("devtools://devtools/bundled/inspector.html"), &data));
+      profile(), GURL("devtools://devtools/bundled/inspector.html"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("custom://devtools/bundled/inspector.html"), &data));
+      profile(), GURL("custom://devtools/bundled/inspector.html"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_TRUE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com/a/specific/path/"), &data));
+      profile(), GURL("http://google.com/a/specific/path/"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com/not/a/specific/path/"), &data));
+      profile(), GURL("http://google.com/not/a/specific/path/"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_TRUE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com:1234"), &data));
+      profile(), GURL("http://google.com:1234"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com:4321"), &data));
+      profile(), GURL("http://google.com:4321"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_TRUE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com?q=5678"), &data));
+      profile(), GURL("http://google.com?q=5678"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com?q=8765"), &data));
+      profile(), GURL("http://google.com?q=8765"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_TRUE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -392,7 +451,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoPref) {
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -404,7 +465,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoPref2) {
   SetMalwarePolicy(DO_NOT_SCAN);
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -416,7 +479,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoPref4) {
   SetMalwarePolicy(SEND_DOWNLOADS);
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -428,7 +493,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoList) {
   SetMalwarePolicy(SEND_UPLOADS);
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -440,7 +507,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoList2) {
   SetMalwarePolicy(SEND_UPLOADS_AND_DOWNLOADS);
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(profile(), GURL(), &data));
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), GURL(), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -454,7 +523,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareEnabled) {
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, url);
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_TRUE(data.do_malware_scan);
 }
@@ -469,11 +540,14 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoScanInIncognito) {
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, url);
 
   DeepScanningDialogDelegate::Data data;
-  EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
   // The same URL should not trigger a scan in incognito.
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile()->GetOffTheRecordProfile(), url, &data));
+      profile()->GetOffTheRecordProfile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 }
 
 TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareEnabledWithPatterns) {
@@ -498,65 +572,79 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareEnabledWithPatterns) {
   DeepScanningDialogDelegate::Data data;
 
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://example.com"), &data));
+      profile(), GURL("http://example.com"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_TRUE(data.do_malware_scan);
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com"), &data));
+      profile(), GURL("http://google.com"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("chrome://version/"), &data));
+      profile(), GURL("chrome://version/"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_TRUE(data.do_malware_scan);
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("custom://version/"), &data));
+      profile(), GURL("custom://version/"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("devtools://devtools/bundled/inspector.html"), &data));
+      profile(), GURL("devtools://devtools/bundled/inspector.html"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_TRUE(data.do_malware_scan);
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("custom://devtools/bundled/inspector.html"), &data));
+      profile(), GURL("custom://devtools/bundled/inspector.html"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("https://google.com"), &data));
+      profile(), GURL("https://google.com"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_TRUE(data.do_malware_scan);
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("custom://google.com"), &data));
+      profile(), GURL("custom://google.com"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com/a/specific/path/"), &data));
+      profile(), GURL("http://google.com/a/specific/path/"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_TRUE(data.do_malware_scan);
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com/not/a/specific/path/"), &data));
+      profile(), GURL("http://google.com/not/a/specific/path/"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com:1234"), &data));
+      profile(), GURL("http://google.com:1234"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_TRUE(data.do_malware_scan);
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com:4321"), &data));
+      profile(), GURL("http://google.com:4321"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com?q=5678"), &data));
+      profile(), GURL("http://google.com?q=5678"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_TRUE(data.do_malware_scan);
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile(), GURL("http://google.com?q=8765"), &data));
+      profile(), GURL("http://google.com?q=8765"), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
   EXPECT_FALSE(data.do_dlp_scan);
   EXPECT_FALSE(data.do_malware_scan);
 }
@@ -661,7 +749,9 @@ class DeepScanningDialogDelegateAuditOnlyTest : public BaseTest {
 TEST_F(DeepScanningDialogDelegateAuditOnlyTest, Empty) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
   // Keep |data| empty by not setting any text or paths.
 
@@ -684,7 +774,9 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, Empty) {
 TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringData) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY));
 
   data.text.emplace_back(base::UTF8ToUTF16("foo"));
 
@@ -708,7 +800,9 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringData) {
 TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringData2) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY));
 
   data.text.emplace_back(base::UTF8ToUTF16("foo"));
   data.text.emplace_back(base::UTF8ToUTF16("bar"));
@@ -735,9 +829,11 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
        FileDataPositiveMalwareAndDlpVerdicts) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.doc"));
+  CreateFilesForTest({FILE_PATH_LITERAL("foo.doc")}, &data);
 
   bool called = false;
   ScanUpload(contents(), std::move(data),
@@ -760,10 +856,12 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
        FileDataPositiveMalwareAndDlpVerdicts2) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/bar.doc"));
+  CreateFilesForTest(
+      {FILE_PATH_LITERAL("foo.doc"), FILE_PATH_LITERAL("bar.doc")}, &data);
 
   bool called = false;
   ScanUpload(contents(), std::move(data),
@@ -789,10 +887,12 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/good.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/good2.doc"));
+  CreateFilesForTest(
+      {FILE_PATH_LITERAL("good.doc"), FILE_PATH_LITERAL("good2.doc")}, &data);
 
   bool called = false;
   ScanUpload(contents(), std::move(data),
@@ -813,16 +913,23 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
 }
 
 TEST_F(DeepScanningDialogDelegateAuditOnlyTest, FileIsEncrypted) {
+  content::InProcessUtilityThreadHelper in_process_utility_thread_helper;
+
   SetScanPolicies(/*dlp=*/true, /*malware=*/true);
   SetAllowPasswordPolicy(ALLOW_NONE);
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/enc.zip"));
-
-  SetPathIsEncrypted(data.paths[0]);
+  base::FilePath test_zip;
+  EXPECT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_zip));
+  test_zip = test_zip.AppendASCII("safe_browsing")
+                 .AppendASCII("download_protection")
+                 .AppendASCII("encrypted.zip");
+  data.paths.emplace_back(test_zip);
 
   bool called = false;
   ScanUpload(contents(), std::move(data),
@@ -842,16 +949,23 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, FileIsEncrypted) {
 }
 
 TEST_F(DeepScanningDialogDelegateAuditOnlyTest, FileIsEncrypted_PolicyAllows) {
+  content::InProcessUtilityThreadHelper in_process_utility_thread_helper;
+
   SetScanPolicies(/*dlp=*/true, /*malware=*/true);
   SetAllowPasswordPolicy(ALLOW_UPLOADS);
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/enc.zip"));
-
-  SetPathIsEncrypted(data.paths[0]);
+  base::FilePath test_zip;
+  EXPECT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_zip));
+  test_zip = test_zip.AppendASCII("safe_browsing")
+                 .AppendASCII("download_protection")
+                 .AppendASCII("encrypted.zip");
+  data.paths.emplace_back(test_zip);
 
   bool called = false;
   ScanUpload(contents(), std::move(data),
@@ -876,11 +990,12 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/good.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/bad.doc"));
-
+  CreateFilesForTest(
+      {FILE_PATH_LITERAL("good.doc"), FILE_PATH_LITERAL("bad.doc")}, &data);
   PathFailsDeepScan(data.paths[1],
                     FakeDeepScanningDialogDelegate::MalwareResponse(
                         MalwareDeepScanningVerdict::MALWARE));
@@ -907,10 +1022,12 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, FileDataPositiveDlpVerdict) {
   SetScanPolicies(/*dlp=*/true, /*malware=*/false);
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/good.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/good2.doc"));
+  CreateFilesForTest(
+      {FILE_PATH_LITERAL("good.doc"), FILE_PATH_LITERAL("good2.doc")}, &data);
 
   bool called = false;
   ScanUpload(contents(), std::move(data),
@@ -935,10 +1052,12 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, FileDataNegativeDlpVerdict) {
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/good.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/bad.doc"));
+  CreateFilesForTest(
+      {FILE_PATH_LITERAL("good.doc"), FILE_PATH_LITERAL("bad.doc")}, &data);
 
   PathFailsDeepScan(data.paths[1],
                     FakeDeepScanningDialogDelegate::DlpResponse(
@@ -969,10 +1088,12 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/good.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/bad.doc"));
+  CreateFilesForTest(
+      {FILE_PATH_LITERAL("good.doc"), FILE_PATH_LITERAL("bad.doc")}, &data);
 
   PathFailsDeepScan(
       data.paths[1],
@@ -1001,11 +1122,13 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
 TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileData) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY));
 
   data.text.emplace_back(base::UTF8ToUTF16("foo"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/bar.doc"));
+  CreateFilesForTest(
+      {FILE_PATH_LITERAL("foo.doc"), FILE_PATH_LITERAL("bar.doc")}, &data);
 
   bool called = false;
   ScanUpload(contents(), std::move(data),
@@ -1032,12 +1155,14 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataNoDLP) {
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY));
 
   data.text.emplace_back(base::UTF8ToUTF16("foo"));
   data.text.emplace_back(base::UTF8ToUTF16("bar"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/bar.doc"));
+  CreateFilesForTest(
+      {FILE_PATH_LITERAL("foo.doc"), FILE_PATH_LITERAL("bar.doc")}, &data);
 
   bool called = false;
   ScanUpload(contents(), std::move(data),
@@ -1063,7 +1188,9 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataFailedDLP) {
   SetScanPolicies(/*dlp=*/true, /*malware=*/false);
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY));
 
   data.text.emplace_back(base::UTF8ToUTF16("good"));
   data.text.emplace_back(base::UTF8ToUTF16("bad"));
@@ -1094,14 +1221,17 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataFailedDLP) {
 TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataPartialSuccess) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY));
 
   data.text.emplace_back(base::UTF8ToUTF16("foo"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo_fail_malware_1.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo_fail_malware_2.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo_fail_dlp_status.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo_fail_dlp_rule.doc"));
+  CreateFilesForTest({FILE_PATH_LITERAL("foo.doc"),
+                      FILE_PATH_LITERAL("foo_fail_malware_1.doc"),
+                      FILE_PATH_LITERAL("foo_fail_malware_2.doc"),
+                      FILE_PATH_LITERAL("foo_fail_dlp_status.doc"),
+                      FILE_PATH_LITERAL("foo_fail_dlp_rule.doc")},
+                     &data);
 
   // Mark some files with failed scans.
   PathFailsDeepScan(data.paths[1],
@@ -1146,14 +1276,17 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, NoDelay) {
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
   data.text.emplace_back(base::UTF8ToUTF16("dlp_text"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo_fail_malware_0.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo_fail_malware_1.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo_fail_malware_2.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo_fail_dlp_status.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo_fail_dlp_rule.doc"));
+  CreateFilesForTest({FILE_PATH_LITERAL("foo_fail_malware_0.doc"),
+                      FILE_PATH_LITERAL("foo_fail_malware_1.doc"),
+                      FILE_PATH_LITERAL("foo_fail_malware_2.doc"),
+                      FILE_PATH_LITERAL("foo_fail_dlp_status.doc"),
+                      FILE_PATH_LITERAL("foo_fail_dlp_rule.doc")},
+                     &data);
 
   // Mark all files and text with failed scans.
   SetDLPResponse(FakeDeepScanningDialogDelegate::DlpResponse(
@@ -1206,7 +1339,9 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, NoDelay) {
 TEST_F(DeepScanningDialogDelegateAuditOnlyTest, EmptyWait) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
   bool called = false;
   ScanUpload(contents(), std::move(data),
@@ -1225,31 +1360,21 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, EmptyWait) {
 }
 
 TEST_F(DeepScanningDialogDelegateAuditOnlyTest, SupportedTypes) {
+  content::InProcessUtilityThreadHelper in_process_utility_thread_helper;
+
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.7z"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.bzip"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.cab"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.doc"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.docx"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.eps"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.gzip"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.odt"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.pdf"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.ppt"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.pptx"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.ps"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.rar"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.rtf"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.tar"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.txt"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.wpd"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.xls"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.xlsx"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.xps"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.zip"));
+  std::vector<base::FilePath::StringType> file_names;
+  for (const base::FilePath::StringType& supported_type :
+       SupportedDlpFileTypes()) {
+    file_names.push_back(base::FilePath::StringType(FILE_PATH_LITERAL("foo")) +
+                         supported_type);
+  }
+  CreateFilesForTest(file_names, &data);
 
   // Mark all files with failed scans.
   for (const auto& path : data.paths) {
@@ -1262,8 +1387,8 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, SupportedTypes) {
              base::BindOnce(
                  [](bool* called, const DeepScanningDialogDelegate::Data& data,
                     const DeepScanningDialogDelegate::Result& result) {
-                   EXPECT_EQ(21u, data.paths.size());
-                   EXPECT_EQ(21u, result.paths_results.size());
+                   EXPECT_EQ(24u, data.paths.size());
+                   EXPECT_EQ(24u, result.paths_results.size());
 
                    // The supported types should be marked as false.
                    for (const auto& result : result.paths_results)
@@ -1278,14 +1403,15 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, SupportedTypes) {
 TEST_F(DeepScanningDialogDelegateAuditOnlyTest, UnsupportedTypesDefaultPolicy) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.these"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.file"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.types"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.are"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.not"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.supported"));
+  CreateFilesForTest(
+      {FILE_PATH_LITERAL("foo.these"), FILE_PATH_LITERAL("foo.file"),
+       FILE_PATH_LITERAL("foo.types"), FILE_PATH_LITERAL("foo.are"),
+       FILE_PATH_LITERAL("foo.not"), FILE_PATH_LITERAL("foo.supported")},
+      &data);
 
   // Mark all files with failed scans.
   for (const auto& path : data.paths) {
@@ -1317,14 +1443,15 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, UnsupportedTypesBlockPolicy) {
       prefs::kBlockUnsupportedFiletypes, BLOCK_UNSUPPORTED_FILETYPES_UPLOADS);
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.these"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.file"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.types"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.are"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.not"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.supported"));
+  CreateFilesForTest(
+      {FILE_PATH_LITERAL("foo.these"), FILE_PATH_LITERAL("foo.file"),
+       FILE_PATH_LITERAL("foo.types"), FILE_PATH_LITERAL("foo.are"),
+       FILE_PATH_LITERAL("foo.not"), FILE_PATH_LITERAL("foo.supported")},
+      &data);
 
   // Mark all files with failed scans.
   for (const auto& path : data.paths) {
@@ -1354,24 +1481,19 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, UnsupportedTypesBlockPolicy) {
 TEST_F(DeepScanningDialogDelegateAuditOnlyTest, SupportedAndUnsupportedTypes) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
   // Only 3 of these file types are supported (bzip, cab and doc). They are
   // mixed in the list so as to show that insertion order does not matter.
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.bzip"));
-
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.these"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.file"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.types"));
-
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.cab"));
-
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.are"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.not"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.supported"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo_no_extension"));
-
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.doc"));
+  CreateFilesForTest(
+      {FILE_PATH_LITERAL("foo.bzip"), FILE_PATH_LITERAL("foo.these"),
+       FILE_PATH_LITERAL("foo.file"), FILE_PATH_LITERAL("foo.types"),
+       FILE_PATH_LITERAL("foo.cab"), FILE_PATH_LITERAL("foo.are"),
+       FILE_PATH_LITERAL("foo.not"), FILE_PATH_LITERAL("foo.supported"),
+       FILE_PATH_LITERAL("foo_no_extension"), FILE_PATH_LITERAL("foo.doc")},
+      &data);
 
   // Mark all files with failed scans.
   for (const auto& path : data.paths) {
@@ -1406,10 +1528,13 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, SupportedAndUnsupportedTypes) {
 TEST_F(DeepScanningDialogDelegateAuditOnlyTest, UnsupportedTypeAndDLPFailure) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.unsupported_extension"));
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/dlp_fail.doc"));
+  CreateFilesForTest({FILE_PATH_LITERAL("foo.unsupported_extension"),
+                      FILE_PATH_LITERAL("dlp_fail.doc")},
+                     &data);
 
   // Mark DLP as failure.
   SetDLPResponse(FakeDeepScanningDialogDelegate::DlpResponse(
@@ -1449,9 +1574,11 @@ TEST_P(DeepScanningDialogDelegateResultHandlingTest, Test) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
   FakeDeepScanningDialogDelegate::SetResponseResult(GetParam());
-  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(profile(), url, &data));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      profile(), url, &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
-  data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.txt"));
+  CreateFilesForTest({FILE_PATH_LITERAL("foo.txt")}, &data);
 
   bool called = false;
   ScanUpload(
@@ -1466,7 +1593,7 @@ TEST_P(DeepScanningDialogDelegateResultHandlingTest, Test) {
 
             bool expected =
                 DeepScanningDialogDelegate::ResultShouldAllowDataUse(
-                    GetParam());
+                    GetParam(), data.settings);
             EXPECT_EQ(expected, result.paths_results[0]);
             *called = true;
           },
@@ -1487,7 +1614,18 @@ INSTANTIATE_TEST_SUITE_P(
                     BinaryUploadService::Result::UNAUTHORIZED,
                     BinaryUploadService::Result::FILE_ENCRYPTED));
 
-using DeepScanningDialogDelegatePolicyResultsTest = BaseTest;
+class DeepScanningDialogDelegatePolicyResultsTest : public BaseTest {
+ public:
+  enterprise_connectors::AnalysisSettings settings() {
+    base::Optional<enterprise_connectors::AnalysisSettings> settings =
+        enterprise_connectors::ConnectorsManager::GetInstance()
+            ->GetAnalysisSettings(
+                GURL(kTestUrl),
+                enterprise_connectors::AnalysisConnector::FILE_ATTACHED);
+    EXPECT_TRUE(settings.has_value());
+    return std::move(settings.value());
+  }
+};
 
 TEST_F(DeepScanningDialogDelegatePolicyResultsTest, BlockLargeFile) {
   // The value returned by ResultShouldAllowDataUse for FILE_TOO_LARGE should
@@ -1495,19 +1633,19 @@ TEST_F(DeepScanningDialogDelegatePolicyResultsTest, BlockLargeFile) {
   SetBlockLargeFilePolicy(
       BlockLargeFileTransferValues::BLOCK_LARGE_UPLOADS_AND_DOWNLOADS);
   EXPECT_FALSE(DeepScanningDialogDelegate::ResultShouldAllowDataUse(
-      BinaryUploadService::Result::FILE_TOO_LARGE));
+      BinaryUploadService::Result::FILE_TOO_LARGE, settings()));
 
   SetBlockLargeFilePolicy(BlockLargeFileTransferValues::BLOCK_LARGE_DOWNLOADS);
   EXPECT_TRUE(DeepScanningDialogDelegate::ResultShouldAllowDataUse(
-      BinaryUploadService::Result::FILE_TOO_LARGE));
+      BinaryUploadService::Result::FILE_TOO_LARGE, settings()));
 
   SetBlockLargeFilePolicy(BlockLargeFileTransferValues::BLOCK_LARGE_UPLOADS);
   EXPECT_FALSE(DeepScanningDialogDelegate::ResultShouldAllowDataUse(
-      BinaryUploadService::Result::FILE_TOO_LARGE));
+      BinaryUploadService::Result::FILE_TOO_LARGE, settings()));
 
   SetBlockLargeFilePolicy(BlockLargeFileTransferValues::BLOCK_NONE);
   EXPECT_TRUE(DeepScanningDialogDelegate::ResultShouldAllowDataUse(
-      BinaryUploadService::Result::FILE_TOO_LARGE));
+      BinaryUploadService::Result::FILE_TOO_LARGE, settings()));
 }
 
 TEST_F(DeepScanningDialogDelegatePolicyResultsTest,
@@ -1517,19 +1655,19 @@ TEST_F(DeepScanningDialogDelegatePolicyResultsTest,
   SetAllowPasswordPolicy(
       AllowPasswordProtectedFilesValues::ALLOW_UPLOADS_AND_DOWNLOADS);
   EXPECT_TRUE(DeepScanningDialogDelegate::ResultShouldAllowDataUse(
-      BinaryUploadService::Result::FILE_ENCRYPTED));
+      BinaryUploadService::Result::FILE_ENCRYPTED, settings()));
 
   SetAllowPasswordPolicy(AllowPasswordProtectedFilesValues::ALLOW_DOWNLOADS);
   EXPECT_FALSE(DeepScanningDialogDelegate::ResultShouldAllowDataUse(
-      BinaryUploadService::Result::FILE_ENCRYPTED));
+      BinaryUploadService::Result::FILE_ENCRYPTED, settings()));
 
   SetAllowPasswordPolicy(AllowPasswordProtectedFilesValues::ALLOW_UPLOADS);
   EXPECT_TRUE(DeepScanningDialogDelegate::ResultShouldAllowDataUse(
-      BinaryUploadService::Result::FILE_ENCRYPTED));
+      BinaryUploadService::Result::FILE_ENCRYPTED, settings()));
 
   SetAllowPasswordPolicy(AllowPasswordProtectedFilesValues::ALLOW_NONE);
   EXPECT_FALSE(DeepScanningDialogDelegate::ResultShouldAllowDataUse(
-      BinaryUploadService::Result::FILE_ENCRYPTED));
+      BinaryUploadService::Result::FILE_ENCRYPTED, settings()));
 }
 
 }  // namespace safe_browsing

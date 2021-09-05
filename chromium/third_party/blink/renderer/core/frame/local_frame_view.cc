@@ -49,6 +49,7 @@
 #include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/css/font_face_set_document.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
+#include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/static_node_list.h"
 #include "third_party/blink/renderer/core/editing/compute_layer_selection.h"
 #include "third_party/blink/renderer/core/editing/drag_caret.h"
@@ -60,6 +61,7 @@
 #include "third_party/blink/renderer/core/frame/find_in_page.h"
 #include "third_party/blink/renderer/core/frame/frame_overlay.h"
 #include "third_party/blink/renderer/core/frame/frame_view_auto_size_info.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_ukm_aggregator.h"
@@ -155,7 +157,7 @@
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/cursor/cursor.h"
-#include "ui/base/mojom/cursor_type.mojom-blink.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-blink.h"
 
 // Used to check for dirty layouts violating document lifecycle rules.
 // If arg evaluates to true, the program will continue. If arg evaluates to
@@ -230,7 +232,6 @@ LocalFrameView::LocalFrameView(LocalFrame& frame, const IntSize& initial_size)
 LocalFrameView::LocalFrameView(LocalFrame& frame, IntRect frame_rect)
     : FrameView(frame_rect),
       frame_(frame),
-      display_mode_(blink::mojom::DisplayMode::kBrowser),
       can_have_scrollbars_(true),
       has_pending_layout_(false),
       layout_scheduling_enabled_(true),
@@ -271,7 +272,7 @@ LocalFrameView::LocalFrameView(LocalFrame& frame, IntRect frame_rect)
       forced_layout_start_time_(base::TimeTicks()),
       paint_frame_count_(0),
       unique_id_(NewUniqueObjectId()),
-      layout_shift_tracker_(std::make_unique<LayoutShiftTracker>(this)),
+      layout_shift_tracker_(MakeGarbageCollected<LayoutShiftTracker>(this)),
       paint_timing_detector_(MakeGarbageCollected<PaintTimingDetector>(this))
 #if DCHECK_IS_ON()
       ,
@@ -301,6 +302,7 @@ void LocalFrameView::Trace(Visitor* visitor) {
   visitor->Trace(viewport_scrollable_area_);
   visitor->Trace(anchoring_adjustment_queue_);
   visitor->Trace(scroll_event_queue_);
+  visitor->Trace(layout_shift_tracker_);
   visitor->Trace(paint_timing_detector_);
   visitor->Trace(lifecycle_observers_);
 }
@@ -639,11 +641,37 @@ void LocalFrameView::PerformPreLayoutTasks() {
 
   Lifecycle().AdvanceTo(DocumentLifecycle::kStyleClean);
 
-  if (was_resized)
+  if (was_resized) {
     document->ClearResizedForViewportUnits();
+
+    // Mark all of writing-mode roots for layout, as the ICB size has changed.
+    MarkOrthogonalWritingModeRootsForLayout();
+  }
 }
 
-void LocalFrameView::LayoutFromRootObject(LayoutObject& root) {
+bool LocalFrameView::LayoutFromRootObject(LayoutObject& root) {
+  if (!root.NeedsLayout())
+    return false;
+
+  if (auto* locked_ancestor =
+          DisplayLockUtilities::LockedAncestorPreventingLayout(root)) {
+    // Note that since we're preventing the layout on a layout root, we have to
+    // mark its ancestor chain for layout. The reason for this is that we will
+    // clear the layout roots whether or not we have finished laying them out,
+    // so the fact that this root still needs layout will be lost if we don't
+    // mark its container chain.
+    //
+    // Also, since we know that this root has a layout-blocking ancestor, the
+    // layout bit propagation will stop there.
+    //
+    // TODO(vmpstr): Note that an alternative to this approach is to keep `root`
+    // as a layout root in `layout_subtree_root_list_`. It would mean that we
+    // will keep it in the list while the display-lock prevents layout. We need
+    // to investigate which of these approaches is better.
+    root.MarkContainerChainForLayout();
+    return false;
+  }
+
   LayoutState layout_state(root);
   if (scrollable_areas_) {
     for (auto& scrollable_area : *scrollable_areas_) {
@@ -654,6 +682,7 @@ void LocalFrameView::LayoutFromRootObject(LayoutObject& root) {
   }
 
   root.UpdateLayout();
+  return true;
 }
 
 void LocalFrameView::PrepareLayoutAnalyzer() {
@@ -730,9 +759,8 @@ void LocalFrameView::PerformLayout(bool in_subtree_layout) {
                              layout_subtree_root_list_.size());
       }
       for (auto& root : layout_subtree_root_list_.Ordered()) {
-        if (!root->NeedsLayout())
+        if (!LayoutFromRootObject(*root))
           continue;
-        LayoutFromRootObject(*root);
 
         root->PaintingLayer()->UpdateLayerPositionsAfterLayout();
 
@@ -1181,18 +1209,6 @@ void LocalFrameView::AddPartToUpdate(LayoutEmbeddedObject& object) {
   part_update_set_.insert(&object);
 }
 
-void LocalFrameView::SetDisplayMode(blink::mojom::DisplayMode mode) {
-  if (mode == display_mode_)
-    return;
-
-  display_mode_ = mode;
-
-  if (frame_->GetDocument()) {
-    frame_->GetDocument()->MediaQueryAffectingValueChanged(
-        MediaValueChange::kOther);
-  }
-}
-
 void LocalFrameView::SetDisplayShape(DisplayShape display_shape) {
   if (display_shape == display_shape_)
     return;
@@ -1279,16 +1295,35 @@ bool LocalFrameView::RequiresMainThreadScrollingForBackgroundAttachmentFixed()
   return true;
 }
 
-void LocalFrameView::AddViewportConstrainedObject(LayoutObject& object) {
+void LocalFrameView::AddViewportConstrainedObject(
+    LayoutObject& object,
+    ViewportConstrainedType constrained_reason) {
   if (!viewport_constrained_objects_)
     viewport_constrained_objects_ = std::make_unique<ObjectSet>();
 
-  viewport_constrained_objects_->insert(&object);
+  auto result = viewport_constrained_objects_->insert(&object);
+  if (constrained_reason == ViewportConstrainedType::kSticky) {
+    if (result.is_new_entry) {
+      sticky_position_object_count_++;
+    }
+    DCHECK_LE(sticky_position_object_count_,
+              viewport_constrained_objects_->size());
+  }
 }
 
-void LocalFrameView::RemoveViewportConstrainedObject(LayoutObject& object) {
-  if (viewport_constrained_objects_)
-    viewport_constrained_objects_->erase(&object);
+void LocalFrameView::RemoveViewportConstrainedObject(
+    LayoutObject& object,
+    ViewportConstrainedType constrained_reason) {
+  if (viewport_constrained_objects_) {
+    auto it = viewport_constrained_objects_->find(&object);
+    if (it != viewport_constrained_objects_->end()) {
+      viewport_constrained_objects_->erase(it);
+      if (constrained_reason == ViewportConstrainedType::kSticky) {
+        DCHECK_GT(sticky_position_object_count_, 0U);
+        sticky_position_object_count_--;
+      }
+    }
+  }
 }
 
 void LocalFrameView::ViewportSizeChanged(bool width_changed,
@@ -1623,6 +1658,17 @@ void LocalFrameView::ScheduleOrthogonalWritingModeRootsForLayout() {
   }
 }
 
+void LocalFrameView::MarkOrthogonalWritingModeRootsForLayout() {
+  for (auto& root : orthogonal_writing_mode_root_list_.Ordered()) {
+    // OOF-positioned objects don't depend on the ICB size.
+    if (root->NeedsLayout() || root->IsOutOfFlowPositioned())
+      continue;
+
+    root->SetNeedsLayoutAndIntrinsicWidthsRecalc(
+        layout_invalidation_reason::kSizeChanged);
+  }
+}
+
 bool LocalFrameView::CheckLayoutInvalidationIsAllowed() const {
 #if DCHECK_IS_ON()
   if (allows_layout_invalidation_after_layout_clean_)
@@ -1694,7 +1740,8 @@ void LocalFrameView::ScheduleRelayoutOfSubtree(LayoutObject* relayout_root) {
     if (!ShouldThrottleRendering())
       GetPage()->Animator().ScheduleVisualUpdate(frame_.Get());
 
-    Lifecycle().EnsureStateAtMost(DocumentLifecycle::kStyleClean);
+    if (GetPage()->Animator().IsServicingAnimations())
+      Lifecycle().EnsureStateAtMost(DocumentLifecycle::kStyleClean);
   }
   TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
                        "InvalidateLayout", TRACE_EVENT_SCOPE_THREAD, "data",
@@ -2191,34 +2238,33 @@ bool LocalFrameView::NotifyResizeObservers(
     return false;
 
   // Controller exists only if ResizeObserver was created.
-  if (!GetFrame().GetDocument()->GetResizeObserverController())
+  ResizeObserverController* resize_controller =
+      ResizeObserverController::FromIfExists(*GetFrame().DomWindow());
+  if (!resize_controller)
     return false;
-
-  ResizeObserverController& resize_controller =
-      frame_->GetDocument()->EnsureResizeObserverController();
 
   DCHECK(Lifecycle().GetState() >= DocumentLifecycle::kPrePaintClean);
 
-  size_t min_depth = resize_controller.GatherObservations();
+  size_t min_depth = resize_controller->GatherObservations();
 
   if (min_depth != ResizeObserverController::kDepthBottom) {
-    resize_controller.DeliverObservations();
+    resize_controller->DeliverObservations();
   } else {
     // Observation depth limit reached
-    if (resize_controller.SkippedObservations()) {
-      resize_controller.ClearObservations();
+    if (resize_controller->SkippedObservations() &&
+        !resize_controller->IsLoopLimitErrorDispatched()) {
+      resize_controller->ClearObservations();
       ErrorEvent* error = ErrorEvent::Create(
           "ResizeObserver loop limit exceeded",
-          SourceLocation::Capture(frame_->GetDocument()->ToExecutionContext()),
-          nullptr);
+          SourceLocation::Capture(frame_->DomWindow()), nullptr);
       // We're using |SanitizeScriptErrors::kDoNotSanitize| as the error is made
       // by blink itself.
       // TODO(yhirano): Reconsider this.
-      frame_->GetDocument()->ToExecutionContext()->DispatchErrorEvent(
+      frame_->DomWindow()->DispatchErrorEvent(
           error, SanitizeScriptErrors::kDoNotSanitize);
       // Ensure notifications will get delivered in next cycle.
       ScheduleAnimation();
-      DCHECK(Lifecycle().GetState() >= DocumentLifecycle::kPrePaintClean);
+      resize_controller->SetLoopLimitErrorDispatched(true);
     }
     if (Lifecycle().GetState() >= DocumentLifecycle::kPrePaintClean)
       return false;
@@ -2433,9 +2479,10 @@ bool LocalFrameView::RunResizeObserverSteps(
   }
   if (!re_run_lifecycles) {
     ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
-      ResizeObserverController& resize_controller =
-          frame_view.frame_->GetDocument()->EnsureResizeObserverController();
-      resize_controller.ClearMinDepth();
+      ResizeObserverController* resize_controller =
+          ResizeObserverController::From(*frame_view.frame_->DomWindow());
+      resize_controller->ClearMinDepth();
+      resize_controller->SetLoopLimitErrorDispatched(false);
     });
   }
   return re_run_lifecycles;
@@ -2972,9 +3019,18 @@ void LocalFrameView::PushPaintArtifactToCompositor() {
     paint_controller_->CommitNewDisplayItems();
   }
 
+  WTF::Vector<const TransformPaintPropertyNode*> scroll_translation_nodes;
+  if (RuntimeEnabledFeatures::ScrollUnificationEnabled()) {
+    ForAllNonThrottledLocalFrameViews(
+        [&scroll_translation_nodes](LocalFrameView& frame_view) {
+          scroll_translation_nodes.AppendVector(
+              frame_view.GetScrollTranslationNodes());
+        });
+  }
+
   paint_artifact_compositor_->Update(
       paint_controller_->GetPaintArtifactShared(), viewport_properties,
-      settings);
+      settings, scroll_translation_nodes);
 
   probe::LayerTreePainted(&GetFrame());
 }
@@ -4543,6 +4599,19 @@ LocalFrameView::EnsureOverlayInterstitialAdDetector() {
         std::make_unique<OverlayInterstitialAdDetector>();
   }
   return *overlay_interstitial_ad_detector_.get();
+}
+
+WTF::Vector<const TransformPaintPropertyNode*>
+LocalFrameView::GetScrollTranslationNodes() {
+  WTF::Vector<const TransformPaintPropertyNode*> scroll_translation_nodes;
+  for (auto area : *ScrollableAreas()) {
+    const auto* paint_properties =
+        area->GetLayoutBox()->FirstFragment().PaintProperties();
+    if (paint_properties && paint_properties->Scroll()) {
+      scroll_translation_nodes.push_back(paint_properties->ScrollTranslation());
+    }
+  }
+  return scroll_translation_nodes;
 }
 
 }  // namespace blink

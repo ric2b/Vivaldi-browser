@@ -223,19 +223,37 @@ class CreditCardAccessManagerTest : public testing::Test {
     personal_data_manager_.AddCreditCard(local_card);
   }
 
-  void CreateServerCard(std::string guid, std::string number = std::string()) {
-    CreditCard masked_server_card = CreditCard();
-    test::SetCreditCardInfo(&masked_server_card, "Elvis Presley",
-                            number.c_str(), NextMonth().c_str(),
-                            NextYear().c_str(), "1");
-    masked_server_card.set_guid(guid);
-    masked_server_card.set_record_type(CreditCard::MASKED_SERVER_CARD);
+  void CreateServerCard(std::string guid,
+                        std::string number = std::string(),
+                        bool masked = true) {
+    CreditCard server_card = CreditCard();
+    test::SetCreditCardInfo(&server_card, "Elvis Presley", number.c_str(),
+                            NextMonth().c_str(), NextYear().c_str(), "1");
+    server_card.set_guid(guid);
+    server_card.set_record_type(masked ? CreditCard::MASKED_SERVER_CARD
+                                       : CreditCard::FULL_SERVER_CARD);
 
-    personal_data_manager_.AddServerCreditCard(masked_server_card);
+    personal_data_manager_.AddServerCreditCard(server_card);
   }
 
   CreditCardCVCAuthenticator* GetCVCAuthenticator() {
     return credit_card_access_manager_->GetOrCreateCVCAuthenticator();
+  }
+
+  void MockUserResponseForCvcAuth(std::string cvc, bool enable_fido) {
+    payments::FullCardRequest* full_card_request =
+        GetCVCAuthenticator()->full_card_request_.get();
+    if (!full_card_request)
+      return;
+
+    // Mock user response.
+    payments::FullCardRequest::UserProvidedUnmaskDetails details;
+    details.cvc = base::ASCIIToUTF16(cvc);
+#if defined(OS_ANDROID)
+    details.enable_fido_auth = enable_fido;
+#endif
+    full_card_request->OnUnmaskPromptAccepted(details);
+    full_card_request->OnDidGetUnmaskRiskData(/*risk_data=*/"");
   }
 
   // Returns true if full card request was sent from CVC auth.
@@ -249,10 +267,7 @@ class CreditCardAccessManagerTest : public testing::Test {
     if (!full_card_request)
       return false;
 
-    // Mock user response.
-    payments::FullCardRequest::UserProvidedUnmaskDetails details;
-    details.cvc = base::ASCIIToUTF16(kTestCvc);
-    full_card_request->OnUnmaskPromptAccepted(details);
+    MockUserResponseForCvcAuth(kTestCvc, follow_with_fido_auth);
 
     payments::PaymentsClient::UnmaskResponseDetails response;
 #if !defined(OS_IOS)
@@ -1299,6 +1314,34 @@ TEST_F(CreditCardAccessManagerTest, FIDOOptIn_CheckboxDeclined) {
   EXPECT_FALSE(GetFIDOAuthenticator()->IsUserOptedIn());
 }
 
+// Ensures that opting-in through settings page on Android successfully sends an
+// opt-in request the next time the user downstreams a card.
+TEST_F(CreditCardAccessManagerTest, FIDOSettingsPageOptInSuccess_Android) {
+  CreateServerCard(kTestGUID, kTestNumber);
+  CreditCard* card = credit_card_access_manager_->GetCreditCard(kTestGUID);
+  GetFIDOAuthenticator()->SetUserVerifiable(true);
+
+  // Setting the local opt-in state as true and implying that Payments servers
+  // has the opt-in state to false - this shows the user opted-in through the
+  // settings page.
+  SetUserOptedIn(true);
+  payments_client_->AllowFidoRegistration(true);
+  payments_client_->ShouldReturnUnmaskDetailsImmediately(true);
+
+  credit_card_access_manager_->PrepareToFetchCreditCard();
+  credit_card_access_manager_->FetchCreditCard(card, accessor_->GetWeakPtr());
+  InvokeUnmaskDetailsTimeout();
+  WaitForCallbacks();
+
+  MockUserResponseForCvcAuth(kTestCvc, /*enable_fido=*/false);
+
+  // Although the checkbox was hidden and |enable_fido_auth| was set to false in
+  // the user request, because of the previous opt-in intention, the client must
+  // request to opt-in.
+  EXPECT_TRUE(
+      payments_client_->unmask_request()->user_response.enable_fido_auth);
+}
+
 #else  // defined(OS_ANDROID)
 // Ensures that the WebAuthn enrollment prompt is invoked after user opts in. In
 // this case, the user is not yet enrolled server-side, and thus receives
@@ -1760,6 +1803,30 @@ TEST_F(CreditCardAccessManagerTest, AuthenticationInProgress) {
 
   EXPECT_TRUE(GetRealPanForCVCAuth(AutofillClient::SUCCESS, kTestNumber));
   EXPECT_FALSE(IsAuthenticationInProgress());
+}
+
+// Ensures that the use of |unmasked_card_cache_| is set and logged correctly.
+TEST_F(CreditCardAccessManagerTest, FetchCreditCardUsesUnmaskedCardCache) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCacheServerCardInfo);
+  base::HistogramTester histogram_tester;
+  CreateServerCard(kTestGUID, kTestNumber, /*masked=*/false);
+  CreditCard* unmasked_card =
+      credit_card_access_manager_->GetCreditCard(kTestGUID);
+  credit_card_access_manager_->CacheUnmaskedCardInfo(
+      *unmasked_card, base::UTF8ToUTF16(kTestCvc));
+
+  CreateServerCard(kTestGUID, kTestNumber, /*masked=*/true);
+  CreditCard* masked_card =
+      credit_card_access_manager_->GetCreditCard(kTestGUID);
+
+  credit_card_access_manager_->FetchCreditCard(masked_card,
+                                               accessor_->GetWeakPtr());
+  histogram_tester.ExpectBucketCount("Autofill.UsedCachedServerCard", 1, 1);
+
+  credit_card_access_manager_->FetchCreditCard(masked_card,
+                                               accessor_->GetWeakPtr());
+  histogram_tester.ExpectBucketCount("Autofill.UsedCachedServerCard", 2, 1);
 }
 
 // TODO(crbug/949269): Once metrics are added, create test to ensure that

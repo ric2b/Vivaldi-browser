@@ -28,8 +28,8 @@ import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProv
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager.OverlayPanelManagerObserver;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
+import org.chromium.chrome.browser.fullscreen.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager.FullscreenListener;
 import org.chromium.chrome.browser.night_mode.RemoteViewsWithNightModeInflater;
 import org.chromium.chrome.browser.night_mode.SystemNightModeMonitor;
 import org.chromium.chrome.browser.tab.Tab;
@@ -43,7 +43,7 @@ import javax.inject.Inject;
  * Delegate that manages bottom bar area inside of {@link CustomTabActivity}.
  */
 @ActivityScope
-public class CustomTabBottomBarDelegate implements FullscreenListener {
+public class CustomTabBottomBarDelegate implements BrowserControlsStateProvider.Observer {
     private static final String TAG = "CustomTab";
     private static final int SLIDE_ANIMATION_DURATION_MS = 400;
 
@@ -87,9 +87,14 @@ public class CustomTabBottomBarDelegate implements FullscreenListener {
         mFullscreenManager = fullscreenManager;
         mNightModeStateController = nightModeStateController;
         mSystemNightModeMonitor = systemNightModeMonitor;
-        fullscreenManager.addListener(this);
+        fullscreenManager.addObserver(this);
 
         compositorContentInitializer.addCallback(this::addOverlayPanelManagerObserver);
+
+        mActivity.getWindowAndroid().getApplicationBottomInsetProvider().addObserver((inset) -> {
+            if (mBottomBarView == null) return;
+            hideBottomBar(inset > 0);
+        });
     }
 
     /**
@@ -321,7 +326,7 @@ public class CustomTabBottomBarDelegate implements FullscreenListener {
         return mBottomBarView != null || mActivity.findViewById(R.id.bottombar_stub) != null;
     }
 
-    // FullscreenListener methods
+    // BrowserControlsStateProvider.Observer methods
     @Override
     public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
             int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {
@@ -346,15 +351,6 @@ public class CustomTabBottomBarDelegate implements FullscreenListener {
         // using getBrowserControlHiddenRatio(), http://crbug.com/928903.
         getBottomBarView().setTranslationY(mFullscreenManager.getBrowserControlHiddenRatio()
                 * bottomControlsHeight);
-    }
-
-    @Override
-    public void onUpdateViewportSize() {
-        if (mBottomBarView == null) return; // Check bottom bar view but don't inflate it.
-
-        // Hide the container of the bottom bar while there is another feature shrinking the
-        // viewport of the web content.
-        hideBottomBar(mActivity.getWindowAndroid().getApplicationBottomInsetProvider().get() > 0);
     }
 
     /**

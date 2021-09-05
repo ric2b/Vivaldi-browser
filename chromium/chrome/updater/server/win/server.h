@@ -8,67 +8,92 @@
 #include <wrl/implements.h>
 #include <wrl/module.h>
 
+#include <string>
+
 #include "base/memory/scoped_refptr.h"
-#include "base/strings/string16.h"
-#include "chrome/updater/server/win/updater_idl.h"
+#include "base/sequenced_task_runner.h"
+#include "base/win/scoped_com_initializer.h"
+#include "chrome/updater/app/app.h"
+#include "chrome/updater/update_service.h"
 
 namespace updater {
 
-// TODO(crbug.com/1065712): these Impl classes don't have to be
-// visible in the updater namespace. Additionally, there is some code
-// duplication for the registration and unregistration code in both server and
-// service_main compilation units.
-//
-// This class implements the ICompleteStatus interface and exposes it as a COM
-// object.
-class CompleteStatusImpl
-    : public Microsoft::WRL::RuntimeClass<
-          Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>,
-          ICompleteStatus> {
- public:
-  CompleteStatusImpl(int code, const base::string16& message)
-      : code_(code), message_(message) {}
-  CompleteStatusImpl(const CompleteStatusImpl&) = delete;
-  CompleteStatusImpl& operator=(const CompleteStatusImpl&) = delete;
+class Configurator;
+class UpdateService;
 
-  // Overrides for ICompleteStatus.
-  IFACEMETHODIMP get_statusCode(LONG* code) override;
-  IFACEMETHODIMP get_statusMessage(BSTR* message) override;
-
- private:
-  const int code_;
-  const base::string16 message_;
-
-  ~CompleteStatusImpl() override = default;
-};
-
-// This class implements the IUpdater interface and exposes it as a COM object.
-class UpdaterImpl
-    : public Microsoft::WRL::RuntimeClass<
-          Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>,
-          IUpdater> {
- public:
-  UpdaterImpl() = default;
-  UpdaterImpl(const UpdaterImpl&) = delete;
-  UpdaterImpl& operator=(const UpdaterImpl&) = delete;
-
-  // Overrides for IUpdater.
-  IFACEMETHODIMP CheckForUpdate(const base::char16* app_id) override;
-  IFACEMETHODIMP Register(const base::char16* app_id,
-                          const base::char16* brand_code,
-                          const base::char16* tag,
-                          const base::char16* version,
-                          const base::char16* existence_checker_path) override;
-  IFACEMETHODIMP Update(const base::char16* app_id) override;
-  IFACEMETHODIMP UpdateAll(IUpdaterObserver* observer) override;
-
- private:
-  ~UpdaterImpl() override = default;
-};
-
-class App;
-
+// Returns an application object bound to this COM server.
 scoped_refptr<App> AppServerInstance();
+
+// The COM objects involved in this server are free threaded. Incoming COM calls
+// arrive on COM RPC threads. Outgoing COM calls are posted from a blocking
+// sequenced task runner in the thread pool. Calls to the update service occur
+// in the main sequence, which is bound to the main thread.
+//
+// The free-threaded COM objects exposed by this server are entered either by
+// COM RPC threads, when their functions are invoked by COM clients, or by
+// threads from the updater's thread pool, when callbacks posted by the
+// update service are handled. Access to the shared state maintained by these
+// objects is synchronized by a lock. The sequencing of callbacks is ensured
+// by using a sequenced task runner, since the callbacks can't use base
+// synchronization primitives on the main sequence where they are posted from.
+//
+// This class is responsible for the lifetime of the COM server, as well as
+// class factory registration.
+class ComServerApp : public App {
+ public:
+  ComServerApp();
+
+  // Returns the singleton instance of this ComServerApp.
+  static scoped_refptr<ComServerApp> Instance() {
+    return static_cast<ComServerApp*>(AppServerInstance().get());
+  }
+
+  scoped_refptr<base::SequencedTaskRunner> main_task_runner() {
+    return main_task_runner_;
+  }
+  scoped_refptr<UpdateService> service() { return service_; }
+
+ private:
+  ~ComServerApp() override;
+
+  // Overrides for App.
+  void InitializeThreadPool() override;
+  void Initialize() override;
+  void FirstTaskRun() override;
+
+  // Registers and unregisters the out-of-process COM class factories.
+  HRESULT RegisterClassObjects();
+  void UnregisterClassObjects();
+
+  // Waits until the last COM object is released.
+  void WaitForExitSignal();
+
+  // Called when the last object is released.
+  void SignalExit();
+
+  // Creates an out-of-process WRL Module.
+  void CreateWRLModule();
+
+  // Handles object unregistration then triggers program shutdown.
+  void Stop();
+
+  // Identifier of registered class objects used for unregistration.
+  DWORD cookies_[2] = {};
+
+  // While this object lives, COM can be used by all threads in the program.
+  base::win::ScopedCOMInitializer com_initializer_;
+
+  // Task runner bound to the main sequence and the update service instance.
+  scoped_refptr<base::SequencedTaskRunner> main_task_runner_;
+
+  // The UpdateService to use for handling the incoming COM requests. This
+  // instance of the service runs the in-process update service code, which is
+  // delegating to the update_client component.
+  scoped_refptr<UpdateService> service_;
+
+  // The updater's Configurator.
+  scoped_refptr<Configurator> config_;
+};
 
 }  // namespace updater
 

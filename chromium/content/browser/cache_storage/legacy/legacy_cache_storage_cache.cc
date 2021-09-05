@@ -58,7 +58,6 @@
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/quota/padding_key.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
-#include "storage/common/storage_histograms.h"
 #include "third_party/blink/public/common/cache_storage/cache_storage_utils.h"
 #include "third_party/blink/public/common/fetch/fetch_api_request_headers_map.h"
 #include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
@@ -74,8 +73,6 @@ using ResponseHeaderMap = base::flat_map<std::string, std::string>;
 
 const size_t kMaxQueryCacheResultBytes =
     1024 * 1024 * 10;  // 10MB query cache limit
-
-const char kRecordBytesLabel[] = "DiskCache.CacheStorage";
 
 // If the way that a cache's padding is calculated changes increment this
 // version.
@@ -292,9 +289,6 @@ void ReadMetadataDidReadMetadata(disk_cache::Entry* entry,
     return;
   }
 
-  if (rv > 0)
-    storage::RecordBytesRead(kRecordBytesLabel, rv);
-
   std::unique_ptr<proto::CacheMetadata> metadata(new proto::CacheMetadata());
 
   if (!metadata->ParseFromArray(buffer->data(), buffer->size())) {
@@ -357,7 +351,7 @@ blink::mojom::FetchAPIResponsePtr CreateResponse(
           metadata.response().cors_exposed_header_names().begin(),
           metadata.response().cors_exposed_header_names().end()),
       nullptr /* side_data_blob */, nullptr /* side_data_blob_for_cache_put */,
-      std::vector<network::mojom::ContentSecurityPolicyPtr>(),
+      network::mojom::ParsedHeaders::New(),
       metadata.response().loaded_with_credentials());
 }
 
@@ -1520,9 +1514,6 @@ void LegacyCacheStorageCache::WriteSideDataDidWrite(
     return;
   }
 
-  if (rv > 0)
-    storage::RecordBytesWritten(kRecordBytesLabel, rv);
-
   if (ShouldPadResourceSize(response.get())) {
     cache_padding_ -= CalculateResponsePaddingInternal(
         response.get(), cache_padding_key_.get(), side_data_size_before_write);
@@ -1775,8 +1766,6 @@ void LegacyCacheStorageCache::PutDidWriteHeaders(
     return;
   }
 
-  if (rv > 0)
-    storage::RecordBytesWritten(kRecordBytesLabel, rv);
   if (ShouldPadResourceSize(*put_context->response)) {
     cache_padding_ += CalculateResponsePadding(*put_context->response,
                                                cache_padding_key_.get(),
@@ -2008,7 +1997,7 @@ void LegacyCacheStorageCache::UpdateCacheSizeGotSize(
   last_reported_size_ = PaddedCacheSize();
 
   quota_manager_proxy_->NotifyStorageModified(
-      CacheStorageQuotaClient::GetIDFromOwner(owner_), origin_,
+      CacheStorageQuotaClient::GetClientTypeFromOwner(owner_), origin_,
       blink::mojom::StorageType::kTemporary, size_delta);
 
   if (cache_storage_)
@@ -2377,8 +2366,6 @@ void LegacyCacheStorageCache::InitGotCacheSize(
     DLOG_IF(ERROR, cache_size_ != cache_size)
         << "Cache size: " << cache_size
         << " does not match size from index: " << cache_size_;
-    UMA_HISTOGRAM_COUNTS_10M("ServiceWorkerCache.IndexSizeDifference",
-                             std::abs(cache_size_ - cache_size));
     if (cache_size_ != cache_size) {
       // We assume that if the sizes match then then cached padding is still
       // correct. If not then we recalculate the padding.

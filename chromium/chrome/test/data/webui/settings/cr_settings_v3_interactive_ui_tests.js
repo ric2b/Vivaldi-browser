@@ -7,6 +7,8 @@
 // Polymer BrowserTest fixture.
 GEN_INCLUDE(['//chrome/test/data/webui/polymer_interactive_ui_test.js']);
 
+GEN('#include "content/public/test/browser_test.h"');
+
 /** Test fixture for shared Polymer 3 elements. */
 // eslint-disable-next-line no-var
 var CrSettingsV3InteractiveUITest = class extends PolymerInteractiveUITest {
@@ -29,7 +31,7 @@ var CrSettingsAnimatedPagesV3Test =
     class extends CrSettingsV3InteractiveUITest {
   /** @override */
   get browsePreload() {
-    return 'chrome://settings/test_loader.html?module=settings/settings_animated_pages_test.m.js';
+    return 'chrome://settings/test_loader.html?module=settings/settings_animated_pages_test.js';
   }
 };
 
@@ -41,7 +43,7 @@ TEST_F('CrSettingsAnimatedPagesV3Test', 'All', function() {
 var CrSettingsSyncPageV3Test = class extends CrSettingsV3InteractiveUITest {
   /** @override */
   get browsePreload() {
-    return 'chrome://settings/test_loader.html?module=settings/people_page_sync_page_interactive_test.m.js';
+    return 'chrome://settings/test_loader.html?module=settings/people_page_sync_page_interactive_test.js';
   }
 };
 
@@ -53,7 +55,7 @@ TEST_F('CrSettingsSyncPageV3Test', 'All', function() {
 var CrSettingsSecureDnsV3Test = class extends CrSettingsV3InteractiveUITest {
   /** @override */
   get browsePreload() {
-    return 'chrome://settings/test_loader.html?module=settings/secure_dns_interactive_test.m.js';
+    return 'chrome://settings/test_loader.html?module=settings/secure_dns_interactive_test.js';
   }
 };
 
@@ -65,7 +67,7 @@ TEST_F('CrSettingsSecureDnsV3Test', 'All', function() {
 var SettingsUIV3InteractiveTest = class extends CrSettingsV3InteractiveUITest {
   /** @override */
   get browsePreload() {
-    return 'chrome://settings/test_loader.html?module=settings/settings_ui_tests.m.js';
+    return 'chrome://settings/test_loader.html?module=settings/settings_ui_tests.js';
   }
 };
 

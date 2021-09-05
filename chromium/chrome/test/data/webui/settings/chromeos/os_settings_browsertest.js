@@ -19,6 +19,8 @@ GEN('#include "ash/public/cpp/ash_features.h"');
 GEN('#include "build/branding_buildflags.h"');
 GEN('#include "chrome/common/chrome_features.h"');
 GEN('#include "chromeos/constants/chromeos_features.h"');
+GEN('#include "content/public/test/browser_test.h"');
+GEN('#include "ui/display/display_features.h"');
 
 // Generic test fixture for CrOS Polymer Settings elements to be overridden by
 // individual element tests.
@@ -294,11 +296,6 @@ const OSSettingsAppManagementBrowserTest = class extends OSSettingsBrowserTest {
   }
 
   /** @override */
-  get featureList() {
-    return {enabled: ['features::kAppManagement']};
-  }
-
-  /** @override */
   get extraLibraries() {
     return super.extraLibraries.concat([
       '//ui/webui/resources/js/cr/ui/store.js',
@@ -394,6 +391,50 @@ TEST_F('OSSettingsAppManagementArcDetailViewTest', 'AllJsTests', () => {
   mocha.run();
 });
 
+// Test fixture for the app management Plugin VM detail view element.
+// eslint-disable-next-line no-var
+var OSSettingsAppManagementPluginVmDetailViewTest =
+    class extends OSSettingsAppManagementBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return super.browsePreload + 'app_management/plugin_vm_detail_view.html';
+  }
+
+  /** @override */
+  get extraLibraries() {
+    return super.extraLibraries.concat([
+      'app_management/plugin_vm_detail_view_test.js',
+    ]);
+  }
+};
+
+TEST_F('OSSettingsAppManagementPluginVmDetailViewTest', 'AllJsTests', () => {
+  mocha.run();
+});
+
+// Test fixture for the Plugin VM page.
+// eslint-disable-next-line no-var
+var OSSettingsAppManagementPluginVmPageTest =
+    class extends OSSettingsAppManagementBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return super.browsePreload +
+        'app_management/plugin_vm_page/plugin_vm_shared_folders.html';
+  }
+
+  /** @override */
+  get extraLibraries() {
+    return super.extraLibraries.concat([
+      BROWSER_SETTINGS_PATH + '../test_browser_proxy.js',
+      'app_management/plugin_vm_shared_folders_test.js',
+    ]);
+  }
+};
+
+TEST_F('OSSettingsAppManagementPluginVmPageTest', 'AllJsTests', () => {
+  mocha.run();
+});
+
 // Test fixture for the app management managed app view.
 // eslint-disable-next-line no-var
 var OSSettingsAppManagementManagedAppTest =
@@ -486,16 +527,15 @@ TEST_F('OSSettingsCrostiniPageTest', 'MainPage', function() {
   mocha.grep('MainPage').run();
 });
 
-TEST_F('OSSettingsCrostiniPageTest', 'SubPageDefault', function() {
+TEST_F('OSSettingsCrostiniPageTest', 'DISABLED_SubPageDefault', function() {
   mocha.grep('SubPageDefault').run();
 });
 
-TEST_F(
-    'OSSettingsCrostiniPageTest', 'DISABLED_SubPagePortForwarding', function() {
-      mocha.grep('SubPagePortForwarding').run();
-    });
+TEST_F('OSSettingsCrostiniPageTest', 'SubPagePortForwarding', function() {
+  mocha.grep('SubPagePortForwarding').run();
+});
 
-TEST_F('OSSettingsCrostiniPageTest', 'DiskResize', function() {
+TEST_F('OSSettingsCrostiniPageTest', 'DISABLED_DiskResize', function() {
   mocha.grep('DiskResize').run();
 });
 
@@ -533,6 +573,16 @@ var OSSettingsDevicePageTest = class extends OSSettingsBrowserTest {
   /** @override */
   get browsePreload() {
     return super.browsePreload + 'chromeos/device_page/device_page.html';
+  }
+
+  /** @override */
+  get featureList() {
+    return {
+      enabled: [
+        'ash::features::kDisplayIdentification',
+        'display::features::kListAllDisplayModes'
+      ]
+    };
   }
 
   /** @override */
@@ -1133,30 +1183,6 @@ TEST_F('OSSettingsPersonalizationPageTest', 'AllJsTests', () => {
   mocha.run();
 });
 
-// Test fixture for the Plugin VM page.
-// eslint-disable-next-line no-var
-var OSSettingsPluginVmPageTest = class extends OSSettingsBrowserTest {
-  /** @override */
-  get browsePreload() {
-    return super.browsePreload + 'chromeos/plugin_vm_page/plugin_vm_page.html';
-  }
-
-  /** @override */
-  get extraLibraries() {
-    return super.extraLibraries.concat([
-      '//ui/webui/resources/js/promise_resolver.js',
-      '//ui/webui/resources/js/util.js',
-      BROWSER_SETTINGS_PATH + '../test_util.js',
-      BROWSER_SETTINGS_PATH + '../test_browser_proxy.js',
-      'plugin_vm_page_test.js',
-    ]);
-  }
-};
-
-TEST_F('OSSettingsPluginVmPageTest', 'AllJsTests', () => {
-  mocha.run();
-});
-
 // Tests for the CUPS printer entry.
 // eslint-disable-next-line no-var
 var OSSettingsPrinterEntryTest = class extends OSSettingsBrowserTest {
@@ -1270,6 +1296,25 @@ TEST_F('OSSettingsLanguagesPageTest', 'LanguageMenu', function() {
 
 TEST_F('OSSettingsLanguagesPageTest', 'InputMethods', function() {
   mocha.grep(assert(os_languages_page_tests.TestNames.InputMethods)).run();
+});
+
+// eslint-disable-next-line no-var
+var OSSettingsSmartInputsPageTest = class extends OSSettingsBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return super.browsePreload +
+        'chromeos/os_languages_page/smart_inputs_page.html';
+  }
+  /** @override */
+  get extraLibraries() {
+    return super.extraLibraries.concat([
+      'smart_inputs_page_test.js',
+    ]);
+  }
+};
+
+TEST_F('OSSettingsSmartInputsPageTest', 'AllJsTests', () => {
+  mocha.run();
 });
 
 // Tests for the Reset section.

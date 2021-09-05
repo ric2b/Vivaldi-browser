@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/strings/string_split.h"
 #include "build/build_config.h"
 #include "components/optimization_guide/optimization_guide_constants.h"
 #include "components/optimization_guide/optimization_guide_switches.h"
@@ -69,6 +70,15 @@ size_t MaxHintsFetcherTopHostBlacklistSize() {
                                           "top_host_blacklist_size_multiplier",
                                           3) *
          MaxHostsForOptimizationGuideServiceHintsFetch();
+}
+
+bool ShouldBatchUpdateHintsForTopHosts() {
+  if (base::FeatureList::IsEnabled(kRemoteOptimizationGuideFetching)) {
+    return GetFieldTrialParamByFeatureAsBool(kRemoteOptimizationGuideFetching,
+                                             "batch_update_hints_for_top_hosts",
+                                             true);
+  }
+  return false;
 }
 
 size_t MaxHostsForOptimizationGuideServiceHintsFetch() {
@@ -228,8 +238,11 @@ size_t MaxHostModelFeaturesCacheSize() {
 }
 
 size_t MaxURLKeyedHintCacheSize() {
-  return GetFieldTrialParamByFeatureAsInt(kOptimizationHints,
-                                          "max_url_keyed_hint_cache_size", 20);
+  size_t max_url_keyed_hint_cache_size = GetFieldTrialParamByFeatureAsInt(
+      kOptimizationHints, "max_url_keyed_hint_cache_size", 30);
+  DCHECK_GE(max_url_keyed_hint_cache_size,
+            MaxUrlsForOptimizationGuideServiceHintsFetch());
+  return max_url_keyed_hint_cache_size;
 }
 
 bool IsOptimizationTargetPredictionEnabled() {
@@ -253,6 +266,18 @@ int PredictionModelFetchRandomMinDelaySecs() {
 int PredictionModelFetchRandomMaxDelaySecs() {
   return GetFieldTrialParamByFeatureAsInt(kOptimizationTargetPrediction,
                                           "fetch_random_max_delay_secs", 180);
+}
+
+base::flat_set<std::string> ExternalAppPackageNamesApprovedForFetch() {
+  std::string value = base::GetFieldTrialParamValueByFeature(
+      kRemoteOptimizationGuideFetching, "approved_external_app_packages");
+  if (value.empty())
+    return {};
+
+  std::vector<std::string> app_packages_list = base::SplitString(
+      value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  return base::flat_set<std::string>(app_packages_list.begin(),
+                                     app_packages_list.end());
 }
 
 }  // namespace features

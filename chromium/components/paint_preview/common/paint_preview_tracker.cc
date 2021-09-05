@@ -9,7 +9,7 @@
 #include <string>
 #include <utility>
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/stl_util.h"
 #include "components/paint_preview/common/glyph_usage.h"
 #include "components/paint_preview/common/mojom/paint_preview_recorder.mojom.h"
@@ -90,7 +90,7 @@ void PaintPreviewTracker::AddGlyphs(const SkTextBlob* blob) {
 }
 
 void PaintPreviewTracker::AnnotateLink(const GURL& url, const gfx::Rect& rect) {
-  links_.push_back(mojom::LinkData(url, rect));
+  links_.push_back(mojom::LinkData::New(url, rect));
 }
 
 void PaintPreviewTracker::CustomDataToSkPictureCallback(SkCanvas* canvas,
@@ -107,6 +107,11 @@ void PaintPreviewTracker::CustomDataToSkPictureCallback(SkCanvas* canvas,
   SkRect rect = it->second->cullRect();
   SkMatrix matrix = SkMatrix::MakeTrans(rect.x(), rect.y());
   canvas->drawPicture(it->second, &matrix, nullptr);
+}
+
+void PaintPreviewTracker::MoveLinks(std::vector<mojom::LinkDataPtr>* out) {
+  std::move(links_.begin(), links_.end(), std::back_inserter(*out));
+  links_.clear();
 }
 
 }  // namespace paint_preview

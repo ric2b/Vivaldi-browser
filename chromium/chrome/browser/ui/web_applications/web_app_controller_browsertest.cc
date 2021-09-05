@@ -5,13 +5,13 @@
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 
 #include "chrome/browser/apps/app_service/app_launch_params.h"
-#include "chrome/browser/apps/launch_service/launch_service.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/banners/test_app_banner_manager_desktop.h"
-#include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/predictors/loading_predictor_config.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/components/app_shortcut_manager.h"
-#include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -51,11 +51,18 @@ WebAppControllerBrowserTestBase::WebAppControllerBrowserTestBase() {
 
 WebAppControllerBrowserTestBase::~WebAppControllerBrowserTestBase() = default;
 
+WebAppProviderBase& WebAppControllerBrowserTestBase::provider() {
+  auto* provider = WebAppProviderBase::GetProviderBase(profile());
+  DCHECK(provider);
+  return *provider;
+}
+
 AppId WebAppControllerBrowserTestBase::InstallPWA(const GURL& app_url) {
   auto web_app_info = std::make_unique<WebApplicationInfo>();
   web_app_info->app_url = app_url;
   web_app_info->scope = app_url.GetWithoutFilename();
   web_app_info->open_as_window = true;
+  web_app_info->title = base::ASCIIToUTF16("A Web App");
   return web_app::InstallWebApp(profile(), std::move(web_app_info));
 }
 
@@ -72,6 +79,16 @@ Browser* WebAppControllerBrowserTestBase::LaunchWebAppBrowser(
 Browser* WebAppControllerBrowserTestBase::LaunchWebAppBrowserAndWait(
     const AppId& app_id) {
   return web_app::LaunchWebAppBrowserAndWait(profile(), app_id);
+}
+
+Browser*
+WebAppControllerBrowserTestBase::LaunchWebAppBrowserAndAwaitInstallabilityCheck(
+    const AppId& app_id) {
+  Browser* browser = web_app::LaunchWebAppBrowserAndWait(profile(), app_id);
+  banners::TestAppBannerManagerDesktop::FromWebContents(
+      browser->tab_strip_model()->GetActiveWebContents())
+      ->WaitForInstallableCheck();
+  return browser;
 }
 
 Browser* WebAppControllerBrowserTestBase::LaunchBrowserForWebAppInTab(
@@ -101,9 +118,7 @@ WebAppControllerBrowserTestBase::NavigateInNewWindowAndAwaitInstallabilityCheck(
 
 base::Optional<AppId> WebAppControllerBrowserTestBase::FindAppWithUrlInScope(
     const GURL& url) {
-  auto* provider = WebAppProvider::Get(profile());
-  DCHECK(provider);
-  return provider->registrar().FindAppWithUrlInScope(url);
+  return provider().registrar().FindAppWithUrlInScope(url);
 }
 
 WebAppControllerBrowserTest::WebAppControllerBrowserTest()
@@ -123,10 +138,8 @@ void WebAppControllerBrowserTest::SetUp() {
 
 content::WebContents* WebAppControllerBrowserTest::OpenApplication(
     const AppId& app_id) {
-  auto* provider = WebAppProvider::Get(profile());
-  DCHECK(provider);
   ui_test_utils::UrlLoadObserver url_observer(
-      provider->registrar().GetAppLaunchURL(app_id),
+      provider().registrar().GetAppLaunchURL(app_id),
       content::NotificationService::AllSources());
 
   apps::AppLaunchParams params(
@@ -134,7 +147,9 @@ content::WebContents* WebAppControllerBrowserTest::OpenApplication(
       WindowOpenDisposition::NEW_WINDOW,
       apps::mojom::AppLaunchSource::kSourceTest);
   content::WebContents* contents =
-      apps::LaunchService::Get(profile())->OpenApplication(params);
+      apps::AppServiceProxyFactory::GetForProfile(profile())
+          ->BrowserAppLauncher()
+          .LaunchAppWithParams(params);
   url_observer.Wait();
   return contents;
 }
@@ -174,9 +189,7 @@ void WebAppControllerBrowserTest::SetUpOnMainThread() {
   // By default, all SSL cert checks are valid. Can be overridden in tests.
   cert_verifier_.mock_cert_verifier()->set_default_result(net::OK);
 
-  web_app::WebAppProviderBase::GetProviderBase(profile())
-      ->shortcut_manager()
-      .SuppressShortcutsForTesting();
+  provider().shortcut_manager().SuppressShortcutsForTesting();
 }
 
 }  // namespace web_app

@@ -4,7 +4,6 @@
 
 #include "third_party/blink/renderer/platform/scheduler/public/scheduling_policy.h"
 
-#include "base/logging.h"
 
 namespace blink {
 
@@ -25,6 +24,7 @@ bool SchedulingPolicy::IsFeatureSticky(SchedulingPolicy::Feature feature) {
     case Feature::kSharedWorker:
     case Feature::kWebHID:
     case Feature::kWebShare:
+    case Feature::kWebDatabase:
       return false;
     case Feature::kMainResourceHasCacheControlNoStore:
     case Feature::kMainResourceHasCacheControlNoCache:
@@ -51,6 +51,9 @@ bool SchedulingPolicy::IsFeatureSticky(SchedulingPolicy::Feature feature) {
     case Feature::kRequestedStorageAccessGrant:
     case Feature::kWebNfc:
     case Feature::kWebFileSystem:
+    case Feature::kAppBanner:
+    case Feature::kPrinting:
+    case Feature::kPictureInPicture:
       return true;
   }
 }

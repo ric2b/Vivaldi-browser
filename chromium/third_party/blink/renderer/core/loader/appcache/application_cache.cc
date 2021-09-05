@@ -30,6 +30,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event_listener.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/loader/appcache/application_cache_host_for_frame.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
@@ -39,9 +40,9 @@
 
 namespace blink {
 
-ApplicationCache::ApplicationCache(LocalFrame* frame) : DOMWindowClient(frame) {
-  DCHECK(RuntimeEnabledFeatures::AppCacheEnabled(
-      frame->GetDocument()->ToExecutionContext()));
+ApplicationCache::ApplicationCache(LocalFrame* frame)
+    : ExecutionContextClient(frame) {
+  DCHECK(RuntimeEnabledFeatures::AppCacheEnabled(frame->DomWindow()));
   ApplicationCacheHostForFrame* cache_host = GetApplicationCacheHost();
   if (cache_host)
     cache_host->SetApplicationCache(this);
@@ -49,7 +50,7 @@ ApplicationCache::ApplicationCache(LocalFrame* frame) : DOMWindowClient(frame) {
 
 void ApplicationCache::Trace(Visitor* visitor) {
   EventTargetWithInlineData::Trace(visitor);
-  DOMWindowClient::Trace(visitor);
+  ExecutionContextClient::Trace(visitor);
 }
 
 ApplicationCacheHostForFrame* ApplicationCache::GetApplicationCacheHost()
@@ -120,7 +121,7 @@ const AtomicString& ApplicationCache::InterfaceName() const {
 }
 
 ExecutionContext* ApplicationCache::GetExecutionContext() const {
-  return GetFrame() ? GetFrame()->GetDocument()->ToExecutionContext() : nullptr;
+  return GetFrame() ? GetFrame()->DomWindow() : nullptr;
 }
 
 const AtomicString& ApplicationCache::ToEventType(mojom::AppCacheEventID id) {

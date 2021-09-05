@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.tabmodel;
 import android.app.Activity;
 import android.os.Handler;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
@@ -18,6 +19,7 @@ import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabPersistentStoreObserver;
+import org.chromium.ui.base.WindowAndroid;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -115,11 +117,10 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
     /**
      * Should be called once the native library is loaded so that the actual internals of this
      * class can be initialized.
-     * @param tabContentProvider                      A {@link TabContentManager} instance.
+     * @param tabContentProvider A {@link TabContentManager} instance.
      */
     public void onNativeLibraryReady(TabContentManager tabContentProvider) {
         assert mTabContentManager == null : "onNativeLibraryReady called twice!";
-        mTabContentManager = tabContentProvider;
 
         ChromeTabCreator regularTabCreator =
                 (ChromeTabCreator) getTabCreatorManager().getTabCreator(false);
@@ -131,9 +132,16 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
         TabModel incognitoModel = new IncognitoTabModel(new IncognitoTabModelImplCreator(
                 regularTabCreator, incognitoTabCreator, mUma, mOrderController,
                 mTabContentManager, mTabSaver, this));
-        initialize(normalModel, incognitoModel);
         regularTabCreator.setTabModel(normalModel, mOrderController);
         incognitoTabCreator.setTabModel(incognitoModel, mOrderController);
+        onNativeLibraryReadyInternal(tabContentProvider, normalModel, incognitoModel);
+    }
+
+    @VisibleForTesting
+    void onNativeLibraryReadyInternal(
+            TabContentManager tabContentProvider, TabModel normalModel, TabModel incognitoModel) {
+        mTabContentManager = tabContentProvider;
+        initialize(normalModel, incognitoModel);
         mTabSaver.setTabContentManager(mTabContentManager);
 
         addObserver(new EmptyTabModelSelectorObserver() {
@@ -192,8 +200,8 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
             }
 
             @Override
-            public void onActivityAttachmentChanged(Tab tab, boolean attached) {
-                if (!attached && !isReparentingInProgress()) {
+            public void onActivityAttachmentChanged(Tab tab, @Nullable WindowAndroid window) {
+                if (window == null && !isReparentingInProgress()) {
                     getModel(tab.isIncognito()).removeTab(tab);
                 }
             }
@@ -398,11 +406,6 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
         return mSessionRestoreInProgress.get();
     }
 
-    @Override
-    public boolean isReparentingInProgress() {
-        return super.isReparentingInProgress();
-    }
-
     // TODO(tedchoc): Remove the need for this to be exposed.
     @Override
     public void notifyChanged() {
@@ -412,21 +415,5 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
     @VisibleForTesting
     public TabPersistentStore getTabPersistentStoreForTesting() {
         return mTabSaver;
-    }
-
-    /**
-     * Add a {@link TabPersistentStoreObserver} to {@link TabPersistentStore}.
-     * @param observer The observer to add.
-     */
-    public void addTabPersistentStoreObserver(TabPersistentStoreObserver observer) {
-        mTabSaver.addObserver(observer);
-    }
-
-    /**
-     * Remove a {@link TabPersistentStoreObserver} from {@link TabPersistentStore}.
-     * @param observer The observer to remove.
-     */
-    public void removeTabPersistentStoreObserver(TabPersistentStoreObserver observer) {
-        mTabSaver.removeObserver(observer);
     }
 }

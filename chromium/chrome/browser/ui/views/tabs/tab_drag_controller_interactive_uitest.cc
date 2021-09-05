@@ -55,6 +55,7 @@
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/test/browser_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/aura/env.h"
 #include "ui/base/test/ui_controls.h"
@@ -90,9 +91,7 @@
 #include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/test/test_system_web_app_installation.h"
-#include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -234,9 +233,17 @@ void TabDragControllerTest::StopAnimating(TabStrip* tab_strip) {
 }
 
 void TabDragControllerTest::AddTabsAndResetBrowser(Browser* browser,
-                                                   int additional_tabs) {
-  for (int i = 0; i < additional_tabs; i++)
-    AddBlankTabAndShow(browser);
+                                                   int additional_tabs,
+                                                   const GURL& url) {
+  for (int i = 0; i < additional_tabs; i++) {
+    content::WindowedNotificationObserver observer(
+        content::NOTIFICATION_LOAD_STOP,
+        content::NotificationService::AllSources());
+    chrome::AddSelectedTabWithURL(browser, url,
+                                  ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+    observer.Wait();
+  }
+  browser->window()->Show();
   StopAnimating(GetTabStripForBrowser(browser));
   ResetIDs(browser->tab_strip_model(), 0);
 }
@@ -3166,6 +3173,10 @@ class DetachToBrowserTabDragControllerTestWithTabbedSystemApp
     return web_app::LaunchWebAppBrowser(browser()->profile(), app_id);
   }
 
+  const GURL& GetAppUrl() {
+    return test_system_web_app_installation_->GetAppUrl();
+  }
+
  private:
   std::unique_ptr<web_app::TestSystemWebAppInstallation>
       test_system_web_app_installation_;
@@ -3185,7 +3196,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTestWithTabbedSystemApp,
   SelectFirstBrowser();
   ASSERT_EQ(app_browser, browser());
   EXPECT_EQ(Browser::Type::TYPE_APP, browser_list->get(0)->type());
-  AddTabsAndResetBrowser(browser(), 1);
+  AddTabsAndResetBrowser(browser(), 1, GetAppUrl());
   TabStrip* tab_strip = GetTabStripForBrowser(browser());
 
   // Drag tab to create a new browser.
@@ -3216,7 +3227,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTestWithTabbedSystemApp,
   SelectFirstBrowser();
   ASSERT_EQ(app_browser1, browser());
 
-  AddTabsAndResetBrowser(browser(), 1);
+  AddTabsAndResetBrowser(browser(), 1, GetAppUrl());
   TabStrip* tab_strip1 = GetTabStripForBrowser(app_browser1);
   TabStrip* tab_strip2 = GetTabStripForBrowser(app_browser2);
 
@@ -3248,7 +3259,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTestWithTabbedSystemApp,
   Browser* browser2 = CreateAnotherBrowserAndResize();
   ResetIDs(browser2->tab_strip_model(), 100);
 
-  AddTabsAndResetBrowser(browser(), 1);
+  AddTabsAndResetBrowser(browser(), 1, GetAppUrl());
   TabStrip* tab_strip1 = GetTabStripForBrowser(app_browser);
   TabStrip* tab_strip2 = GetTabStripForBrowser(browser2);
 

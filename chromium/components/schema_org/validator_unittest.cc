@@ -48,12 +48,28 @@ TEST_F(SchemaOrgValidatorTest, ValidStringPropertyValue) {
   EXPECT_EQ(1u, entity->properties.size());
 }
 
-TEST_F(SchemaOrgValidatorTest, InvalidStringPropertyValue) {
+TEST_F(SchemaOrgValidatorTest, AllowsStringPropertyValueForThingType) {
   EntityPtr entity = Entity::New();
-  entity->type = entity::kAboutPage;
+  entity->type = entity::kCreativeWork;
 
   PropertyPtr property = Property::New();
-  property->name = property::kAbout;
+  property->name = property::kAuthor;
+  property->values = Values::New();
+  property->values->string_values.push_back("foo");
+
+  entity->properties.push_back(std::move(property));
+
+  bool validated_entity = ValidateEntity(entity.get());
+  EXPECT_TRUE(validated_entity);
+  EXPECT_EQ(1u, entity->properties.size());
+}
+
+TEST_F(SchemaOrgValidatorTest, InvalidStringPropertyValue) {
+  EntityPtr entity = Entity::New();
+  entity->type = entity::kSingleFamilyResidence;
+
+  PropertyPtr property = Property::New();
+  property->name = property::kAdditionalNumberOfGuests;
   property->values = Values::New();
   property->values->string_values.push_back("foo");
 
@@ -204,6 +220,46 @@ TEST_F(SchemaOrgValidatorTest, InvalidEntityPropertyValue) {
   EXPECT_TRUE(entity->properties.empty());
 }
 
+TEST_F(SchemaOrgValidatorTest, ValidEntityPropertyValueDescendedType) {
+  EntityPtr entity = Entity::New();
+  entity->type = entity::kVideoObject;
+
+  PropertyPtr property = Property::New();
+  property->name = property::kThumbnail;
+  property->values = Values::New();
+
+  // Barcode is descended from ImageObject, an acceptable type for the thumbnail
+  // property. So barcode should also be accepted.
+  EntityPtr value = Entity::New();
+  value->type = entity::kBarcode;
+  property->values->entity_values.push_back(std::move(value));
+
+  entity->properties.push_back(std::move(property));
+
+  bool validated_entity = ValidateEntity(entity.get());
+  EXPECT_TRUE(validated_entity);
+  EXPECT_EQ(1u, entity->properties.size());
+}
+
+TEST_F(SchemaOrgValidatorTest, ValidUrlPropertyValueDescendedType) {
+  EntityPtr entity = Entity::New();
+  entity->type = entity::kVideoObject;
+
+  PropertyPtr property = Property::New();
+  property->name = property::kThumbnail;
+  property->values = Values::New();
+
+  // Barcode is descended from ImageObject, an acceptable type for the thumbnail
+  // property. So barcode should also be accepted.
+  property->values->url_values.push_back(GURL("http://schema.org/Barcode"));
+
+  entity->properties.push_back(std::move(property));
+
+  bool validated_entity = ValidateEntity(entity.get());
+  EXPECT_TRUE(validated_entity);
+  EXPECT_EQ(1u, entity->properties.size());
+}
+
 TEST_F(SchemaOrgValidatorTest, ValidRepeatedEntityPropertyValue) {
   EntityPtr entity = Entity::New();
   entity->type = entity::kRestaurant;
@@ -310,6 +366,22 @@ TEST_F(SchemaOrgValidatorTest, InvalidEnumPropertyValue) {
   bool validated_entity = ValidateEntity(entity.get());
   EXPECT_TRUE(validated_entity);
   EXPECT_TRUE(entity->properties.empty());
+}
+
+TEST_F(SchemaOrgValidatorTest, ValidDurationPropertyValue) {
+  EntityPtr entity = Entity::New();
+  entity->type = entity::kAction;
+
+  PropertyPtr property = Property::New();
+  property->name = property::kDuration;
+  property->values = Values::New();
+  property->values->time_values.push_back(base::TimeDelta::FromHours(2));
+
+  entity->properties.push_back(std::move(property));
+
+  bool validated_entity = ValidateEntity(entity.get());
+  EXPECT_TRUE(validated_entity);
+  EXPECT_EQ(1u, entity->properties.size());
 }
 
 }  // namespace schema_org

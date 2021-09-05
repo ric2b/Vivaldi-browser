@@ -52,6 +52,7 @@
 #include "third_party/blink/renderer/platform/peerconnection/rtc_stats.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_void_request.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/thread_safe_ref_counted.h"
 #include "third_party/webrtc/api/data_channel_interface.h"
@@ -1063,10 +1064,7 @@ RTCPeerConnectionHandler::RTCPeerConnectionHandler(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     bool force_encoded_audio_insertable_streams,
     bool force_encoded_video_insertable_streams)
-    : initialize_called_(false),
-      client_(client),
-      is_closed_(false),
-      is_unregistered_(false),
+    : client_(client),
       dependency_factory_(dependency_factory),
       track_adapter_map_(
           base::MakeRefCounted<blink::WebRtcMediaStreamTrackAdapterMap>(
@@ -1081,6 +1079,12 @@ RTCPeerConnectionHandler::RTCPeerConnectionHandler(
 
   GetPeerConnectionHandlers()->insert(this);
 }
+
+// Constructor to be used for creating mocks only.
+RTCPeerConnectionHandler::RTCPeerConnectionHandler(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+    : is_unregistered_(true),  // Avoid StopAndUnregister in destructor
+      task_runner_(std::move(task_runner)) {}
 
 RTCPeerConnectionHandler::~RTCPeerConnectionHandler() {
   if (!is_unregistered_) {
@@ -1133,8 +1137,7 @@ bool RTCPeerConnectionHandler::Initialize(
 
   // Configure optional SRTP configurations enabled via the command line.
   configuration_.crypto_options = webrtc::CryptoOptions{};
-  configuration_.crypto_options->srtp.enable_gcm_crypto_suites =
-      blink::Platform::Current()->IsWebRtcSrtpAesGcmEnabled();
+  configuration_.crypto_options->srtp.enable_gcm_crypto_suites = true;
   configuration_.crypto_options->srtp.enable_encrypted_rtp_header_extensions =
       blink::Platform::Current()->IsWebRtcSrtpEncryptedHeadersEnabled();
   configuration_.enable_implicit_rollback = true;
@@ -2257,16 +2260,16 @@ void RTCPeerConnectionHandler::OnIceConnectionChange(
 }
 
 void RTCPeerConnectionHandler::TrackIceConnectionStateChange(
-    RTCPeerConnectionHandlerPlatform::IceConnectionStateVersion version,
+    RTCPeerConnectionHandler::IceConnectionStateVersion version,
     webrtc::PeerConnectionInterface::IceConnectionState state) {
   if (!peer_connection_tracker_)
     return;
   switch (version) {
-    case RTCPeerConnectionHandlerPlatform::IceConnectionStateVersion::kLegacy:
+    case RTCPeerConnectionHandler::IceConnectionStateVersion::kLegacy:
       peer_connection_tracker_->TrackLegacyIceConnectionStateChange(this,
                                                                     state);
       break;
-    case RTCPeerConnectionHandlerPlatform::IceConnectionStateVersion::kDefault:
+    case RTCPeerConnectionHandler::IceConnectionStateVersion::kDefault:
       peer_connection_tracker_->TrackIceConnectionStateChange(this, state);
       break;
   }

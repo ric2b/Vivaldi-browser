@@ -17,12 +17,12 @@ option optimize_for = LITE_RUNTIME;
 //
 // This is the 'value' in the key/value store.
 // Keys are defined as:
-// 'S/<stream-id>' -> stream_data
-// 'T/<stream-id>/<sequence-number>' -> stream_structures
-// 'c/<content-id>' -> content
-// 'a/<id>' -> action
-// 's/<content-id>' -> shared_state
-// 'N' -> next_stream_state
+// S/<stream-id>                    -> stream_data
+// T/<stream-id>/<sequence-number>  -> stream_structures
+// c/<content-id>                   -> content
+// a/<id>                           -> action
+// s/<content-id>                   -> shared_state
+// m                                -> metadata
 message Record {
   oneof data {
     StreamData stream_data = 1;
@@ -30,8 +30,7 @@ message Record {
     Content content = 3;
     StoredAction local_action = 4;
     StreamSharedState shared_state = 5;
-    // The result of a background refresh, to be processed later.
-    StreamAndContentState next_stream_state = 6;
+    Metadata metadata = 6;
   }
 }
 
@@ -41,14 +40,19 @@ message StreamData {
   feedwire.ContentId content_id = 1;
   // Token used to request a 'more' request to the server.
   bytes next_page_token = 2;
-  // Token used to read or write to the same storage.
-  bytes consistency_token = 3;
   // The unix timestamp in milliseconds that the most recent content was added.
   int64 last_added_time_millis = 4;
-  // Next sequential ID to be used for StoredAction.id.
-  int32 next_action_id = 5;
   // The content ID of the shared state for this stream.
   feedwire.ContentId shared_state_id = 6;
+  reserved 3, 5;
+}
+
+// Data that doesn't belong to a stream.
+message Metadata {
+  // Token used to read or write to the same storage.
+  bytes consistency_token = 1;
+  // ID for the next pending action.
+  int32 next_action_id = 2;
 }
 
 // A set of StreamStructures that should be applied to a stream.
@@ -162,12 +166,4 @@ message StoredAction {
   int32 upload_attempt_count = 2;
   // The action to upload.
   feedwire.FeedAction action = 3;
-}
-
-// The internal version of the server response. Includes feature tree and
-// content.
-message StreamAndContentState {
-  StreamData stream_data = 1;
-  repeated Content content = 2;
-  repeated StreamSharedState shared_state = 3;
 }

@@ -10,6 +10,7 @@
 #include "content/browser/conversions/conversion_host.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -132,6 +133,25 @@ IN_PROC_BROWSER_TEST_F(ConversionRegistrationBrowserTest,
 
   EXPECT_TRUE(ExecJs(web_contents(), "registerConversion(123)"));
   EXPECT_EQ(123UL, host->WaitForNumConversions(1));
+}
+
+IN_PROC_BROWSER_TEST_F(ConversionRegistrationBrowserTest,
+                       FeaturePolicyDisabled_ConversionNotRegistered) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL(
+                   "/page_with_conversion_measurement_disabled.html")));
+  std::unique_ptr<TestConversionHost> host =
+      TestConversionHost::ReplaceAndGetConversionHost(web_contents());
+
+  GURL redirect_url = embedded_test_server()->GetURL(
+      "/server-redirect?" + kWellKnownUrl + "?conversion-data=200");
+  ResourceLoadObserver load_observer(shell());
+  EXPECT_TRUE(ExecJs(web_contents(),
+                     JsReplace("createTrackingPixel($1);", redirect_url)));
+  load_observer.WaitForResourceCompletion(redirect_url);
+
+  EXPECT_TRUE(NavigateToURL(shell(), GURL("about:blank")));
+  EXPECT_EQ(0u, host->num_conversions());
 }
 
 IN_PROC_BROWSER_TEST_F(ConversionRegistrationBrowserTest,

@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/test/test_extension_dir.h"
@@ -153,10 +154,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionFetchTest,
                               "example.com", "/extensions/test_file.txt"))));
 }
 
-// TODO(crbug.com/1038156): Test is flaky.
 IN_PROC_BROWSER_TEST_F(
     ExtensionFetchTest,
-    DISABLED_ExtensionCannotFetchHostedResourceWithoutHostPermissions) {
+    ExtensionCannotFetchHostedResourceWithoutHostPermissions) {
   TestExtensionDir dir;
   constexpr char kManifest[] =
       R"({

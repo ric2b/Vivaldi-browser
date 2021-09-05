@@ -27,6 +27,7 @@
 #include "content/public/common/javascript_dialog_type.h"
 #include "media/mojo/services/media_metrics_provider.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/http/http_response_headers.h"
@@ -34,9 +35,11 @@
 #include "services/device/public/mojom/wake_lock.mojom.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
+#include "third_party/blink/public/mojom/choosers/popup_menu.mojom.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom-forward.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_mode.h"
@@ -79,7 +82,6 @@ class ClipboardFormatType;
 
 namespace content {
 class FrameTreeNode;
-class InterstitialPage;
 class PageState;
 class RenderFrameHostImpl;
 class SessionStorageNamespace;
@@ -247,10 +249,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Return this object cast to a WebContents, if it is one. If the object is
   // not a WebContents, returns NULL.
   virtual WebContents* GetAsWebContents();
-
-  // Returns this object cast to an InterstitialPage if it is one. Returns
-  // nullptr otherwise.
-  virtual InterstitialPage* GetAsInterstitialPage();
 
   // The render frame has requested access to media devices listed in
   // |request|, and the client should grant or deny that permission by
@@ -483,15 +481,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual Visibility GetVisibility();
 
   // Get the UKM source ID for current content from the last committed
-  // cross-document navigation. This is for providing data about the
-  // content to the URL-keyed metrics service. Use this method if UKM events
-  // should be attributed to the navigation that led to the creation of this
-  // document, that is, attribute events following navigations within the same
-  // document to the same source. Note: This is also exposed by the
-  // RenderWidgetHostDelegate class.
-  virtual ukm::SourceId GetUkmSourceIdForLastCommittedSource() const;
-
-  // Get the UKM source ID for current content from the last committed
   // navigation, either a cross-document or same-document navigation. This is
   // for providing data about the content to the URL-keyed metrics service.
   // Use this method if UKM events should be attributed to the latest
@@ -567,6 +556,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void OnPageScaleFactorChanged(RenderFrameHostImpl* source,
                                         float page_scale_factor) {}
 
+  virtual void OnTextAutosizerPageInfoChanged(
+      RenderFrameHostImpl* source,
+      blink::mojom::TextAutosizerPageInfoPtr page_info) {}
+
   // Return true if we have seen a recent orientation change, which is used to
   // decide if we should consume user activation when entering fullscreen.
   virtual bool HasSeenRecentScreenOrientationChange();
@@ -591,6 +584,35 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}
+
+  // Return true if the popup is shown through WebContentsObserver.
+  // BrowserPluginGuest for the guest WebContents will show the popup on Mac,
+  // then, we should skip to show the popup at RenderViewHostDelegateView.
+  virtual bool ShowPopupMenu(
+      RenderFrameHostImpl* render_frame_host,
+      mojo::PendingRemote<blink::mojom::PopupMenuClient>* popup_client,
+      const gfx::Rect& bounds,
+      int32_t item_height,
+      double font_size,
+      int32_t selected_item,
+      std::vector<blink::mojom::MenuItemPtr>* menu_items,
+      bool right_aligned,
+      bool allow_multiple_selection);
+
+  virtual void DidLoadResourceFromMemoryCache(
+      RenderFrameHostImpl* source,
+      const GURL& url,
+      const std::string& http_request,
+      const std::string& mime_type,
+      network::mojom::RequestDestination request_destination) {}
+
+  // Called when the renderer sends a response via DomAutomationController.
+  // For example, `window.domAutomationController.send(foo())` sends the result
+  // of foo() here.
+  virtual void DomOperationResponse(const std::string& json_string) {}
+
+  virtual void OnCookiesAccessed(RenderFrameHostImpl* render_frame_host,
+                                 const CookieAccessDetails& details) {}
 
  protected:
   virtual ~RenderFrameHostDelegate() = default;

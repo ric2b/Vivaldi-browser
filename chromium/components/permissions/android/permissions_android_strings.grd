@@ -69,6 +69,7 @@
     <output filename="values-sl/permissions_android_strings.xml" lang="sl" type="android" />
     <output filename="values-sq/permissions_android_strings.xml" lang="sq" type="android" />
     <output filename="values-sr/permissions_android_strings.xml" lang="sr" type="android" />
+    <output filename="values-b+sr+Latn/permissions_android_strings.xml" lang="sr-Latn" type="android" />
     <output filename="values-sv/permissions_android_strings.xml" lang="sv" type="android" />
     <output filename="values-sw/permissions_android_strings.xml" lang="sw" type="android" />
     <output filename="values-ta/permissions_android_strings.xml" lang="ta" type="android" />
@@ -168,6 +169,9 @@
   </translations>
   <release allow_pseudo="false" seq="1">
     <messages fallback_to_english="true">
+      <message name="IDS_INFOBAR_MISSING_AR_CAMERA_PERMISSION_TEXT" desc="Text shown in an infobar when a website has requested access to augmented reality capabilities, but Chrome is missing the Android camera permission.">
+        Chrome needs permission to access your camera to create a 3D map of your surroundings.
+      </message>
       <message name="IDS_INFOBAR_MISSING_CAMERA_PERMISSION_TEXT" desc="Text shown in an infobar when a website has requested access to the camera capabilities, but Chrome is missing the Android camera permission.">
         Chrome needs permission to access your camera for this site.
       </message>
@@ -190,6 +194,14 @@
       </message>
       <message name="IDS_NFC_PROMPT_TURN_ON" desc="Text on the positive button of the nfc prompt">
         Turn on
+      </message>
+
+      <!-- Overlay detected dialog -->
+      <message name="IDS_OVERLAY_DETECTED_DIALOG_TITLE" desc="Title of the dialog that informs the user about detected overlay window that prevents interaction with permissions.">
+        Another app is displaying over <ph name="APP_NAME">%1$s<ex>Chrome</ex></ph>
+      </message>
+      <message name="IDS_OVERLAY_DETECTED_DIALOG_MESSAGE" desc="Dialog message that informs the user about detected overlay window that prevents interaction with permissions.">
+        To change the permission for this site, close the other app and try again.\n\nIf you can’t close the app, turn off the app’s permission to “Display over other apps” in Android settings.
       </message>
     </messages>
   </release>

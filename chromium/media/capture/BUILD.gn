@@ -309,6 +309,14 @@ jumbo_component("capture_lib") {
     sources += [
       "video/fuchsia/video_capture_device_factory_fuchsia.cc",
       "video/fuchsia/video_capture_device_factory_fuchsia.h",
+      "video/fuchsia/video_capture_device_fuchsia.cc",
+      "video/fuchsia/video_capture_device_fuchsia.h",
+    ]
+    deps += [
+      "//media/fuchsia/common",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.camera3",
+      "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
+      "//third_party/libyuv",
     ]
   }
 }
@@ -383,6 +391,16 @@ test("capture_unittests") {
       "//media/capture/video/android",
       "//media/capture/video/android:capture_java",
     ]
+  }
+
+  if (is_fuchsia) {
+    deps += [
+      "//media/fuchsia/camera:test_support",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.camera3",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sysmem",
+      "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
+    ]
+    sources += [ "video/fuchsia/video_capture_device_fuchsia_test.cc" ]
   }
 
   if (is_win) {

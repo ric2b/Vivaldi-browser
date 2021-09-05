@@ -57,16 +57,15 @@ class TestPipelineHost : public IPCMediaPipelineHost {
   void DataReady(DemuxerStream::ReadCB read_cb,
                  IPCDecodingBuffer buffer);
 
-  void ReadRawData(int64_t position,
-                   int size,
-                   ipc_data_source::ReadCB read_cb);
+  void ReadRawData(ipc_data_source::Buffer buffer);
 
-  void OnReadRawDataDone(ipc_data_source::ReadCB read_cb,
-                         std::unique_ptr<uint8_t[]> data,
+  void OnReadRawDataDone(ipc_data_source::Buffer buffer,
+                         base::WritableSharedMemoryMapping raw_data_mapping,
                          int size);
 
   std::unique_ptr<PlatformMediaPipelineFactory> platform_pipeline_factory_;
   std::unique_ptr<PlatformMediaPipeline> platform_pipeline_;
+  base::WritableSharedMemoryMapping raw_data_mapping_;
 
   InitializeCB init_cb_;
   IPCDecodingBuffer ipc_decoding_buffers_[kPlatformMediaDataTypeCount];

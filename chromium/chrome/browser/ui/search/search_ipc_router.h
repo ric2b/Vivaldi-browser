@@ -13,9 +13,10 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "chrome/common/search.mojom.h"
 #include "chrome/common/search/instant_types.h"
 #include "chrome/common/search/ntp_logging_events.h"
+#include "chrome/common/search/omnibox.mojom.h"
+#include "chrome/common/search/search.mojom.h"
 #include "components/ntp_tiles/ntp_tile_impression.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -36,7 +37,7 @@ class SearchIPCRouterTest;
 // SearchIPCRouter is responsible for receiving and sending IPC messages between
 // the browser and the Instant page.
 class SearchIPCRouter : public content::WebContentsObserver,
-                        public chrome::mojom::EmbeddedSearch {
+                        public search::mojom::EmbeddedSearch {
  public:
   // SearchIPCRouter calls its delegate in response to messages received from
   // the page.
@@ -182,6 +183,9 @@ class SearchIPCRouter : public content::WebContentsObserver,
                                        bool shift_key) = 0;
 
     virtual void DeleteAutocompleteMatch(uint8_t line) = 0;
+
+    virtual void ToggleSuggestionGroupIdVisibility(
+        int32_t suggestion_group_id) = 0;
   };
 
   // An interface to be implemented by consumers of SearchIPCRouter objects to
@@ -230,16 +234,17 @@ class SearchIPCRouter : public content::WebContentsObserver,
     virtual bool ShouldProcessOpenExtensionsPage() = 0;
     virtual bool ShouldProcessOpenAutocompleteMatch(bool is_active_tab) = 0;
     virtual bool ShouldProcessDeleteAutocompleteMatch() = 0;
+    virtual bool ShouldProcessToggleSuggestionGroupIdVisibility() = 0;
   };
 
-  // Creates chrome::mojom::EmbeddedSearchClient connections on request.
+  // Creates search::mojom::EmbeddedSearchClient connections on request.
   class EmbeddedSearchClientFactory {
    public:
     EmbeddedSearchClientFactory() = default;
     virtual ~EmbeddedSearchClientFactory() = default;
 
     // The returned pointer is owned by the factory.
-    virtual chrome::mojom::EmbeddedSearchClient* GetEmbeddedSearchClient() = 0;
+    virtual search::mojom::EmbeddedSearchClient* GetEmbeddedSearchClient() = 0;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(EmbeddedSearchClientFactory);
@@ -251,7 +256,7 @@ class SearchIPCRouter : public content::WebContentsObserver,
   ~SearchIPCRouter() override;
 
   // Updates the renderer with the autocomplete results.
-  void AutocompleteResultChanged(chrome::mojom::AutocompleteResultPtr result);
+  void AutocompleteResultChanged(search::mojom::AutocompleteResultPtr result);
 
   // Updates the renderer with the given autocomplete match's image data.
   void AutocompleteMatchImageAvailable(uint32_t match_index,
@@ -284,7 +289,7 @@ class SearchIPCRouter : public content::WebContentsObserver,
   // Called when the tab corresponding to |this| instance is deactivated.
   void OnTabDeactivated();
 
-  // chrome::mojom::EmbeddedSearch:
+  // search::mojom::EmbeddedSearch:
   void FocusOmnibox(int page_id, bool focus) override;
   void DeleteMostVisitedItem(int page_seq_no, const GURL& url) override;
   void UndoMostVisitedDeletion(int page_seq_no, const GURL& url) override;
@@ -363,6 +368,7 @@ class SearchIPCRouter : public content::WebContentsObserver,
                              bool meta_key,
                              bool shift_key) override;
   void DeleteAutocompleteMatch(uint8_t line) override;
+  void ToggleSuggestionGroupIdVisibility(int32_t suggestion_group_id) override;
   void set_embedded_search_client_factory_for_testing(
       std::unique_ptr<EmbeddedSearchClientFactory> factory) {
     embedded_search_client_factory_ = std::move(factory);
@@ -385,7 +391,7 @@ class SearchIPCRouter : public content::WebContentsObserver,
   // Used by unit tests.
   int page_seq_no_for_testing() const { return commit_counter_; }
 
-  chrome::mojom::EmbeddedSearchClient* embedded_search_client() {
+  search::mojom::EmbeddedSearchClient* embedded_search_client() {
     return embedded_search_client_factory_->GetEmbeddedSearchClient();
   }
 
@@ -402,7 +408,7 @@ class SearchIPCRouter : public content::WebContentsObserver,
   // Receiver for the connected main frame. We only allow one frame to connect
   // at the moment, but this could be extended to a map of connected frames, if
   // desired.
-  mojo::AssociatedReceiver<chrome::mojom::EmbeddedSearch> receiver_{this};
+  mojo::AssociatedReceiver<search::mojom::EmbeddedSearch> receiver_{this};
 
   std::unique_ptr<EmbeddedSearchClientFactory> embedded_search_client_factory_;
 

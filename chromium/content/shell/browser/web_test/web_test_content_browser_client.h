@@ -12,36 +12,25 @@
 #include "build/build_config.h"
 #include "content/public/common/client_hints.mojom.h"
 #include "content/shell/browser/shell_content_browser_client.h"
-#include "content/shell/common/blink_test.mojom-forward.h"
-#include "content/shell/common/web_test.mojom-forward.h"
 #include "content/shell/common/web_test/fake_bluetooth_chooser.mojom-forward.h"
+#include "content/shell/common/web_test/web_test.mojom-forward.h"
+#include "mojo/public/cpp/bindings/binder_map.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "services/service_manager/public/cpp/binder_map.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/blink/public/mojom/badging/badging.mojom.h"
 #include "third_party/blink/public/mojom/clipboard/clipboard.mojom.h"
+#include "third_party/blink/public/mojom/clipboard/raw_clipboard.mojom.h"
 #include "third_party/blink/public/mojom/permissions/permission_automation.mojom-forward.h"
 
-namespace network {
-namespace mojom {
-class NetworkContext;
-}  // namespace mojom
-}  // namespace network
-
-namespace storage {
-class DatabaseTracker;
-class QuotaManager;
-}  // namespace storage
-
 namespace content {
-
 class FakeBluetoothChooser;
 class FakeBluetoothChooserFactory;
 class FakeBluetoothDelegate;
 class MockBadgeService;
 class MockClipboardHost;
 class MockPlatformNotificationService;
+class MockRawClipboardHost;
 class WebTestBrowserContext;
 
 class WebTestContentBrowserClient : public ShellContentBrowserClient {
@@ -54,7 +43,7 @@ class WebTestContentBrowserClient : public ShellContentBrowserClient {
 
   WebTestBrowserContext* GetWebTestBrowserContext();
   void SetPopupBlockingEnabled(bool block_popups_);
-  void ResetMockClipboardHost();
+  void ResetMockClipboardHosts();
   void SetScreenOrientationChanged(bool screen_orientation_changed);
 
   // Retrieves the last created FakeBluetoothChooser instance.
@@ -62,7 +51,7 @@ class WebTestContentBrowserClient : public ShellContentBrowserClient {
   void ResetFakeBluetoothDelegate();
 
   // ContentBrowserClient overrides.
-  void RenderProcessWillLaunch(RenderProcessHost* host) override;
+  void BrowserChildProcessHostCreated(BrowserChildProcessHost* host) override;
   void ExposeInterfacesToRenderer(
       service_manager::BinderRegistry* registry,
       blink::AssociatedInterfaceRegistry* associated_registry,
@@ -95,8 +84,7 @@ class WebTestContentBrowserClient : public ShellContentBrowserClient {
                        bool* no_javascript_access) override;
   void RegisterBrowserInterfaceBindersForFrame(
       RenderFrameHost* render_frame_host,
-      service_manager::BinderMapWithContext<content::RenderFrameHost*>* map)
-      override;
+      mojo::BinderMapWithContext<content::RenderFrameHost*>* map) override;
   bool CanAcceptUntrustedExchangesIfNeeded() override;
   BluetoothDelegate* GetBluetoothDelegate() override;
   content::TtsControllerDelegate* GetTtsControllerDelegate() override;
@@ -115,11 +103,15 @@ class WebTestContentBrowserClient : public ShellContentBrowserClient {
   bool PreSpawnRenderer(sandbox::TargetPolicy* policy,
                         RendererSpawnFlags flags) override;
 #endif
+  std::string GetAcceptLangs(BrowserContext* context) override;
 
  private:
   // ShellContentBrowserClient overrides.
-  network::mojom::NetworkContextParamsPtr CreateNetworkContextParams(
-      BrowserContext* context) override;
+  void ConfigureNetworkContextParamsForShell(
+      BrowserContext* context,
+      network::mojom::NetworkContextParams* context_params,
+      network::mojom::CertVerifierCreationParams* cert_verifier_creation_params)
+      override;
 
   // Creates and stores a FakeBluetoothChooserFactory instance.
   void CreateFakeBluetoothChooserFactory(
@@ -127,6 +119,9 @@ class WebTestContentBrowserClient : public ShellContentBrowserClient {
   void BindClipboardHost(
       RenderFrameHost* render_frame_host,
       mojo::PendingReceiver<blink::mojom::ClipboardHost> receiver);
+  void BindRawClipboardHost(
+      RenderFrameHost* render_frame_host,
+      mojo::PendingReceiver<blink::mojom::RawClipboardHost> receiver);
 
   void BindBadgeService(
       RenderFrameHost* render_frame_host,
@@ -138,14 +133,12 @@ class WebTestContentBrowserClient : public ShellContentBrowserClient {
   void BindPermissionAutomation(
       mojo::PendingReceiver<blink::test::mojom::PermissionAutomation> receiver);
 
-  void BindBlinkTestController(
-      mojo::PendingAssociatedReceiver<mojom::BlinkTestClient> receiver);
+  void BindWebTestControlHost(
+      mojo::PendingAssociatedReceiver<mojom::WebTestControlHost> receiver);
 
-  void BindWebTestController(
+  static void BindWebTestClient(
       int render_process_id,
-      storage::QuotaManager* quota_manager,
-      storage::DatabaseTracker* database_tracker,
-      network::mojom::NetworkContext* network_context,
+      StoragePartition* partition,
       mojo::PendingAssociatedReceiver<mojom::WebTestClient> receiver);
 
   std::unique_ptr<MockPlatformNotificationService>
@@ -157,6 +150,7 @@ class WebTestContentBrowserClient : public ShellContentBrowserClient {
   std::unique_ptr<FakeBluetoothChooserFactory> fake_bluetooth_chooser_factory_;
   std::unique_ptr<FakeBluetoothDelegate> fake_bluetooth_delegate_;
   std::unique_ptr<MockClipboardHost> mock_clipboard_host_;
+  std::unique_ptr<MockRawClipboardHost> mock_raw_clipboard_host_;
   std::unique_ptr<MockBadgeService> mock_badge_service_;
 };
 

@@ -116,6 +116,7 @@ class FlexItem {
   // - |min_max_main_sizes| is the resolved min and max size properties in the
   //   main axis direction (not intrinsic widths). It does not include
   //   border/padding.
+  //   |min_max_cross_sizes| does include cross_axis_border_padding.
   FlexItem(const FlexLayoutAlgorithm*,
            LayoutBox*,
            const ComputedStyle& style,
@@ -359,7 +360,10 @@ class FlexLayoutAlgorithm {
   DISALLOW_NEW();
 
  public:
-  FlexLayoutAlgorithm(const ComputedStyle*, LayoutUnit line_break_length);
+  FlexLayoutAlgorithm(const ComputedStyle*,
+                      LayoutUnit line_break_length,
+                      LogicalSize percent_resolution_sizes,
+                      Document*);
 
   template <typename... Args>
   FlexItem& emplace_back(Args&&... args) {
@@ -381,6 +385,7 @@ class FlexLayoutAlgorithm {
   bool IsColumnFlow() const;
   bool IsMultiline() const { return style_->FlexWrap() != EFlexWrap::kNowrap; }
   static bool IsHorizontalFlow(const ComputedStyle&);
+  static bool IsColumnFlow(const ComputedStyle&);
   bool IsLeftToRightFlow() const;
   TransformedWritingMode GetTransformedWritingMode() const;
 
@@ -428,6 +433,13 @@ class FlexLayoutAlgorithm {
   void LayoutColumnReverse(LayoutUnit main_axis_content_size,
                            LayoutUnit border_scrollbar_padding_before);
   bool IsNGFlexBox() const;
+
+  static LayoutUnit GapBetweenItems(const ComputedStyle& style,
+                                    LogicalSize percent_resolution_sizes);
+  static LayoutUnit GapBetweenLines(const ComputedStyle& style,
+                                    LogicalSize percent_resolution_sizes);
+  const LayoutUnit gap_between_items_;
+  const LayoutUnit gap_between_lines_;
 
  private:
   EOverflow MainAxisOverflowForChild(const LayoutBox& child) const;

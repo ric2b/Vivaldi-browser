@@ -21,6 +21,7 @@
 #include "base/token.h"
 #include "components/payments/core/native_error_strings.h"
 #include "components/payments/core/payments_validators.h"
+#include "content/browser/devtools/devtools_background_services_context_impl.h"
 #include "content/browser/payments/payment_app_context_impl.h"
 #include "content/browser/payments/payment_app_installer.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -678,8 +679,9 @@ void AddModifiersToMap(const std::vector<PaymentDetailsModifierPtr>& modifiers,
   }
 }
 
-DevToolsBackgroundServicesContext* GetDevTools(BrowserContext* browser_context,
-                                               const url::Origin& sw_origin) {
+scoped_refptr<DevToolsBackgroundServicesContextImpl> GetDevTools(
+    BrowserContext* browser_context,
+    const url::Origin& sw_origin) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(browser_context);
   auto* storage_partition = BrowserContext::GetStoragePartitionForSite(
@@ -687,23 +689,17 @@ DevToolsBackgroundServicesContext* GetDevTools(BrowserContext* browser_context,
   if (!storage_partition)
     return nullptr;
 
-  auto* dev_tools = storage_partition->GetDevToolsBackgroundServicesContext();
+  scoped_refptr<DevToolsBackgroundServicesContextImpl> dev_tools =
+      static_cast<DevToolsBackgroundServicesContextImpl*>(
+          storage_partition->GetDevToolsBackgroundServicesContext());
   return dev_tools && dev_tools->IsRecording(
                           DevToolsBackgroundService::kPaymentHandler)
              ? dev_tools
              : nullptr;
 }
 
-DevToolsBackgroundServicesContext* GetDevToolsForInstanceGroup(
-    const base::Token& instance_group,
-    const url::Origin& sw_origin) {
-  BrowserContext* browser_context =
-      BrowserContext::GetBrowserContextForServiceInstanceGroup(instance_group);
-  return browser_context ? GetDevTools(browser_context, sw_origin) : nullptr;
-}
-
 void OnResponseForCanMakePaymentOnUiThread(
-    const base::Token& instance_group,
+    scoped_refptr<DevToolsBackgroundServicesContextImpl> dev_tools,
     int64_t registration_id,
     const url::Origin& sw_origin,
     const std::string& payment_request_id,
@@ -719,7 +715,6 @@ void OnResponseForCanMakePaymentOnUiThread(
         CanMakePaymentEventResponseType::INVALID_ACCOUNT_BALANCE_VALUE);
   }
 
-  auto* dev_tools = GetDevToolsForInstanceGroup(instance_group, sw_origin);
   if (dev_tools) {
     std::stringstream response_type;
     response_type << response->response_type;
@@ -742,13 +737,12 @@ void OnResponseForCanMakePaymentOnUiThread(
 }
 
 void OnResponseForAbortPaymentOnUiThread(
-    const base::Token& instance_group,
+    scoped_refptr<DevToolsBackgroundServicesContextImpl> dev_tools,
     int64_t registration_id,
     const url::Origin& sw_origin,
     const std::string& payment_request_id,
     PaymentAppProvider::AbortCallback callback,
     bool payment_aborted) {
-  auto* dev_tools = GetDevToolsForInstanceGroup(instance_group, sw_origin);
   if (dev_tools) {
     dev_tools->LogBackgroundServiceEvent(
         registration_id, sw_origin, DevToolsBackgroundService::kPaymentHandler,
@@ -761,13 +755,12 @@ void OnResponseForAbortPaymentOnUiThread(
 }
 
 void OnResponseForPaymentRequestOnUiThread(
-    const base::Token& instance_group,
+    scoped_refptr<DevToolsBackgroundServicesContextImpl> dev_tools,
     int64_t registration_id,
     const url::Origin& sw_origin,
     const std::string& payment_request_id,
     PaymentAppProvider::InvokePaymentAppCallback callback,
     PaymentHandlerResponsePtr response) {
-  auto* dev_tools = GetDevToolsForInstanceGroup(instance_group, sw_origin);
   if (dev_tools) {
     std::stringstream response_type;
     response_type << response->response_type;
@@ -823,7 +816,8 @@ void PaymentAppProviderImpl::InvokePaymentApp(
     InvokePaymentAppCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  auto* dev_tools = GetDevTools(browser_context, sw_origin);
+  scoped_refptr<DevToolsBackgroundServicesContextImpl> dev_tools =
+      GetDevTools(browser_context, sw_origin);
   if (dev_tools) {
     std::map<std::string, std::string> data = {
         {"Merchant Top Origin", event_data->top_origin.spec()},
@@ -845,11 +839,9 @@ void PaymentAppProviderImpl::InvokePaymentApp(
       browser_context, registration_id,
       base::BindOnce(
           &DispatchPaymentRequestEvent, browser_context, std::move(event_data),
-          base::BindOnce(
-              &OnResponseForPaymentRequestOnUiThread,
-              BrowserContext::GetServiceInstanceGroupFor(browser_context),
-              registration_id, sw_origin, event_data->payment_request_id,
-              std::move(callback))));
+          base::BindOnce(&OnResponseForPaymentRequestOnUiThread, dev_tools,
+                         registration_id, sw_origin,
+                         event_data->payment_request_id, std::move(callback))));
 }
 
 void PaymentAppProviderImpl::InstallAndInvokePaymentApp(
@@ -857,8 +849,8 @@ void PaymentAppProviderImpl::InstallAndInvokePaymentApp(
     PaymentRequestEventDataPtr event_data,
     const std::string& app_name,
     const SkBitmap& app_icon,
-    const std::string& sw_js_url,
-    const std::string& sw_scope,
+    const GURL& sw_js_url,
+    const GURL& sw_scope,
     bool sw_use_cache,
     const std::string& method,
     const SupportedDelegations& supported_delegations,
@@ -866,11 +858,7 @@ void PaymentAppProviderImpl::InstallAndInvokePaymentApp(
     InvokePaymentAppCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  DCHECK(base::IsStringUTF8(sw_js_url));
-  GURL url = GURL(sw_js_url);
-  DCHECK(base::IsStringUTF8(sw_scope));
-  GURL scope = GURL(sw_scope);
-  if (!url.is_valid() || !scope.is_valid() || method.empty()) {
+  if (!sw_js_url.is_valid() || !sw_scope.is_valid() || method.empty()) {
     base::PostTask(
         FROM_HERE, {BrowserThread::UI},
         base::BindOnce(
@@ -891,9 +879,9 @@ void PaymentAppProviderImpl::InstallAndInvokePaymentApp(
   }
 
   PaymentAppInstaller::Install(
-      web_contents, app_name, string_encoded_icon, url, scope, sw_use_cache,
-      method, supported_delegations,
-      base::BindOnce(&OnInstallPaymentApp, url::Origin::Create(scope),
+      web_contents, app_name, string_encoded_icon, sw_js_url, sw_scope,
+      sw_use_cache, method, supported_delegations,
+      base::BindOnce(&OnInstallPaymentApp, url::Origin::Create(sw_scope),
                      std::move(event_data), std::move(registration_id_callback),
                      std::move(callback)));
 }
@@ -907,7 +895,8 @@ void PaymentAppProviderImpl::CanMakePayment(
     CanMakePaymentCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  auto* dev_tools = GetDevTools(browser_context, sw_origin);
+  scoped_refptr<DevToolsBackgroundServicesContextImpl> dev_tools =
+      GetDevTools(browser_context, sw_origin);
   if (dev_tools) {
     std::map<std::string, std::string> data = {
         {"Merchant Top Origin", event_data->top_origin.spec()},
@@ -927,13 +916,11 @@ void PaymentAppProviderImpl::CanMakePayment(
 
   StartServiceWorkerForDispatch(
       browser_context, registration_id,
-      base::BindOnce(
-          &DispatchCanMakePaymentEvent, browser_context, std::move(event_data),
-          base::BindOnce(
-              &OnResponseForCanMakePaymentOnUiThread,
-              BrowserContext::GetServiceInstanceGroupFor(browser_context),
-              registration_id, sw_origin, payment_request_id,
-              std::move(callback))));
+      base::BindOnce(&DispatchCanMakePaymentEvent, browser_context,
+                     std::move(event_data),
+                     base::BindOnce(&OnResponseForCanMakePaymentOnUiThread,
+                                    dev_tools, registration_id, sw_origin,
+                                    payment_request_id, std::move(callback))));
 }
 
 void PaymentAppProviderImpl::AbortPayment(BrowserContext* browser_context,
@@ -943,7 +930,8 @@ void PaymentAppProviderImpl::AbortPayment(BrowserContext* browser_context,
                                           AbortCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  auto* dev_tools = GetDevTools(browser_context, sw_origin);
+  scoped_refptr<DevToolsBackgroundServicesContextImpl> dev_tools =
+      GetDevTools(browser_context, sw_origin);
   if (dev_tools) {
     dev_tools->LogBackgroundServiceEvent(
         registration_id, sw_origin, DevToolsBackgroundService::kPaymentHandler,
@@ -955,9 +943,7 @@ void PaymentAppProviderImpl::AbortPayment(BrowserContext* browser_context,
       browser_context, registration_id,
       base::BindOnce(&DispatchAbortPaymentEvent, browser_context,
                      base::BindOnce(&OnResponseForAbortPaymentOnUiThread,
-                                    BrowserContext::GetServiceInstanceGroupFor(
-                                        browser_context),
-                                    registration_id, sw_origin,
+                                    dev_tools, registration_id, sw_origin,
                                     payment_request_id, std::move(callback))));
 }
 

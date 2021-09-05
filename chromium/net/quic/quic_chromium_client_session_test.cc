@@ -107,7 +107,7 @@ class TestingQuicChromiumClientSession : public QuicChromiumClientSession {
  public:
   using QuicChromiumClientSession::QuicChromiumClientSession;
 
-  MOCK_METHOD0(OnPathDegrading, void());
+  MOCK_METHOD(void, OnPathDegrading, (), (override));
 
   void ReallyOnPathDegrading() { QuicChromiumClientSession::OnPathDegrading(); }
 };
@@ -592,7 +592,7 @@ TEST_P(QuicChromiumClientSessionTest, AsyncStreamRequest) {
   for (size_t i = 0; i < kMaxOpenStreams; i++) {
     QuicChromiumClientSessionPeer::CreateOutgoingStream(session_.get());
   }
-  EXPECT_EQ(kMaxOpenStreams, session_->GetNumOpenOutgoingStreams());
+  EXPECT_EQ(kMaxOpenStreams, session_->GetNumActiveStreams());
 
   // Request a stream and verify that it's pending.
   std::unique_ptr<QuicChromiumClientSession::Handle> handle =
@@ -664,7 +664,7 @@ TEST_P(QuicChromiumClientSessionTest, ReadAfterConnectionClose) {
   for (size_t i = 0; i < kMaxOpenStreams; i++) {
     QuicChromiumClientSessionPeer::CreateOutgoingStream(session_.get());
   }
-  EXPECT_EQ(kMaxOpenStreams, session_->GetNumOpenOutgoingStreams());
+  EXPECT_EQ(kMaxOpenStreams, session_->GetNumActiveStreams());
 
   // Request two streams which will both be pending.
   // In V99 each will generate a max stream id for each attempt.
@@ -727,7 +727,7 @@ TEST_P(QuicChromiumClientSessionTest, ClosedWithAsyncStreamRequest) {
   for (size_t i = 0; i < kMaxOpenStreams; i++) {
     QuicChromiumClientSessionPeer::CreateOutgoingStream(session_.get());
   }
-  EXPECT_EQ(kMaxOpenStreams, session_->GetNumOpenOutgoingStreams());
+  EXPECT_EQ(kMaxOpenStreams, session_->GetNumActiveStreams());
 
   // Request two streams which will both be pending.
   // In V99 each will generate a max stream id for each attempt.
@@ -798,7 +798,7 @@ TEST_P(QuicChromiumClientSessionTest, CancelPendingStreamRequest) {
   for (size_t i = 0; i < kMaxOpenStreams; i++) {
     QuicChromiumClientSessionPeer::CreateOutgoingStream(session_.get());
   }
-  EXPECT_EQ(kMaxOpenStreams, session_->GetNumOpenOutgoingStreams());
+  EXPECT_EQ(kMaxOpenStreams, session_->GetNumActiveStreams());
 
   // Request a stream and verify that it's pending.
   std::unique_ptr<QuicChromiumClientSession::Handle> handle =
@@ -826,7 +826,7 @@ TEST_P(QuicChromiumClientSessionTest, CancelPendingStreamRequest) {
         quic::QUIC_STREAM_CANCELLED);
     session_->OnStopSendingFrame(stop_sending);
   }
-  EXPECT_EQ(kMaxOpenStreams - 1, session_->GetNumOpenOutgoingStreams());
+  EXPECT_EQ(kMaxOpenStreams - 1, session_->GetNumActiveStreams());
 
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
@@ -944,7 +944,7 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionCloseWithPendingStreamRequest) {
   for (size_t i = 0; i < kMaxOpenStreams; i++) {
     QuicChromiumClientSessionPeer::CreateOutgoingStream(session_.get());
   }
-  EXPECT_EQ(kMaxOpenStreams, session_->GetNumOpenOutgoingStreams());
+  EXPECT_EQ(kMaxOpenStreams, session_->GetNumActiveStreams());
 
   // Request a stream and verify that it's pending.
   std::unique_ptr<QuicChromiumClientSession::Handle> handle =
@@ -1013,7 +1013,7 @@ TEST_P(QuicChromiumClientSessionTest, MaxNumStreams) {
   EXPECT_FALSE(
       QuicChromiumClientSessionPeer::CreateOutgoingStream(session_.get()));
 
-  EXPECT_EQ(kMaxOpenStreams, session_->GetNumOpenOutgoingStreams());
+  EXPECT_EQ(kMaxOpenStreams, session_->GetNumActiveStreams());
 
   // Close a stream and ensure I can now open a new one.
   quic::QuicStreamId stream_id = streams[0]->id();
@@ -1027,7 +1027,7 @@ TEST_P(QuicChromiumClientSessionTest, MaxNumStreams) {
   quic::QuicRstStreamFrame rst1(quic::kInvalidControlFrameId, stream_id,
                                 quic::QUIC_STREAM_NO_ERROR, 0);
   session_->OnRstStream(rst1);
-  EXPECT_EQ(kMaxOpenStreams - 1, session_->GetNumOpenOutgoingStreams());
+  EXPECT_EQ(kMaxOpenStreams - 1, session_->GetNumActiveStreams());
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(
       QuicChromiumClientSessionPeer::CreateOutgoingStream(session_.get()));
@@ -1175,7 +1175,7 @@ TEST_P(QuicChromiumClientSessionTest, PendingStreamOnRst) {
   quic::QuicStreamFrame data(GetNthServerInitiatedUnidirectionalStreamId(0),
                              false, 1, quiche::QuicheStringPiece("SP"));
   session_->OnStreamFrame(data);
-  EXPECT_EQ(0u, session_->GetNumOpenIncomingStreams());
+  EXPECT_EQ(0u, session_->GetNumActiveStreams());
   quic::QuicRstStreamFrame rst(quic::kInvalidControlFrameId,
                                GetNthServerInitiatedUnidirectionalStreamId(0),
                                quic::QUIC_STREAM_CANCELLED, 0);
@@ -1207,7 +1207,7 @@ TEST_P(QuicChromiumClientSessionTest, ClosePendingStream) {
   quic::QuicStreamId id = GetNthServerInitiatedUnidirectionalStreamId(0);
   quic::QuicStreamFrame data(id, false, 1, quiche::QuicheStringPiece("SP"));
   session_->OnStreamFrame(data);
-  EXPECT_EQ(0u, session_->GetNumOpenIncomingStreams());
+  EXPECT_EQ(0u, session_->GetNumActiveStreams());
   session_->CloseStream(id);
 }
 
@@ -1899,70 +1899,6 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketReadError) {
   EXPECT_TRUE(new_socket_data.AllWriteDataConsumed());
 }
 
-TEST_P(QuicChromiumClientSessionTest, DetectPathDegradingDuringHandshake) {
-  if (version_.handshake_protocol == quic::PROTOCOL_TLS1_3) {
-    // TODO(nharper, b/112643533): Figure out why this test fails when TLS is
-    // enabled and fix it.
-    return;
-  }
-  migrate_session_early_v2_ = true;
-
-  MockQuicData quic_data(version_);
-  quic_data.AddRead(SYNCHRONOUS, ERR_IO_PENDING);  // Hanging read
-  quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeDummyCHLOPacket(1));
-  quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeDummyCHLOPacket(2));
-  quic_data.AddSocketDataToFactory(&socket_factory_);
-
-  // Set the crypto handshake mode to cold start and send CHLO packets.
-  crypto_client_stream_factory_.set_handshake_mode(
-      MockCryptoClientStream::COLD_START_WITH_CHLO_SENT);
-  Initialize();
-
-  session_->CryptoConnect(callback_.callback());
-
-  // Check retransmission alarm is set after sending the initial CHLO packet.
-  quic::QuicAlarm* retransmission_alarm =
-      quic::test::QuicConnectionPeer::GetRetransmissionAlarm(
-          session_->connection());
-  EXPECT_TRUE(retransmission_alarm->IsSet());
-  quic::QuicTime retransmission_time = retransmission_alarm->deadline();
-
-  // Check path degrading alarm is set after sending the initial CHLO packet.
-  quic::QuicAlarm* path_degrading_alarm =
-      quic::test::QuicConnectionPeer::GetPathDegradingAlarm(
-          session_->connection());
-  EXPECT_TRUE(path_degrading_alarm->IsSet());
-  quic::QuicTime path_degrading_time = path_degrading_alarm->deadline();
-  EXPECT_LE(retransmission_time, path_degrading_time);
-
-  // Do not create outgoing stream since encryption is not established.
-  std::unique_ptr<QuicChromiumClientSession::Handle> handle =
-      session_->CreateHandle(destination_);
-  TestCompletionCallback callback;
-  EXPECT_TRUE(handle->IsConnected());
-  EXPECT_FALSE(handle->OneRttKeysAvailable());
-  EXPECT_EQ(
-      ERR_IO_PENDING,
-      handle->RequestStream(/*require_handshake_confirmation=*/true,
-                            callback.callback(), TRAFFIC_ANNOTATION_FOR_TESTS));
-
-  // Fire the retransmission alarm to retransmit the crypto packet.
-  quic::QuicTime::Delta delay = retransmission_time - clock_.ApproximateNow();
-  clock_.AdvanceTime(delay);
-  alarm_factory_.FireAlarm(retransmission_alarm);
-
-  // Fire the path degrading alarm to notify session that path is degrading
-  // during crypto handshake.
-  delay = path_degrading_time - clock_.ApproximateNow();
-  clock_.AdvanceTime(delay);
-  EXPECT_CALL(*session_.get(), OnPathDegrading());
-  alarm_factory_.FireAlarm(path_degrading_alarm);
-
-  EXPECT_TRUE(session_->connection()->IsPathDegrading());
-  EXPECT_TRUE(quic_data.AllReadDataConsumed());
-  EXPECT_TRUE(quic_data.AllWriteDataConsumed());
-}
-
 TEST_P(QuicChromiumClientSessionTest,
        GoAwayOnPathDegradingOnlyWhenHandshakeConfirmed) {
   go_away_on_path_degrading_ = true;
@@ -1994,8 +1930,8 @@ TEST_P(QuicChromiumClientSessionTest, RetransmittableOnWireTimeout) {
   quic_data.AddWrite(SYNCHRONOUS,
                      client_maker_.MakePingPacket(packet_num++, true));
 
-  quic_data.AddRead(
-      ASYNC, server_maker_.MakeAckPacket(1, packet_num - 1, 1, 1, false));
+  quic_data.AddRead(ASYNC,
+                    server_maker_.MakeAckPacket(1, packet_num - 1, 1, 1));
 
   quic_data.AddWrite(SYNCHRONOUS,
                      client_maker_.MakePingPacket(packet_num++, false));

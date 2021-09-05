@@ -11,6 +11,8 @@ import android.text.TextUtils;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.BaseSwitches;
+import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
@@ -24,8 +26,9 @@ import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionUiType;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.base.SuggestionDrawableState;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionHost;
-import org.chromium.chrome.browser.util.ConversionUtils;
+import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,7 +40,7 @@ public class EntitySuggestionProcessor extends BaseSuggestionViewProcessor {
     private static final String TAG = "EntitySP";
     private final Context mContext;
     private final SuggestionHost mSuggestionHost;
-    private final Map<String, List<PropertyModel>> mPendingImageRequests;
+    private final Map<GURL, List<PropertyModel>> mPendingImageRequests;
     private final int mEntityImageSizePx;
     private final Supplier<ImageFetcher> mImageFetcherSupplier;
     // Threshold for low RAM devices. We won't be showing entity suggestion images
@@ -83,12 +86,12 @@ public class EntitySuggestionProcessor extends BaseSuggestionViewProcessor {
     }
 
     @Override
-    public PropertyModel createModelForSuggestion(OmniboxSuggestion suggestion) {
+    public PropertyModel createModel() {
         return new PropertyModel(EntitySuggestionViewProperties.ALL_KEYS);
     }
 
     @Override
-    public void recordSuggestionPresented(OmniboxSuggestion suggestion, PropertyModel model) {
+    public void recordItemPresented(PropertyModel model) {
         // SuggestionUsed bookkeeping handled in C++:
         // http://cs.chromium.org/Omnibox.SuggestionUsed.RichEntity
         int decorationType = model.get(EntitySuggestionViewProperties.DECORATION_TYPE);
@@ -98,8 +101,8 @@ public class EntitySuggestionProcessor extends BaseSuggestionViewProcessor {
 
     private void fetchEntityImage(OmniboxSuggestion suggestion, PropertyModel model) {
         ThreadUtils.assertOnUiThread();
-        final String url = suggestion.getImageUrl();
-        if (TextUtils.isEmpty(url)) return;
+        final GURL url = suggestion.getImageUrl();
+        if (url.isEmpty()) return;
 
         // Ensure an image fetcher is available prior to requesting images.
         ImageFetcher imageFetcher = mImageFetcherSupplier.get();
@@ -116,7 +119,7 @@ public class EntitySuggestionProcessor extends BaseSuggestionViewProcessor {
         models.add(model);
         mPendingImageRequests.put(url, models);
 
-        imageFetcher.fetchImage(url, ImageFetcher.ENTITY_SUGGESTIONS_UMA_CLIENT_NAME,
+        imageFetcher.fetchImage(url.getSpec(), ImageFetcher.ENTITY_SUGGESTIONS_UMA_CLIENT_NAME,
                 mEntityImageSizePx, mEntityImageSizePx, (Bitmap bitmap) -> {
                     ThreadUtils.assertOnUiThread();
 
@@ -170,12 +173,14 @@ public class EntitySuggestionProcessor extends BaseSuggestionViewProcessor {
                         .build());
         model.set(EntitySuggestionViewProperties.DECORATION_TYPE, DECORATION_TYPE_ICON);
 
-        if (SysUtils.amountOfPhysicalMemoryKB() >= LOW_MEMORY_THRESHOLD_KB) {
+        if (SysUtils.amountOfPhysicalMemoryKB() >= LOW_MEMORY_THRESHOLD_KB
+                || CommandLine.getInstance().hasSwitch(BaseSwitches.DISABLE_LOW_END_DEVICE_MODE)) {
             applyImageDominantColor(suggestion.getImageDominantColor(), model);
             fetchEntityImage(suggestion, model);
         }
 
         model.set(EntitySuggestionViewProperties.SUBJECT_TEXT, suggestion.getDisplayText());
         model.set(EntitySuggestionViewProperties.DESCRIPTION_TEXT, suggestion.getDescription());
+        setRefineAction(model, suggestion);
     }
 }

@@ -47,6 +47,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 
 /**
  * This class handles managing the positions and behavior of all tabs in a tab strip.  It is
@@ -156,6 +157,10 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     public static final int ID_CLOSE_ALL_TABS = 0;
 
     private Context mContext;
+
+    /** Vivaldi **/
+    private TabModelObserver mModelObserver;
+    private int mOrientation;
     /**
      * Creates an instance of the {@link StripLayoutHelper}.
      * @param context         The current Android {@link Context}.
@@ -230,6 +235,14 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         if (ChromeApplication.isVivaldi()) mShouldCascadeTabs = false;
         mStripStacker = mShouldCascadeTabs ? mCascadingStripStacker : mScrollingStripStacker;
         mIsFirstLayoutPass = true;
+
+        // Vivaldi
+        mModelObserver = new TabModelObserver() {
+            @Override
+            public void restoreCompleted() {
+                scrollToSelectedTab();
+            }
+        };
     }
 
     /**
@@ -237,6 +250,8 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
      */
     public void destroy() {
         mStripTabEventHandler.removeCallbacksAndMessages(null);
+        // Vivaldi
+        if (mModelObserver != null) mModel.removeObserver(mModelObserver);
     }
 
     /**
@@ -445,6 +460,8 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         mModel = model;
         mTabCreator = tabCreator;
         computeAndUpdateTabOrders(false);
+        // Vivaldi
+        mModel.addObserver(mModelObserver);
     }
 
     /**
@@ -1804,5 +1821,29 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         builder.append(mContext.getResources().getString(resId));
 
         stripTab.setAccessibilityDescription(builder.toString(), title);
+    }
+
+    /** Vivaldi **/
+    public void onSizeChanged(
+            float width, float height, float visibleViewportOffsetY, int orientation) {
+        if (mOrientation != orientation) {
+            mOrientation = orientation;
+            scrollToSelectedTab();
+        }
+        onSizeChanged(width, height);
+    }
+
+    /** Vivaldi **/
+    public void scrollToSelectedTab() {
+        mScrollOffset = 0;
+        Tab tab = mModel.getTabAt(mModel.index());
+        if (tab != null) {
+            StripLayoutTab stripLayoutTab = findTabById(tab.getId());
+            if (stripLayoutTab != null) {
+                updateStrip();
+                float delta = calculateOffsetToMakeTabVisible(stripLayoutTab, true, true, true);
+                setScrollForScrollingTabStacker(delta, true, SystemClock.uptimeMillis());
+            }
+        }
     }
 }

@@ -22,7 +22,6 @@
 #include "components/webrtc_logging/browser/text_log_list.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_process_host.h"
-#include "services/service_manager/public/cpp/connector.h"
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "content/public/browser/child_process_security_policy.h"
@@ -492,9 +491,14 @@ void WebRtcLoggingController::DoUploadLogAndRtpDumps(
       base::UmaHistogramSparse("WebRtcTextLogging.UploadFailureReason",
                                WebRtcLogUploadFailureReason::kInvalidState);
     }
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(callback, false, "",
-                                  "Logging not stopped or no log open."));
+
+    // Do not fire callback if it is null. Nesting null callbacks is not
+    // allowed, as it can lead to crashes. See https://crbug.com/1071475
+    if (!callback.is_null()) {
+      base::SequencedTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::BindOnce(callback, false, "",
+                                    "Logging not stopped or no log open."));
+    }
     return;
   }
 

@@ -6,7 +6,9 @@
 
 #include "base/macros.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
-#include "chrome/browser/apps/launch_service/launch_service.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -15,14 +17,17 @@
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/settings_window_manager_observer_chromeos.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
+#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "url/gurl.h"
 
 namespace {
@@ -112,8 +117,9 @@ IN_PROC_BROWSER_TEST_F(SettingsWindowManagerTest, OpenSettingsWindow) {
   web_app::AppId settings_app_id = *web_app::GetAppIdForSystemWebApp(
       browser()->profile(), web_app::SystemAppType::SETTINGS);
   content::WebContents* contents =
-      apps::LaunchService::Get(browser()->profile())
-          ->OpenApplication(apps::AppLaunchParams(
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+          ->BrowserAppLauncher()
+          .LaunchAppWithParams(apps::AppLaunchParams(
               settings_app_id,
               apps::mojom::LaunchContainer::kLaunchContainerWindow,
               WindowOpenDisposition::NEW_WINDOW,
@@ -186,8 +192,9 @@ IN_PROC_BROWSER_TEST_F(SettingsWindowManagerTest, OpenSettings) {
   EXPECT_EQ(chrome::kChromeUIOSSettingsHost, web_contents->GetURL().host());
 
   // Showing an OS sub-page reuses the OS settings window.
-  settings_manager_->ShowOSSettings(browser()->profile(),
-                                    chrome::kBluetoothSubPage);
+  settings_manager_->ShowOSSettings(
+      browser()->profile(),
+      chromeos::settings::mojom::kBluetoothDevicesSubpagePath);
   EXPECT_EQ(1u, observer_.new_settings_count());
   EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
 
@@ -198,4 +205,18 @@ IN_PROC_BROWSER_TEST_F(SettingsWindowManagerTest, OpenSettings) {
   // Showing a browser setting sub-page reuses the browser window.
   chrome::ShowSettingsSubPage(browser(), chrome::kAutofillSubPage);
   EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
+}
+
+IN_PROC_BROWSER_TEST_F(SettingsWindowManagerTest, KioskMode) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(switches::kForceAppMode);
+
+  // Open settings window.
+  settings_manager_->ShowOSSettings(browser()->profile());
+  Browser* settings_browser =
+      settings_manager_->FindBrowserForProfile(browser()->profile());
+  ASSERT_TRUE(settings_browser);
+
+  // In kiosk mode, browser should be created, but it should not be a system web
+  // app.
+  EXPECT_EQ(settings_browser->app_controller(), nullptr);
 }

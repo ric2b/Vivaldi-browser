@@ -16,6 +16,8 @@ group("web_app_test_group") {
 # Extension codepaths have been removed.
 source_set("common") {
   sources = [
+    "daily_metrics_helper.cc",
+    "daily_metrics_helper.h",
     "manifest_update_manager.cc",
     "manifest_update_manager.h",
     "manifest_update_task.cc",
@@ -34,6 +36,7 @@ source_set("common") {
     "//components/content_settings/core/browser",
     "//components/pref_registry",
     "//content/public/browser",
+    "//services/metrics/public/cpp:ukm_builders",
     "//skia",
   ]
 
@@ -122,6 +125,8 @@ source_set("web_applications_test_support") {
     "test/service_worker_registration_waiter.h",
     "test/test_app_registrar.cc",
     "test/test_app_registrar.h",
+    "test/test_app_registry_controller.cc",
+    "test/test_app_registry_controller.h",
     "test/test_app_shortcut_manager.cc",
     "test/test_app_shortcut_manager.h",
     "test/test_data_retriever.cc",
@@ -177,6 +182,7 @@ source_set("web_applications_unit_tests") {
   testonly = true
 
   sources = [
+    "daily_metrics_helper_unittest.cc",
     "external_web_app_manager_unittest.cc",
     "pending_app_manager_impl_unittest.cc",
     "web_app_database_unittest.cc",
@@ -201,7 +207,9 @@ source_set("web_applications_unit_tests") {
     "//chrome/test:test_support",
     "//content/public/browser",
     "//content/test:test_support",
+    "//services/metrics/public/cpp:ukm_builders",
     "//skia",
+    "//testing/gmock",
     "//testing/gtest",
   ]
 
@@ -250,7 +258,10 @@ source_set("web_applications_browser_tests") {
   ]
 
   if (is_chromeos) {
-    deps += [ "//chrome/browser/ui" ]
+    deps += [
+      "//chrome/browser/chromeos",
+      "//chrome/browser/ui",
+    ]
   }
 }
 
@@ -303,6 +314,7 @@ source_set("web_applications_on_extensions_test_support") {
     "//chrome/browser",
     "//chrome/browser/web_applications/components",
     "//components/keyed_service/content",
+    "//ui/webui",
   ]
 }
 

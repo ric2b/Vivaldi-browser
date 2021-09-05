@@ -15,42 +15,39 @@ namespace blink {
 XRTargetRaySpace::XRTargetRaySpace(XRSession* session, XRInputSource* source)
     : XRSpace(session), input_source_(source) {}
 
-std::unique_ptr<TransformationMatrix> XRTargetRaySpace::MojoFromNative() {
-  auto mojo_from_viewer = session()->MojoFromViewer();
+base::Optional<TransformationMatrix> XRTargetRaySpace::MojoFromNative() {
+  auto mojo_from_viewer =
+      session()->GetMojoFrom(XRReferenceSpace::Type::kTypeViewer);
   switch (input_source_->TargetRayMode()) {
     case device::mojom::XRTargetRayMode::TAPPING: {
       // If the pointer origin is the screen, we need mojo_from_viewer, as the
       // viewer space is the input space.
       // So our result will be mojo_from_viewer * viewer_from_pointer
       if (!(mojo_from_viewer && input_source_->InputFromPointer()))
-        return nullptr;
+        return base::nullopt;
 
-      return std::make_unique<TransformationMatrix>(
-          (*mojo_from_viewer * *(input_source_->InputFromPointer())));
+      return *mojo_from_viewer * *(input_source_->InputFromPointer());
     }
     case device::mojom::XRTargetRayMode::GAZING: {
       // If the pointer origin is gaze, then the pointer offset is just
       // mojo_from_viewer.
-      if (!mojo_from_viewer)
-        return nullptr;
 
-      return std::make_unique<TransformationMatrix>(*(mojo_from_viewer));
+      return mojo_from_viewer;
     }
     case device::mojom::XRTargetRayMode::POINTING: {
       // mojo_from_pointer is just: MojoFromInput*InputFromPointer;
       if (!(input_source_->MojoFromInput() &&
             input_source_->InputFromPointer()))
-        return nullptr;
+        return base::nullopt;
 
-      return std::make_unique<TransformationMatrix>(
-          (*(input_source_->MojoFromInput()) *
-           *(input_source_->InputFromPointer())));
+      return *(input_source_->MojoFromInput()) *
+             *(input_source_->InputFromPointer());
     }
   }
 }
 
-std::unique_ptr<TransformationMatrix> XRTargetRaySpace::NativeFromMojo() {
-  return TryInvert(MojoFromNative());
+base::Optional<TransformationMatrix> XRTargetRaySpace::NativeFromMojo() {
+  return XRSpace::TryInvert(MojoFromNative());
 }
 
 bool XRTargetRaySpace::EmulatedPosition() const {
@@ -60,6 +57,12 @@ bool XRTargetRaySpace::EmulatedPosition() const {
 base::Optional<XRNativeOriginInformation> XRTargetRaySpace::NativeOrigin()
     const {
   return input_source_->nativeOrigin();
+}
+
+bool XRTargetRaySpace::IsStationary() const {
+  // Target ray space is a space derived off of input source, so it is not
+  // considered stationary.
+  return false;
 }
 
 void XRTargetRaySpace::Trace(Visitor* visitor) {

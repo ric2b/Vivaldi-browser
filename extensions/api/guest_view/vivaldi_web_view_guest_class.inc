@@ -127,21 +127,13 @@
   // mouse events, but this class will hide the cursor on a beat in fullscreen.
   class CursorHider {
    public:
-    static std::unique_ptr<CursorHider> Create(aura::Window* window) {
-      return std::unique_ptr<CursorHider>(
-          base::WrapUnique(new CursorHider(window)));
-    }
+    static std::unique_ptr<CursorHider> Create(aura::Window* window);
 
-    void Hide() { cursor_client_->HideCursor(); }
+    void Hide();
 
-    CursorHider(aura::Window* window) {
-      cursor_client_ = aura::client::GetCursorClient(window);
-      hide_timer_.Start(FROM_HERE,
-                        base::TimeDelta::FromMilliseconds(TIME_BEFORE_HIDING_MS),
-                        this, &CursorHider::Hide);
-    }
+    CursorHider(aura::Window* window);
 
-    ~CursorHider() { cursor_client_->ShowCursor(); }
+    ~CursorHider();
 
     // Reset and stop the hide timer.
     void Reset() { hide_timer_.Reset(); }

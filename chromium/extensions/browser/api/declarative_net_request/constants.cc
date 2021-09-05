@@ -35,9 +35,6 @@ const char kErrorDuplicateIDs[] = "Rule with id * does not have a unique ID.";
 const char kErrorPersisting[] = "Internal error while parsing rules.";
 const char kErrorNonAscii[] =
     "Rule with id * cannot have non-ascii characters as part of \"*\" key.";
-const char kErrorEmptyRemoveHeadersList[] =
-    "Rule with id * does not specify the value for \"*\" key. This is required "
-    "for \"removeHeaders\" rules.";
 const char kErrorInvalidKey[] =
     "Rule with id * specifies an incorrect value for the \"*\" key.";
 const char kErrorInvalidTransformScheme[] =
@@ -73,7 +70,13 @@ const char kErrorListNotPassed[] = "Rules file must contain a list.";
 const char kRuleCountExceeded[] =
     "Rule count exceeded. Some rules were ignored.";
 const char kRegexRuleCountExceeded[] =
-    "Regex rule count exceeded. Some rules were ignored.";
+    "Regular expression rule count exceeded. Some rules were ignored.";
+const char kEnabledRuleCountExceeded[] =
+    "The number of enabled rules exceeds the API limits. Some rulesets will be "
+    "ignored.";
+const char kEnabledRegexRuleCountExceeded[] =
+    "The number of enabled regular expression rules exceeds the API limits. "
+    "Some rulesets will be ignored.";
 const char kRuleNotParsedWarning[] =
     "Rule with * couldn't be parsed. Parse error: *.";
 const char kTooManyParseFailuresWarning[] =
@@ -85,10 +88,21 @@ const char kInternalErrorGettingDynamicRules[] =
 const char kDynamicRuleCountExceeded[] = "Dynamic rule count exceeded.";
 const char kDynamicRegexRuleCountExceeded[] =
     "Dynamic rule count for regex rules exceeded.";
+
+const char kInvalidRulesetIDError[] = "Invalid ruleset id: *.";
+const char kEnabledRulesetsRuleCountExceeded[] =
+    "The set of enabled rulesets exceeds the rule count limit.";
+const char kEnabledRulesetsRegexRuleCountExceeded[] =
+    "The set of enabled rulesets exceeds the regular expression rule count "
+    "limit.";
+const char kInternalErrorUpdatingEnabledRulesets[] = "Internal error.";
+
 const char kIndexAndPersistRulesTimeHistogram[] =
     "Extensions.DeclarativeNetRequest.IndexAndPersistRulesTime";
 const char kManifestRulesCountHistogram[] =
-    "Extensions.DeclarativeNetRequest.ManifestRulesCount";
+    "Extensions.DeclarativeNetRequest.ManifestRulesCount2";
+const char kManifestEnabledRulesCountHistogram[] =
+    "Extensions.DeclarativeNetRequest.ManifestEnabledRulesCount2";
 const char kUpdateDynamicRulesStatusHistogram[] =
     "Extensions.DeclarativeNetRequest.UpdateDynamicRulesStatus";
 const char kReadDynamicRulesJSONStatusHistogram[] =

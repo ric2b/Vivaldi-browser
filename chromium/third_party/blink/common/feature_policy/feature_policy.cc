@@ -8,7 +8,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
 #include "base/stl_util.h"
-#include "third_party/blink/public/common/frame/sandbox_flags.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
 
 namespace blink {
@@ -18,14 +18,12 @@ namespace {
 std::unique_ptr<FeaturePolicy::Allowlist> AllowlistFromDeclaration(
     const ParsedFeaturePolicyDeclaration& parsed_declaration,
     const FeaturePolicy::FeatureList& feature_list) {
-  mojom::PolicyValueType type =
-      feature_list.at(parsed_declaration.feature).second;
   std::unique_ptr<FeaturePolicy::Allowlist> result =
-      base::WrapUnique(new FeaturePolicy::Allowlist(type));
+      base::WrapUnique(new FeaturePolicy::Allowlist());
   result->SetFallbackValue(parsed_declaration.fallback_value);
   result->SetOpaqueValue(parsed_declaration.opaque_value);
-  for (const auto& value : parsed_declaration.values)
-    result->Add(value.first, value.second);
+  for (const auto& value : parsed_declaration.allowed_origins)
+    result->Add(value);
 
   return result;
 }
@@ -36,21 +34,18 @@ ParsedFeaturePolicyDeclaration::ParsedFeaturePolicyDeclaration()
     : fallback_value(false), opaque_value(false) {}
 
 ParsedFeaturePolicyDeclaration::ParsedFeaturePolicyDeclaration(
-    mojom::FeaturePolicyFeature feature,
-    mojom::PolicyValueType type)
-    : feature(feature),
-      fallback_value(PolicyValue::CreateMinPolicyValue(type)),
-      opaque_value(PolicyValue::CreateMinPolicyValue(type)) {}
+    mojom::FeaturePolicyFeature feature)
+    : feature(feature), fallback_value(false), opaque_value(false) {}
 
 ParsedFeaturePolicyDeclaration::ParsedFeaturePolicyDeclaration(
     mojom::FeaturePolicyFeature feature,
-    const std::map<url::Origin, PolicyValue> values,
-    const PolicyValue& fallback_value,
-    const PolicyValue& opaque_value)
+    const std::vector<url::Origin>& allowed_origins,
+    bool fallback_value,
+    bool opaque_value)
     : feature(feature),
-      values(std::move(values)),
-      fallback_value(std::move(fallback_value)),
-      opaque_value(std::move(opaque_value)) {}
+      allowed_origins(allowed_origins),
+      fallback_value(fallback_value),
+      opaque_value(opaque_value) {}
 
 ParsedFeaturePolicyDeclaration::ParsedFeaturePolicyDeclaration(
     const ParsedFeaturePolicyDeclaration& rhs) = default;
@@ -62,60 +57,48 @@ ParsedFeaturePolicyDeclaration::~ParsedFeaturePolicyDeclaration() = default;
 
 bool operator==(const ParsedFeaturePolicyDeclaration& lhs,
                 const ParsedFeaturePolicyDeclaration& rhs) {
-  if (lhs.feature != rhs.feature)
-    return false;
-  if (!(lhs.fallback_value == rhs.fallback_value))
-    return false;
-  if (!(lhs.opaque_value == rhs.opaque_value))
-    return false;
-  return lhs.values == rhs.values;
+  return std::tie(lhs.feature, lhs.fallback_value, lhs.opaque_value,
+                  lhs.allowed_origins) ==
+         std::tie(rhs.feature, rhs.fallback_value, rhs.opaque_value,
+                  rhs.allowed_origins);
 }
 
-FeaturePolicy::Allowlist::Allowlist(mojom::PolicyValueType type)
-    : fallback_value_(PolicyValue::CreateMinPolicyValue(type)),
-      opaque_value_(PolicyValue::CreateMinPolicyValue(type)) {}
+FeaturePolicy::Allowlist::Allowlist()
+    : fallback_value_(false), opaque_value_(false) {}
 
 FeaturePolicy::Allowlist::Allowlist(const Allowlist& rhs) = default;
 
 FeaturePolicy::Allowlist::~Allowlist() = default;
 
-void FeaturePolicy::Allowlist::Add(const url::Origin& origin,
-                                   const PolicyValue& value) {
-  values_[origin] = value;
+void FeaturePolicy::Allowlist::Add(const url::Origin& origin) {
+  allowed_origins_.push_back(origin);
 }
 
-PolicyValue FeaturePolicy::Allowlist::GetValueForOrigin(
+bool FeaturePolicy::Allowlist::GetValueForOrigin(
     const url::Origin& origin) const {
-  // |fallback_value_| will either be min (initialized in the parser) value or
-  // set to the corresponding value for * origins.
-  auto value = values_.find(origin);
-  if (value != values_.end())
-    return value->second;
+  for (const auto& allowed_origin : allowed_origins_) {
+    if (origin == allowed_origin)
+      return true;
+  }
   if (origin.opaque())
     return opaque_value_;
   return fallback_value_;
 }
 
-const PolicyValue& FeaturePolicy::Allowlist::GetFallbackValue() const {
+bool FeaturePolicy::Allowlist::GetFallbackValue() const {
   return fallback_value_;
 }
 
-void FeaturePolicy::Allowlist::SetFallbackValue(
-    const PolicyValue& fallback_value) {
+void FeaturePolicy::Allowlist::SetFallbackValue(bool fallback_value) {
   fallback_value_ = fallback_value;
 }
 
-const PolicyValue& FeaturePolicy::Allowlist::GetOpaqueValue() const {
+bool FeaturePolicy::Allowlist::GetOpaqueValue() const {
   return opaque_value_;
 }
 
-void FeaturePolicy::Allowlist::SetOpaqueValue(const PolicyValue& opaque_value) {
+void FeaturePolicy::Allowlist::SetOpaqueValue(bool opaque_value) {
   opaque_value_ = opaque_value;
-}
-
-const base::flat_map<url::Origin, PolicyValue>&
-FeaturePolicy::Allowlist::Values() const {
-  return values_;
 }
 
 // static
@@ -140,32 +123,16 @@ std::unique_ptr<FeaturePolicy> FeaturePolicy::CreateWithOpenerPolicy(
 
 bool FeaturePolicy::IsFeatureEnabled(
     mojom::FeaturePolicyFeature feature) const {
-  mojom::PolicyValueType feature_type = feature_list_.at(feature).second;
-  return IsFeatureEnabledForOrigin(
-      feature, origin_, PolicyValue::CreateMaxPolicyValue(feature_type));
-}
-
-bool FeaturePolicy::IsFeatureEnabled(mojom::FeaturePolicyFeature feature,
-                                     const PolicyValue& threshold_value) const {
-  return IsFeatureEnabledForOrigin(feature, origin_, threshold_value);
+  return IsFeatureEnabledForOrigin(feature, origin_);
 }
 
 bool FeaturePolicy::IsFeatureEnabledForOrigin(
     mojom::FeaturePolicyFeature feature,
     const url::Origin& origin) const {
-  mojom::PolicyValueType feature_type = feature_list_.at(feature).second;
-  return GetFeatureValueForOrigin(feature, origin) >=
-         PolicyValue::CreateMaxPolicyValue(feature_type);
+  return GetFeatureValueForOrigin(feature, origin);
 }
 
-bool FeaturePolicy::IsFeatureEnabledForOrigin(
-    mojom::FeaturePolicyFeature feature,
-    const url::Origin& origin,
-    const PolicyValue& threshold_value) const {
-  return GetFeatureValueForOrigin(feature, origin) >= threshold_value;
-}
-
-PolicyValue FeaturePolicy::GetFeatureValueForOrigin(
+bool FeaturePolicy::GetFeatureValueForOrigin(
     mojom::FeaturePolicyFeature feature,
     const url::Origin& origin) const {
   DCHECK(base::Contains(feature_list_, feature));
@@ -175,18 +142,16 @@ PolicyValue FeaturePolicy::GetFeatureValueForOrigin(
   auto allowlist = allowlists_.find(feature);
   if (allowlist != allowlists_.end()) {
     auto specified_value = allowlist->second->GetValueForOrigin(origin);
-    return PolicyValue::Combine(inherited_value, specified_value);
+    return inherited_value && specified_value;
   }
 
   // If no "allowlist" is specified, return default feature value.
-  // Note that combining value "v" with min value "min_v" is "min_v" and
-  // comining "v" with max value "max_v" is "v".
-  const FeaturePolicy::FeatureDefaultValue default_policy =
+  const FeaturePolicy::FeatureDefault default_policy =
       feature_list_.at(feature);
-  if (default_policy.first == FeaturePolicy::FeatureDefault::DisableForAll ||
-      (default_policy.first == FeaturePolicy::FeatureDefault::EnableForSelf &&
+  if (default_policy == FeaturePolicy::FeatureDefault::DisableForAll ||
+      (default_policy == FeaturePolicy::FeatureDefault::EnableForSelf &&
        !origin_.IsSameOriginWith(origin)))
-    return PolicyValue::CreateMinPolicyValue(default_policy.second);
+    return false;
   return inherited_value;
 }
 
@@ -195,7 +160,7 @@ PolicyValue FeaturePolicy::GetFeatureValueForOrigin(
 // the default allowlist for a feature if not specified in the header, is always
 // '*', but where the header allowlist *must* allow the nested frame origin in
 // order to delegate use of the feature to that frame.
-PolicyValue FeaturePolicy::GetProposedFeatureValueForOrigin(
+bool FeaturePolicy::GetProposedFeatureValueForOrigin(
     mojom::FeaturePolicyFeature feature,
     const url::Origin& origin) const {
   DCHECK(base::Contains(feature_list_, feature));
@@ -205,7 +170,7 @@ PolicyValue FeaturePolicy::GetProposedFeatureValueForOrigin(
   auto allowlist = allowlists_.find(feature);
   if (allowlist != allowlists_.end()) {
     auto specified_value = allowlist->second->GetValueForOrigin(origin);
-    return PolicyValue::Combine(inherited_value, specified_value);
+    return inherited_value && specified_value;
   }
 
   // If no allowlist is specified, return default feature value.
@@ -216,28 +181,23 @@ const FeaturePolicy::Allowlist FeaturePolicy::GetAllowlistForFeature(
     mojom::FeaturePolicyFeature feature) const {
   DCHECK(base::Contains(feature_list_, feature));
   DCHECK(base::Contains(inherited_policies_, feature));
-  mojom::PolicyValueType type = feature_list_.at(feature).second;
   // Return an empty allowlist when disabled through inheritance.
-  if (inherited_policies_.at(feature) <=
-      PolicyValue::CreateMinPolicyValue(type))
-    return FeaturePolicy::Allowlist(type);
+  if (!inherited_policies_.at(feature))
+    return FeaturePolicy::Allowlist();
 
   // Return defined policy if exists; otherwise return default policy.
   auto allowlist = allowlists_.find(feature);
   if (allowlist != allowlists_.end())
     return FeaturePolicy::Allowlist(*(allowlist->second));
 
-  const FeaturePolicy::FeatureDefaultValue default_policy =
+  const FeaturePolicy::FeatureDefault default_policy =
       feature_list_.at(feature);
-  FeaturePolicy::Allowlist default_allowlist(type);
+  FeaturePolicy::Allowlist default_allowlist;
 
-  if (default_policy.first == FeaturePolicy::FeatureDefault::EnableForAll) {
-    default_allowlist.SetFallbackValue(
-        PolicyValue::CreateMaxPolicyValue(default_policy.second));
-  } else if (default_policy.first ==
-             FeaturePolicy::FeatureDefault::EnableForSelf) {
-    default_allowlist.Add(
-        origin_, PolicyValue::CreateMaxPolicyValue(default_policy.second));
+  if (default_policy == FeaturePolicy::FeatureDefault::EnableForAll) {
+    default_allowlist.SetFallbackValue(true);
+  } else if (default_policy == FeaturePolicy::FeatureDefault::EnableForSelf) {
+    default_allowlist.Add(origin_);
   }
 
   return default_allowlist;
@@ -286,12 +246,10 @@ std::unique_ptr<FeaturePolicy> FeaturePolicy::CreateFromParentPolicy(
   // returns true if |feature| is enabled in |parent_policy| for |origin|.
   for (const auto& feature : features) {
     if (!parent_policy) {
-      // If no parent policy, set inherited policy to max value.
-      new_policy->inherited_policies_[feature.first] =
-          PolicyValue::CreateMaxPolicyValue(feature.second.second);
+      // If no parent policy, set inherited policy to true.
+      new_policy->inherited_policies_[feature.first] = true;
       // Temporary code to support metrics (https://crbug.com/937131)
-      new_policy->proposed_inherited_policies_[feature.first] =
-          PolicyValue::CreateMaxPolicyValue(feature.second.second);
+      new_policy->proposed_inherited_policies_[feature.first] = true;
       // End of temporary metrics code
     } else {
       new_policy->inherited_policies_[feature.first] =
@@ -299,23 +257,21 @@ std::unique_ptr<FeaturePolicy> FeaturePolicy::CreateFromParentPolicy(
 
       // Temporary code to support metrics (https://crbug.com/937131)
       new_policy->proposed_inherited_policies_[feature.first] =
-          PolicyValue::Combine(parent_policy->GetProposedFeatureValueForOrigin(
-                                   feature.first, parent_policy->origin_),
-                               parent_policy->GetProposedFeatureValueForOrigin(
-                                   feature.first, origin));
+          parent_policy->GetProposedFeatureValueForOrigin(
+              feature.first, parent_policy->origin_) &&
+          parent_policy->GetProposedFeatureValueForOrigin(feature.first,
+                                                          origin);
       // For features which currently use 'self' default allowlist, set the
       // proposed inherited policy to "allow self" if the container policy does
       // not mention this feature at all.
-      if (feature.second.first ==
-          FeaturePolicy::FeatureDefault::EnableForSelf) {
+      if (feature.second == FeaturePolicy::FeatureDefault::EnableForSelf) {
         bool found_in_container_policy = std::any_of(
             container_policy.begin(), container_policy.end(),
             [&](const auto& decl) { return decl.feature == feature.first; });
         if (!found_in_container_policy) {
-          new_policy->proposed_inherited_policies_[feature.first].Combine(
-              origin.IsSameOriginWith(parent_policy->origin_)
-                  ? PolicyValue::CreateMaxPolicyValue(feature.second.second)
-                  : PolicyValue::CreateMinPolicyValue(feature.second.second));
+          new_policy->proposed_inherited_policies_[feature.first] =
+              new_policy->proposed_inherited_policies_[feature.first] &&
+              origin.IsSameOriginWith(parent_policy->origin_);
         }
       }
       // End of temporary metrics code
@@ -348,10 +304,11 @@ void FeaturePolicy::AddContainerPolicy(
     // specified is '*'.
     auto proposed_inherited_policy = proposed_inherited_policies_.find(feature);
     if (proposed_inherited_policy != proposed_inherited_policies_.end()) {
-      PolicyValue& proposed_inherited_value = proposed_inherited_policy->second;
-      proposed_inherited_value.Combine(
+      bool& proposed_inherited_value = proposed_inherited_policy->second;
+      proposed_inherited_value =
+          proposed_inherited_value &&
           AllowlistFromDeclaration(parsed_declaration, feature_list_)
-              ->GetValueForOrigin(origin_));
+              ->GetValueForOrigin(origin_);
     }
     // End of metrics code
 
@@ -360,18 +317,16 @@ void FeaturePolicy::AddContainerPolicy(
     auto inherited_policy = inherited_policies_.find(feature);
     if (inherited_policy == inherited_policies_.end())
       continue;
-    PolicyValue& inherited_value = inherited_policy->second;
+    bool& inherited_value = inherited_policy->second;
     // If enabled by |parent_policy| for either |origin| or |parent_policy|'s
     // origin, then enable in the child iff the declared container policy
     // matches |origin|.
     auto parent_value = parent_policy->GetFeatureValueForOrigin(
         feature, parent_policy->origin_);
-    inherited_value =
-        inherited_value > parent_value ? inherited_value : parent_value;
-
-    inherited_value.Combine(
-        AllowlistFromDeclaration(parsed_declaration, feature_list_)
-            ->GetValueForOrigin(origin_));
+    inherited_value = inherited_value || parent_value;
+    inherited_value = inherited_value && AllowlistFromDeclaration(
+                                             parsed_declaration, feature_list_)
+                                             ->GetValueForOrigin(origin_);
   }
 }
 
@@ -381,41 +336,42 @@ const FeaturePolicy::FeatureList& FeaturePolicy::GetFeatureList() const {
 
 // static
 mojom::FeaturePolicyFeature FeaturePolicy::FeatureForSandboxFlag(
-    mojom::WebSandboxFlags flag) {
+    network::mojom::WebSandboxFlags flag) {
   switch (flag) {
-    case mojom::WebSandboxFlags::kAll:
+    case network::mojom::WebSandboxFlags::kAll:
       NOTREACHED();
       break;
-    case mojom::WebSandboxFlags::kTopNavigation:
+    case network::mojom::WebSandboxFlags::kTopNavigation:
       return mojom::FeaturePolicyFeature::kTopNavigation;
-    case mojom::WebSandboxFlags::kForms:
+    case network::mojom::WebSandboxFlags::kForms:
       return mojom::FeaturePolicyFeature::kFormSubmission;
-    case mojom::WebSandboxFlags::kAutomaticFeatures:
-    case mojom::WebSandboxFlags::kScripts:
+    case network::mojom::WebSandboxFlags::kAutomaticFeatures:
+    case network::mojom::WebSandboxFlags::kScripts:
       return mojom::FeaturePolicyFeature::kScript;
-    case mojom::WebSandboxFlags::kPopups:
+    case network::mojom::WebSandboxFlags::kPopups:
       return mojom::FeaturePolicyFeature::kPopups;
-    case mojom::WebSandboxFlags::kPointerLock:
+    case network::mojom::WebSandboxFlags::kPointerLock:
       return mojom::FeaturePolicyFeature::kPointerLock;
-    case mojom::WebSandboxFlags::kOrientationLock:
+    case network::mojom::WebSandboxFlags::kOrientationLock:
       return mojom::FeaturePolicyFeature::kOrientationLock;
-    case mojom::WebSandboxFlags::kModals:
+    case network::mojom::WebSandboxFlags::kModals:
       return mojom::FeaturePolicyFeature::kModals;
-    case mojom::WebSandboxFlags::kPresentationController:
+    case network::mojom::WebSandboxFlags::kPresentationController:
       return mojom::FeaturePolicyFeature::kPresentation;
-    case mojom::WebSandboxFlags::kDownloads:
+    case network::mojom::WebSandboxFlags::kDownloads:
       return mojom::FeaturePolicyFeature::kDownloads;
     // Other flags fall through to the bitmask test below. They are named
     // specifically here so that authors introducing new flags must consider
     // this method when adding them.
-    case mojom::WebSandboxFlags::kDocumentDomain:
-    case mojom::WebSandboxFlags::kNavigation:
-    case mojom::WebSandboxFlags::kNone:
-    case mojom::WebSandboxFlags::kOrigin:
-    case mojom::WebSandboxFlags::kPlugins:
-    case mojom::WebSandboxFlags::kPropagatesToAuxiliaryBrowsingContexts:
-    case mojom::WebSandboxFlags::kTopNavigationByUserActivation:
-    case mojom::WebSandboxFlags::kStorageAccessByUserActivation:
+    case network::mojom::WebSandboxFlags::kDocumentDomain:
+    case network::mojom::WebSandboxFlags::kNavigation:
+    case network::mojom::WebSandboxFlags::kNone:
+    case network::mojom::WebSandboxFlags::kOrigin:
+    case network::mojom::WebSandboxFlags::kPlugins:
+    case network::mojom::WebSandboxFlags::
+        kPropagatesToAuxiliaryBrowsingContexts:
+    case network::mojom::WebSandboxFlags::kTopNavigationByUserActivation:
+    case network::mojom::WebSandboxFlags::kStorageAccessByUserActivation:
       break;
   }
   return mojom::FeaturePolicyFeature::kNotFound;
@@ -424,192 +380,131 @@ mojom::FeaturePolicyFeature FeaturePolicy::FeatureForSandboxFlag(
 // static
 // See third_party/blink/public/common/feature_policy/feature_policy.h for
 // status of each feature (in spec, implemented, etc).
-// The second field of FeatureDefaultValue is the type of PolicyValue that is
-// asspcoated with the feature.
-// TODO(loonybear): replace boolean type value to the actual value type.
 const FeaturePolicy::FeatureList& FeaturePolicy::GetDefaultFeatureList() {
   static base::NoDestructor<FeatureList> default_feature_list(
       {{mojom::FeaturePolicyFeature::kAccelerometer,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kAccessibilityEvents,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kAmbientLightSensor,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kAutoplay,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kClientHintDPR,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kClientHintDeviceMemory,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kClientHintDownlink,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kClientHintECT,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kClientHintLang,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kClientHintRTT,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kClientHintUA,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kClientHintUAArch,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kClientHintUAPlatform,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kClientHintUAModel,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kClientHintUAMobile,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kClientHintUAFullVersion,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
+       {mojom::FeaturePolicyFeature::kClientHintUAPlatformVersion,
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kClientHintViewportWidth,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kClientHintWidth,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kClipboard,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kCamera,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kDocumentDomain,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kDocumentWrite,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kDownloads,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kEncryptedMedia,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kExecutionWhileOutOfViewport,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kExecutionWhileNotRendered,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kFocusWithoutUserActivation,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kFormSubmission,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        // kFrobulate is a test only feature.
        {mojom::FeaturePolicyFeature::kFrobulate,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kFullscreen,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kGeolocation,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kGyroscope,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kHid,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kIdleDetection,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
-       {mojom::FeaturePolicyFeature::kLayoutAnimations,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kLazyLoad,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kLoadingFrameDefaultEager,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kMagnetometer,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kMicrophone,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kMidiFeature,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kModals,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kOrientationLock,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kPayment,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kPictureInPicture,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kPointerLock,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kPopups,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kPresentation,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
-       {mojom::FeaturePolicyFeature::kPublicKeyCredentials,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
+       {mojom::FeaturePolicyFeature::kPublicKeyCredentialsGet,
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kScript,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kSerial,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kSyncScript,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kSyncXHR,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kTopNavigation,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kUsb,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kVerticalScroll,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kScreenWakeLock,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kWebVr,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kWebXr,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
        {mojom::FeaturePolicyFeature::kStorageAccessAPI,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
-                            mojom::PolicyValueType::kBool)},
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForAll)},
        {mojom::FeaturePolicyFeature::kTrustTokenRedemption,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
-                            mojom::PolicyValueType::kBool)}});
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)},
+       {mojom::FeaturePolicyFeature::kConversionMeasurement,
+        FeatureDefault(FeaturePolicy::FeatureDefault::EnableForSelf)}});
   return *default_feature_list;
 }
 

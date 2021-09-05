@@ -140,6 +140,10 @@
             "description": "The next time a fetching and updating from the rule source will be attempted.",
             "type": "number"
           },
+          "is_fetching": {
+            "description": "Whether fetching of the rule source is in progress",
+            "type": "boolean"
+          },
           "last_fetch_result": {
             "description": "The result of the last fetch attempt",
             "$ref": "FetchResult"
@@ -152,6 +156,19 @@
           },
           "loaded": {
             "type": "boolean"
+          }
+        }
+      },
+      {
+        "id": "BlockedDomainCounter",
+        "description": "How often requests to given domain were blocked",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "blocked_count": {
+            "type": "integer"
           }
         }
       },
@@ -169,6 +186,46 @@
         }
       },
       {
+        "id": "TrackerInfo",
+        "description": "Information for a given tracker",
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "description": "The id of the rule source from which this info was obtained.",
+            "type": "integer"
+          },
+          "info": {
+            "type": "any"
+          }
+        }
+      },
+      {
+        "id": "BlockedTrackersInfo",
+        "description": "Information about a blocked tracker",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "blocked_urls": {
+            "type": "array",
+            "description": "blocked urls that belong to this tracker",
+            "items": {
+              "$ref": "BlockedUrlsInfo"
+            }
+          },
+          "tracker_info": {
+            "type": "array",
+            "items": {
+              "$ref": "TrackerInfo"
+            }
+          },
+          "blocked_count": {
+            "type": "integer"
+          }
+        }
+      },
+      {
         "id": "TabBlockedUrlsInfo",
         "description": "Information about urls that got blocked, per tab",
         "type": "object",
@@ -179,8 +236,16 @@
           "total_blocked_count": {
             "type": "integer"
           },
+          "blocked_trackers_info": {
+            "type": "array",
+            "description": "blocked urls that belong to a known tracker, alongside with tracker information.",
+            "items": {
+              "$ref": "BlockedTrackersInfo"
+            }
+          },
           "blocked_urls_info": {
             "type": "array",
+            "description": "blocked urls for which there is no tracker information.",
             "items": {
               "$ref": "BlockedUrlsInfo"
             }
@@ -598,6 +663,43 @@
         ]
       },
       {
+        "name": "getBlockedDomainCounters",
+        "type": "function",
+        "description": "Retrieves the amount of requests blocked per domain since the last time the counters got reset.",
+        "parameters": [
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name": "counters",
+                "type": "object",
+                "properties": {
+                  "tracking": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "BlockedDomainCounter"
+                    }
+                  },
+                  "ad_blocking": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "BlockedDomainCounter"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "clearBlockedDomainCounters",
+        "type": "function",
+        "description": "Resets the counters used for getBlockedDomainCounters",
+        "parameters": []
+      },
+      {
         "name": "isExemptOfFiltering",
         "type": "function",
         "description": "Returns whether a page URL will be exempt from filtering by a given rule group, based on the active exception list.",
@@ -636,9 +738,9 @@
         ]
       },
       {
-        "name": "onRulesFetchComplete",
+        "name": "onRulesSourceUpdated",
         "type": "function",
-        "description": "Fired when an attempt to fetch rules for a loaded rule source completed, successfully or not.",
+        "description": "The properties of a rule source have been updated, either because a fetch started or completed.",
         "parameters": [
           {
             "name" : "rule_source",

@@ -24,7 +24,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/tracing/crash_service_uploader.h"
-#include "components/heap_profiling/supervisor.h"
+#include "components/heap_profiling/multi_process/supervisor.h"
 #include "components/services/heap_profiling/public/cpp/controller.h"
 #include "components/services/heap_profiling/public/cpp/settings.h"
 #include "components/version_info/version_info.h"
@@ -97,10 +97,10 @@ void UploadTraceToCrashServer(std::string upload_url,
   if (!upload_url.empty())
     uploader->SetUploadURL(upload_url);
 
-  uploader->DoUpload(file_contents, content::TraceUploader::COMPRESSED_UPLOAD,
-                     std::move(metadata),
-                     content::TraceUploader::UploadProgressCallback(),
-                     base::Bind(&OnTraceUploadComplete, base::Owned(uploader)));
+  uploader->DoUpload(
+      file_contents, content::TraceUploader::COMPRESSED_UPLOAD,
+      std::move(metadata), content::TraceUploader::UploadProgressCallback(),
+      base::BindOnce(&OnTraceUploadComplete, base::Owned(uploader)));
 }
 
 }  // namespace

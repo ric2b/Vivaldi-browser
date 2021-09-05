@@ -55,7 +55,9 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
                       RenderFrameHostDelegate* delegate,
                       FrameTree* frame_tree,
                       FrameTreeNode* frame_tree_node,
-                      int32_t routing_id);
+                      int32_t routing_id,
+                      const base::UnguessableToken& frame_token,
+                      LifecycleState lifecyle_state);
   ~TestRenderFrameHost() override;
 
   // RenderFrameHostImpl overrides (same values, but in Test*/Mock* types)
@@ -160,7 +162,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       bool same_document);
 
   // Send a message with the sandbox flags and feature policy
-  void SendFramePolicy(blink::mojom::WebSandboxFlags sandbox_flags,
+  void SendFramePolicy(network::mojom::WebSandboxFlags sandbox_flags,
                        const blink::ParsedFeaturePolicy& fp_header,
                        const blink::DocumentPolicy::FeatureState& dp_header);
 
@@ -170,9 +172,6 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   bool last_commit_was_error_page() const {
     return last_commit_was_error_page_;
   }
-
-  // Exposes the interface registry to be manipulated for testing.
-  service_manager::BinderRegistry& binder_registry() { return *registry_; }
 
   // Returns a PendingReceiver<InterfaceProvider> that is safe to bind to an
   // implementation, but will never receive any interface receivers.

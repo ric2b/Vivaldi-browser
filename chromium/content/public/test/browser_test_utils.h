@@ -99,7 +99,6 @@ namespace content {
 class BrowserContext;
 struct FrameVisualProperties;
 class FrameTreeNode;
-class InterstitialPage;
 class NavigationHandle;
 class NavigationRequest;
 class RenderFrameMetadataProviderImpl;
@@ -985,10 +984,6 @@ bool RequestKeyboardLock(WebContents* web_contents,
                          base::Optional<base::flat_set<ui::DomCode>> codes);
 void CancelKeyboardLock(WebContents* web_contents);
 
-// Returns true if inner |interstitial_page| is connected to an outer
-// WebContents.
-bool IsInnerInterstitialPageConnected(InterstitialPage* interstitial_page);
-
 // Returns the screen orientation provider that's been set via
 // WebContents::SetScreenOrientationDelegate(). May return null.
 ScreenOrientationDelegate* GetScreenOrientationDelegate();
@@ -1077,7 +1072,7 @@ class RenderProcessHostWatcher : public RenderProcessHostObserver {
   RenderProcessHostWatcher(WebContents* web_contents, WatchType type);
   ~RenderProcessHostWatcher() override;
 
-  // Waits until the expected event is triggered.
+  // Waits until the expected event is triggered. This may only be called once.
   void Wait();
 
   // Returns true if a renderer process exited cleanly (without hitting
@@ -1086,6 +1081,11 @@ class RenderProcessHostWatcher : public RenderProcessHostObserver {
   bool did_exit_normally() { return did_exit_normally_; }
 
  private:
+  // Stop observing and drop the reference to the RenderProcessHost.
+  void ClearProcessHost();
+  // Quit the run loop and clean up.
+  void QuitRunLoop();
+
   // Overridden RenderProcessHost::LifecycleObserver methods.
   void RenderProcessReady(RenderProcessHost* host) override;
   void RenderProcessExited(RenderProcessHost* host,
@@ -1244,22 +1244,6 @@ class WebContentsAddedObserver {
   DISALLOW_COPY_AND_ASSIGN(WebContentsAddedObserver);
 };
 
-// Watches a WebContents to check if it was destroyed.
-class WebContentsDestroyedObserver : public WebContentsObserver {
- public:
-  explicit WebContentsDestroyedObserver(WebContents* web_contents);
-  ~WebContentsDestroyedObserver() override;
-  bool IsDestroyed() { return destroyed_; }
-
- private:
-  // Overridden WebContentsObserver methods.
-  void WebContentsDestroyed() override;
-
-  bool destroyed_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(WebContentsDestroyedObserver);
-};
-
 // Request a new frame be drawn, returns false if request fails.
 bool RequestFrame(WebContents* web_contents);
 
@@ -1388,24 +1372,26 @@ class InputMsgWatcher : public RenderWidgetHost::InputEventObserver {
 
   // Wait until ack message occurs, returning the ack result from
   // the message.
-  InputEventAckState WaitForAck();
+  blink::mojom::InputEventResultState WaitForAck();
 
   // Wait for the ack if it hasn't been received, if it has been
   // received return the result immediately.
-  InputEventAckState GetAckStateWaitIfNecessary();
+  blink::mojom::InputEventResultState GetAckStateWaitIfNecessary();
 
-  InputEventAckSource last_event_ack_source() const { return ack_source_; }
+  blink::mojom::InputEventResultSource last_event_ack_source() const {
+    return ack_source_;
+  }
 
  private:
   // Overridden InputEventObserver methods.
-  void OnInputEventAck(InputEventAckSource source,
-                       InputEventAckState state,
+  void OnInputEventAck(blink::mojom::InputEventResultSource source,
+                       blink::mojom::InputEventResultState state,
                        const blink::WebInputEvent&) override;
 
   RenderWidgetHost* render_widget_host_;
   blink::WebInputEvent::Type wait_for_type_;
-  InputEventAckState ack_result_;
-  InputEventAckSource ack_source_;
+  blink::mojom::InputEventResultState ack_result_;
+  blink::mojom::InputEventResultSource ack_source_;
   base::OnceClosure quit_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(InputMsgWatcher);
@@ -1417,8 +1403,8 @@ class InputEventAckWaiter : public RenderWidgetHost::InputEventObserver {
   // A function determining if a given |event| and its ack are what we're
   // waiting for.
   using InputEventAckPredicate =
-      base::RepeatingCallback<bool(InputEventAckSource source,
-                                   InputEventAckState state,
+      base::RepeatingCallback<bool(blink::mojom::InputEventResultSource source,
+                                   blink::mojom::InputEventResultState state,
                                    const blink::WebInputEvent& event)>;
 
   // Wait for an event satisfying |predicate|.
@@ -1433,8 +1419,8 @@ class InputEventAckWaiter : public RenderWidgetHost::InputEventObserver {
   void Reset();
 
   // RenderWidgetHost::InputEventObserver:
-  void OnInputEventAck(InputEventAckSource source,
-                       InputEventAckState state,
+  void OnInputEventAck(blink::mojom::InputEventResultSource source,
+                       blink::mojom::InputEventResultState state,
                        const blink::WebInputEvent& event) override;
 
  private:
@@ -1647,6 +1633,11 @@ class WebContentsConsoleObserver : public WebContentsObserver {
 
   // A convenience method to just match the message against a string pattern.
   void SetPattern(std::string pattern);
+
+  // A helper method to return the string content (in UTF8) of the message at
+  // the given |index|. This will cause a test failure if there is no such
+  // message.
+  std::string GetMessageAt(size_t index) const;
 
   const std::vector<Message>& messages() const { return messages_; }
 

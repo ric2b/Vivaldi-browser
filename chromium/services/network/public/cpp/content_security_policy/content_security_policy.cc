@@ -17,6 +17,7 @@
 #include "services/network/public/cpp/content_security_policy/csp_source.h"
 #include "services/network/public/cpp/content_security_policy/csp_source_list.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
+#include "services/network/public/cpp/web_sandbox_flags.h"
 #include "url/gurl.h"
 #include "url/url_canon.h"
 #include "url/url_util.h"
@@ -32,7 +33,6 @@ static CSPDirectiveName CSPFallback(CSPDirectiveName directive) {
   switch (directive) {
     case CSPDirectiveName::DefaultSrc:
     case CSPDirectiveName::FormAction:
-    case CSPDirectiveName::UpgradeInsecureRequests:
     case CSPDirectiveName::NavigateTo:
     case CSPDirectiveName::FrameAncestors:
       return CSPDirectiveName::Unknown;
@@ -78,7 +78,6 @@ const char* ErrorMessage(CSPDirectiveName directive) {
     case CSPDirectiveName::ChildSrc:
     case CSPDirectiveName::DefaultSrc:
     case CSPDirectiveName::Unknown:
-    case CSPDirectiveName::UpgradeInsecureRequests:
       NOTREACHED();
       return nullptr;
   };
@@ -400,6 +399,10 @@ void ParseReportDirective(const GURL& request_url,
     //   the "Report-To" header. See https://w3c.github.io/reporting
     if (using_reporting_api) {
       report_endpoints->push_back(uri.as_string());
+
+      // 'report-to' only allows for a single token. The following ones are
+      // ignored. A console error warning is displayed from blink's CSP parser.
+      break;
     } else {
       GURL url = request_url.Resolve(uri);
 
@@ -488,6 +491,20 @@ void AddContentSecurityPolicyFromHeaders(
     if (frame_ancestors != directives.end())
       ParseFrameAncestors(policy, frame_ancestors->second);
 
+    auto sandbox = directives.find("sandbox");
+    if (sandbox != directives.end()) {
+      // Note: |ParseSandboxPolicy(...).error_message| is ignored here. Blink's
+      // CSP parser is already in charge of displaying it.
+      policy->sandbox =
+          ~ParseWebSandboxPolicy(sandbox->second, mojom::WebSandboxFlags::kNone)
+               .flags;
+    }
+
+    policy->upgrade_insecure_requests |=
+        directives.contains("upgrade-insecure-requests");
+    policy->treat_as_public_address |=
+        directives.contains("treat-as-public-address");
+
     auto report_endpoints = directives.find("report-to");
     if (report_endpoints != directives.end()) {
       if (!policy->use_reporting_api) {
@@ -550,7 +567,17 @@ bool CheckContentSecurityPolicy(const mojom::ContentSecurityPolicyPtr& policy,
 bool ShouldUpgradeInsecureRequest(
     const std::vector<mojom::ContentSecurityPolicyPtr>& policies) {
   for (const auto& policy : policies) {
-    if (policy->directives.count(CSPDirectiveName::UpgradeInsecureRequests))
+    if (policy->upgrade_insecure_requests)
+      return true;
+  }
+
+  return false;
+}
+
+bool ShouldTreatAsPublicAddress(
+    const std::vector<mojom::ContentSecurityPolicyPtr>& policies) {
+  for (const auto& policy : policies) {
+    if (policy->treat_as_public_address)
       return true;
   }
 
@@ -583,8 +610,6 @@ CSPDirectiveName ToCSPDirectiveName(const std::string& name) {
     return CSPDirectiveName::FrameSrc;
   if (name == "form-action")
     return CSPDirectiveName::FormAction;
-  if (name == "upgrade-insecure-requests")
-    return CSPDirectiveName::UpgradeInsecureRequests;
   if (name == "navigate-to")
     return CSPDirectiveName::NavigateTo;
   if (name == "frame-ancestors")
@@ -602,8 +627,6 @@ std::string ToString(CSPDirectiveName name) {
       return "frame-src";
     case CSPDirectiveName::FormAction:
       return "form-action";
-    case CSPDirectiveName::UpgradeInsecureRequests:
-      return "upgrade-insecure-requests";
     case CSPDirectiveName::NavigateTo:
       return "navigate-to";
     case CSPDirectiveName::FrameAncestors:

@@ -7,6 +7,8 @@
 #include "base/bind_helpers.h"
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/optional.h"
 #include "chrome/browser/optimization_guide/optimization_guide_hints_manager.h"
 #include "chrome/browser/optimization_guide/optimization_guide_navigation_data.h"
 #include "chrome/browser/optimization_guide/optimization_guide_session_statistic.h"
@@ -38,8 +40,8 @@ GetTopHostProviderIfUserPermitted(content::BrowserContext* browser_context) {
   if (top_host_provider)
     return top_host_provider;
 
-  // If not enabled by flag, see if the user is a Data Saver user and has seen
-  // all the right prompts for it.
+  // If not enabled by flag, see if the user is allowed to fetch from the remote
+  // Optimization Guide Service.
   return OptimizationGuideTopHostProvider::CreateIfAllowed(browser_context);
 }
 
@@ -116,6 +118,8 @@ void OptimizationGuideKeyedService::Initialize(
 
   Profile* profile = Profile::FromBrowserContext(browser_context_);
   top_host_provider_ = GetTopHostProviderIfUserPermitted(browser_context_);
+  UMA_HISTOGRAM_BOOLEAN("OptimizationGuide.RemoteFetchingEnabled",
+                        top_host_provider_ != nullptr);
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory =
       content::BrowserContext::GetDefaultStoragePartition(profile)
           ->GetURLLoaderFactoryForBrowserProcess();
@@ -142,21 +146,36 @@ void OptimizationGuideKeyedService::OnNavigationStartOrRedirect(
     content::NavigationHandle* navigation_handle) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (hints_manager_ && hints_manager_->HasRegisteredOptimizationTypes()) {
-    hints_manager_->OnNavigationStartOrRedirect(navigation_handle,
-                                                base::DoNothing());
+  OptimizationGuideNavigationData* navigation_data =
+      OptimizationGuideNavigationData::GetFromNavigationHandle(
+          navigation_handle);
+  if (hints_manager_) {
+    base::flat_set<optimization_guide::proto::OptimizationType>
+        registered_optimization_types =
+            hints_manager_->registered_optimization_types();
+
+    if (!registered_optimization_types.empty()) {
+      hints_manager_->OnNavigationStartOrRedirect(navigation_handle,
+                                                  base::DoNothing());
+    }
+    if (navigation_data) {
+      navigation_data->set_registered_optimization_types(
+          hints_manager_->registered_optimization_types());
+    }
+  }
+
+  if (prediction_manager_ && navigation_data) {
+    navigation_data->set_registered_optimization_targets(
+        prediction_manager_->registered_optimization_targets());
   }
 }
 
 void OptimizationGuideKeyedService::OnNavigationFinish(
-    const std::vector<GURL>& navigation_redirect_chain,
-    OptimizationGuideNavigationData* navigation_data) {
+    const std::vector<GURL>& navigation_redirect_chain) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (hints_manager_) {
-    hints_manager_->OnNavigationFinish(navigation_redirect_chain,
-                                       navigation_data);
-  }
+  if (hints_manager_)
+    hints_manager_->OnNavigationFinish(navigation_redirect_chain);
 }
 
 void OptimizationGuideKeyedService::RegisterOptimizationTypesAndTargets(
@@ -257,6 +276,16 @@ void OptimizationGuideKeyedService::CanApplyOptimizationAsync(
 
   hints_manager_->CanApplyOptimizationAsync(
       navigation_handle->GetURL(), optimization_type, std::move(callback));
+}
+
+void OptimizationGuideKeyedService::AddHintForTesting(
+    const GURL& url,
+    optimization_guide::proto::OptimizationType optimization_type,
+    const base::Optional<optimization_guide::OptimizationMetadata>& metadata) {
+  if (!hints_manager_)
+    return;
+
+  hints_manager_->AddHintForTesting(url, optimization_type, metadata);
 }
 
 void OptimizationGuideKeyedService::ClearData() {

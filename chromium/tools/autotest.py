@@ -90,7 +90,7 @@ def RunCommand(cmd, **kwargs):
 def BuildTestTargetWithNinja(out_dir, target, dry_run):
   """Builds the specified target with ninja"""
   ninja_path = os.path.join(DEPOT_TOOLS_DIR, 'autoninja')
-  if 'win' in sys.platform:
+  if sys.platform.startswith('win32'):
     ninja_path += '.bat'
   cmd = [ninja_path, '-C', out_dir, target]
   print('Building: ' + ' '.join(cmd))
@@ -108,7 +108,8 @@ def RecursiveMatchFilename(folder, filename):
     for entry in it:
       if (entry.is_symlink()):
         continue
-      if entry.is_file() and filename in entry.path:
+      if (entry.is_file() and filename in entry.path and
+          not os.path.basename(entry.path).startswith('.')):
         matches.append(entry.path)
       if entry.is_dir():
         # On Windows, junctions are like a symlink that python interprets as a
@@ -124,6 +125,12 @@ def RecursiveMatchFilename(folder, filename):
 
 
 def FindMatchingTestFile(target):
+  if sys.platform.startswith('win32') and os.path.altsep in target:
+    # Use backslash as the path separator on Windows to match os.scandir().
+    if DEBUG:
+      print('Replacing ' + os.path.altsep + ' with ' + os.path.sep + ' in: '
+            + target)
+    target = target.replace(os.path.altsep, os.path.sep)
   if DEBUG:
     print('Finding files with full path containing: ' + target)
   results = RecursiveMatchFilename(SRC_DIR, target)
@@ -170,7 +177,7 @@ def FindTestTarget(out_dir, path):
   # internal gn targets, and match against well-known test suffixes, falling
   # back to a list of known test targets if that fails.
   gn_path = os.path.join(DEPOT_TOOLS_DIR, 'gn')
-  if 'win' in sys.platform:
+  if sys.platform.startswith('win32'):
     gn_path += '.bat'
   cmd = [gn_path, 'refs', out_dir, '--all', path]
   targets = RunCommand(cmd, cwd=SRC_DIR).splitlines()

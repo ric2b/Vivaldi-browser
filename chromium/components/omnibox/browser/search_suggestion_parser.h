@@ -33,6 +33,9 @@ class SimpleURLLoader;
 
 class SearchSuggestionParser {
  public:
+  // Indicates a missing suggestion group Id.
+  static const int kNoSuggestionGroupId;
+
   // The Result classes are intermediate representations of AutocompleteMatches,
   // simply containing relevance-ranked search and navigation suggestions.
   // They may be cached to provide some synchronous matches while requests for
@@ -207,9 +210,11 @@ class SearchSuggestionParser {
     std::string additional_query_params_;
 
     // The suggestion group Id based on the SuggestionGroupIds enum in
-    // http://google3/suggest/base/suggestion_config.proto
+    // suggestion_config.proto
     // Used to look up the header this suggestion must appear under from the
     // server supplied map of suggestion group Ids to headers.
+    // Note: Use kNoSuggestionGroupId in place of a missing suggestion group Id
+    // when this is to be converted to a primitive type.
     base::Optional<int> suggestion_group_id_;
 
     // Optional short answer to the input that produced this suggestion.

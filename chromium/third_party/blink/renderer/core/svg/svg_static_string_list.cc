@@ -53,12 +53,7 @@ void SVGStaticStringList::Trace(Visitor* visitor) {
   SVGAnimatedPropertyBase::Trace(visitor);
 }
 
-SVGPropertyBase* SVGStaticStringList::CurrentValueBase() {
-  return value_.Get();
-}
-
 const SVGPropertyBase& SVGStaticStringList::BaseValueBase() const {
-  NOTREACHED();
   return *value_;
 }
 

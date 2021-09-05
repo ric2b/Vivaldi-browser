@@ -92,6 +92,7 @@
 <translation id="1947424002851288782">Πληκτρολόγιο με γερμανικούς χαρακτήρες</translation>
 <translation id="1972984168337863910">Ανάπτυξη πλαισίων σχολίων αρχείων</translation>
 <translation id="1984603991036629094">Αρμενικό φωνητικό πληκτρολόγιο</translation>
+<translation id="1995337122023280937">Μετάβαση στην τοποθεσία αρχείου</translation>
 <translation id="2001796770603320721">Διαχείριση στο Drive</translation>
 <translation id="2009067268969781306">Η διαμόρφωση ενός δίσκου θα διαγράψει όλα τα δεδομένα που έχουν αποθηκευτεί σε αυτόν. Δεν είναι δυνατή η αναίρεση αυτής της ενέργειας.</translation>
 <translation id="2028997212275086731">Αρχείο RAR</translation>
@@ -143,6 +144,7 @@
 <translation id="2638942478653899953">Δεν ήταν δυνατή η επικοινωνία με το Google Drive. <ph name="BEGIN_LINK" />Αποσυνδεθείτε<ph name="END_LINK" /> και συνδεθείτε ξανά.</translation>
 <translation id="2649120831653069427">Πέστροφες</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">Τοποθεσία αρχείου</translation>
 <translation id="2672394958563893062">Παρουσιάστηκε σφάλμα. Κάντε κλικ για επανεκκίνηση από την αρχή.</translation>
 <translation id="2676946222714718093">Αναπαραγωγή σε</translation>
 <translation id="2735698359135166290">Τυπικό πληκτρολόγιο Ρουμανικών</translation>
@@ -217,6 +219,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> σφάλματα.</translation>
 <translation id="3519867315646775981">Μεταγραφή (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Πορτογαλικά</translation>
+<translation id="3524311639100184459">Προσοχή: Αυτά τα αρχεία είναι προσωρινά και ενδέχεται να διαγραφούν αυτόματα για να απελευθερωθεί χώρος στη μονάδα δίσκου.  <ph name="BEGIN_LINK" />Μάθετε περισσότερα<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Φάκελος</translation>
 <translation id="3549797760399244642">Μετάβαση στη διεύθυνση drive.google.com…</translation>
 <translation id="357479282490346887">Λιθουανικά
@@ -265,6 +268,7 @@
 <translation id="3958548648197196644">Ακτινίδιο</translation>
 <translation id="3966388904776714213">Πρόγραμμα αναπαραγωγής ήχου</translation>
 <translation id="4002066346123236978">Τίτλος</translation>
+<translation id="4065397611279318371">Για να ανοίξετε αρχεία με εφαρμογές <ph name="APP_NAME" />, αρχικά μετακινήστε τα στον φάκελο <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Μέθοδος εισαγωγής Καντονέζικων</translation>
 <translation id="4072248638558688893">Πληκτρολόγιο Ταμίλ (Φωνητικό)</translation>
 <translation id="4124935795427217608">Μονόκερος</translation>
@@ -336,6 +340,7 @@
 <translation id="4880520557730313061">Αυτόματη επιδιόρθωση</translation>
 <translation id="4881695831933465202">Άνοιγμα</translation>
 <translation id="4886021172213954916">Πληκτρολόγιο Ταμίλ (Γραφομηχανής)</translation>
+<translation id="4892969127351273348">Δεν είναι δυνατό το άνοιγμα με την εφαρμογή <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Έτοιμο για δημιουργία αντιγράφων ασφαλείας για <ph name="FILE_COUNT" /> αρχεία</translation>
 <translation id="4924638091161556692">Διορθώθηκε</translation>
 <translation id="4935975195727477204">Φυτό γκαζάνια</translation>
@@ -513,6 +518,7 @@
 <translation id="6806699711453372963">Διαχείριση κοινοποίησης Linux</translation>
 <translation id="6808193438228982088">Αλεπού</translation>
 <translation id="6820687829547641339">Συμπιεσμένο αρχείο tar Gzip</translation>
+<translation id="6823166707458800069">Για όλα τα αρχεία που αποθηκεύονται σε αυτόν το φάκελο δημιουργούνται αυτόματα αντίγραφα ασφαλείας στο διαδίκτυο.</translation>
 <translation id="6825883775269213504">Ρωσικά
 </translation>
 <translation id="6827236167376090743">Αυτό το βίντεο θα συνεχίσει να παίζει για πάντα.</translation>
@@ -570,6 +576,7 @@
 <translation id="7417705661718309329">Χάρτης Google</translation>
 <translation id="7419631653042041064">Πληκτρολόγιο με καταλανικούς χαρακτήρες</translation>
 <translation id="7434823369735508263">Πληκτρολόγιο Dvorak ΗΒ</translation>
+<translation id="7447678886297481665">Τα αρχεία σε αυτόν τον φάκελο είναι μόνο για ανάγνωση. Δεν υποστηρίζονται ορισμένες δραστηριότητες.</translation>
 <translation id="7460898608667578234">Ουκρανικά
 </translation>
 <translation id="7474889694310679759">Πληκτρολόγιο με αγγλικούς χαρακτήρες (Καναδά)</translation>

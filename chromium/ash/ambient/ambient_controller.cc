@@ -5,38 +5,54 @@
 #include "ash/ambient/ambient_controller.h"
 
 #include <string>
+#include <utility>
 
 #include "ash/ambient/ambient_constants.h"
-#include "ash/ambient/model/photo_model_observer.h"
+#include "ash/ambient/fake_ambient_backend_controller_impl.h"
+#include "ash/ambient/model/ambient_backend_model_observer.h"
 #include "ash/ambient/ui/ambient_container_view.h"
 #include "ash/ambient/util/ambient_util.h"
-#include "ash/assistant/assistant_controller.h"
 #include "ash/login/ui/lock_screen.h"
+#include "ash/public/cpp/ambient/ambient_backend_controller.h"
+#include "ash/public/cpp/ambient/ambient_client.h"
 #include "ash/public/cpp/ambient/ambient_mode_state.h"
 #include "ash/public/cpp/ambient/ambient_prefs.h"
-#include "ash/public/cpp/ambient/photo_controller.h"
+#include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "base/bind_helpers.h"
+#include "build/buildflag.h"
+#include "chromeos/assistant/buildflags.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "ui/views/widget/widget.h"
+
+#if BUILDFLAG(ENABLE_CROS_AMBIENT_MODE_BACKEND)
+#include "ash/ambient/backdrop/ambient_backend_controller_impl.h"
+#endif  // BUILDFLAG(ENABLE_CROS_AMBIENT_MODE_BACKEND)
 
 namespace ash {
 
 namespace {
 
 bool CanStartAmbientMode() {
-  return chromeos::features::IsAmbientModeEnabled() && PhotoController::Get() &&
-         !ambient::util::IsShowing(LockScreen::ScreenType::kLogin);
+  return chromeos::features::IsAmbientModeEnabled() &&
+         AmbientClient::Get()->IsAmbientModeAllowedForActiveUser();
 }
 
 void CloseAssistantUi() {
-  auto* assistant_controller = Shell::Get()->assistant_controller();
-  // |AssistantController| is initiated before the |AmbientController| in shell.
-  DCHECK(assistant_controller);
-
-  assistant_controller->ui_controller()->CloseUi(
+  DCHECK(AssistantUiController::Get());
+  AssistantUiController::Get()->CloseUi(
       chromeos::assistant::mojom::AssistantExitPoint::kUnspecified);
+}
+
+std::unique_ptr<AmbientBackendController> CreateAmbientBackendController() {
+#if BUILDFLAG(ENABLE_CROS_AMBIENT_MODE_BACKEND)
+  return std::make_unique<AmbientBackendControllerImpl>();
+#else
+  return std::make_unique<FakeAmbientBackendControllerImpl>();
+#endif  // BUILDFLAG(ENABLE_CROS_AMBIENT_MODE_BACKEND)
 }
 
 }  // namespace
@@ -51,13 +67,11 @@ void AmbientController::RegisterProfilePrefs(PrefRegistrySimple* registry) {
     // devices.
     registry->RegisterBooleanPref(ash::ambient::prefs::kAmbientModeEnabled,
                                   true);
-    registry->RegisterIntegerPref(
-        ash::ambient::prefs::kAmbientModeTopicSource,
-        static_cast<int>(ash::ambient::prefs::TopicSource::kArtGallery));
   }
 }
 
 AmbientController::AmbientController() {
+  ambient_backend_controller_ = CreateAmbientBackendController();
   ambient_state_.AddObserver(this);
   // |SessionController| is initialized before |this| in Shell.
   Shell::Get()->session_controller()->AddObserver(this);
@@ -74,6 +88,8 @@ AmbientController::~AmbientController() {
 
 void AmbientController::OnWidgetDestroying(views::Widget* widget) {
   refresh_timer_.Stop();
+  ambient_backend_model_.Clear();
+  weak_factory_.InvalidateWeakPtrs();
   container_view_->GetWidget()->RemoveObserver(this);
   container_view_ = nullptr;
 
@@ -94,20 +110,38 @@ void AmbientController::OnAmbientModeEnabled(bool enabled) {
 }
 
 void AmbientController::OnLockStateChanged(bool locked) {
-  if (!locked) {
-    // We should already exit ambient mode at this time, as the ambient
-    // container needs to be closed to uncover the login port for
-    // re-authentication.
+  if (locked) {
+    // Show ambient mode when entering lock screen.
     DCHECK(!container_view_);
-    return;
-  }
 
-  // Show the ambient container on top of the lock screen.
-  DCHECK(!container_view_);
-  Start();
+    // We have 3 options to manage the token for lock screen. Here use option 1.
+    // 1. Request only one time after entering lock screen. We will use it once
+    //    to request all the image links and no more requests.
+    // 2. Request one time before entering lock screen. This will introduce
+    //    extra latency.
+    // 3. Request and refresh the token in the background (even the ambient mode
+    //    is not started) with extra buffer time to use. When entering
+    //    lock screen, it will be most likely to have the token already and
+    //    enough time to use. More specifically,
+    //    3a. We will leave enough buffer time (e.g. 10 mins before expire) to
+    //        start to refresh the token.
+    //    3b. When lock screen is triggered, most likely we will have >10 mins
+    //        of token which can be used on lock screen.
+    //    3c. There is a corner case that we may not have the token fetched when
+    //        locking screen, we probably can use PrepareForLock(callback) when
+    //        locking screen. We can add the refresh token into it. If the token
+    //        has already been fetched, then there is not additional time to
+    //        wait.
+    RequestAccessToken(base::DoNothing());
+
+    Show();
+  } else {
+    // Destroy ambient mode after user re-login.
+    Destroy();
+  }
 }
 
-void AmbientController::Start() {
+void AmbientController::Show() {
   if (!CanStartAmbientMode()) {
     // TODO(wutao): Show a toast to indicate that Ambient mode is not ready.
     return;
@@ -122,14 +156,39 @@ void AmbientController::Start() {
   ambient_state_.SetAmbientModeEnabled(true);
 }
 
-void AmbientController::Stop() {
+void AmbientController::Destroy() {
   ambient_state_.SetAmbientModeEnabled(false);
 }
+
 void AmbientController::Toggle() {
   if (container_view_)
-    Stop();
+    Destroy();
   else
-    Start();
+    Show();
+}
+
+void AmbientController::OnBackgroundPhotoEvents() {
+  refresh_timer_.Stop();
+
+  // Move the |AmbientModeContainer| beneath the |LockScreenWidget| to show
+  // the lock screen contents on top before the fade-out animation.
+  auto* ambient_window = container_view_->GetWidget()->GetNativeWindow();
+  ambient_window->parent()->StackChildAtBottom(ambient_window);
+
+  // Start fading out the current background photo.
+  StartFadeOutAnimation();
+}
+
+void AmbientController::StartFadeOutAnimation() {
+  // We fade out the |PhotoView| on its own layer instead of using the general
+  // layer of the widget, otherwise it will reveal the color of the lockscreen
+  // wallpaper beneath.
+  container_view_->FadeOutPhotoView();
+}
+
+void AmbientController::RequestAccessToken(
+    AmbientAccessTokenController::AccessTokenCallback callback) {
+  access_token_controller_.RequestAccessToken(std::move(callback));
 }
 
 void AmbientController::CreateContainerView() {
@@ -147,10 +206,7 @@ void AmbientController::DestroyContainerView() {
 }
 
 void AmbientController::RefreshImage() {
-  if (!PhotoController::Get())
-    return;
-
-  if (photo_model_.ShouldFetchImmediately()) {
+  if (ambient_backend_model_.ShouldFetchImmediately()) {
     // TODO(b/140032139): Defer downloading image if it is animating.
     base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
@@ -158,37 +214,51 @@ void AmbientController::RefreshImage() {
                        weak_factory_.GetWeakPtr()),
         kAnimationDuration);
   } else {
-    photo_model_.ShowNextImage();
+    ambient_backend_model_.ShowNextImage();
     ScheduleRefreshImage();
   }
 }
 
 void AmbientController::ScheduleRefreshImage() {
-  base::TimeDelta refresh_interval;
-  if (!photo_model_.ShouldFetchImmediately()) {
-    // TODO(b/139953713): Change to a correct time interval.
-    refresh_interval = base::TimeDelta::FromSeconds(5);
-  }
-
-  refresh_timer_.Start(
-      FROM_HERE, refresh_interval,
-      base::BindOnce(&AmbientController::RefreshImage, base::Unretained(this)));
+  const base::TimeDelta refresh_interval =
+      ambient_backend_model_.GetPhotoRefreshInterval();
+  refresh_timer_.Start(FROM_HERE, refresh_interval,
+                       base::BindOnce(&AmbientController::RefreshImage,
+                                      weak_factory_.GetWeakPtr()));
 }
 
 void AmbientController::GetNextImage() {
-  PhotoController::Get()->GetNextImage(base::BindOnce(
-      &AmbientController::OnPhotoDownloaded, weak_factory_.GetWeakPtr()));
+  // Start requesting photo and weather information from the backdrop server.
+  ambient_photo_controller_.GetNextScreenUpdateInfo(
+      base::BindOnce(&AmbientController::OnPhotoDownloaded,
+                     weak_factory_.GetWeakPtr()),
+      base::BindOnce(&AmbientController::OnWeatherConditionIconDownloaded,
+                     weak_factory_.GetWeakPtr()));
 }
 
-void AmbientController::OnPhotoDownloaded(bool success,
-                                          const gfx::ImageSkia& image) {
+void AmbientController::OnPhotoDownloaded(const gfx::ImageSkia& image) {
   // TODO(b/148485116): Implement retry logic.
-  if (!success)
+  if (image.isNull())
     return;
 
-  DCHECK(!image.isNull());
-  photo_model_.AddNextImage(image);
+  ambient_backend_model_.AddNextImage(image);
   ScheduleRefreshImage();
+}
+
+void AmbientController::OnWeatherConditionIconDownloaded(
+    base::Optional<float> temp_f,
+    const gfx::ImageSkia& icon) {
+  // For now we only show the weather card when both fields have values.
+  // TODO(meilinw): optimize the behavior with more specific error handling.
+  if (icon.isNull() || !temp_f.has_value())
+    return;
+
+  ambient_backend_model_.UpdateWeatherInfo(icon, temp_f.value());
+}
+
+void AmbientController::set_backend_controller_for_testing(
+    std::unique_ptr<AmbientBackendController> backend_controller) {
+  ambient_backend_controller_ = std::move(backend_controller);
 }
 
 }  // namespace ash

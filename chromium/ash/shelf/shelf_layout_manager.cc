@@ -30,10 +30,12 @@
 #include "ash/shelf/drag_handle.h"
 #include "ash/shelf/home_to_overview_nudge_controller.h"
 #include "ash/shelf/hotseat_widget.h"
+#include "ash/shelf/in_app_to_home_nudge_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager_observer.h"
 #include "ash/shelf/shelf_metrics.h"
 #include "ash/shelf/shelf_navigation_widget.h"
+#include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/system/locale/locale_update_controller_impl.h"
@@ -110,6 +112,17 @@ constexpr int kNotificationBubbleGapHeight = 6;
 // the auto hidden shelf when the shelf is on the boundary between displays.
 constexpr int kMaxAutoHideShowShelfRegionSize = 10;
 
+aura::Window* GetDragHandleNudgeWindow(ShelfWidget* shelf_widget) {
+  if (!shelf_widget->GetDragHandle())
+    return nullptr;
+  if (!shelf_widget->GetDragHandle()->drag_handle_nudge())
+    return nullptr;
+  return shelf_widget->GetDragHandle()
+      ->drag_handle_nudge()
+      ->GetWidget()
+      ->GetNativeWindow();
+}
+
 ui::Layer* GetLayer(views::Widget* widget) {
   return widget->GetNativeView()->layer();
 }
@@ -128,16 +141,15 @@ void SetupAnimator(ui::ScopedLayerAnimationSettings* animation_setter,
   }
 }
 
-void AnimateOpacity(views::Widget* widget,
+void AnimateOpacity(ui::Layer* layer,
                     float target_opacity,
                     base::TimeDelta animation_duration,
                     gfx::Tween::Type type,
                     ui::AnimationMetricsReporter* animation_metrics_reporter) {
-  ui::ScopedLayerAnimationSettings animation_setter(
-      GetLayer(widget)->GetAnimator());
+  ui::ScopedLayerAnimationSettings animation_setter(layer->GetAnimator());
   SetupAnimator(&animation_setter, animation_duration, type,
                 animation_metrics_reporter);
-  GetLayer(widget)->SetOpacity(target_opacity);
+  layer->SetOpacity(target_opacity);
 }
 
 // Returns true if the window is in the app list window container.
@@ -612,28 +624,22 @@ void ShelfLayoutManager::UpdateContextualNudges() {
 
   contextual_tooltip::SetDragHandleNudgeDisabledForHiddenShelf(!IsVisible());
 
-  if (in_app_shelf && in_tablet_mode) {
-    if (contextual_tooltip::ShouldShowNudge(
-            Shell::Get()->session_controller()->GetLastActiveUserPrefService(),
-            contextual_tooltip::TooltipType::kInAppToHome, nullptr)) {
-      shelf_widget_->ScheduleShowDragHandleNudge();
-    } else if (!shelf_widget_->GetDragHandle()
-                    ->gesture_nudge_target_visibility()) {
-      // If the drag handle is not yet shown, HideDragHandleNudge() should
-      // cancel any scheduled show requests.
-      shelf_widget_->HideDragHandleNudge(
-          contextual_tooltip::DismissNudgeReason::kOther);
-    }
-  } else {
-    shelf_widget_->HideDragHandleNudge(
-        in_tablet_mode
-            ? contextual_tooltip::DismissNudgeReason::kExitToHomeScreen
-            : contextual_tooltip::DismissNudgeReason::kSwitchToClamshell);
+  if (in_app_shelf && in_tablet_mode && !in_app_to_home_nudge_controller_) {
+    in_app_to_home_nudge_controller_ =
+        std::make_unique<InAppToHomeNudgeController>(shelf_widget_);
+  }
+
+  if (in_app_to_home_nudge_controller_) {
+    in_app_to_home_nudge_controller_->SetNudgeAllowedForCurrentShelf(
+        in_tablet_mode, in_app_shelf,
+        ShelfConfig::Get()->shelf_controls_shown());
   }
 
   // Create home to overview nudge controller if home to overview nudge is
   // allowed by the current shelf state.
-  const bool allow_home_to_overview_nudge = in_tablet_mode && !in_app_shelf;
+  const bool allow_home_to_overview_nudge =
+      in_tablet_mode && !in_app_shelf &&
+      !ShelfConfig::Get()->shelf_controls_shown();
   if (allow_home_to_overview_nudge && !home_to_overview_nudge_controller_) {
     home_to_overview_nudge_controller_ =
         std::make_unique<HomeToOverviewNudgeController>(
@@ -703,9 +709,14 @@ void ShelfLayoutManager::ProcessGestureEventOfInAppHotseat(
     return;
 
   base::AutoReset<bool> hide_hotseat(&should_hide_hotseat_, true);
-  UMA_HISTOGRAM_ENUMERATION(
-      kHotseatGestureHistogramName,
-      InAppShelfGestures::kHotseatHiddenDueToInteractionOutsideOfShelf);
+
+  // Record gesture metrics only for ET_GESTURE_BEGIN to avoid over counting.
+  if (event->type() == ui::ET_GESTURE_BEGIN) {
+    UMA_HISTOGRAM_ENUMERATION(
+        kHotseatGestureHistogramName,
+        InAppShelfGestures::kHotseatHiddenDueToInteractionOutsideOfShelf);
+  }
+
   UpdateVisibilityState();
 }
 
@@ -1071,6 +1082,9 @@ void ShelfLayoutManager::OnAppListVisibilityChanged(bool shown,
 void ShelfLayoutManager::OnWindowActivated(ActivationReason reason,
                                            aura::Window* gained_active,
                                            aura::Window* lost_active) {
+  if (!IsShelfWindow(gained_active))
+    shelf_->hotseat_widget()->set_manually_extended(/*value=*/false);
+
   UpdateAutoHideStateNow();
 }
 
@@ -1335,6 +1349,7 @@ HotseatState ShelfLayoutManager::CalculateHotseatState(
     in_split_view =
         split_view_controller && split_view_controller->InSplitViewMode();
   }
+  const int hotseat_size = shelf_->hotseat_widget()->GetHotseatSize();
   switch (drag_status_) {
     case kDragNone:
     case kDragHomeToOverviewInProgress: {
@@ -1408,11 +1423,11 @@ HotseatState ShelfLayoutManager::CalculateHotseatState(
       // |drag_amount_| is relative to the top of the hotseat when the drag
       // begins with an extended hotseat. Correct for this to get
       // |total_amount_dragged|.
-      const int drag_base = (hotseat_state() == HotseatState::kExtended &&
-                             state_.visibility_state == SHELF_VISIBLE)
-                                ? (ShelfConfig::Get()->hotseat_size() +
-                                   ShelfConfig::Get()->hotseat_bottom_padding())
-                                : 0;
+      const int drag_base =
+          (hotseat_state() == HotseatState::kExtended &&
+           state_.visibility_state == SHELF_VISIBLE)
+              ? (hotseat_size + ShelfConfig::Get()->hotseat_bottom_padding())
+              : 0;
       const float total_amount_dragged = drag_base + drag_amount_;
       const float end_of_drag_in_screen =
           drag_start_point_in_screen_.y() + total_amount_dragged;
@@ -1437,8 +1452,7 @@ HotseatState ShelfLayoutManager::CalculateHotseatState(
           screen_bottom -
           shelf_->hotseat_widget()->GetWindowBoundsInScreen().y();
       const bool dragged_over_half_hotseat_size =
-          top_of_hotseat_to_screen_bottom <
-          ShelfConfig::Get()->hotseat_size() / 2;
+          top_of_hotseat_to_screen_bottom < hotseat_size / 2;
       if (dragged_over_half_hotseat_size)
         return HotseatState::kHidden;
 
@@ -1471,9 +1485,19 @@ ShelfVisibilityState ShelfLayoutManager::CalculateShelfVisibility() {
   return SHELF_VISIBLE;
 }
 
-void ShelfLayoutManager::SetDimmed(bool dimmed) {
+bool ShelfLayoutManager::SetDimmed(bool dimmed) {
+  // Do nothing if we are already in the correct dim state.
   if (dimmed_for_inactivity_ == dimmed)
-    return;
+    return false;
+
+  // We do not want the auto hide state to change while setting up animations.
+  std::unique_ptr<Shelf::ScopedAutoHideLock> auto_hide_lock =
+      std::make_unique<Shelf::ScopedAutoHideLock>(shelf_);
+
+  // We should not set the dim state if the shelf is hidden. Shelf will be
+  // undimmed when it transitions into a visible state.
+  if (!state_.IsShelfVisible())
+    return false;
 
   dimmed_for_inactivity_ = dimmed;
   CalculateTargetBoundsAndUpdateWorkArea();
@@ -1483,20 +1507,21 @@ void ShelfLayoutManager::SetDimmed(bool dimmed) {
   const gfx::Tween::Type dim_animation_tween =
       ShelfConfig::Get()->DimAnimationTween();
 
-  AnimateOpacity(shelf_->navigation_widget(), target_opacity_,
+  AnimateOpacity(GetLayer(shelf_->navigation_widget()), target_opacity_,
                  dim_animation_duration, dim_animation_tween,
                  shelf_->GetNavigationWidgetAnimationMetricsReporter());
 
-  AnimateOpacity(shelf_->hotseat_widget(),
-                 shelf_->hotseat_widget()->CalculateOpacity(),
+  AnimateOpacity(shelf_->hotseat_widget()->GetShelfView()->layer(),
+                 shelf_->hotseat_widget()->CalculateShelfViewOpacity(),
                  dim_animation_duration, dim_animation_tween,
                  /*animation_metrics_reporter=*/nullptr);
 
-  AnimateOpacity(shelf_->status_area_widget(), target_opacity_,
+  AnimateOpacity(GetLayer(shelf_->status_area_widget()), target_opacity_,
                  dim_animation_duration, dim_animation_tween,
                  /*animation_metrics_reporter=*/nullptr);
 
   shelf_widget_->SetLoginShelfButtonOpacity(target_opacity_);
+  return true;
 }
 
 void ShelfLayoutManager::UpdateBoundsAndOpacity(bool animate) {
@@ -1699,7 +1724,7 @@ void ShelfLayoutManager::UpdateTargetBoundsForGesture(
 
     int hotseat_y = 0;
     const int hotseat_extended_y =
-        Shell::Get()->shelf_config()->hotseat_size() +
+        shelf_->hotseat_widget()->GetHotseatSize() +
         Shell::Get()->shelf_config()->hotseat_bottom_padding();
     const int hotseat_baseline =
         (hotseat_target_state == HotseatState::kExtended) ? -hotseat_extended_y
@@ -1922,10 +1947,14 @@ bool ShelfLayoutManager::IsShelfWindow(aura::Window* window) {
       shelf_->hotseat_widget()->GetNativeWindow();
   const aura::Window* status_area_window =
       shelf_widget_->status_area_widget()->GetNativeWindow();
+  const aura::Window* drag_handle_nudge_window =
+      GetDragHandleNudgeWindow(shelf_widget_);
   return (shelf_window && shelf_window->Contains(window)) ||
          (navigation_window && navigation_window->Contains(window)) ||
          (hotseat_window && hotseat_window->Contains(window)) ||
-         (status_area_window && status_area_window->Contains(window));
+         (status_area_window && status_area_window->Contains(window)) ||
+         (drag_handle_nudge_window &&
+          drag_handle_nudge_window->Contains(window));
 }
 
 bool ShelfLayoutManager::IsStatusAreaWindow(aura::Window* window) {
@@ -2245,7 +2274,7 @@ bool ShelfLayoutManager::StartShelfDrag(const ui::LocatedEvent& event_in_screen,
   // offset to the hotseats extended position.
   if (hotseat_state() == HotseatState::kExtended &&
       visibility_state() == SHELF_VISIBLE) {
-    drag_amount_ = -(ShelfConfig::Get()->hotseat_size() +
+    drag_amount_ = -(shelf_->hotseat_widget()->GetHotseatSize() +
                      ShelfConfig::Get()->hotseat_bottom_padding());
   } else {
     drag_amount_ = 0.f;
@@ -2509,13 +2538,13 @@ bool ShelfLayoutManager::ShouldChangeVisibilityAfterDrag(
     // The visibility of the shelf changes only if the shelf was dragged X%
     // along the correct axis. If the shelf was already visible, then the
     // direction of the drag does not matter.
-    const float kDragHideThreshold = 0.4f;
     const gfx::Rect bounds = GetIdealBounds();
     const float drag_ratio =
         fabs(drag_amount_) /
         (shelf_->IsHorizontalAlignment() ? bounds.height() : bounds.width());
 
-    return IsSwipingCorrectDirection() && drag_ratio > kDragHideThreshold;
+    return IsSwipingCorrectDirection() &&
+           drag_ratio > ShelfConfig::Get()->drag_hide_ratio_threshold();
   }
 
   if (event_in_screen.type() == ui::ET_SCROLL_FLING_START)
@@ -2586,7 +2615,7 @@ bool ShelfLayoutManager::MaybeStartDragWindowFromShelf(
   // hasn't been fully dragged up.
   if (hotseat_state() == HotseatState::kHidden) {
     const int full_drag_amount =
-        -ShelfConfig::Get()->GetHotseatFullDragAmount();
+        -shelf_->hotseat_widget()->GetHotseatFullDragAmount();
     if (drag_amount_ > full_drag_amount)
       return false;
   } else if (hotseat_state() == HotseatState::kExtended) {
@@ -2678,7 +2707,7 @@ bool ShelfLayoutManager::MaybeEndDragFromOverviewToHome(
     ShelfConfig* shelf_config = ShelfConfig::Get();
     const int drag_amount_threshold =
         -(shelf_config->shelf_size() + shelf_config->hotseat_bottom_padding() +
-          kHotseatSizeMultiplier * shelf_config->hotseat_size());
+          kHotseatSizeMultiplier * shelf_->hotseat_widget()->GetHotseatSize());
     if (drag_amount_ > drag_amount_threshold)
       return false;
   }

@@ -73,12 +73,9 @@ class PaintedScrollbar : public FakeScrollbar {
   SkColor color_ = SK_ColorGREEN;
 };
 
-#if !defined(GL_NOT_ON_PLATFORM) || defined(ENABLE_CC_VULKAN_TESTS)
 LayerTreeTest::RendererType const kRendererTypes[] = {
-#if !defined(GL_NOT_ON_PLATFORM)
     LayerTreeTest::RENDERER_GL,
     LayerTreeTest::RENDERER_SKIA_GL,
-#endif  // !defined(GL_NOT_ON_PLATFORM)
 #if defined(ENABLE_CC_VULKAN_TESTS)
     LayerTreeTest::RENDERER_SKIA_VK,
 #endif  // defined(ENABLE_CC_VULKAN_TESTS)
@@ -87,7 +84,6 @@ LayerTreeTest::RendererType const kRendererTypes[] = {
 INSTANTIATE_TEST_SUITE_P(All,
                          LayerTreeHostScrollbarsPixelTest,
                          ::testing::ValuesIn(kRendererTypes));
-#endif  //  !defined(GL_NOT_ON_PLATFORM) || defined(ENABLE_CC_VULKAN_TESTS)
 
 TEST_P(LayerTreeHostScrollbarsPixelTest, NoScale) {
   scoped_refptr<SolidColorLayer> background =
@@ -188,7 +184,7 @@ TEST_P(LayerTreeHostScrollbarsPixelTest, MAYBE_HugeTransformScale) {
     pixel_comparator_ = std::make_unique<FuzzyPixelOffByOneComparator>(true);
 
   RunPixelTest(background,
-               use_vulkan()
+               use_skia_vulkan()
                    ? base::FilePath(FILE_PATH_LITERAL("spiral_64_scale_vk.png"))
                    : base::FilePath(FILE_PATH_LITERAL("spiral_64_scale.png")));
 }
@@ -200,8 +196,7 @@ class LayerTreeHostOverlayScrollbarsPixelTest
 
   void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
     LayerImpl* layer = host_impl->active_tree()->LayerById(scrollbar_layer_id_);
-    ScrollbarLayerImplBase* scrollbar = layer->ToScrollbarLayer();
-    scrollbar->SetThumbThicknessScaleFactor(thickness_scale_);
+    ToScrollbarLayer(layer)->SetThumbThicknessScaleFactor(thickness_scale_);
   }
 
   int scrollbar_layer_id_;
@@ -256,11 +251,9 @@ class PaintedOverlayScrollbar : public FakeScrollbar {
   ~PaintedOverlayScrollbar() override = default;
 };
 
-#if !defined(GL_NOT_ON_PLATFORM) || defined(ENABLE_CC_VULKAN_TESTS)
 INSTANTIATE_TEST_SUITE_P(All,
                          LayerTreeHostOverlayScrollbarsPixelTest,
                          ::testing::ValuesIn(kRendererTypes));
-#endif  //  !defined(GL_NOT_ON_PLATFORM) || defined(ENABLE_CC_VULKAN_TESTS)
 
 // Simulate increasing the thickness of a painted overlay scrollbar. Ensure that
 // the scrollbar border remains crisp.

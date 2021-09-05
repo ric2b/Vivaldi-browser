@@ -7,6 +7,7 @@
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker_controller.h"
@@ -61,12 +62,25 @@ bool ParseTextDirective(const String& fragment,
 bool CheckSecurityRestrictions(LocalFrame& frame,
                                bool same_document_navigation) {
   // This algorithm checks the security restrictions detailed in
-  // https://wicg.github.io/ScrollToTextFragment/#should-allow-text-fragment
+  // https://wicg.github.io/ScrollToTextFragment/#should-allow-a-text-fragment
+  // TODO(bokan): These are really only relevant for observable actions like
+  // scrolling. We should consider allowing highlighting regardless of these
+  // conditions. See the TODO in the relevant spec section:
+  // https://wicg.github.io/ScrollToTextFragment/#restricting-the-text-fragment
 
-  // We only allow text fragment anchors for user or browser initiated
-  // navigations, i.e. no script navigations.
-  if (!(frame.Loader().GetDocumentLoader()->HadTransientActivation() ||
-        frame.Loader().GetDocumentLoader()->IsBrowserInitiated())) {
+  // History navigation is special because it's considered to be browser
+  // initiated even if the navigation originated via use of the history API
+  // within the renderer. We avoid creating a text fragment for history
+  // navigations since history scroll restoration should take precedence but
+  // it'd be bad if we ever got here for a history navigation since the check
+  // below would pass even if the user took no action.
+  SECURITY_CHECK(frame.Loader().GetDocumentLoader()->GetNavigationType() !=
+                 kWebNavigationTypeBackForward);
+
+  // We only allow text fragment anchors for user navigations, e.g. link
+  // clicks, omnibox navigations, no script navigations.
+  if (!frame.Loader().GetDocumentLoader()->HadTransientActivation() &&
+      !frame.Loader().GetDocumentLoader()->IsBrowserInitiated()) {
     return false;
   }
 
@@ -104,6 +118,17 @@ TextFragmentAnchor* TextFragmentAnchor::TryCreateFragmentDirective(
   if (!frame.GetDocument()->GetFragmentDirective())
     return nullptr;
 
+  // Avoid invoking the text fragment for history or reload navigations as
+  // they'll be clobbered by scroll restoration; this prevents a transient
+  // scroll as well as user gesture issues; see https://crbug.com/1042986 for
+  // details.
+  auto navigation_type =
+      frame.Loader().GetDocumentLoader()->GetNavigationType();
+  if (navigation_type == kWebNavigationTypeBackForward ||
+      navigation_type == kWebNavigationTypeReload) {
+    return nullptr;
+  }
+
   if (!CheckSecurityRestrictions(frame, same_document_navigation))
     return nullptr;
 
@@ -131,7 +156,9 @@ TextFragmentAnchor::TextFragmentAnchor(
   DCHECK(!text_fragment_selectors.IsEmpty());
   DCHECK(frame_->View());
 
-  metrics_->DidCreateAnchor(text_fragment_selectors.size());
+  metrics_->DidCreateAnchor(
+      text_fragment_selectors.size(),
+      frame.GetDocument()->GetFragmentDirective().length());
 
   text_fragment_finders_.ReserveCapacity(text_fragment_selectors.size());
   for (TextFragmentSelector selector : text_fragment_selectors)
@@ -173,12 +200,17 @@ bool TextFragmentAnchor::Invoke() {
       finder.FindMatch(*frame_->GetDocument());
   }
 
-  if (frame_->GetDocument()->IsLoadCompleted())
+  // Stop searching for matching text once the load event has fired. This may
+  // cause ScrollToTextFragment to not work on pages which dynamically load
+  // content: http://crbug.com/963045
+  if (frame_->GetDocument()->IsLoadCompleted() &&
+      beforematch_state_ != kEventQueued)
     DidFinishSearch();
 
   // We return true to keep this anchor alive as long as we need another invoke,
   // are waiting to be dismissed, or are proxying an element fragment anchor.
-  return !search_finished_ || !dismissed_ || element_fragment_anchor_;
+  return !search_finished_ || !dismissed_ || element_fragment_anchor_ ||
+         beforematch_state_ == kEventQueued;
 }
 
 void TextFragmentAnchor::Installed() {}
@@ -206,7 +238,9 @@ void TextFragmentAnchor::Trace(Visitor* visitor) {
   FragmentAnchor::Trace(visitor);
 }
 
-void TextFragmentAnchor::DidFindMatch(const EphemeralRangeInFlatTree& range) {
+void TextFragmentAnchor::DidFindMatch(
+    const EphemeralRangeInFlatTree& range,
+    const TextFragmentAnchorMetrics::Match match_metrics) {
   if (search_finished_)
     return;
 
@@ -221,6 +255,22 @@ void TextFragmentAnchor::DidFindMatch(const EphemeralRangeInFlatTree& range) {
            .IsEmpty()) {
     return;
   }
+
+  if (beforematch_state_ == kNoMatchFound) {
+    Element* enclosing_block =
+        EnclosingBlock(range.StartPosition(), kCannotCrossEditingBoundary);
+    DCHECK(enclosing_block);
+    frame_->GetDocument()->EnqueueAnimationFrameTask(
+        WTF::Bind(&TextFragmentAnchor::FireBeforeMatchEvent,
+                  WrapPersistent(this), WrapWeakPersistent(enclosing_block)));
+    beforematch_state_ = kEventQueued;
+    return;
+  }
+  if (beforematch_state_ == kEventQueued)
+    return;
+  // TODO(jarhar): Consider what to do based on DOM/style modifications made by
+  // the beforematch event here and write tests for it once we decide on a
+  // behavior here: https://github.com/WICG/display-locking/issues/150
 
   bool needs_style_and_layout = false;
 
@@ -247,7 +297,7 @@ void TextFragmentAnchor::DidFindMatch(const EphemeralRangeInFlatTree& range) {
         DocumentUpdateReason::kFindInPage);
   }
 
-  metrics_->DidFindMatch(PlainText(range));
+  metrics_->DidFindMatch(match_metrics);
   did_find_match_ = true;
 
   if (first_match_needs_scroll_) {
@@ -353,6 +403,12 @@ void TextFragmentAnchor::ApplyTargetToCommonAncestor(
     auto* target = DynamicTo<Element>(common_node);
     frame_->GetDocument()->SetCSSTarget(target);
   }
+}
+
+void TextFragmentAnchor::FireBeforeMatchEvent(Element* element) {
+  if (RuntimeEnabledFeatures::BeforeMatchEventEnabled())
+    element->DispatchEvent(*Event::Create(event_type_names::kBeforematch));
+  beforematch_state_ = kFiredEvent;
 }
 
 }  // namespace blink

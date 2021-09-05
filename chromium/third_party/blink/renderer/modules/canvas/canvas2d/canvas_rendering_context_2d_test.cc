@@ -887,6 +887,11 @@ TEST_F(CanvasRenderingContext2DTest, ImageBitmapColorSpaceConversion) {
   for (int conversion_iterator = kColorSpaceConversion_Default;
        conversion_iterator <= kColorSpaceConversion_Last;
        conversion_iterator++) {
+    // TODO(crbug.com/898631): Do not test "preserve" which
+    // is not a valid value of ColorSpaceConversion.
+    if (conversion_iterator == kColorSpaceConversion_Preserve)
+      continue;
+
     // Color convert using ImageBitmap
     ImageBitmapOptions* options = ImageBitmapOptions::Create();
     options->setColorSpaceConversion(
@@ -1162,8 +1167,9 @@ TEST_F(CanvasRenderingContext2DTestAccelerated,
   UpdateAllLifecyclePhasesForTest();
 
   // Hide element to trigger hibernation (if enabled).
-  GetDocument().GetPage()->SetVisibilityState(PageVisibilityState::kHidden,
-                                              /*is_initial_state=*/false);
+  GetDocument().GetPage()->SetVisibilityState(
+      mojom::blink::PageVisibilityState::kHidden,
+      /*is_initial_state=*/false);
   blink::test::RunPendingTasks();  // Run hibernation task.
   // If enabled, hibernation should cause compositing update.
   EXPECT_EQ(!!CANVAS2D_HIBERNATION_ENABLED,
@@ -1178,8 +1184,9 @@ TEST_F(CanvasRenderingContext2DTestAccelerated,
   EXPECT_FALSE(layer->NeedsCompositingInputsUpdate());
 
   // Wake up again, which should request a compositing update synchronously.
-  GetDocument().GetPage()->SetVisibilityState(PageVisibilityState::kVisible,
-                                              /*is_initial_state=*/false);
+  GetDocument().GetPage()->SetVisibilityState(
+      mojom::blink::PageVisibilityState::kVisible,
+      /*is_initial_state=*/false);
   EXPECT_EQ(!!CANVAS2D_HIBERNATION_ENABLED,
             layer->NeedsCompositingInputsUpdate());
 }
@@ -1209,8 +1216,9 @@ TEST_F(CanvasRenderingContext2DTestAccelerated,
   canvas_element_->ReplaceResourceProvider(nullptr);
 
   // Hide element to trigger hibernation (if enabled).
-  GetDocument().GetPage()->SetVisibilityState(PageVisibilityState::kHidden,
-                                              /*is_initial_state=*/false);
+  GetDocument().GetPage()->SetVisibilityState(
+      mojom::blink::PageVisibilityState::kHidden,
+      /*is_initial_state=*/false);
   blink::test::RunPendingTasks();  // Run hibernation task.
 
   // Never hibernate a canvas with no resource provider

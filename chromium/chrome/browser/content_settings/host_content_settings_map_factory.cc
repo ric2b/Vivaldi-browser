@@ -18,6 +18,7 @@
 #include "components/permissions/features.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/buildflags/buildflags.h"
+#include "ui/webui/webui_allowlist_provider.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/extension_service.h"
@@ -86,7 +87,14 @@ scoped_refptr<RefcountedKeyedService>
       profile->IsIncognitoProfile() || profile->IsGuestSession(),
       /*store_last_modified=*/true,
       base::FeatureList::IsEnabled(
-          permissions::features::kPermissionDelegation)));
+          permissions::features::kPermissionDelegation),
+      profile->ShouldRestoreOldSessionCookies()));
+
+  auto allowlist_provider = std::make_unique<WebUIAllowlistProvider>(
+      WebUIAllowlist::GetOrCreate(profile));
+  settings_map->RegisterProvider(
+      HostContentSettingsMap::WEBUI_ALLOWLIST_PROVIDER,
+      std::move(allowlist_provider));
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // These must be registered before before the HostSettings are passed over to

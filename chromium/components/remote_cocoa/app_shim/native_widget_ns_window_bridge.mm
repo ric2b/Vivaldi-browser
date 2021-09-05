@@ -21,6 +21,7 @@
 #import "components/remote_cocoa/app_shim/browser_native_widget_window_mac.h"
 #import "components/remote_cocoa/app_shim/mouse_capture.h"
 #import "components/remote_cocoa/app_shim/native_widget_mac_frameless_nswindow.h"
+#import "components/remote_cocoa/app_shim/vivaldi_native_widget_mac_frameless_nswindow.h"
 #import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 #import "components/remote_cocoa/app_shim/native_widget_ns_window_host_helper.h"
 #include "components/remote_cocoa/app_shim/select_file_dialog_bridge.h"
@@ -279,6 +280,14 @@ NativeWidgetNSWindowBridge::CreateNSWindow(
                         defer:NO]);
       break;
     case mojom::WindowClass::kFrameless:
+      if (vivaldi::IsVivaldiRunning() && base::mac::IsAtLeastOS10_15()) {
+        ns_window.reset([[VivaldiNativeWidgetMacFramelessNSWindow alloc]
+          initWithContentRect:ui::kWindowSizeDeterminedLater
+                    styleMask:params->style_mask
+                      backing:NSBackingStoreBuffered
+                        defer:NO]);
+        break;
+      }
       ns_window.reset([[NativeWidgetMacFramelessNSWindow alloc]
           initWithContentRect:ui::kWindowSizeDeterminedLater
                     styleMask:params->style_mask

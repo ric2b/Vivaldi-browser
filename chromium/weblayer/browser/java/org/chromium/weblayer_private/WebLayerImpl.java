@@ -10,6 +10,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
+import android.content.res.Resources;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -21,6 +22,7 @@ import android.webkit.ValueCallback;
 import android.webkit.WebViewDelegate;
 import android.webkit.WebViewFactory;
 
+import androidx.annotation.Nullable;
 import androidx.core.content.FileProvider;
 
 import org.chromium.base.BuildInfo;
@@ -32,11 +34,13 @@ import org.chromium.base.FileUtils;
 import org.chromium.base.Log;
 import org.chromium.base.PathUtils;
 import org.chromium.base.StrictModeContext;
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.components.embedder_support.application.ClassLoaderContextWrapperFactory;
+import org.chromium.components.embedder_support.application.FirebaseConfig;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.ChildProcessCreationParams;
 import org.chromium.content_public.browser.DeviceUtils;
@@ -49,6 +53,7 @@ import org.chromium.weblayer_private.interfaces.ICrashReporterController;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
 import org.chromium.weblayer_private.interfaces.IProfile;
 import org.chromium.weblayer_private.interfaces.IRemoteFragmentClient;
+import org.chromium.weblayer_private.interfaces.ISiteSettingsFragment;
 import org.chromium.weblayer_private.interfaces.IWebLayer;
 import org.chromium.weblayer_private.interfaces.IWebLayerClient;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
@@ -87,10 +92,16 @@ public final class WebLayerImpl extends IWebLayer.Stub {
     public static final String PREF_LAST_VERSION_CODE =
             "org.chromium.weblayer.last_version_code_used";
 
+    // The required package ID for WebLayer when loaded as a shared library, hardcoded in the
+    // resources. If this value changes make sure to change _SHARED_LIBRARY_HARDCODED_ID in
+    // //build/android/gyp/util/protoresources.py.
+    private static final int REQUIRED_PACKAGE_IDENTIFIER = 12;
+
     private final ProfileManager mProfileManager = new ProfileManager();
 
     private boolean mInited;
     private static IWebLayerClient sClient;
+
     // Whether WebView is running in process. Set in init().
     private boolean mIsWebViewCompatMode;
 
@@ -205,15 +216,11 @@ public final class WebLayerImpl extends IWebLayer.Stub {
         }
 
         BuildInfo.setBrowserPackageInfo(packageInfo);
-        int resourcesPackageId = getPackageId(appContext, packageInfo.packageName);
-        if (resourcesPackageId < 0x7f && resourcesPackageId != 2) {
-            throw new AndroidRuntimeException(
-                    "WebLayer can't be used with another shared library. Loaded packages: "
-                    + getLoadedPackageNames(appContext));
-        }
+        BuildInfo.setFirebaseAppId(
+                FirebaseConfig.getFirebaseAppIdForPackage(packageInfo.packageName));
         // TODO: The call to onResourcesLoaded() can be slow, we may need to parallelize this with
         // other expensive startup tasks.
-        R.onResourcesLoaded(resourcesPackageId);
+        R.onResourcesLoaded(forceCorrectPackageId(remoteContext));
         SelectionPopupController.setMustUseWebContentsContext();
 
         ResourceBundle.setAvailablePakLocales(new String[] {}, ProductConfig.UNCOMPRESSED_LOCALES);
@@ -252,6 +259,9 @@ public final class WebLayerImpl extends IWebLayer.Stub {
             LibraryLoader.getInstance().ensureInitialized();
         }
         GmsBridge.getInstance().setSafeBrowsingHandler();
+
+        MediaStreamManager.onWebLayerInit();
+        WebLayerNotificationChannels.updateChannelsIfNecessary();
     }
 
     @Override
@@ -262,6 +272,16 @@ public final class WebLayerImpl extends IWebLayer.Stub {
         BrowserFragmentImpl fragment =
                 new BrowserFragmentImpl(mProfileManager, fragmentClient, unwrappedArgs);
         return fragment.asIBrowserFragment();
+    }
+
+    @Override
+    public ISiteSettingsFragment createSiteSettingsFragmentImpl(
+            IRemoteFragmentClient remoteFragmentClient, IObjectWrapper fragmentArgs) {
+        StrictModeWorkaround.apply();
+        Bundle unwrappedArgs = ObjectWrapper.unwrap(fragmentArgs, Bundle.class);
+        SiteSettingsFragmentImpl fragment =
+                new SiteSettingsFragmentImpl(mProfileManager, remoteFragmentClient, unwrappedArgs);
+        return fragment.asISiteSettingsFragment();
     }
 
     @Override
@@ -298,10 +318,14 @@ public final class WebLayerImpl extends IWebLayer.Stub {
     }
 
     @Override
-    public void onReceivedDownloadNotification(IObjectWrapper appContextWrapper, Intent intent) {
+    public void onReceivedBroadcast(IObjectWrapper appContextWrapper, Intent intent) {
         StrictModeWorkaround.apply();
         Context context = ObjectWrapper.unwrap(appContextWrapper, Context.class);
-        DownloadImpl.forwardIntent(context, intent, mProfileManager);
+        if (intent.getAction().startsWith(DownloadImpl.getIntentPrefix())) {
+            DownloadImpl.forwardIntent(context, intent, mProfileManager);
+        } else if (intent.getAction().startsWith(MediaStreamManager.getIntentPrefix())) {
+            MediaStreamManager.forwardIntent(intent);
+        }
     }
 
     @Override
@@ -316,6 +340,18 @@ public final class WebLayerImpl extends IWebLayer.Stub {
     public void setClient(IWebLayerClient client) {
         StrictModeWorkaround.apply();
         sClient = client;
+    }
+
+    @Override
+    public String getUserAgentString() {
+        StrictModeWorkaround.apply();
+        return WebLayerImplJni.get().getUserAgentString();
+    }
+
+    @Override
+    public void registerExternalExperimentIDs(String trialName, int[] experimentIDs) {
+        StrictModeWorkaround.apply();
+        WebLayerImplJni.get().registerExternalExperimentIDs(trialName, experimentIDs);
     }
 
     /**
@@ -344,6 +380,48 @@ public final class WebLayerImpl extends IWebLayer.Stub {
         }
     }
 
+    public static String getClientApplicationName() {
+        Context context = ContextUtils.getApplicationContext();
+        return new StringBuilder()
+                .append(context.getPackageManager().getApplicationLabel(
+                        context.getApplicationInfo()))
+                .toString();
+    }
+
+    /**
+     * Converts the given id into a resource ID that can be shown in system UI, such as
+     * notifications.
+     */
+    public static int getResourceIdForSystemUi(int id) {
+        if (isAndroidResource(id)) {
+            return id;
+        }
+
+        Context context = ContextUtils.getApplicationContext();
+        try {
+            // String may be missing translations, since they are loaded at a different package ID
+            // by default in standalone WebView.
+            assert !context.getResources().getResourceTypeName(id).equals("string");
+        } catch (Resources.NotFoundException e) {
+        }
+        id &= 0x00ffffff;
+        id |= (0x01000000
+                * getPackageId(context, WebViewFactory.getLoadedPackageInfo().packageName));
+        return id;
+    }
+
+    /** Returns whether this ID is from the android system package. */
+    public static boolean isAndroidResource(int id) {
+        try {
+            return ContextUtils.getApplicationContext()
+                    .getResources()
+                    .getResourcePackageName(id)
+                    .equals("android");
+        } catch (Resources.NotFoundException e) {
+            return false;
+        }
+    }
+
     /**
      * Performs the minimal initialization needed for a context. This is used for example in
      * CrashReporterControllerImpl, so it can be used before full WebLayer initialization.
@@ -366,24 +444,61 @@ public final class WebLayerImpl extends IWebLayer.Stub {
         return appContext;
     }
 
+    /** Forces the correct package ID or dies with a runtime exception. */
+    private static int forceCorrectPackageId(Context remoteContext) {
+        int packageId = getPackageId(remoteContext, remoteContext.getPackageName());
+        // This is using app_as_shared_lib, no change needed.
+        if (packageId >= 0x7f) {
+            return packageId;
+        }
+
+        if (packageId > REQUIRED_PACKAGE_IDENTIFIER) {
+            throw new AndroidRuntimeException(
+                    "WebLayer can't be used with other shared libraries. Loaded packages: "
+                    + getLoadedPackageNames(remoteContext));
+        }
+
+        forceAddAssetPaths(remoteContext, packageId);
+
+        return REQUIRED_PACKAGE_IDENTIFIER;
+    }
+
+    /** Forces adding entries to the package identifiers array until we hit the required ID. */
+    private static void forceAddAssetPaths(Context remoteContext, int packageId) {
+        try {
+            Method addAssetPath = AssetManager.class.getMethod("addAssetPath", String.class);
+            String path = remoteContext.getApplicationInfo().sourceDir;
+            // Add enough paths to make sure we reach the required ID.
+            for (int i = packageId; i < REQUIRED_PACKAGE_IDENTIFIER; i++) {
+                // Change the path to ensure the asset path is re-added and grabs a new package ID.
+                path = "/." + path;
+                addAssetPath.invoke(remoteContext.getAssets(), path);
+            }
+        } catch (ReflectiveOperationException e) {
+            throw new AndroidRuntimeException(e);
+        }
+    }
+
     /**
      * Returns the package ID to use when calling R.onResourcesLoaded().
      */
     private static int getPackageId(Context appContext, String implPackageName) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                Constructor constructor = WebViewDelegate.class.getDeclaredConstructor();
+                Constructor<WebViewDelegate> constructor =
+                        WebViewDelegate.class.getDeclaredConstructor();
                 constructor.setAccessible(true);
-                WebViewDelegate delegate = (WebViewDelegate) constructor.newInstance();
+                WebViewDelegate delegate = constructor.newInstance();
                 return delegate.getPackageId(appContext.getResources(), implPackageName);
             } else {
                 // In L WebViewDelegate did not yet exist, so we have to look inside AssetManager.
                 Method getAssignedPackageIdentifiers =
                         AssetManager.class.getMethod("getAssignedPackageIdentifiers");
-                SparseArray packageIdentifiers = (SparseArray) getAssignedPackageIdentifiers.invoke(
-                        appContext.getResources().getAssets());
+                SparseArray<String> packageIdentifiers =
+                        (SparseArray) getAssignedPackageIdentifiers.invoke(
+                                appContext.getResources().getAssets());
                 for (int i = 0; i < packageIdentifiers.size(); i++) {
-                    final String name = (String) packageIdentifiers.valueAt(i);
+                    final String name = packageIdentifiers.valueAt(i);
 
                     if (implPackageName.equals(name)) {
                         return packageIdentifiers.keyAt(i);
@@ -401,17 +516,20 @@ public final class WebLayerImpl extends IWebLayer.Stub {
         try {
             Method getAssignedPackageIdentifiers =
                     AssetManager.class.getMethod("getAssignedPackageIdentifiers");
-            SparseArray packageIdentifiers = (SparseArray) getAssignedPackageIdentifiers.invoke(
-                    appContext.getResources().getAssets());
+            SparseArray<String> packageIdentifiers =
+                    (SparseArray) getAssignedPackageIdentifiers.invoke(
+                            appContext.getResources().getAssets());
             List<String> packageNames = new ArrayList<>();
             for (int i = 0; i < packageIdentifiers.size(); i++) {
-                String name = (String) packageIdentifiers.valueAt(i);
+                String name = packageIdentifiers.valueAt(i);
                 int key = packageIdentifiers.keyAt(i);
                 // This is the android package.
                 if (key == 1) {
                     continue;
                 }
-                packageNames.add(name + ":" + key);
+
+                // Make sure this doesn't look like a URL so it doesn't get removed from crashes.
+                packageNames.add(name.replace(".", "_") + " -> " + key);
             }
             return TextUtils.join(",", packageNames);
         } catch (ReflectiveOperationException e) {
@@ -538,10 +656,18 @@ public final class WebLayerImpl extends IWebLayer.Stub {
         }
     }
 
+    @CalledByNative
+    @Nullable
+    private static String getEmbedderName() {
+        return getClientApplicationName();
+    }
+
     @NativeMethods
     interface Natives {
         void setRemoteDebuggingEnabled(boolean enabled);
         boolean isRemoteDebuggingEnabled();
         void setIsWebViewCompatMode(boolean value);
+        String getUserAgentString();
+        void registerExternalExperimentIDs(String trialName, int[] experimentIDs);
     }
 }

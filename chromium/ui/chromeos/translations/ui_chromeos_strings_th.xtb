@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">แป้นพิมพ์ภาษาเยอรมัน</translation>
 <translation id="1972984168337863910">ขยายแผงความคิดเห็นเกี่ยวกับไฟล์</translation>
 <translation id="1984603991036629094">แป้นพิมพ์แบบออกเสียงอาร์เมเนีย</translation>
+<translation id="1995337122023280937">ไปยังตำแหน่งที่ตั้งไฟล์</translation>
 <translation id="2001796770603320721">จัดการใน Google ไดรฟ์</translation>
 <translation id="2009067268969781306">การฟอร์แมตไดรฟ์จะลบข้อมูลทั้งหมดที่เก็บไว้ในไดรฟ์ การดำเนินการนี้ยกเลิกไม่ได้</translation>
 <translation id="2028997212275086731">ไฟล์ RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">ไม่สามารถเข้าถึง Google ไดรฟ์ โปรด<ph name="BEGIN_LINK" />ออกจากระบบ<ph name="END_LINK" /> และเข้าสู่ระบบใหม่อีกครั้ง</translation>
 <translation id="2649120831653069427">ปลาเรนโบว์</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">ตำแหน่งที่ตั้งไฟล์</translation>
 <translation id="2672394958563893062">เกิดข้อผิดพลาด คลิกเพื่อเริ่มใหม่ตั้งแต่ต้น</translation>
 <translation id="2676946222714718093">กำลังเล่นบน</translation>
 <translation id="2735698359135166290">แป้นพิมพ์มาตรฐานโรมาเนีย</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826">ข้อผิดพลาด <ph name="COUNT" /> รายการ</translation>
 <translation id="3519867315646775981">การทับศัพท์ (shalom ← שלום)</translation>
 <translation id="3522708245912499433">โปรตุเกส</translation>
+<translation id="3524311639100184459">ข้อควรระวัง: ไฟล์เหล่านี้ใช้ชั่วคราวและอาจถูกลบโดยอัตโนมัติเพื่อเพิ่มพื้นที่ว่างในดิสก์  <ph name="BEGIN_LINK" />ดูข้อมูลเพิ่มเติม<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">โฟลเดอร์</translation>
 <translation id="3549797760399244642">ไปยัง drive.google.com...</translation>
 <translation id="357479282490346887">ลิทัวเนีย</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">กีวี</translation>
 <translation id="3966388904776714213">โปรแกรมเล่นเสียง</translation>
 <translation id="4002066346123236978">ชื่อ</translation>
+<translation id="4065397611279318371">หากต้องการเปิดไฟล์ด้วยแอป <ph name="APP_NAME" /> ให้ย้ายไฟล์ไปที่โฟลเดอร์ <ph name="SHARED_DIRECTORY_LABEL" /> ก่อน</translation>
 <translation id="4070370845051020638">วิธีการป้อนข้อมูลภาษาจีนกวางตุ้ง</translation>
 <translation id="4072248638558688893">แป้นพิมพ์ภาษาทมิฬ (คำที่ใช้ออกเสียง)</translation>
 <translation id="4124935795427217608">ยูนิคอร์น</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">แก้ไขอัตโนมัติ</translation>
 <translation id="4881695831933465202">เปิด</translation>
 <translation id="4886021172213954916">แป้นพิมพ์ภาษาทมิฬ (เครื่องพิมพ์ดีด)</translation>
+<translation id="4892969127351273348">เปิดด้วย <ph name="APP_NAME" /> ไม่ได้</translation>
 <translation id="4905417359854579806">พร้อมสำรอง <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">คงที่</translation>
 <translation id="4935975195727477204">ดอกทานตะวัน</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">จัดการการแชร์ของ Linux</translation>
 <translation id="6808193438228982088">สุนัขจิ้งจอก</translation>
 <translation id="6820687829547641339">ไฟล์ Tar ที่บีบอัดโดย Gzip</translation>
+<translation id="6823166707458800069">ระบบจะสำรองข้อมูลไฟล์ทั้งหมดที่บันทึกไว้ในโฟลเดอร์นี้แบบออนไลน์โดยอัตโนมัติ</translation>
 <translation id="6825883775269213504">รัสเซีย</translation>
 <translation id="6827236167376090743">วิดีโอนี้จะเล่นวนรอบ</translation>
 <translation id="6847101934483209767">นำ <ph name="ENTRY_NAME" /> ออกจากรายการที่เลือกแล้ว</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">แผนที่ Google</translation>
 <translation id="7419631653042041064">แป้นพิมพ์ภาษาคาตาลัน</translation>
 <translation id="7434823369735508263">แป้นพิมพ์ดีโวรักสหราชอาณาจักร</translation>
+<translation id="7447678886297481665">ไฟล์ในโฟลเดอร์นี้เป็นแบบอ่านอย่างเดียว โดยระบบจะไม่รองรับบางกิจกรรม</translation>
 <translation id="7460898608667578234">ยูเครน</translation>
 <translation id="7474889694310679759">แป้นพิมพ์ภาษาอังกฤษแคนาดา</translation>
 <translation id="7489215562877293245">พบ <ph name="FILE_COUNT" />

@@ -32,16 +32,18 @@ ShutdownConfirmationDialog::ShutdownConfirmationDialog(
     int window_title_text_id,
     int dialog_text_id,
     base::OnceClosure on_accept_callback,
-    base::OnceClosure on_cancel_callback)
-    : window_title_(l10n_util::GetStringUTF16(window_title_text_id)) {
-  DialogDelegate::SetButtonLabel(
+    base::OnceClosure on_cancel_callback) {
+  SetTitle(l10n_util::GetStringUTF16(window_title_text_id));
+  SetShowCloseButton(false);
+
+  SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_ASH_SHUTDOWN_CONFIRMATION_OK_BUTTON));
-  DialogDelegate::SetButtonLabel(
+  SetButtonLabel(
       ui::DIALOG_BUTTON_CANCEL,
       l10n_util::GetStringUTF16(IDS_ASH_SHUTDOWN_CONFIRMATION_CANCEL_BUTTON));
-  DialogDelegate::SetAcceptCallback(std::move(on_accept_callback));
-  DialogDelegate::SetCancelCallback(std::move(on_cancel_callback));
+  SetAcceptCallback(std::move(on_accept_callback));
+  SetCancelCallback(std::move(on_cancel_callback));
   SetLayoutManager(std::make_unique<views::FillLayout>());
   SetBorder(views::CreateEmptyBorder(
       views::LayoutProvider::Get()->GetDialogInsetsForContentType(
@@ -66,14 +68,6 @@ ShutdownConfirmationDialog::~ShutdownConfirmationDialog() = default;
 
 ui::ModalType ShutdownConfirmationDialog::GetModalType() const {
   return ui::MODAL_TYPE_SYSTEM;
-}
-
-base::string16 ShutdownConfirmationDialog::GetWindowTitle() const {
-  return window_title_;
-}
-
-bool ShutdownConfirmationDialog::ShouldShowCloseButton() const {
-  return false;
 }
 
 gfx::Size ShutdownConfirmationDialog::CalculatePreferredSize() const {

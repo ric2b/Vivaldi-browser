@@ -8,9 +8,13 @@ import("//vivaldi/gn/config/signer_features.gni")
 
 build_app_dmg_script_path = "//vivaldi/thirdparty/create_dmg/create-dmg"
 
-dmg_name = "Vivaldi.$vivaldi_version_full.dmg"
-mac_product_name = "Vivaldi"
-mac_app_name = "$root_build_dir/$mac_product_name.app"
+vivaldi_name = "Vivaldi"
+mac_product_filename = vivaldi_name
+vivaldi_app_name = vivaldi_name
+input_app_folder_for_dmg = "$root_build_dir/$mac_product_filename.app"
+
+# NOTE(tomas@vivaldi.com): Don't change the names of these files based on channel
+dmg_name = "$vivaldi_name.$vivaldi_version_full.dmg"
 
 perform_signing = vivaldi_signing_key != "" && vivaldi_signing_id != ""
 
@@ -20,9 +24,18 @@ if (perform_signing) {
   signing_deps += [ ":sign_mac" ]
   dmg__signing_deps += [ ":sign_dmg" ]
 
-  mac_packaging_dir = "$root_build_dir/${mac_product_name}_Packaging"
+  mac_packaging_dir = "$root_build_dir/Vivaldi_Packaging"
+  if (VIVALDI_RELEASE_KIND == "vivaldi_snapshot") {
+    app_name_fragment = "Snapshot"
+    mac_product_filename = "$vivaldi_name$app_name_fragment"
+    vivaldi_app_name = "$vivaldi_name $app_name_fragment"
+  } else if (VIVALDI_RELEASE_KIND == "vivaldi_sopranos") {
+    app_name_fragment = "Internal"
+    mac_product_filename = "$vivaldi_name$app_name_fragment"
+    vivaldi_app_name = "$vivaldi_name $app_name_fragment"
+  }
 
-  mac_app_name = "$root_build_dir/$mac_product_name-$vivaldi_version_full"
+  input_app_folder_for_dmg = "$root_build_dir/$mac_product_filename-$vivaldi_version_full"
 }
 
 group("mac") {
@@ -58,7 +71,7 @@ command_bash("build_dmg") {
   ]
 
   args = [
-    "--volname","Vivaldi $vivaldi_version_full.dmg",
+    "--volname","$vivaldi_app_name $vivaldi_version_full.dmg",
     "--volicon", rebase_path(icns, root_build_dir),
     "--eula", rebase_path(eula, root_build_dir),
     "--background", rebase_path(background, root_build_dir),
@@ -66,19 +79,20 @@ command_bash("build_dmg") {
     "--window-size", "577", "366",
     "--text-size", "13",
     "--icon-size", "128",
-    "--icon", "Vivaldi", "158", "152",
+    "--icon", vivaldi_app_name, "158", "152",
     "--icon", ".background", "1000", "152",
     "--icon", ".fseventsd", "1100", "152",
     "--icon", ".VolumeIcon.icns", "1200", "152",
     "--app-drop-link", "412", "152",
     "--format", "UDBZ",
     "--no-internet-enable",
-    "Vivaldi.$vivaldi_version_full.dmg",
-    rebase_path(mac_app_name, root_build_dir),
+    dmg_name,
+    rebase_path(input_app_folder_for_dmg, root_build_dir),
   ]
 }
 
 if (perform_signing) {
+  tar_name = "$vivaldi_name.$vivaldi_version_full.tar.xz"
   group("sign_mac") {
     deps = [
       ":sign_package",
@@ -102,6 +116,7 @@ if (perform_signing) {
       "--input", ".",
       "--output", ".",
       "--disable-packaging",
+      "--vivaldi-release-kind", VIVALDI_RELEASE_KIND,
     ]
 
     # hardening and notarization and disabled due to VB-58183
@@ -163,7 +178,7 @@ if (perform_signing) {
       "$root_gen_dir/chmod.done",
     ]
     args = [
-      rebase_path(mac_app_name, root_build_dir),
+      rebase_path("$input_app_folder_for_dmg", root_build_dir),
       "-exec", "chmod", "-h", "a-st+rX,u+w,go-w", "{}", ";"
     ]
   }
@@ -174,7 +189,7 @@ if (perform_signing) {
       ":sign_package",
     ]
     command = "tar"
-    tar_path = "$root_build_dir/Vivaldi.$vivaldi_version_full.tar.xz"
+    tar_path = "$root_build_dir/$tar_name"
     inputs = [
       "$root_gen_dir/chmod.done",
       "$root_gen_dir/signed_package.done",
@@ -183,10 +198,10 @@ if (perform_signing) {
 
     args = [
       "-C",
-      rebase_path(mac_app_name, root_build_dir),
+      rebase_path(input_app_folder_for_dmg, root_build_dir),
       "-cJf",
       rebase_path(tar_path, root_build_dir),
-      "$mac_product_name.app",
+      "$vivaldi_app_name.app",
     ]
   }
 }

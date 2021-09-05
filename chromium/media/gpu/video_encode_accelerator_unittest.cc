@@ -301,8 +301,12 @@ bool ShouldSkipTest(VideoPixelFormat format) {
       // Disable mid_stream_bitrate_switch test cases for elm/hana.
       {"elm", "MidStreamParamSwitchBitrate", PIXEL_FORMAT_UNKNOWN},
       {"elm", "MultipleEncoders", PIXEL_FORMAT_UNKNOWN},
+      {"elm-kernelnext", "MidStreamParamSwitchBitrate", PIXEL_FORMAT_UNKNOWN},
+      {"elm-kernelnext", "MultipleEncoders", PIXEL_FORMAT_UNKNOWN},
       {"hana", "MidStreamParamSwitchBitrate", PIXEL_FORMAT_UNKNOWN},
       {"hana", "MultipleEncoders", PIXEL_FORMAT_UNKNOWN},
+      {"hana-kernelnext", "MidStreamParamSwitchBitrate", PIXEL_FORMAT_UNKNOWN},
+      {"hana-kernelnext", "MultipleEncoders", PIXEL_FORMAT_UNKNOWN},
 
       // crbug.com/965348#c6: Tegra driver calculates the wrong plane size of
       // NV12. Disable all tests on nyan family for NV12 test.
@@ -691,7 +695,7 @@ class VideoEncodeAcceleratorTestEnvironment : public ::testing::Environment {
 #if defined(USE_OZONE)
     // Initialize Ozone so that DMABuf can be created through Ozone DRM.
     ui::OzonePlatform::InitParams params;
-    params.single_process = false;
+    params.single_process = true;
     ui::OzonePlatform::InitializeForUI(params);
 
     base::Thread::Options options;
@@ -1136,8 +1140,8 @@ void VideoFrameQualityValidator::Initialize(const gfx::Size& coded_size,
 
   decoder_->Initialize(
       config, false, nullptr,
-      base::BindRepeating(&VideoFrameQualityValidator::InitializeCB,
-                          base::Unretained(this)),
+      base::BindOnce(&VideoFrameQualityValidator::InitializeCB,
+                     base::Unretained(this)),
       base::BindRepeating(&VideoFrameQualityValidator::VerifyOutputFrame,
                           base::Unretained(this)),
       base::NullCallback());
@@ -2567,8 +2571,8 @@ void VEANoInputClient::RequireBitstreamBuffers(
   // Timer is used to make sure there is no output frame in 100ms.
   timer_.reset(new base::OneShotTimer());
   timer_->Start(FROM_HERE, base::TimeDelta::FromMilliseconds(100),
-                base::Bind(&VEANoInputClient::SetState, base::Unretained(this),
-                           CS_FINISHED));
+                base::BindOnce(&VEANoInputClient::SetState,
+                               base::Unretained(this), CS_FINISHED));
 }
 
 void VEANoInputClient::BitstreamBufferReady(

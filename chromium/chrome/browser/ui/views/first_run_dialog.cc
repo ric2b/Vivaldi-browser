@@ -68,8 +68,8 @@ void FirstRunDialog::Show(Profile* profile) {
 }
 
 FirstRunDialog::FirstRunDialog(Profile* profile) {
-  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_OK);
-  DialogDelegate::SetExtraView(
+  SetButtons(ui::DIALOG_BUTTON_OK);
+  SetExtraView(
       std::make_unique<views::Link>(l10n_util::GetStringUTF16(IDS_LEARN_MORE)))
       ->set_callback(base::BindRepeating(&platform_util::OpenExternal,
                                          base::Unretained(profile),
@@ -83,7 +83,7 @@ FirstRunDialog::FirstRunDialog(Profile* profile) {
   views::ColumnSet* column_set = layout->AddColumnSet(0);
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::CENTER,
                         views::GridLayout::kFixedSize,
-                        views::GridLayout::USE_PREF, 0, 0);
+                        views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
 
   layout->StartRow(views::GridLayout::kFixedSize, 0);
   auto make_default = std::make_unique<views::Checkbox>(

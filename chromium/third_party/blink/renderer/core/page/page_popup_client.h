@@ -44,6 +44,7 @@ class ChromeClient;
 class Document;
 class Element;
 class Locale;
+class Page;
 class PagePopup;
 class PagePopupController;
 
@@ -62,7 +63,7 @@ class CORE_EXPORT PagePopupClient {
 
   virtual CSSFontSelector* CreateCSSFontSelector(Document& popup_document);
 
-  virtual PagePopupController* CreatePagePopupController(PagePopup&);
+  virtual PagePopupController* CreatePagePopupController(Page&, PagePopup&);
 
   // Returns effective zoom factor of ownerElement, or the page zoom factor if
   // the effective zoom factor is not available.
@@ -89,6 +90,9 @@ class CORE_EXPORT PagePopupClient {
   // This is called whenever a PagePopup was closed.
   virtual void DidClosePopup() = 0;
 
+  // This is called when popup content or its owner's position changed.
+  virtual void Update(bool force_update) {}
+
   virtual ~PagePopupClient() = default;
 
   // Helper functions to be used in PagePopupClient::writeDocument().
@@ -103,6 +107,7 @@ class CORE_EXPORT PagePopupClient {
                           const Vector<String>& values,
                           SharedBuffer*);
   static void AddProperty(const char* name, const IntRect&, SharedBuffer*);
+  void AddLocalizedProperty(const char* name, int resource_id, SharedBuffer*);
 };
 
 inline void PagePopupClient::AddString(const String& str, SharedBuffer* data) {

@@ -70,16 +70,6 @@ void VideoDecoderProxy::CreateCdm(
     const std::string& key_system,
     mojo::PendingReceiver<media::mojom::ContentDecryptionModule> receiver) {}
 
-void VideoDecoderProxy::CreateDecryptor(
-    int cdm_id,
-    mojo::PendingReceiver<media::mojom::Decryptor> receiver) {}
-
-#if BUILDFLAG(ENABLE_CDM_PROXY)
-void VideoDecoderProxy::CreateCdmProxy(
-    const base::Token& cdm_guid,
-    mojo::PendingReceiver<media::mojom::CdmProxy> receiver) {}
-#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
-
 media::mojom::InterfaceFactory* VideoDecoderProxy::GetMediaInterfaceFactory() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
@@ -94,7 +84,7 @@ void VideoDecoderProxy::ConnectToMediaService() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!interface_factory_remote_);
 
-  mojo::PendingRemote<service_manager::mojom::InterfaceProvider> interfaces;
+  mojo::PendingRemote<media::mojom::FrameInterfaceFactory> interfaces;
   ignore_result(interfaces.InitWithNewPipeAndPassReceiver());
 
   GetMediaService().CreateInterfaceFactory(

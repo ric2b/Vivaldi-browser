@@ -47,6 +47,8 @@ enum class PermissionType {
   VR = 25,
   AR = 26,
   STORAGE_ACCESS_GRANT = 27,
+  CAMERA_PAN_TILT_ZOOM = 28,
+  WINDOW_PLACEMENT = 29,
 
   // Always keep this at the end.
   NUM,

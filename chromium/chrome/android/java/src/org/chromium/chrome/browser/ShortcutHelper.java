@@ -40,16 +40,17 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.ui.favicon.RoundedIconGenerator;
 import org.chromium.chrome.browser.webapps.WebDisplayMode;
 import org.chromium.chrome.browser.webapps.WebappActivity;
 import org.chromium.chrome.browser.webapps.WebappAuthenticator;
 import org.chromium.chrome.browser.webapps.WebappDataStorage;
-import org.chromium.chrome.browser.webapps.WebappInfo;
+import org.chromium.chrome.browser.webapps.WebappIntentDataProviderFactory;
 import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
+import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.content_public.common.ScreenOrientationConstants;
 import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.widget.Toast;
@@ -57,6 +58,7 @@ import org.chromium.webapk.lib.client.WebApkValidator;
 
 import java.io.ByteArrayOutputStream;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * This class contains functions related to adding shortcuts to the Android Home
@@ -228,10 +230,11 @@ public class ShortcutHelper {
                 // process is complete, call back to native code to start the splash image
                 // download.
                 WebappRegistry.getInstance().register(id, storage -> {
-                    WebappInfo webappInfo = WebappInfo.create(resultIntent);
-                    assert webappInfo != null;
-                    if (webappInfo != null) {
-                        storage.updateFromWebappInfo(webappInfo);
+                    BrowserServicesIntentDataProvider intentDataProvider =
+                            WebappIntentDataProviderFactory.create(resultIntent);
+                    assert intentDataProvider != null;
+                    if (intentDataProvider != null) {
+                        storage.updateFromWebappIntentDataProvider(intentDataProvider);
                         if (callbackPointer != 0) {
                             ShortcutHelperJni.get().onWebappDataStored(callbackPointer);
                         }
@@ -560,8 +563,8 @@ public class ShortcutHelper {
         int cornerRadius = Math.round(ICON_CORNER_RADIUS_RATIO * outerSize);
         int fontSize = Math.round(GENERATED_ICON_FONT_SIZE_RATIO * outerSize);
         int color = Color.rgb(red, green, blue);
-        RoundedIconGenerator generator = new RoundedIconGenerator(
-                innerSize, innerSize, cornerRadius, color, fontSize);
+        RoundedIconGenerator generator =
+                new RoundedIconGenerator(innerSize, innerSize, cornerRadius, color, fontSize);
         Bitmap icon = generator.generateIconForUrl(url);
         if (icon == null) return null; // Bookmark URL does not have a domain.
         canvas.drawBitmap(icon, padding, padding, null);
@@ -576,6 +579,27 @@ public class ShortcutHelper {
     @CalledByNative
     private static String queryFirstWebApkPackage(String url) {
         return WebApkValidator.queryFirstWebApkPackage(ContextUtils.getApplicationContext(), url);
+    }
+
+    /**
+     * Returns true if there is a WebAPK installed that sits within {@link origin}, and false
+     * otherwise.
+     */
+    @CalledByNative
+    @VisibleForTesting
+    public static boolean doesOriginContainAnyInstalledWebApk(String origin) {
+        return WebappRegistry.getInstance().hasAtLeastOneWebApkForOrigin(
+                origin.toLowerCase(Locale.getDefault()));
+    }
+    /**
+     * Returns true if there is a TWA installed that sits within {@link origin}, and false
+     * otherwise.
+     */
+    @CalledByNative
+    @VisibleForTesting
+    public static boolean doesOriginContainAnyInstalledTwa(String origin) {
+        return WebappRegistry.getInstance().getTrustedWebActivityPermissionStore().isTwaInstalled(
+                origin.toLowerCase(Locale.getDefault()));
     }
 
     /**

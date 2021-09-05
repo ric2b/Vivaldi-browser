@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/optional.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/sessions/tab_loader_tester.h"
@@ -18,6 +19,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
+#include "content/public/test/browser_test.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
@@ -31,10 +33,11 @@ class ThumbnailWaiter : public ThumbnailImage::Observer {
   ThumbnailWaiter() = default;
   ~ThumbnailWaiter() override = default;
 
-  gfx::ImageSkia WaitForThumbnail(ThumbnailImage* thumbnail) {
+  base::Optional<gfx::ImageSkia> WaitForThumbnail(ThumbnailImage* thumbnail) {
     DCHECK(!thumbnail_);
     thumbnail_ = thumbnail;
     scoped_observer_.Add(thumbnail);
+    thumbnail_->RequestThumbnailImage();
     run_loop_.Run();
     return image_;
   }
@@ -46,15 +49,14 @@ class ThumbnailWaiter : public ThumbnailImage::Observer {
       scoped_observer_.Remove(thumbnail_);
       thumbnail_ = nullptr;
       image_ = thumbnail_image;
-      base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                    run_loop_.QuitClosure());
+      run_loop_.Quit();
     }
   }
 
  private:
   base::RunLoop run_loop_;
   ThumbnailImage* thumbnail_ = nullptr;
-  gfx::ImageSkia image_;
+  base::Optional<gfx::ImageSkia> image_;
   ScopedObserver<ThumbnailImage, ThumbnailImage::Observer> scoped_observer_{
       this};
 };
@@ -135,11 +137,14 @@ class ThumbnailTabHelperBrowserTest : public InProcessBrowserTest {
         << " tab at index " << tab_index << " already has data.";
 
     ThumbnailWaiter waiter;
-    const gfx::ImageSkia data = waiter.WaitForThumbnail(thumbnail.get());
-    EXPECT_FALSE(data.isNull())
-        << " tab at index " << tab_index << " generated empty thumbnail.";
+    const base::Optional<gfx::ImageSkia> data =
+        waiter.WaitForThumbnail(thumbnail.get());
     EXPECT_TRUE(thumbnail->has_data())
         << " tab at index " << tab_index << " thumbnail has no data.";
+    ASSERT_TRUE(data) << " observer for tab at index " << tab_index
+                      << " received no thumbnail.";
+    EXPECT_FALSE(data->isNull())
+        << " tab at index " << tab_index << " generated empty thumbnail.";
   }
 
   GURL url1_;
@@ -185,9 +190,6 @@ IN_PROC_BROWSER_TEST_F(
   AddSomeTabs(browser2, kTabCount - browser2->tab_strip_model()->count());
   EXPECT_EQ(kTabCount, browser2->tab_strip_model()->count());
   CloseBrowserSynchronously(browser2);
-
-  // Limit the number of restored tabs that are loaded.
-  TabLoaderTester::SetMaxLoadedTabCountForTesting(2);
 
   // When the tab loader is created configure it for this test. This ensures
   // that no more than 1 loading slot is used for the test.

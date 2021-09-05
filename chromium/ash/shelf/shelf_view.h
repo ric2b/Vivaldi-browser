@@ -86,10 +86,9 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
   Shelf* shelf() const { return shelf_; }
   ShelfModel* model() const { return model_; }
 
-  // Returns the size occupied by |count| app icons. If |with_overflow| is
-  // true, returns the size of |count| app icons followed by an overflow
-  // button.
-  static int GetSizeOfAppIcons(int count);
+  // Returns the size occupied by |count| app buttons. |button_size| indicates
+  // the size of each app button.
+  static int GetSizeOfAppButtons(int count, int button_size);
 
   // Initializes shelf view elements.
   void Init();
@@ -242,6 +241,15 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
   // Whether ShelfView is handling a drag and drop.
   bool IsShelfViewHandlingDragAndDrop() const;
 
+  // Returns the the shelf button size.
+  int GetButtonSize() const;
+
+  // Returns the size of a shelf button icon.
+  int GetButtonIconSize() const;
+
+  // Returns the size of the shelf item ripple ring.
+  int GetShelfItemRippleSize() const;
+
   // Return the view model for test purposes.
   const views::ViewModel* view_model_for_test() const {
     return view_model_.get();
@@ -262,14 +270,19 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
   int number_of_visible_apps() const {
     return std::max(0, last_visible_index_ + 1);
   }
-  views::View* first_visible_button_for_testing() {
-    return view_model_->view_at(first_visible_index());
-  }
   ShelfWidget* shelf_widget() const { return shelf_->shelf_widget(); }
   views::ViewModel* view_model() { return view_model_.get(); }
   const views::ViewModel* view_model() const { return view_model_.get(); }
   bool dragged_off_shelf() const { return dragged_off_shelf_; }
   ShelfID drag_and_drop_shelf_id() const { return drag_and_drop_shelf_id_; }
+
+  views::View* first_visible_button_for_testing() {
+    return view_model_->view_at(first_visible_index());
+  }
+
+  ShelfMenuModelAdapter* shelf_menu_model_adapter_for_testing() {
+    return shelf_menu_model_adapter_.get();
+  }
 
  private:
   friend class ShelfViewTestAPI;
@@ -359,9 +372,8 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
                            float scale_factor,
                            bool animate_visibility);
 
-  // Handles ripping off an item from the shelf. Returns true when the item got
-  // removed.
-  bool HandleRipOffDrag(const ui::LocatedEvent& event);
+  // Handles ripping off an item from the shelf.
+  void HandleRipOffDrag(const ui::LocatedEvent& event);
 
   // Finalize the rip off dragging by either |cancel| the action or validating.
   void FinalizeRipOffDrag(bool cancel);
@@ -392,9 +404,6 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
   // Invoked after the fading out animation for item deletion is ended.
   void OnFadeOutAnimationEnded();
 
-  // Fade in last visible item.
-  void StartFadeInLastVisibleItem();
-
   // Gets the menu anchor rect for menus. |source| is the view that is
   // asking for a menu, |location| is the location of the event, |context_menu|
   // is whether the menu is for a context or application menu.
@@ -420,6 +429,8 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
                                 ShelfItemDelegate* old_delegate,
                                 ShelfItemDelegate* delegate) override;
   void ShelfItemStatusChanged(const ShelfID& id) override;
+  void ShelfItemRippedOff() override;
+  void ShelfItemReturnedFromRipOff(int index) override;
 
   // Overridden from ShellObserver:
   void OnShelfAlignmentChanged(aura::Window* root_window,
@@ -481,6 +492,8 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
 
   bool ShouldHandleGestures(const ui::GestureEvent& event) const;
 
+  void DestroyScopedRootWindow();
+
   // Different from GetTitleForView, |view| here must be a child view.
   base::string16 GetTitleForChildView(const views::View* view) const;
 
@@ -536,6 +549,9 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
 
   // Responsible for building and running all menus.
   std::unique_ptr<ShelfMenuModelAdapter> shelf_menu_model_adapter_;
+
+  // Created when a shelf icon is pressed, so that new windows will be on the
+  // same root window as the press event.
   std::unique_ptr<ScopedRootWindowForNewWindows>
       scoped_root_window_for_new_windows_;
 
@@ -638,6 +654,9 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
 
   // The animation metrics reporter for icon fade-out animation.
   std::unique_ptr<ui::AnimationMetricsReporter> fade_out_animation_reporter_;
+
+  // Called when showing shelf context menu.
+  base::RepeatingClosure context_menu_shown_callback_;
 
   base::WeakPtrFactory<ShelfView> weak_factory_{this};
 

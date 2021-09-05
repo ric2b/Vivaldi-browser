@@ -192,10 +192,13 @@ void CastMessageHandler::SendBroadcastMessage(
   SendCastMessageToSocket(socket, message);
 }
 
-void CastMessageHandler::LaunchSession(int channel_id,
-                                       const std::string& app_id,
-                                       base::TimeDelta launch_timeout,
-                                       LaunchSessionCallback callback) {
+void CastMessageHandler::LaunchSession(
+    int channel_id,
+    const std::string& app_id,
+    base::TimeDelta launch_timeout,
+    const std::vector<std::string>& supported_app_types,
+    const std::string& app_params,
+    LaunchSessionCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CastSocket* socket = socket_service_->GetSocket(channel_id);
   if (!socket) {
@@ -214,7 +217,8 @@ void CastMessageHandler::LaunchSession(int channel_id,
                                      request_id, std::move(callback), clock_),
                                  launch_timeout)) {
     SendCastMessageToSocket(
-        socket, CreateLaunchRequest(sender_id_, request_id, app_id, locale_));
+        socket, CreateLaunchRequest(sender_id_, request_id, app_id, locale_,
+                                    supported_app_types));
   }
 }
 

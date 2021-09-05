@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/task/post_task.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -84,8 +84,7 @@ void CreateSystemWideLoopbackStreamHelper(
   const bool enable_agc = false;
   factory->CreateInputStream(
       -1, -1, media::AudioDeviceDescription::kLoopbackWithMuteDeviceId, params,
-      total_segments, enable_agc, nullptr /* processing_config */,
-      std::move(client_remote));
+      total_segments, enable_agc, std::move(client_remote));
 }
 
 }  // namespace

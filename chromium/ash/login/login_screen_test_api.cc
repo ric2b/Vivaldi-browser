@@ -12,7 +12,10 @@
 #include "ash/login/ui/lock_screen.h"
 #include "ash/login/ui/login_auth_user_view.h"
 #include "ash/login/ui/login_big_user_view.h"
+#include "ash/login/ui/login_expanded_public_account_view.h"
 #include "ash/login/ui/login_password_view.h"
+#include "ash/login/ui/login_user_menu_view.h"
+#include "ash/login/ui/login_user_view.h"
 #include "ash/shelf/login_shelf_view.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
@@ -195,6 +198,85 @@ bool LoginScreenTestApi::IsSystemInfoShown() {
 }
 
 // static
+bool LoginScreenTestApi::IsDisplayPasswordButtonShown(
+    const AccountId& account_id) {
+  if (!FocusUser(account_id)) {
+    ADD_FAILURE() << "Could not focus on user " << account_id.Serialize();
+    return false;
+  }
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginBigUserView* big_user_view = lock_contents_test.FindBigUser(account_id);
+  if (!big_user_view) {
+    ADD_FAILURE() << "Could not find user " << account_id.Serialize();
+    return false;
+  }
+  if (!big_user_view->IsAuthEnabled()) {
+    ADD_FAILURE() << "Auth is not enabled for user " << account_id.Serialize();
+    return false;
+  }
+  LoginAuthUserView::TestApi auth_test(big_user_view->auth_user());
+  if (!auth_test.HasAuthMethod(LoginAuthUserView::AUTH_PASSWORD)) {
+    ADD_FAILURE() << "Password auth is not enabled for user "
+                  << account_id.Serialize();
+    return false;
+  }
+  LoginPasswordView::TestApi password_test(auth_test.password_view());
+  bool display_password_button_visible =
+      auth_test.user_view()->current_user().show_display_password_button;
+  EXPECT_EQ(display_password_button_visible,
+            password_test.display_password_button()->GetVisible());
+  return display_password_button_visible;
+}
+
+// static
+bool LoginScreenTestApi::IsManagedIconShown(const AccountId& account_id) {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginBigUserView* big_user_view = lock_contents_test.FindBigUser(account_id);
+  if (!big_user_view) {
+    ADD_FAILURE() << "Could not find user " << account_id.Serialize();
+    return false;
+  }
+  LoginUserView::TestApi user_test(big_user_view->GetUserView());
+  auto* enterprise_icon = user_test.enterprise_icon();
+  return enterprise_icon->GetVisible();
+}
+
+// static
+bool LoginScreenTestApi::IsManagedMessageInMenuShown(
+    const AccountId& account_id) {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginBigUserView* big_user_view = lock_contents_test.FindBigUser(account_id);
+  if (!big_user_view) {
+    ADD_FAILURE() << "Could not find user " << account_id.Serialize();
+    return false;
+  }
+  LoginUserView::TestApi user_test(big_user_view->GetUserView());
+  LoginUserMenuView::TestApi user_menu_test(user_test.menu());
+  auto* managed_user_data = user_menu_test.managed_user_data();
+  return managed_user_data && managed_user_data->GetVisible();
+}
+
+// static
+bool LoginScreenTestApi::IsForcedOnlineSignin(const AccountId& account_id) {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginBigUserView* big_user_view = lock_contents_test.FindBigUser(account_id);
+  if (!big_user_view) {
+    ADD_FAILURE() << "Could not find user " << account_id.Serialize();
+    return false;
+  }
+  LoginAuthUserView::TestApi auth_test(big_user_view->auth_user());
+  return auth_test.HasAuthMethod(LoginAuthUserView::AUTH_ONLINE_SIGN_IN);
+}
+
+// static
 void LoginScreenTestApi::SubmitPassword(const AccountId& account_id,
                                         const std::string& password,
                                         bool check_if_submittable) {
@@ -206,7 +288,7 @@ void LoginScreenTestApi::SubmitPassword(const AccountId& account_id,
   LockScreen::TestApi lock_screen_test(LockScreen::Get());
   LockContentsView::TestApi lock_contents_test(
       lock_screen_test.contents_view());
-  LoginBigUserView* big_user_view = lock_contents_test.FindUser(account_id);
+  LoginBigUserView* big_user_view = lock_contents_test.FindBigUser(account_id);
   ASSERT_TRUE(big_user_view);
   ASSERT_TRUE(big_user_view->IsAuthEnabled());
   LoginAuthUserView::TestApi auth_test(big_user_view->auth_user());
@@ -276,13 +358,154 @@ bool LoginScreenTestApi::FocusUser(const AccountId& account_id) {
   LockScreen::TestApi lock_screen_test(LockScreen::Get());
   LockContentsView::TestApi lock_contents_test(
       lock_screen_test.contents_view());
-  LoginBigUserView* big_user_view = lock_contents_test.FindUser(account_id);
-  if (!big_user_view)
+  LoginBigUserView* big_user_view = lock_contents_test.FindBigUser(account_id);
+  if (!big_user_view) {
+    ADD_FAILURE() << "User not found " << account_id;
     return false;
-  LoginAuthUserView::TestApi auth_test(big_user_view->auth_user());
-  LoginUserView::TestApi user_test(auth_test.user_view());
+  }
+  LoginUserView::TestApi user_test(big_user_view->GetUserView());
   user_test.OnTap();
   return GetFocusedUser() == account_id;
+}
+
+// static
+bool LoginScreenTestApi::ExpandPublicSessionPod(const AccountId& account_id) {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginBigUserView* big_user_view = lock_contents_test.FindBigUser(account_id);
+  if (!big_user_view)
+    return false;
+  LoginPublicAccountUserView::TestApi public_account_test(
+      big_user_view->public_account());
+  if (!public_account_test.arrow_button()->GetVisible()) {
+    ADD_FAILURE() << "Arrow button not visible";
+    return false;
+  }
+  public_account_test.OnArrowTap();
+  return lock_contents_test.expanded_view();
+}
+
+// static
+bool LoginScreenTestApi::HidePublicSessionExpandedPod() {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginExpandedPublicAccountView* expanded_view =
+      lock_contents_test.expanded_view();
+  if (!expanded_view || !expanded_view->GetVisible())
+    return false;
+  expanded_view->Hide();
+  return true;
+}
+
+// static
+bool LoginScreenTestApi::IsPublicSessionExpanded() {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginExpandedPublicAccountView* expanded_view =
+      lock_contents_test.expanded_view();
+  return expanded_view && expanded_view->GetVisible();
+}
+
+// static
+bool LoginScreenTestApi::IsExpandedPublicSessionAdvanced() {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginExpandedPublicAccountView::TestApi expanded_test(
+      lock_contents_test.expanded_view());
+  return expanded_test.advanced_view()->GetVisible();
+}
+
+// static
+void LoginScreenTestApi::ClickPublicExpandedAdvancedViewButton() {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginExpandedPublicAccountView::TestApi expanded_test(
+      lock_contents_test.expanded_view());
+  expanded_test.OnAdvancedButtonTap();
+}
+
+// static
+void LoginScreenTestApi::ClickPublicExpandedSubmitButton() {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginExpandedPublicAccountView::TestApi expanded_test(
+      lock_contents_test.expanded_view());
+  expanded_test.OnSubmitButtonTap();
+}
+
+// static
+void LoginScreenTestApi::SetPublicSessionLocale(const std::string& locale) {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginExpandedPublicAccountView::TestApi expanded_test(
+      lock_contents_test.expanded_view());
+  ASSERT_TRUE(expanded_test.SelectLanguage(locale));
+}
+
+// static
+void LoginScreenTestApi::SetPublicSessionKeyboard(const std::string& ime_id) {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginExpandedPublicAccountView::TestApi expanded_test(
+      lock_contents_test.expanded_view());
+  ASSERT_TRUE(expanded_test.SelectKeyboard(ime_id))
+      << "Failed to select " << ime_id;
+}
+
+// static
+std::vector<ash::LocaleItem> LoginScreenTestApi::GetPublicSessionLocales(
+    const AccountId& account_id) {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginBigUserView* big_user_view = lock_contents_test.FindBigUser(account_id);
+  if (!big_user_view) {
+    ADD_FAILURE() << "Could not find user " << account_id.Serialize();
+    return std::vector<ash::LocaleItem>();
+  }
+  return big_user_view->public_account()
+      ->user_view()
+      ->current_user()
+      .public_account_info->available_locales;
+}
+
+// static
+std::vector<ash::LocaleItem>
+LoginScreenTestApi::GetExpandedPublicSessionLocales() {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginExpandedPublicAccountView::TestApi expanded_test(
+      lock_contents_test.expanded_view());
+  return expanded_test.GetLocales();
+}
+
+// static
+std::string LoginScreenTestApi::GetExpandedPublicSessionSelectedLocale() {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginExpandedPublicAccountView::TestApi expanded_test(
+      lock_contents_test.expanded_view());
+  return expanded_test.selected_language_item().value;
+}
+
+// static
+std::string LoginScreenTestApi::GetExpandedPublicSessionSelectedKeyboard() {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginExpandedPublicAccountView::TestApi expanded_test(
+      lock_contents_test.expanded_view());
+  return expanded_test.selected_keyboard_item().value;
 }
 
 // static
@@ -299,6 +522,20 @@ bool LoginScreenTestApi::RemoveUser(const AccountId& account_id) {
   LockContentsView::TestApi lock_contents_test(
       lock_screen_test.contents_view());
   return lock_contents_test.RemoveUser(account_id);
+}
+
+// static
+std::string LoginScreenTestApi::GetDisplayedName(const AccountId& account_id) {
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi lock_contents_test(
+      lock_screen_test.contents_view());
+  LoginUserView* user_view = lock_contents_test.FindUserView(account_id);
+  if (!user_view) {
+    ADD_FAILURE() << "Could not find user " << account_id.Serialize();
+    return std::string();
+  }
+  LoginUserView::TestApi user_view_test(user_view);
+  return base::UTF16ToUTF8(user_view_test.displayed_name());
 }
 
 // static

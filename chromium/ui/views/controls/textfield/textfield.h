@@ -31,6 +31,7 @@
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/pointer/touch_editing_controller.h"
+#include "ui/events/gesture_event_details.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/insets.h"
@@ -75,6 +76,13 @@ class VIEWS_EXPORT Textfield : public View,
  public:
   METADATA_HEADER(Textfield);
 
+  enum MenuCommands {
+    kUndo = kLastTouchEditableCommandId + 1,
+    kDelete,
+    kSelectAll,
+    kLastCommandId = kSelectAll,
+  };
+
   // Returns the text cursor blink time, or 0 for no blinking.
   static base::TimeDelta GetCaretBlinkInterval();
 
@@ -105,11 +113,14 @@ class VIEWS_EXPORT Textfield : public View,
   // textfield.
   const base::string16& GetText() const;
 
-  // Sets the text currently displayed in the Textfield.  This doesn't
-  // change the cursor position if the current cursor is within the
-  // new text's range, or moves the cursor to the end if the cursor is
-  // out of the new text's range.
+  // Sets the text currently displayed in the Textfield and the cursor position.
+  // Calls to |SetText| are often followed by updating the selection or cursor,
+  // which does not update the edit history. I.e. the cursor position after
+  // redoing this change will be determined by |cursor_position| here and not by
+  // any subsequent calls to e.g. |SetSelectedRange|. Selections are not
+  // explicitly set here since redo's clear the selection anyways.
   void SetText(const base::string16& new_text);
+  void SetText(const base::string16& new_text, size_t cursor_position);
 
   // Appends the given string to the previously-existing text in the field.
   void AppendText(const base::string16& new_text);
@@ -136,8 +147,9 @@ class VIEWS_EXPORT Textfield : public View,
   // Clears the selection within the edit field and sets the caret to the end.
   void ClearSelection();
 
-  // Checks if there is any selected text.
-  bool HasSelection() const;
+  // Checks if there is any selected text. |primary_only| indicates whether
+  // secondary selections should also be considered.
+  bool HasSelection(bool primary_only = false) const;
 
   // Gets/sets the text color to be used when painting the Textfield.
   SkColor GetTextColor() const;
@@ -206,6 +218,7 @@ class VIEWS_EXPORT Textfield : public View,
 
   // Selects the specified logical text range.
   void SetSelectedRange(const gfx::Range& range);
+  void SetSelectedRange(const gfx::Range& range, bool primary);
 
   // Gets the text selection model.
   const gfx::SelectionModel& GetSelectionModel() const;
@@ -413,10 +426,13 @@ class VIEWS_EXPORT Textfield : public View,
   // override this to customize when the placeholder text is shown.
   virtual bool ShouldShowPlaceholderText() const;
 
- protected:
   // Like RequestFocus, but explicitly states that the focus is triggered by
   // a pointer event.
   void RequestFocusWithPointer(ui::EventPointerType pointer_type);
+
+  // Like RequestFocus, but explicitly states that the focus is triggered by a
+  // gesture event.
+  void RequestFocusForGesture(const ui::GestureEventDetails& details);
 
  private:
   friend class TextfieldTestApi;
@@ -641,7 +657,7 @@ class VIEWS_EXPORT Textfield : public View,
   std::unique_ptr<views::MenuRunner> context_menu_runner_;
 
   // View containing the text cursor.
-  View cursor_view_;
+  View* cursor_view_ = nullptr;
 
 #if defined(OS_MACOSX)
   // Used to track active password input sessions.

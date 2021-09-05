@@ -10,6 +10,8 @@
 
 #include "base/optional.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd.mojom.h"
+#include "chromeos/services/cros_healthd/public/mojom/cros_healthd_events.mojom.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 
 namespace chromeos {
 namespace cros_healthd {
@@ -149,6 +151,26 @@ class ServiceConnection {
       mojom::CrosHealthdDiagnosticsService::RunBatteryDischargeRoutineCallback
           callback) = 0;
 
+  // Subscribes to cros_healthd's Bluetooth-related events. See
+  // src/chromeos/services/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void AddBluetoothObserver(
+      mojo::PendingRemote<mojom::CrosHealthdBluetoothObserver>
+          pending_observer) = 0;
+
+  // Subscribes to cros_healthd's lid-related events. See
+  // src/chromeos/services/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void AddLidObserver(
+      mojo::PendingRemote<mojom::CrosHealthdLidObserver> pending_observer) = 0;
+
+  // Subscribes to cros_healthd's power-related events. See
+  // src/chromeos/services/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void AddPowerObserver(
+      mojo::PendingRemote<mojom::CrosHealthdPowerObserver>
+          pending_observer) = 0;
+
   // Gather pieces of information about the platform. See
   // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
   // details.
@@ -162,6 +184,13 @@ class ServiceConnection {
   // details.
   virtual void GetDiagnosticsService(
       mojom::CrosHealthdDiagnosticsServiceRequest service) = 0;
+
+  // Binds |service| to an implementation of CrosHealthdProbeService. In
+  // production, this implementation is provided by cros_healthd. See
+  // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void GetProbeService(
+      mojom::CrosHealthdProbeServiceRequest service) = 0;
 
  protected:
   ServiceConnection() = default;

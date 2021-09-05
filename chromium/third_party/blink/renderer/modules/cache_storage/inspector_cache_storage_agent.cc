@@ -20,10 +20,10 @@
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_vector.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fileapi/file_reader_loader.h"
 #include "third_party/blink/renderer/core/fileapi/file_reader_loader_client.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/inspector/inspected_frames.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
@@ -94,11 +94,7 @@ ProtocolResponse GetExecutionContext(InspectedFrames* frames,
     return ProtocolResponse::ServerError(msg.Utf8());
   }
 
-  blink::Document* document = frame->GetDocument();
-  if (!document)
-    return ProtocolResponse::ServerError("No execution context found");
-
-  *context = document->ToExecutionContext();
+  *context = frame->DomWindow();
 
   return ProtocolResponse::Success();
 }
@@ -264,8 +260,7 @@ class ResponsesAccumulator : public RefCounted<ResponsesAccumulator> {
       // a body.
       DCHECK(!request->blob && !request->body);
       auto request_clone_without_body = mojom::blink::FetchAPIRequest::New(
-          request->mode, request->is_main_resource_load,
-          request->request_context_type, request->destination,
+          request->mode, request->is_main_resource_load, request->destination,
           request->frame_type, request->url, request->method, request->headers,
           nullptr /* blob */, nullptr /* body */, request->referrer.Clone(),
           request->credentials_mode, request->cache_mode,

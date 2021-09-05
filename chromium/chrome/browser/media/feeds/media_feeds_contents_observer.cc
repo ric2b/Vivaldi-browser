@@ -12,6 +12,9 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_entry_builder.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "url/origin.h"
 
@@ -27,6 +30,17 @@ void MediaFeedsContentsObserver::DidFinishNavigation(
     return;
 
   render_frame_.reset();
+
+  auto new_origin = url::Origin::Create(web_contents()->GetLastCommittedURL());
+  if (last_origin_ == new_origin)
+    return;
+
+  ResetFeed();
+  last_origin_ = new_origin;
+}
+
+void MediaFeedsContentsObserver::WebContentsDestroyed() {
+  ResetFeed();
 }
 
 void MediaFeedsContentsObserver::DidFinishLoad(
@@ -34,6 +48,13 @@ void MediaFeedsContentsObserver::DidFinishLoad(
     const GURL& validated_url) {
   if (render_frame_host->GetParent() || !GetService())
     return;
+
+  // We should only discover Media Feeds on secure origins.
+  if (!validated_url.SchemeIsCryptographic()) {
+    if (test_closure_)
+      std::move(test_closure_).Run();
+    return;
+  }
 
   render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
       &render_frame_);
@@ -61,7 +82,17 @@ void MediaFeedsContentsObserver::DidFindMediaFeed(
       return;
     }
 
+    CHECK(url->SchemeIsCryptographic());
     service->DiscoverMediaFeed(*url);
+
+    ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
+    if (!ukm_recorder)
+      return;
+
+    ukm::builders::Media_Feed_Discover(
+        web_contents()->GetMainFrame()->GetPageUkmSourceId())
+        .SetHasMediaFeed(true)
+        .Record(ukm_recorder);
   }
 
   if (test_closure_)
@@ -74,6 +105,15 @@ MediaFeedsContentsObserver::GetService() {
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
 
   return media_history::MediaHistoryKeyedServiceFactory::GetForProfile(profile);
+}
+
+void MediaFeedsContentsObserver::ResetFeed() {
+  if (!last_origin_.has_value())
+    return;
+
+  GetService()->ResetMediaFeed(*last_origin_,
+                               media_feeds::mojom::ResetReason::kVisit);
+  last_origin_.reset();
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(MediaFeedsContentsObserver)

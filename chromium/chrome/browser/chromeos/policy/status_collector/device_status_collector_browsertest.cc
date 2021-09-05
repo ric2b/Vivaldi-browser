@@ -107,6 +107,8 @@ using ::testing::ReturnRef;
 
 namespace em = enterprise_management;
 
+namespace cros_healthd = chromeos::cros_healthd::mojom;
+
 namespace {
 
 // Test values for cros_healthd:
@@ -140,13 +142,20 @@ constexpr char kFakeBatteryStatus[] = "fake_battery_status";
 // Cached VPD test values:
 constexpr char kFakeSkuNumber[] = "fake_sku_number";
 // CPU test values:
+constexpr uint32_t kFakeNumTotalThreads = 8;
 constexpr char kFakeModelName[] = "fake_cpu_model_name";
-constexpr chromeos::cros_healthd::mojom::CpuArchitectureEnum
-    kFakeMojoArchitecture =
-        chromeos::cros_healthd::mojom::CpuArchitectureEnum::kX86_64;
+constexpr cros_healthd::CpuArchitectureEnum kFakeMojoArchitecture =
+    cros_healthd::CpuArchitectureEnum::kX86_64;
 constexpr em::CpuInfo::Architecture kFakeProtoArchitecture =
     em::CpuInfo::X86_64;
 constexpr uint32_t kFakeMaxClockSpeed = 3400000;
+constexpr uint32_t kFakeScalingMaxFrequency = 2700000;
+constexpr uint32_t kFakeScalingCurFrequency = 2400000;
+// Since this number is divided by the result of the sysconf(_SC_CLK_TCK)
+// syscall, we need it to be 0 to avoid flaky tests,
+constexpr uint32_t kFakeIdleTime = 0;
+constexpr char kFakeCStateName[] = "fake_c_state_name";
+constexpr uint64_t kFakeTimeInStateSinceLastBoot = 87;
 // CPU Temperature test values:
 constexpr char kFakeCpuLabel[] = "fake_cpu_label";
 constexpr int kFakeCpuTemp = 91832;
@@ -172,6 +181,9 @@ constexpr uint32_t kFakeMaxBrightness = 769;
 constexpr uint32_t kFakeBrightness = 124;
 // Fan test values:
 constexpr uint32_t kFakeSpeedRpm = 1225;
+// Stateful partition test values:
+constexpr uint64_t kFakeAvailableSpace = 9238571212ul;
+constexpr uint64_t kFakeTotalSpace = 23420982409ul;
 
 // Time delta representing 1 hour time interval.
 constexpr TimeDelta kHour = TimeDelta::FromHours(1);
@@ -247,7 +259,8 @@ class TestingDeviceStatusCollector : public policy::DeviceStatusCollector {
   TestingDeviceStatusCollector(
       PrefService* pref_service,
       chromeos::system::StatisticsProvider* provider,
-      std::unique_ptr<TestingDeviceStatusCollectorOptions> options)
+      std::unique_ptr<TestingDeviceStatusCollectorOptions> options,
+      base::SimpleTestClock* clock)
       : policy::DeviceStatusCollector(pref_service,
                                       provider,
                                       options->volume_info_fetcher,
@@ -259,15 +272,19 @@ class TestingDeviceStatusCollector : public policy::DeviceStatusCollector {
                                       options->stateful_partition_info_fetcher,
                                       options->cros_healthd_data_fetcher,
                                       options->graphics_status_fetcher,
-                                      options->crash_report_info_fetcher) {
+                                      options->crash_report_info_fetcher),
+        test_clock_(*clock) {
     // Set the baseline time to a fixed value (1 hour after day start) to
     // prevent test flakiness due to a single activity period spanning two days.
-    SetBaselineTime(Time::Now().LocalMidnight() + kHour);
+    clock_ = clock;
+    test_clock_.SetNow(Time::Now().LocalMidnight() + kHour);
   }
 
   void Simulate(ui::IdleState* states, int len) {
-    for (int i = 0; i < len; i++)
+    for (int i = 0; i < len; i++) {
+      test_clock_.Advance(policy::DeviceStatusCollector::kIdlePollInterval);
       ProcessIdleState(states[i]);
+    }
   }
 
   void set_max_stored_past_activity_interval(TimeDelta value) {
@@ -276,12 +293,6 @@ class TestingDeviceStatusCollector : public policy::DeviceStatusCollector {
 
   void set_max_stored_future_activity_interval(TimeDelta value) {
     max_stored_future_activity_interval_ = value;
-  }
-
-  // Reset the baseline time.
-  void SetBaselineTime(Time time) {
-    baseline_time_ = time;
-    baseline_offset_periods_ = 0;
   }
 
   void set_kiosk_account(std::unique_ptr<policy::DeviceLocalAccount> account) {
@@ -318,20 +329,8 @@ class TestingDeviceStatusCollector : public policy::DeviceStatusCollector {
     ADD_FAILURE();
   }
 
-  // Each time this is called, returns a time that is a fixed increment
-  // later than the previous time.
-  Time GetCurrentTime() override {
-    int poll_interval = policy::DeviceStatusCollector::kIdlePollIntervalSeconds;
-    return baseline_time_ +
-           TimeDelta::FromSeconds(poll_interval * baseline_offset_periods_++);
-  }
-
  private:
-  // Baseline time for the fake times returned from GetCurrentTime().
-  Time baseline_time_;
-
-  // The number of simulated periods since the baseline time.
-  int baseline_offset_periods_;
+  base::SimpleTestClock& test_clock_;
 
   std::unique_ptr<policy::DeviceLocalAccount> kiosk_account_;
 };
@@ -447,54 +446,99 @@ em::StatefulPartitionInfo GetFakeStatefulPartitionInfo(
 }
 
 void GetEmptyCrosHealthdData(
+    policy::CrosHealthdCollectionMode mode,
     policy::DeviceStatusCollector::CrosHealthdDataReceiver receiver) {
-  chromeos::cros_healthd::mojom::TelemetryInfoPtr empty_info;
+  cros_healthd::TelemetryInfoPtr empty_info;
   base::circular_deque<std::unique_ptr<policy::SampledData>> empty_samples;
   std::move(receiver).Run(std::move(empty_info), empty_samples);
 }
 
-void GetFakeCrosHealthdData(
-    policy::DeviceStatusCollector::CrosHealthdDataReceiver receiver) {
-  // Create fake TelemetryInfo.
-  chromeos::cros_healthd::mojom::SmartBatteryInfo smart_battery_info(
-      kFakeSmartBatteryManufactureDate, kFakeSmartBatteryTemperature);
-  chromeos::cros_healthd::mojom::BatteryInfo battery_info(
-      kFakeBatteryCycleCount, kFakeBatteryVoltageNow, kFakeBatteryVendor,
-      kFakeBatterySerial, kFakeBatteryChargeFullDesign, kFakeBatteryChargeFull,
-      kFakeBatteryVoltageMinDesign, kFakeBatteryModel, kFakeBatteryChargeNow,
-      kFakeBatteryCurrentNow, kFakeBatteryTechnology, kFakeBatteryStatus,
-      smart_battery_info.Clone());
-  chromeos::cros_healthd::mojom::CachedVpdInfo cached_vpd_info(kFakeSkuNumber);
-  chromeos::cros_healthd::mojom::CpuInfo cpu_info(
-      kFakeModelName, kFakeMojoArchitecture, kFakeMaxClockSpeed);
-  std::vector<chromeos::cros_healthd::mojom::CpuInfoPtr> cpu_vector;
-  cpu_vector.push_back(cpu_info.Clone());
-  chromeos::cros_healthd::mojom::NonRemovableBlockDeviceInfo storage_info(
-      kFakeStoragePath, kFakeStorageSize, kFakeStorageType, kFakeStorageManfid,
-      kFakeStorageName, kFakeStorageSerial);
-  std::vector<chromeos::cros_healthd::mojom::NonRemovableBlockDeviceInfoPtr>
-      storage_vector;
-  storage_vector.push_back(storage_info.Clone());
-  base::Optional<std::vector<
-      chromeos::cros_healthd::mojom::NonRemovableBlockDeviceInfoPtr>>
-      block_device_info(std::move(storage_vector));
-  chromeos::cros_healthd::mojom::TimezoneInfo timezone_info(kPosixTimezone,
-                                                            kTimezoneRegion);
-  chromeos::cros_healthd::mojom::MemoryInfo memory_info(
-      kFakeTotalMemory, kFakeFreeMemory, kFakeAvailableMemory, kFakePageFaults);
-  std::vector<chromeos::cros_healthd::mojom::BacklightInfoPtr> backlight_vector;
-  chromeos::cros_healthd::mojom::BacklightInfo backlight_info(
-      kFakeBacklightPath, kFakeMaxBrightness, kFakeBrightness);
-  backlight_vector.push_back(backlight_info.Clone());
-  std::vector<chromeos::cros_healthd::mojom::FanInfoPtr> fan_vector;
-  chromeos::cros_healthd::mojom::FanInfo fan_info(kFakeSpeedRpm);
-  fan_vector.push_back(fan_info.Clone());
-  chromeos::cros_healthd::mojom::TelemetryInfo fake_info(
-      battery_info.Clone(), std::move(block_device_info),
-      cached_vpd_info.Clone(), std::move(cpu_vector), timezone_info.Clone(),
-      memory_info.Clone(), std::move(backlight_vector), std::move(fan_vector));
+cros_healthd::BatteryResultPtr CreateBatteryResult() {
+  return cros_healthd::BatteryResult::NewBatteryInfo(
+      cros_healthd::BatteryInfo::New(
+          kFakeBatteryCycleCount, kFakeBatteryVoltageNow, kFakeBatteryVendor,
+          kFakeBatterySerial, kFakeBatteryChargeFullDesign,
+          kFakeBatteryChargeFull, kFakeBatteryVoltageMinDesign,
+          kFakeBatteryModel, kFakeBatteryChargeNow, kFakeBatteryCurrentNow,
+          kFakeBatteryTechnology, kFakeBatteryStatus,
+          kFakeSmartBatteryManufactureDate,
+          cros_healthd::UInt64Value::New(kFakeSmartBatteryTemperature)));
+}
 
-  // Create fake SampledData.
+cros_healthd::NonRemovableBlockDeviceResultPtr CreateBlockDeviceResult() {
+  std::vector<cros_healthd::NonRemovableBlockDeviceInfoPtr> storage_vector;
+  storage_vector.push_back(cros_healthd::NonRemovableBlockDeviceInfo::New(
+      kFakeStoragePath, kFakeStorageSize, kFakeStorageType, kFakeStorageManfid,
+      kFakeStorageName, kFakeStorageSerial));
+  return cros_healthd::NonRemovableBlockDeviceResult::NewBlockDeviceInfo(
+      std::move(storage_vector));
+}
+
+cros_healthd::CachedVpdResultPtr CreateVpdResult() {
+  return cros_healthd::CachedVpdResult::NewVpdInfo(
+      cros_healthd::CachedVpdInfo::New(kFakeSkuNumber));
+}
+
+std::vector<cros_healthd::CpuCStateInfoPtr> CreateCStateInfo() {
+  std::vector<cros_healthd::CpuCStateInfoPtr> c_states;
+  c_states.push_back(cros_healthd::CpuCStateInfo::New(
+      kFakeCStateName, kFakeTimeInStateSinceLastBoot));
+  return c_states;
+}
+
+std::vector<cros_healthd::LogicalCpuInfoPtr> CreateLogicalCpu() {
+  std::vector<cros_healthd::LogicalCpuInfoPtr> logical_cpus;
+  logical_cpus.push_back(cros_healthd::LogicalCpuInfo::New(
+      kFakeMaxClockSpeed, kFakeScalingMaxFrequency, kFakeScalingCurFrequency,
+      kFakeIdleTime, CreateCStateInfo()));
+  return logical_cpus;
+}
+
+std::vector<cros_healthd::PhysicalCpuInfoPtr> CreatePhysicalCpu() {
+  std::vector<cros_healthd::PhysicalCpuInfoPtr> physical_cpus;
+  physical_cpus.push_back(
+      cros_healthd::PhysicalCpuInfo::New(kFakeModelName, CreateLogicalCpu()));
+  return physical_cpus;
+}
+
+cros_healthd::CpuResultPtr CreateCpuResult() {
+  return cros_healthd::CpuResult::NewCpuInfo(cros_healthd::CpuInfo::New(
+      kFakeNumTotalThreads, kFakeMojoArchitecture, CreatePhysicalCpu()));
+}
+
+cros_healthd::TimezoneResultPtr CreateTimezoneResult() {
+  return cros_healthd::TimezoneResult::NewTimezoneInfo(
+      cros_healthd::TimezoneInfo::New(kPosixTimezone, kTimezoneRegion));
+}
+
+cros_healthd::MemoryResultPtr CreateMemoryResult() {
+  return cros_healthd::MemoryResult::NewMemoryInfo(
+      cros_healthd::MemoryInfo::New(kFakeTotalMemory, kFakeFreeMemory,
+                                    kFakeAvailableMemory, kFakePageFaults));
+}
+
+cros_healthd::BacklightResultPtr CreateBacklightResult() {
+  std::vector<cros_healthd::BacklightInfoPtr> backlight_vector;
+  backlight_vector.push_back(cros_healthd::BacklightInfo::New(
+      kFakeBacklightPath, kFakeMaxBrightness, kFakeBrightness));
+  return cros_healthd::BacklightResult::NewBacklightInfo(
+      std::move(backlight_vector));
+}
+
+cros_healthd::FanResultPtr CreateFanResult() {
+  std::vector<cros_healthd::FanInfoPtr> fan_vector;
+  fan_vector.push_back(cros_healthd::FanInfo::New(kFakeSpeedRpm));
+  return cros_healthd::FanResult::NewFanInfo(std::move(fan_vector));
+}
+
+cros_healthd::StatefulPartitionResultPtr CreateStatefulPartitionResult() {
+  return cros_healthd::StatefulPartitionResult::NewPartitionInfo(
+      cros_healthd::StatefulPartitionInfo::New(kFakeAvailableSpace,
+                                               kFakeTotalSpace));
+}
+
+base::circular_deque<std::unique_ptr<policy::SampledData>>
+CreateFakeSampleData() {
   em::CPUTempInfo fake_cpu_temp_sample;
   fake_cpu_temp_sample.set_cpu_label(kFakeCpuLabel);
   fake_cpu_temp_sample.set_cpu_temp(kFakeCpuTemp);
@@ -507,11 +551,65 @@ void GetFakeCrosHealthdData(
   fake_battery_sample.set_status(kFakeBatteryStatus);
   auto sample = std::make_unique<policy::SampledData>();
   sample->cpu_samples[fake_cpu_temp_sample.cpu_label()] = fake_cpu_temp_sample;
-  sample->battery_samples[battery_info.model_name] = fake_battery_sample;
+  sample->battery_samples[kFakeBatteryModel] = fake_battery_sample;
   base::circular_deque<std::unique_ptr<policy::SampledData>> samples;
   samples.push_back(std::move(sample));
+  return samples;
+}
 
-  std::move(receiver).Run(fake_info.Clone(), samples);
+// Creates cros_healthd data with only the battery category populated.
+void GetFakeCrosHealthdBatteryData(
+    policy::DeviceStatusCollector::CrosHealthdDataReceiver receiver) {
+  cros_healthd::TelemetryInfo fake_info;
+  fake_info.battery_result = CreateBatteryResult();
+  std::move(receiver).Run(fake_info.Clone(), CreateFakeSampleData());
+}
+
+// Fake cros_healthd fetching function. Returns data with all probe categories
+// populated if |mode| is kFull or only the battery category if |mode| is
+// kBattery.
+void FetchFakeFullCrosHealthdData(
+    policy::CrosHealthdCollectionMode mode,
+    policy::DeviceStatusCollector::CrosHealthdDataReceiver receiver) {
+  switch (mode) {
+    case policy::CrosHealthdCollectionMode::kFull: {
+      cros_healthd::TelemetryInfo fake_info(
+          CreateBatteryResult(), CreateBlockDeviceResult(), CreateVpdResult(),
+          CreateCpuResult(), CreateTimezoneResult(), CreateMemoryResult(),
+          CreateBacklightResult(), CreateFanResult(),
+          CreateStatefulPartitionResult());
+
+      std::move(receiver).Run(fake_info.Clone(), CreateFakeSampleData());
+      return;
+    }
+
+    case policy::CrosHealthdCollectionMode::kBattery: {
+      GetFakeCrosHealthdBatteryData(std::move(receiver));
+      return;
+    }
+  }
+}
+
+// Fake cros_healthd fetching function. Returns data with only the CPU and
+// battery probe categories populated if |mode| is kFull or only the
+// battery category if |mode| is kBattery.
+void FetchFakePartialCrosHealthdData(
+    policy::CrosHealthdCollectionMode mode,
+    policy::DeviceStatusCollector::CrosHealthdDataReceiver receiver) {
+  switch (mode) {
+    case policy::CrosHealthdCollectionMode::kFull: {
+      cros_healthd::TelemetryInfo fake_info;
+      fake_info.battery_result = CreateBatteryResult();
+      fake_info.cpu_result = CreateCpuResult();
+      std::move(receiver).Run(fake_info.Clone(), CreateFakeSampleData());
+      return;
+    }
+
+    case policy::CrosHealthdCollectionMode::kBattery: {
+      GetFakeCrosHealthdBatteryData(std::move(receiver));
+      return;
+    }
+  }
 }
 
 void GetEmptyGraphicsStatus(
@@ -670,7 +768,8 @@ class DeviceStatusCollectorTest : public testing::Test {
       std::unique_ptr<TestingDeviceStatusCollectorOptions> options) {
     std::vector<em::VolumeInfo> expected_volume_info;
     status_collector_ = std::make_unique<TestingDeviceStatusCollector>(
-        &local_state_, &fake_statistics_provider_, std::move(options));
+        &local_state_, &fake_statistics_provider_, std::move(options),
+        &test_clock_);
   }
 
   void RestartStatusCollector() {
@@ -678,9 +777,7 @@ class DeviceStatusCollectorTest : public testing::Test {
   }
 
   void WriteUploadLog(const std::string& log_data) {
-    ASSERT_GT(base::WriteFile(log_path(), log_data.c_str(),
-                              static_cast<int>(log_data.size())),
-              0);
+    ASSERT_TRUE(base::WriteFile(log_path(), log_data));
   }
 
   base::FilePath log_path() {
@@ -856,7 +953,7 @@ class DeviceStatusCollectorTest : public testing::Test {
 
   // Convenience method.
   int64_t ActivePeriodMilliseconds() {
-    return policy::DeviceStatusCollector::kIdlePollIntervalSeconds * 1000;
+    return policy::DeviceStatusCollector::kIdlePollInterval.InMilliseconds();
   }
 
   // Since this is a unit test running in browser_tests we must do additional
@@ -872,6 +969,8 @@ class DeviceStatusCollectorTest : public testing::Test {
   chromeos::ScopedTestingCrosSettings scoped_testing_cros_settings_;
   chromeos::FakeOwnerSettingsService owner_settings_service_{
       scoped_testing_cros_settings_.device_settings(), nullptr};
+  // local_state_ should be destructed after TestingProfile.
+  TestingPrefServiceSimple local_state_;
   // Only set after MockRunningKioskApp was called.
   std::unique_ptr<TestingProfile> testing_profile_;
   // Only set after MockAutoLaunchArcKioskApp was called.
@@ -883,7 +982,6 @@ class DeviceStatusCollectorTest : public testing::Test {
   em::DeviceStatusReportRequest device_status_;
   em::SessionStatusReportRequest session_status_;
   bool got_session_status_;
-  TestingPrefServiceSimple local_state_;
   TestingPrefServiceSimple profile_pref_service_;
   std::unique_ptr<TestingDeviceStatusCollector> status_collector_;
   const policy::DeviceLocalAccount fake_kiosk_device_local_account_;
@@ -1055,32 +1153,29 @@ TEST_F(DeviceStatusCollectorTest, MaxStoredPeriods) {
       TimeDelta::FromDays(kMaxDays - 1));
   status_collector_->set_max_stored_future_activity_interval(
       TimeDelta::FromDays(1));
-  Time baseline = Time::Now().LocalMidnight();
+  test_clock_.SetNow(Time::Now().LocalMidnight());
 
   // Simulate 12 active periods.
   for (int i = 0; i < kMaxDays + 2; i++) {
     status_collector_->Simulate(test_states,
                                 sizeof(test_states) / sizeof(ui::IdleState));
     // Advance the simulated clock by a day.
-    baseline += TimeDelta::FromDays(1);
-    status_collector_->SetBaselineTime(baseline);
+    test_clock_.Advance(TimeDelta::FromDays(1));
   }
 
   // Check that we don't exceed the max number of periods.
   GetStatus();
-  EXPECT_EQ(kMaxDays - 1, device_status_.active_periods_size());
+  EXPECT_EQ(kMaxDays, device_status_.active_periods_size());
 
   // Simulate some future times.
   for (int i = 0; i < kMaxDays + 2; i++) {
     status_collector_->Simulate(test_states,
                                 sizeof(test_states) / sizeof(ui::IdleState));
     // Advance the simulated clock by a day.
-    baseline += TimeDelta::FromDays(1);
-    status_collector_->SetBaselineTime(baseline);
+    test_clock_.Advance(TimeDelta::FromDays(1));
   }
   // Set the clock back so the previous simulated times are in the future.
-  baseline -= TimeDelta::FromDays(20);
-  status_collector_->SetBaselineTime(baseline);
+  test_clock_.Advance(-TimeDelta::FromDays(20));
 
   // Collect one more data point to trigger pruning.
   status_collector_->Simulate(test_states, 1);
@@ -1121,9 +1216,8 @@ TEST_F(DeviceStatusCollectorTest, ActivityCrossingMidnight) {
   scoped_testing_cros_settings_.device_settings()->SetBoolean(
       chromeos::kReportDeviceActivityTimes, true);
 
-  // Set the baseline time to 10 seconds after midnight.
-  status_collector_->SetBaselineTime(Time::Now().LocalMidnight() +
-                                     TimeDelta::FromSeconds(10));
+  // Set the baseline time to 20 seconds before midnight.
+  test_clock_.SetNow(Time::Now().LocalMidnight() - TimeDelta::FromSeconds(20));
 
   status_collector_->Simulate(test_states, 1);
   GetStatus();
@@ -1312,8 +1406,8 @@ TEST_F(DeviceStatusCollectorTest, DevSwitchBootMode) {
 TEST_F(DeviceStatusCollectorTest, WriteProtectSwitch) {
   // Test that write protect switch is reported by default.
   fake_statistics_provider_.SetMachineStatistic(
-      chromeos::system::kFirmwareWriteProtectBootKey,
-      chromeos::system::kFirmwareWriteProtectBootValueOn);
+      chromeos::system::kFirmwareWriteProtectCurrentKey,
+      chromeos::system::kFirmwareWriteProtectCurrentValueOn);
   GetStatus();
   EXPECT_TRUE(device_status_.write_protect_switch());
 
@@ -1331,24 +1425,24 @@ TEST_F(DeviceStatusCollectorTest, WriteProtectSwitch) {
       chromeos::kReportDeviceHardwareStatus, true);
 
   fake_statistics_provider_.SetMachineStatistic(
-      chromeos::system::kFirmwareWriteProtectBootKey, "(error)");
+      chromeos::system::kFirmwareWriteProtectCurrentKey, "(error)");
   GetStatus();
   EXPECT_FALSE(device_status_.has_write_protect_switch());
 
   fake_statistics_provider_.SetMachineStatistic(
-      chromeos::system::kFirmwareWriteProtectBootKey, " ");
+      chromeos::system::kFirmwareWriteProtectCurrentKey, " ");
   GetStatus();
   EXPECT_FALSE(device_status_.has_write_protect_switch());
 
   fake_statistics_provider_.SetMachineStatistic(
-      chromeos::system::kFirmwareWriteProtectBootKey,
-      chromeos::system::kFirmwareWriteProtectBootValueOn);
+      chromeos::system::kFirmwareWriteProtectCurrentKey,
+      chromeos::system::kFirmwareWriteProtectCurrentValueOn);
   GetStatus();
   EXPECT_TRUE(device_status_.write_protect_switch());
 
   fake_statistics_provider_.SetMachineStatistic(
-      chromeos::system::kFirmwareWriteProtectBootKey,
-      chromeos::system::kFirmwareWriteProtectBootValueOff);
+      chromeos::system::kFirmwareWriteProtectCurrentKey,
+      chromeos::system::kFirmwareWriteProtectCurrentValueOff);
   GetStatus();
   EXPECT_FALSE(device_status_.write_protect_switch());
 }
@@ -2884,7 +2978,7 @@ TEST_F(DeviceStatusCollectorTest, TestCrosHealthdInfo) {
   // arbitrary values.
   auto options = CreateEmptyDeviceStatusCollectorOptions();
   options->cros_healthd_data_fetcher =
-      base::BindRepeating(&GetFakeCrosHealthdData);
+      base::BindRepeating(&FetchFakeFullCrosHealthdData);
   RestartStatusCollector(std::move(options));
 
   // If none of the relevant policies are set, expect that the data from
@@ -2968,11 +3062,29 @@ TEST_F(DeviceStatusCollectorTest, TestCrosHealthdInfo) {
   EXPECT_EQ(device_status_.system_status().vpd_sku_number(), kFakeSkuNumber);
 
   // Verify the CPU data.
+  ASSERT_TRUE(device_status_.has_global_cpu_info());
+  EXPECT_EQ(device_status_.global_cpu_info().num_total_threads(),
+            kFakeNumTotalThreads);
+
+  // Verify the physical CPU.
   ASSERT_EQ(device_status_.cpu_info_size(), 1);
   const auto& cpu = device_status_.cpu_info(0);
   EXPECT_EQ(cpu.model_name(), kFakeModelName);
   EXPECT_EQ(cpu.architecture(), kFakeProtoArchitecture);
   EXPECT_EQ(cpu.max_clock_speed_khz(), kFakeMaxClockSpeed);
+  // Verify the logical CPU.
+  ASSERT_EQ(cpu.logical_cpus_size(), 1);
+  const auto& logical_cpu = cpu.logical_cpus(0);
+  EXPECT_EQ(logical_cpu.scaling_max_frequency_khz(), kFakeScalingMaxFrequency);
+  EXPECT_EQ(logical_cpu.scaling_current_frequency_khz(),
+            kFakeScalingCurFrequency);
+  EXPECT_EQ(logical_cpu.idle_time_seconds(), kFakeIdleTime);
+  // Verify the C-state data.
+  ASSERT_EQ(logical_cpu.c_states_size(), 1);
+  const auto& c_state = logical_cpu.c_states(0);
+  EXPECT_EQ(c_state.name(), kFakeCStateName);
+  EXPECT_EQ(c_state.time_in_state_since_last_boot_us(),
+            kFakeTimeInStateSinceLastBoot);
 
   // Verify the Timezone info.
   ASSERT_TRUE(device_status_.has_timezone_info());
@@ -2999,6 +3111,64 @@ TEST_F(DeviceStatusCollectorTest, TestCrosHealthdInfo) {
   ASSERT_EQ(device_status_.fan_info_size(), 1);
   const auto& fan = device_status_.fan_info(0);
   EXPECT_EQ(fan.speed_rpm(), kFakeSpeedRpm);
+}
+
+TEST_F(DeviceStatusCollectorTest, TestPartialCrosHealthdInfo) {
+  // Create a fake partial response from cros_healthd and populate it with some
+  // arbitrary values.
+  auto options = CreateEmptyDeviceStatusCollectorOptions();
+  options->cros_healthd_data_fetcher =
+      base::BindRepeating(&FetchFakePartialCrosHealthdData);
+  RestartStatusCollector(std::move(options));
+
+  scoped_testing_cros_settings_.device_settings()->SetBoolean(
+      chromeos::kReportDeviceCpuInfo, true);
+  scoped_testing_cros_settings_.device_settings()->SetBoolean(
+      chromeos::kReportDevicePowerStatus, true);
+  GetStatus();
+
+  // Check that the CPU temperature samples are stored correctly.
+  ASSERT_EQ(device_status_.cpu_temp_infos_size(), 1);
+  const auto& cpu_sample = device_status_.cpu_temp_infos(0);
+  EXPECT_EQ(cpu_sample.cpu_label(), kFakeCpuLabel);
+  EXPECT_EQ(cpu_sample.cpu_temp(), kFakeCpuTemp);
+  EXPECT_EQ(cpu_sample.timestamp(), kFakeCpuTimestamp);
+
+  // Verify the CPU data.
+  ASSERT_EQ(device_status_.cpu_info_size(), 1);
+  const auto& cpu = device_status_.cpu_info(0);
+  EXPECT_EQ(cpu.model_name(), kFakeModelName);
+  EXPECT_EQ(cpu.architecture(), kFakeProtoArchitecture);
+  EXPECT_EQ(cpu.max_clock_speed_khz(), kFakeMaxClockSpeed);
+
+  // Verify the battery data.
+  ASSERT_TRUE(device_status_.has_power_status());
+  ASSERT_EQ(device_status_.power_status().batteries_size(), 1);
+  const auto& battery = device_status_.power_status().batteries(0);
+  EXPECT_EQ(battery.serial(), kFakeBatterySerial);
+  EXPECT_EQ(battery.manufacturer(), kFakeBatteryVendor);
+  EXPECT_EQ(battery.design_capacity(), kExpectedBatteryChargeFullDesign);
+  EXPECT_EQ(battery.full_charge_capacity(), kExpectedBatteryChargeFull);
+  EXPECT_EQ(battery.cycle_count(), kFakeBatteryCycleCount);
+  EXPECT_EQ(battery.design_min_voltage(), kExpectedBatteryVoltageMinDesign);
+  EXPECT_EQ(battery.manufacture_date(), kFakeSmartBatteryManufactureDate);
+  EXPECT_EQ(battery.technology(), kFakeBatteryTechnology);
+
+  // Verify the battery sample data.
+  ASSERT_EQ(battery.samples_size(), 1);
+  const auto& battery_sample = battery.samples(0);
+  EXPECT_EQ(battery_sample.voltage(), kExpectedBatteryVoltageNow);
+  EXPECT_EQ(battery_sample.remaining_capacity(), kExpectedBatteryChargeNow);
+  EXPECT_EQ(battery_sample.temperature(), kFakeSmartBatteryTemperature);
+  EXPECT_EQ(battery_sample.current(), kExpectedBatteryCurrentNow);
+  EXPECT_EQ(battery_sample.status(), kFakeBatteryStatus);
+
+  EXPECT_FALSE(device_status_.has_memory_info());
+  EXPECT_FALSE(device_status_.has_timezone_info());
+  EXPECT_FALSE(device_status_.has_system_status());
+  EXPECT_FALSE(device_status_.has_storage_status());
+  EXPECT_EQ(device_status_.backlight_info_size(), 0);
+  EXPECT_EQ(device_status_.fan_info_size(), 0);
 }
 
 // Fake device state.

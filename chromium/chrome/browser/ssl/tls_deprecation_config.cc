@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -32,6 +33,8 @@ class TLSDeprecationConfigSingleton {
   chrome_browser_ssl::LegacyTLSExperimentConfig* GetProto() const {
     return proto_.get();
   }
+
+  void Reset() { proto_.reset(); }
 
   static TLSDeprecationConfigSingleton& GetInstance() {
     static base::NoDestructor<TLSDeprecationConfigSingleton> instance;
@@ -76,4 +79,8 @@ bool ShouldSuppressLegacyTLSWarning(const GURL& url) {
                                 control_site_hashes.end(), host_hash);
 
   return lower != control_site_hashes.end() && *lower == host_hash;
+}
+
+void ResetTLSDeprecationConfigForTesting() {
+  TLSDeprecationConfigSingleton::GetInstance().Reset();
 }

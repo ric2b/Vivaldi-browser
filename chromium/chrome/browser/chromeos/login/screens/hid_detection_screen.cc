@@ -73,7 +73,7 @@ HIDDetectionScreen::HIDDetectionScreen(
   if (view_)
     view_->Bind(this);
 
-  device::BluetoothAdapterFactory::GetAdapter(base::BindOnce(
+  device::BluetoothAdapterFactory::Get()->GetAdapter(base::BindOnce(
       &HIDDetectionScreen::InitializeAdapter, weak_ptr_factory_.GetWeakPtr()));
   ConnectToInputDeviceManager();
 }
@@ -452,10 +452,10 @@ void HIDDetectionScreen::InitializeAdapter(
 
 void HIDDetectionScreen::StartBTDiscoverySession() {
   adapter_->StartDiscoverySession(
-      base::Bind(&HIDDetectionScreen::OnStartDiscoverySession,
-                 weak_ptr_factory_.GetWeakPtr()),
-      base::Bind(&HIDDetectionScreen::FindDevicesError,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&HIDDetectionScreen::OnStartDiscoverySession,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&HIDDetectionScreen::FindDevicesError,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void HIDDetectionScreen::ProcessConnectedDevicesList() {

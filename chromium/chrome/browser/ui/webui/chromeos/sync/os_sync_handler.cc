@@ -6,7 +6,7 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
@@ -46,6 +46,10 @@ void OSSyncHandler::RegisterMessages() {
       base::BindRepeating(&OSSyncHandler::HandleDidNavigateAwayFromOsSyncPage,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
+      "OsSyncPrefsDispatch",
+      base::BindRepeating(&OSSyncHandler::HandleOsSyncPrefsDispatch,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
       "SetOsSyncFeatureEnabled",
       base::BindRepeating(&OSSyncHandler::HandleSetOsSyncFeatureEnabled,
                           base::Unretained(this)));
@@ -69,13 +73,16 @@ void OSSyncHandler::OnStateChanged(syncer::SyncService* service) {
 }
 
 void OSSyncHandler::HandleDidNavigateToOsSyncPage(const base::ListValue* args) {
+  HandleOsSyncPrefsDispatch(args);
+}
+
+void OSSyncHandler::HandleOsSyncPrefsDispatch(const base::ListValue* args) {
   AllowJavascript();
 
   // Cache the feature enabled pref.
   SyncService* service = GetSyncService();
   if (service)
     feature_enabled_ = service->GetUserSettings()->IsOsSyncFeatureEnabled();
-
   PushSyncPrefs();
 }
 

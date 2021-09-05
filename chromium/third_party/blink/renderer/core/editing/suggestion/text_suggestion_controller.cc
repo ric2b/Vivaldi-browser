@@ -20,6 +20,7 @@
 #include "third_party/blink/renderer/core/editing/spellcheck/spell_checker.h"
 #include "third_party/blink/renderer/core/editing/suggestion/text_suggestion_info.h"
 #include "third_party/blink/renderer/core/frame/frame_view.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
@@ -192,13 +193,10 @@ SuggestionInfosWithNodeAndHighlightColor ComputeSuggestionInfos(
 
 }  // namespace
 
-TextSuggestionController::TextSuggestionController(LocalFrame& frame)
-    : is_suggestion_menu_open_(false), frame_(&frame) {}
-
-void TextSuggestionController::DidAttachDocument(Document* document) {
-  DCHECK(document);
-  SetExecutionContext(document->ToExecutionContext());
-}
+TextSuggestionController::TextSuggestionController(LocalDOMWindow& window)
+    : is_suggestion_menu_open_(false),
+      window_(&window),
+      text_suggestion_host_(&window) {}
 
 bool TextSuggestionController::IsMenuOpen() const {
   return is_suggestion_menu_open_;
@@ -243,17 +241,18 @@ void TextSuggestionController::HandlePotentialSuggestionTap(
   if (marker && marker->Suggestions().IsEmpty())
     return;
 
-  if (!text_suggestion_host_) {
+  if (!text_suggestion_host_.is_bound()) {
     GetFrame().GetBrowserInterfaceBroker().GetInterface(
-        text_suggestion_host_.BindNewPipeAndPassReceiver());
+        text_suggestion_host_.BindNewPipeAndPassReceiver(
+            GetFrame().GetTaskRunner(TaskType::kMiscPlatformAPI)));
   }
 
   text_suggestion_host_->StartSuggestionMenuTimer();
 }
 
 void TextSuggestionController::Trace(Visitor* visitor) {
-  visitor->Trace(frame_);
-  ExecutionContextLifecycleObserver::Trace(visitor);
+  visitor->Trace(window_);
+  visitor->Trace(text_suggestion_host_);
 }
 
 void TextSuggestionController::ReplaceActiveSuggestionRange(
@@ -535,16 +534,16 @@ void TextSuggestionController::CallMojoShowTextSuggestionMenu(
 
 Document& TextSuggestionController::GetDocument() const {
   DCHECK(IsAvailable());
-  return *Document::From(GetExecutionContext());
+  return *window_->document();
 }
 
 bool TextSuggestionController::IsAvailable() const {
-  return GetExecutionContext();
+  return !window_->IsContextDestroyed();
 }
 
 LocalFrame& TextSuggestionController::GetFrame() const {
-  DCHECK(frame_);
-  return *frame_;
+  DCHECK(window_->GetFrame());
+  return *window_->GetFrame();
 }
 
 std::pair<const Node*, const DocumentMarker*>

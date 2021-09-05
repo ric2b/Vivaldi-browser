@@ -106,6 +106,9 @@ void RecordDeletingClipboardSuggestionMetrics(
   } else if (match_type == AutocompleteMatchType::CLIPBOARD_TEXT) {
     UMA_HISTOGRAM_LONG_TIMES_100("Omnibox.ClipboardSuggestionRemovedAge.TEXT",
                                  clipboard_contents_age);
+  } else if (match_type == AutocompleteMatchType::CLIPBOARD_IMAGE) {
+    UMA_HISTOGRAM_LONG_TIMES_100("Omnibox.ClipboardSuggestionRemovedAge.IMAGE",
+                                 clipboard_contents_age);
   }
 }
 
@@ -392,7 +395,7 @@ void ClipboardProvider::ConstructImageMatchCallback(
   const TemplateURL* default_url = url_service->GetDefaultSearchProvider();
   DCHECK(default_url);
   // Add the clipboard match. The relevance is 800 to beat ZeroSuggest results.
-  AutocompleteMatch match(this, 800, false,
+  AutocompleteMatch match(this, 800, IsMatchDeletionEnabled(),
                           AutocompleteMatchType::CLIPBOARD_IMAGE);
 
   match.description.assign(l10n_util::GetStringUTF16(IDS_IMAGE_FROM_CLIPBOARD));
@@ -405,12 +408,21 @@ void ClipboardProvider::ConstructImageMatchCallback(
   // navigation.
   match.fill_into_edit = match.description;
 
-  TemplateURLRef::SearchTermsArgs search_args(base::ASCIIToUTF16(""));
-  search_args.image_thumbnail_content.assign(image_bytes->front_as<char>(),
-                                             image_bytes->size());
+  match.search_terms_args =
+      std::make_unique<TemplateURLRef::SearchTermsArgs>(base::ASCIIToUTF16(""));
+  match.search_terms_args->image_thumbnail_content.assign(
+      image_bytes->front_as<char>(), image_bytes->size());
   TemplateURLRef::PostContent post_content;
   GURL result(default_url->image_url_ref().ReplaceSearchTerms(
-      search_args, url_service->search_terms_data(), &post_content));
+      *match.search_terms_args.get(), url_service->search_terms_data(),
+      &post_content));
+
+  if (!base::GetFieldTrialParamByFeatureAsBool(
+          omnibox::kEnableClipboardProviderImageSuggestions,
+          OmniboxFieldTrial::kImageSearchSuggestionThumbnail, false)) {
+    // If Omnibox image suggestion do not need thumbnail, release memory.
+    match.search_terms_args.reset();
+  }
   match.destination_url = result;
   match.post_content =
       std::make_unique<TemplateURLRef::PostContent>(post_content);
@@ -431,4 +443,3 @@ void ClipboardProvider::ConstructImageMatchCallback(
     listener_->OnProviderUpdate(true);
   }
 }
-

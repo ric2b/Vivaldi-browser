@@ -145,19 +145,6 @@ TEST(CookieManagerTraitsTest, Roundtrips_ContextType) {
   }
 }
 
-TEST(CookieManagerTraitsTest, Roundtrips_CrossSchemeness) {
-  using CrossSchemeness =
-      net::CookieOptions::SameSiteCookieContext::CrossSchemeness;
-  for (CrossSchemeness cross_schemeness :
-       {CrossSchemeness::NONE, CrossSchemeness::INSECURE_SECURE,
-        CrossSchemeness::SECURE_INSECURE}) {
-    CrossSchemeness roundtrip;
-    ASSERT_TRUE(SerializeAndDeserializeEnum<mojom::CrossSchemeness>(
-        cross_schemeness, &roundtrip));
-    EXPECT_EQ(cross_schemeness, roundtrip);
-  }
-}
-
 TEST(CookieManagerTraitsTest, Roundtrips_CookieAccessSemantics) {
   for (net::CookieAccessSemantics access_semantics :
        {net::CookieAccessSemantics::UNKNOWN,
@@ -186,24 +173,26 @@ TEST(CookieManagerTraitsTest, Roundtrips_CookieChangeCause) {
 
 TEST(CookieManagerTraitsTest, Roundtrips_CookieSameSiteContext) {
   using ContextType = net::CookieOptions::SameSiteCookieContext::ContextType;
-  using CrossSchemeness =
-      net::CookieOptions::SameSiteCookieContext::CrossSchemeness;
-  for (ContextType context_type :
-       {ContextType::CROSS_SITE, ContextType::SAME_SITE_LAX_METHOD_UNSAFE,
-        ContextType::SAME_SITE_LAX, ContextType::SAME_SITE_STRICT}) {
-    for (CrossSchemeness cross_schemeness :
-         {CrossSchemeness::NONE, CrossSchemeness::INSECURE_SECURE,
-          CrossSchemeness::SECURE_INSECURE}) {
-      net::CookieOptions::SameSiteCookieContext context_in(context_type,
-                                                           cross_schemeness),
-          copy;
 
-      EXPECT_TRUE(
+  const ContextType all_context_types[]{
+      ContextType::CROSS_SITE, ContextType::SAME_SITE_LAX_METHOD_UNSAFE,
+      ContextType::SAME_SITE_LAX, ContextType::SAME_SITE_STRICT};
+
+  for (ContextType context_type : all_context_types) {
+    for (ContextType schemeful_context_type : all_context_types) {
+      net::CookieOptions::SameSiteCookieContext context_in, copy;
+      // We want to test malformed SameSiteCookieContexts. Since the constructor
+      // will DCHECK for these use the setters to bypass it.
+      context_in.set_context(context_type);
+      context_in.set_schemeful_context(schemeful_context_type);
+
+      EXPECT_EQ(
           mojo::test::SerializeAndDeserialize<mojom::CookieSameSiteContext>(
-              &context_in, &copy));
+              &context_in, &copy),
+          schemeful_context_type <= context_type);
 
-      EXPECT_EQ(context_in.context, copy.context);
-      EXPECT_EQ(context_in.cross_schemeness, copy.cross_schemeness);
+      if (schemeful_context_type <= context_type)
+        EXPECT_EQ(context_in, copy);
     }
   }
 }

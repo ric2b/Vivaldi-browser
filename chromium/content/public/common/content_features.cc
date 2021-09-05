@@ -130,6 +130,10 @@ const base::Feature kCanvas2DImageChromium {
 const base::Feature kCanvasOopRasterization{"CanvasOopRasterization",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
+// When enabled, code cache does not use a browsing_data filter for deletions.
+extern const base::Feature kCodeCacheDeletionWithoutFilter{
+    "CodeCacheDeletionWithoutFilter", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // When enabled, event.movement is calculated in blink instead of in browser.
 const base::Feature kConsolidatedMovementXY{"ConsolidatedMovementXY",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
@@ -138,10 +142,10 @@ const base::Feature kConsolidatedMovementXY{"ConsolidatedMovementXY",
 const base::Feature kConversionMeasurement{"ConversionMeasurement",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Show messages in the DevTools console about upcoming deprecations
-// that would affect sent/received cookies.
+// Show messages in DevTools about upcoming deprecations that would affect
+// sent/received cookies.
 const base::Feature kCookieDeprecationMessages{
-    "CookieDeprecationMessages", base::FEATURE_ENABLED_BY_DEFAULT};
+    "CookieDeprecationMessages", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables Blink cooperative scheduling.
 const base::Feature kCooperativeScheduling{"CooperativeScheduling",
@@ -168,10 +172,10 @@ const base::Feature kDocumentPolicy{"DocumentPolicy",
 // If this feature is enabled and device permission is not granted by the user,
 // media-device enumeration will provide at most one device per type and the
 // device IDs will not be available.
-// TODO(crbug.com/1019176): remove the feature in M82.
+// TODO(crbug.com/1019176): remove the feature in M89.
 const base::Feature kEnumerateDevicesHideDeviceIDs{
   "EnumerateDevicesHideDeviceIDs",
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
       base::FEATURE_DISABLED_BY_DEFAULT
 #else
       base::FEATURE_ENABLED_BY_DEFAULT
@@ -195,12 +199,19 @@ const base::Feature kExtraSafelistedRequestHeadersForOutOfBlinkCors{
 
 // Controls whether Client Hints are guarded by FeaturePolicy.
 const base::Feature kFeaturePolicyForClientHints{
-    "FeaturePolicyForClientHints", base::FEATURE_DISABLED_BY_DEFAULT};
+    "FeaturePolicyForClientHints", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // When enabled Feature Policy propagation is similar to sandbox flags and,
 // sandbox flags are implemented on top of Feature Policy.
 const base::Feature kFeaturePolicyForSandbox{"FeaturePolicyForSandbox",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether or not First Scroll Latency will be measured and reported.
+// First Scroll Latency (tracking bug: crbug.com/922980) measures, for the
+// first scroll of a navigation, the latency between the user's input and the
+// display's update.
+const base::Feature kFirstScrollLatencyMeasurement{
+    "FirstScrollLatencyMeasurement", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables fixes for matching src: local() for web fonts correctly against full
 // font name or postscript name. Rolling out behind a flag, as enabling this
@@ -270,6 +281,11 @@ const base::Feature kInstalledApp{"InstalledApp",
 const base::Feature kInstalledAppProvider{"InstalledAppProvider",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Show warning about clearing data from installed apps in the clear browsing
+// data flow. The warning will be shown in a second dialog.
+const base::Feature kInstalledAppsInCbd{"InstalledAppsInCbd",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Alternative to switches::kIsolateOrigins, for turning on origin isolation.
 // List of origins to isolate has to be specified via
 // kIsolateOriginsFieldTrialParamName.
@@ -327,6 +343,11 @@ const base::Feature kMediaDevicesSystemMonitorCache {
 #endif
 };
 
+// If enabled Mojo uses a dedicated background thread to listen for incoming
+// IPCs. Otherwise it's configured to use Content's IO thread for that purpose.
+const base::Feature kMojoDedicatedThread{"MojoDedicatedThread",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables/disables the video capture service.
 const base::Feature kMojoVideoCapture{"MojoVideoCapture",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
@@ -383,19 +404,9 @@ const base::Feature kOverscrollHistoryNavigation {
 #endif
 };
 
-// Whether document level event listeners should default 'passive' to true.
-const base::Feature kPassiveDocumentEventListeners{
-    "PassiveDocumentEventListeners", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Whether document level wheel and mousewheel event listeners should default
-// 'passive' to true.
-const base::Feature kPassiveDocumentWheelEventListeners{
-    "PassiveDocumentWheelEventListeners", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Whether we should force a touchstart and first touchmove per scroll event
-// listeners to be non-blocking during fling.
-const base::Feature kPassiveEventListenersDueToFling{
-    "PassiveEventListenersDueToFling", base::FEATURE_ENABLED_BY_DEFAULT};
+// Whether ParkableStrings in blink can be written out to disk.
+const base::Feature kParkableStringsToDisk{"ParkableStringsToDisk",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Whether web apps can run periodic tasks upon network connectivity.
 const base::Feature kPeriodicBackgroundSync{"PeriodicBackgroundSync",
@@ -509,10 +520,6 @@ const base::Feature kRunVideoCaptureServiceInBrowserProcess{
 const base::Feature kSavePageAsWebBundle{"SavePageAsWebBundle",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Start streaming scripts on script preload.
-const base::Feature kScriptStreamingOnPreload{"ScriptStreamingOnPreload",
-                                              base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Make sendBeacon throw for a Blob with a non simple type.
 const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
     "SendBeaconThrowForBlobWithNonSimpleType",
@@ -583,6 +590,18 @@ const base::Feature kSignedHTTPExchangePingValidity{
 // or the site should obtain an Origin Trial token.
 const base::Feature kSmsReceiver{"SmsReceiver",
                                  base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Controls whether Site Isolation protects against spoofing of origin in
+// mojom::FileSystemManager::Open IPC from compromised renderer processes.  See
+// also https://crbug.com/917457.
+//
+// TODO(lukasza, nasko): Make that feature below enabled by default, after
+// coordinating with the remaining consumers of PPAPI.  This should be possible
+// at the end of 2020, when most PPAPI consumers (Flash, most Chrome Apps) will
+// be gone.
+const base::Feature kSiteIsolationEnforcementForFileSystemApi{
+    "SiteIsolationEnforcementForFileSystemApi",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether SpareRenderProcessHostManager tries to always have a warm
 // spare renderer process around for the most recently requested BrowserContext.
@@ -799,6 +818,10 @@ const base::Feature kWebRtcEcdsaDefault{"WebRTC-EnableWebRtcEcdsa",
 const base::Feature kWebRtcUseGpuMemoryBufferVideoFrames{
     "WebRTC-UseGpuMemoryBufferVideoFrames", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables report-only Trusted Types experiment on WebUIs
+const base::Feature kWebUIReportOnlyTrustedTypes{
+    "WebUIReportOnlyTrustedTypes", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether the WebUSB API is enabled:
 // https://wicg.github.io/webusb
 const base::Feature kWebUsb{"WebUSB", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -818,7 +841,7 @@ const base::Feature kWebXrHitTest{"WebXRHitTest",
 const base::Feature kWebXrIncubations{"WebXRIncubations",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kWebXrPermissionsApi{"WebXrPermissionsApi",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
 // Autofill Accessibility in Android.
@@ -853,7 +876,7 @@ const base::Feature kWebNfc{"WebNFC", base::FEATURE_ENABLED_BY_DEFAULT};
 // TODO(crbug.com/955194): Remove this once chrome://oobe migrates off of
 // Polymer 1.
 const base::Feature kWebUIPolymer2Exceptions{"WebUIPolymer2Exceptions",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_MACOSX)

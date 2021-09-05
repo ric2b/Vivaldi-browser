@@ -12,6 +12,7 @@
 #include <list>
 #include <memory>
 
+#include "base/auto_reset.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -427,29 +428,8 @@ OutOfProcessInstance::OutOfProcessInstance(PP_Instance instance)
     : pp::Instance(instance),
       pp::Find_Private(this),
       pp::Printing_Dev(this),
-      cursor_(PP_CURSORTYPE_POINTER),
-      zoom_(1.0),
-      needs_reraster_(true),
-      last_bitmap_smaller_(false),
-      device_scale_(1.0),
-      full_(false),
       paint_manager_(this, this, true),
-      first_paint_(true),
-      document_load_state_(LOAD_STATE_LOADING),
-      preview_document_load_state_(LOAD_STATE_COMPLETE),
-      uma_(this),
-      told_browser_about_unsupported_feature_(false),
-      print_preview_page_count_(-1),
-      print_preview_loaded_page_count_(-1),
-      last_progress_sent_(0),
-      recently_sent_find_update_(false),
-      received_viewport_message_(false),
-      did_call_start_loading_(false),
-      stop_scrolling_(false),
-      background_color_(0),
-      top_toolbar_height_in_viewport_coords_(0),
-      accessibility_state_(ACCESSIBILITY_STATE_OFF),
-      is_print_preview_(false) {
+      uma_(this) {
   callback_factory_.Initialize(this);
   pp::Module::Get()->AddPluginInterface(kPPPPdfInterface, &ppp_private);
   AddPerInstanceObject(kPPPPdfInterface, this);
@@ -922,8 +902,7 @@ void OutOfProcessInstance::DidChangeView(const pp::View& view) {
 }
 
 void OutOfProcessInstance::DidChangeFocus(bool has_focus) {
-  if (!has_focus)
-    engine_->KillFormFocus();
+  engine_->UpdateFocus(has_focus);
 }
 
 void OutOfProcessInstance::GetPrintPresetOptionsFromDocument(
@@ -1173,6 +1152,7 @@ void OutOfProcessInstance::StopFind() {
 void OutOfProcessInstance::OnPaint(const std::vector<pp::Rect>& paint_rects,
                                    std::vector<PaintManager::ReadyRect>* ready,
                                    std::vector<pp::Rect>* pending) {
+  base::AutoReset<bool> auto_reset_in_paint(&in_paint_, true);
   if (image_data_.is_null()) {
     DCHECK(plugin_size_.IsEmpty());
     return;
@@ -1236,6 +1216,12 @@ void OutOfProcessInstance::OnPaint(const std::vector<pp::Rect>& paint_rects,
   }
 
   engine_->PostPaint();
+
+  if (!deferred_invalidates_.empty()) {
+    pp::CompletionCallback callback = callback_factory_.NewCallback(
+        &OutOfProcessInstance::InvalidateAfterPaintDone);
+    pp::Module::Get()->core()->CallOnMainThread(0, callback);
+  }
 }
 
 void OutOfProcessInstance::DidOpen(int32_t result) {
@@ -1324,6 +1310,11 @@ void OutOfProcessInstance::ProposeDocumentLayout(const DocumentLayout& layout) {
 }
 
 void OutOfProcessInstance::Invalidate(const pp::Rect& rect) {
+  if (in_paint_) {
+    deferred_invalidates_.push_back(rect);
+    return;
+  }
+
   pp::Rect offset_rect(rect);
   offset_rect.Offset(available_area_.point());
   paint_manager_.InvalidateRect(offset_rect);
@@ -1582,10 +1573,6 @@ void OutOfProcessInstance::Print() {
   pp::Module::Get()->core()->CallOnMainThread(0, callback);
 }
 
-void OutOfProcessInstance::OnPrint(int32_t) {
-  pp::PDF::Print(this);
-}
-
 void OutOfProcessInstance::SubmitForm(const std::string& url,
                                       const void* data,
                                       int length) {
@@ -1720,6 +1707,7 @@ void OutOfProcessInstance::SetTwoUpView(bool enable_two_up_view) {
   engine_->SetTwoUpView(enable_two_up_view);
 }
 
+// static
 std::string OutOfProcessInstance::GetFileNameFromUrl(const std::string& url) {
   // Generate a file name. Unfortunately, MIME type can't be provided, since it
   // requires IO.
@@ -2063,6 +2051,18 @@ void OutOfProcessInstance::HistogramEnumerationDeprecated(
   if (IsPrintPreview())
     return;
   uma_.HistogramEnumeration(name, sample, boundary_value);
+}
+
+void OutOfProcessInstance::OnPrint(int32_t /*unused_but_required*/) {
+  pp::PDF::Print(this);
+}
+
+void OutOfProcessInstance::InvalidateAfterPaintDone(
+    int32_t /*unused_but_required*/) {
+  DCHECK(!in_paint_);
+  for (const pp::Rect& rect : deferred_invalidates_)
+    Invalidate(rect);
+  deferred_invalidates_.clear();
 }
 
 void OutOfProcessInstance::PrintSettings::Clear() {

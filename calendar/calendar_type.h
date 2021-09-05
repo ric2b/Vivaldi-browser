@@ -23,7 +23,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "calendar/calendar_typedefs.h"
-#include "url/gurl.h"
 
 namespace calendar {
 
@@ -32,18 +31,14 @@ namespace calendar {
 enum UpdateCalendarFields {
   CALENDAR_NAME = 1 << 0,
   CALENDAR_DESCRIPTION = 1 << 1,
-  CALENDAR_URL = 1 << 2,
-  CALENDAR_CTAG = 1 << 3,
-  CALENDAR_ORDERINDEX = 1 << 4,
-  CALENDAR_COLOR = 1 << 5,
-  CALENDAR_HIDDEN = 1 << 6,
-  CALENDAR_ACTIVE = 1 << 7,
-  CALENDAR_ICONINDEX = 1 << 8,
-  CALENDAR_USERNAME = 1 << 9,
-  CALENDAR_TYPE = 1 << 10,
-  CALENDAR_INTERVAL = 1 << 11,
-  CALENDAR_LAST_CHECKED = 1 << 12,
-  CALENDAR_TIMEZONE = 1 << 13,
+  CALENDAR_CTAG = 1 << 2,
+  CALENDAR_ORDERINDEX = 1 << 3,
+  CALENDAR_COLOR = 1 << 4,
+  CALENDAR_HIDDEN = 1 << 5,
+  CALENDAR_ACTIVE = 1 << 6,
+  CALENDAR_ICONINDEX = 1 << 7,
+  CALENDAR_LAST_CHECKED = 1 << 8,
+  CALENDAR_TIMEZONE = 1 << 9,
 };
 
 // Holds all information associated with a specific Calendar.
@@ -54,16 +49,12 @@ class CalendarRow {
               AccountID account_id,
               base::string16 name,
               base::string16 description,
-              GURL url,
               std::string ctag,
               int orderindex,
               std::string color,
               bool hidden,
               bool active,
               int iconindex,
-              base::string16 username,
-              int type,
-              int interval,
               base::Time last_checked,
               std::string timezone,
               base::Time created,
@@ -86,9 +77,6 @@ class CalendarRow {
     description_ = description;
   }
 
-  GURL url() const { return url_; }
-  void set_url(GURL url) { url_ = url; }
-
   std::string ctag() const { return ctag_; }
   void set_ctag(std::string ctag) { ctag_ = ctag; }
 
@@ -106,15 +94,6 @@ class CalendarRow {
 
   int iconindex() const { return iconindex_; }
   void set_iconindex(int iconindex) { iconindex_ = iconindex; }
-
-  base::string16 username() const { return username_; }
-  void set_username(base::string16 username) { username_ = username; }
-
-  int type() const { return type_; }
-  void set_type(int type) { type_ = type; }
-
-  int interval() const { return interval_; }
-  void set_interval(int interval) { interval_ = interval; }
 
   base::Time last_checked() const { return last_checked_; }
   void set_last_checked(base::Time last_checked) {
@@ -137,16 +116,12 @@ class CalendarRow {
   AccountID account_id_;
   base::string16 name_;
   base::string16 description_;
-  GURL url_;
   std::string ctag_;
   int orderindex_;
   std::string color_;
   bool hidden_;
   bool active_;
   int iconindex_;
-  base::string16 username_;
-  int type_;
-  int interval_;
   base::Time last_checked_;
   std::string timezone_;
   base::Time created_;
@@ -174,16 +149,12 @@ struct Calendar {
   AccountID account_id;
   base::string16 name;
   base::string16 description;
-  GURL url;
   std::string ctag;
   int orderindex;
   std::string color;
   bool hidden;
   bool active;
   int iconindex;
-  base::string16 username;
-  int type;
-  int interval;
   base::Time last_checked;
   std::string timezone;
   base::Time created;

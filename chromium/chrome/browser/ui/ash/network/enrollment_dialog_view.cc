@@ -57,7 +57,6 @@ class EnrollmentDialogView : public views::DialogDelegateView {
 
   // views::WidgetDelegate overrides
   ui::ModalType GetModalType() const override;
-  base::string16 GetWindowTitle() const override;
   void WindowClosing() override;
 
   // views::View overrides
@@ -91,6 +90,7 @@ EnrollmentDialogView::EnrollmentDialogView(const std::string& network_name,
       target_uri_(target_uri),
       connect_(connect),
       added_cert_(false) {
+  SetTitle(l10n_util::GetStringUTF16(IDS_NETWORK_ENROLLMENT_HANDLER_TITLE));
   DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_NETWORK_ENROLLMENT_HANDLER_BUTTON));
@@ -130,10 +130,6 @@ ui::ModalType EnrollmentDialogView::GetModalType() const {
   return ui::MODAL_TYPE_SYSTEM;
 }
 
-base::string16 EnrollmentDialogView::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(IDS_NETWORK_ENROLLMENT_HANDLER_TITLE);
-}
-
 void EnrollmentDialogView::WindowClosing() {
   if (!accepted_)
     return;
@@ -161,12 +157,13 @@ void EnrollmentDialogView::InitDialog() {
       SetLayoutManager(std::make_unique<views::GridLayout>());
 
   views::ColumnSet* columns = grid_layout->AddColumnSet(0);
-  columns->AddColumn(views::GridLayout::FILL,      // Horizontal resize.
-                     views::GridLayout::FILL,      // Vertical resize.
-                     1,                            // Resize weight.
-                     views::GridLayout::USE_PREF,  // Size type.
-                     0,                            // Ignored for USE_PREF.
-                     0);                           // Minimum size.
+  columns->AddColumn(
+      views::GridLayout::FILL,                       // Horizontal resize.
+      views::GridLayout::FILL,                       // Vertical resize.
+      1,                                             // Resize weight.
+      views::GridLayout::ColumnSize::kUsePreferred,  // Size type.
+      0,                                             // Ignored for USE_PREF.
+      0);                                            // Minimum size.
   columns = grid_layout->AddColumnSet(1);
 
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
@@ -174,12 +171,13 @@ void EnrollmentDialogView::InitDialog() {
   columns->AddPaddingColumn(
       views::GridLayout::kFixedSize,
       provider->GetDistanceMetric(DISTANCE_UNRELATED_CONTROL_HORIZONTAL));
-  columns->AddColumn(views::GridLayout::LEADING,   // Horizontal leading.
-                     views::GridLayout::FILL,      // Vertical resize.
-                     1,                            // Resize weight.
-                     views::GridLayout::USE_PREF,  // Size type.
-                     0,                            // Ignored for USE_PREF.
-                     0);                           // Minimum size.
+  columns->AddColumn(
+      views::GridLayout::LEADING,                    // Horizontal leading.
+      views::GridLayout::FILL,                       // Vertical resize.
+      1,                                             // Resize weight.
+      views::GridLayout::ColumnSize::kUsePreferred,  // Size type.
+      0,                                             // Ignored for USE_PREF.
+      0);                                            // Minimum size.
 
   grid_layout->StartRow(views::GridLayout::kFixedSize, 0);
   grid_layout->AddView(std::move(label));

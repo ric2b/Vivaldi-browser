@@ -18,10 +18,10 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_image_object.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_payment_instrument.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/modules/payments/basic_card_helper.h"
@@ -77,6 +77,8 @@ bool rejectError(ScriptPromiseResolver* resolver,
 }
 
 bool AllowedToUsePaymentFeatures(ScriptState* script_state) {
+  if (!script_state->ContextIsValid())
+    return false;
   return ExecutionContext::From(script_state)
       ->GetSecurityContext()
       .GetFeaturePolicy()
@@ -144,8 +146,10 @@ class PaymentInstrumentParameter final
 };
 
 PaymentInstruments::PaymentInstruments(
-    const mojo::Remote<payments::mojom::blink::PaymentManager>& manager)
-    : manager_(manager) {}
+    const HeapMojoRemote<payments::mojom::blink::PaymentManager,
+                         HeapMojoWrapperMode::kWithoutContextObserver>& manager,
+    ExecutionContext* context)
+    : manager_(manager), permission_service_(context) {}
 
 ScriptPromise PaymentInstruments::deleteInstrument(
     ScriptState* script_state,
@@ -248,8 +252,6 @@ ScriptPromise PaymentInstruments::set(ScriptState* script_state,
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  ExecutionContext* context = ExecutionContext::From(script_state);
-  Document* doc = Document::DynamicFrom(context);
 
   // Should move this permission check to browser process.
   // Please see http://crbug.com/795929
@@ -257,8 +259,8 @@ ScriptPromise PaymentInstruments::set(ScriptState* script_state,
       ->RequestPermission(
           CreatePermissionDescriptor(
               mojom::blink::PermissionName::PAYMENT_HANDLER),
-          LocalFrame::HasTransientUserActivation(doc ? doc->GetFrame()
-                                                     : nullptr),
+          LocalFrame::HasTransientUserActivation(
+              LocalDOMWindow::From(script_state)->GetFrame()),
           WTF::Bind(
               &PaymentInstruments::OnRequestPermission, WrapPersistent(this),
               WrapPersistent(resolver), instrument_key,
@@ -287,12 +289,19 @@ ScriptPromise PaymentInstruments::clear(ScriptState* script_state,
   return promise;
 }
 
+void PaymentInstruments::Trace(Visitor* visitor) {
+  visitor->Trace(permission_service_);
+  ScriptWrappable::Trace(visitor);
+}
+
 mojom::blink::PermissionService* PaymentInstruments::GetPermissionService(
     ScriptState* script_state) {
-  if (!permission_service_) {
+  if (!permission_service_.is_bound()) {
     ConnectToPermissionService(
         ExecutionContext::From(script_state),
-        permission_service_.BindNewPipeAndPassReceiver());
+        permission_service_.BindNewPipeAndPassReceiver(
+            ExecutionContext::From(script_state)
+                ->GetTaskRunner(TaskType::kMiscPlatformAPI)));
   }
   return permission_service_.get();
 }

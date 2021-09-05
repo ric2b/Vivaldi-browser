@@ -204,14 +204,17 @@ ExtensionInstallProto::BackgroundScriptType GetBackgroundScriptType(
     return ExtensionInstallProto::PERSISTENT_BACKGROUND_PAGE;
   if (extensions::BackgroundInfo::HasLazyBackgroundPage(&extension))
     return ExtensionInstallProto::EVENT_PAGE;
+  if (extensions::BackgroundInfo::IsServiceWorkerBased(&extension))
+    return ExtensionInstallProto::SERVICE_WORKER;
 
-  // If an extension had neither a persistent nor lazy background page, it must
-  // not have a background page.
+  // If an extension had neither a persistent background page, a lazy
+  // background page nor a service worker based background script, it must not
+  // have a background script.
   DCHECK(!extensions::BackgroundInfo::HasBackgroundPage(&extension));
   return ExtensionInstallProto::NO_BACKGROUND_SCRIPT;
 }
 
-static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 18),
+static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 19),
               "Adding a new disable reason? Be sure to include the new reason "
               "below, update the test to exercise it, and then adjust this "
               "value for DISABLE_REASON_LAST");
@@ -250,6 +253,8 @@ std::vector<ExtensionInstallProto::DisableReason> GetDisableReasons(
        ExtensionInstallProto::CUSTODIAN_APPROVAL_REQUIRED},
       {extensions::disable_reason::DISABLE_BLOCKED_BY_POLICY,
        ExtensionInstallProto::BLOCKED_BY_POLICY},
+      {extensions::disable_reason::DISABLE_REMOTELY_FOR_MALWARE,
+       ExtensionInstallProto::DISABLE_REMOTELY_FOR_MALWARE},
   };
 
   int disable_reasons = prefs->GetDisableReasons(id);

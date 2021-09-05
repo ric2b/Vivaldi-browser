@@ -11,7 +11,7 @@
 #include "base/scoped_observer.h"
 #include "build/build_config.h"
 #include "content/browser/browser_interface_broker_impl.h"
-#include "content/public/browser/dedicated_worker_service.h"
+#include "content/public/browser/dedicated_worker_id.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_observer.h"
@@ -205,10 +205,6 @@ class DedicatedWorkerHost final : public blink::mojom::DedicatedWorkerHost,
   // The origin of this worker.
   // https://html.spec.whatwg.org/C/#concept-settings-object-origin
   const url::Origin worker_origin_;
-
-  // The network isolation key to be used for both the worker script and the
-  // worker's subresources.
-  net::NetworkIsolationKey network_isolation_key_;
 
   // The DedicatedWorker's Cross-Origin-Embedder-Policy(COEP). It is equals to
   // the nearest ancestor frame host's COEP:

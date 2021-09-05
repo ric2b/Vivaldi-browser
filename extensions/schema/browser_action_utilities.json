@@ -330,6 +330,11 @@
           {
             "$ref": "ExtensionInfo",
             "name": "extension"
+          },
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "id of the window that receives the update."
           }
         ]
       },

@@ -27,7 +27,10 @@ tweak_info_plist("tweak_info_plist") {
 }
 
 compile_entitlements("entitlements") {
-  substitutions = [ "IOS_BUNDLE_ID_PREFIX=$ios_app_bundle_id_prefix" ]
+  substitutions = [
+    "IOS_BUNDLE_ID_PREFIX=$ios_app_bundle_id_prefix",
+    "CHROMIUM_BUNDLE_ID=$chromium_bundle_id",
+  ]
   output_name =
       "$target_gen_dir/credential_provider_extension.appex.entitlements"
   entitlements_templates = [
@@ -42,17 +45,19 @@ ios_appex_bundle("credential_provider_extension") {
   sources = [
     "credential_provider_view_controller.h",
     "credential_provider_view_controller.mm",
-    "reauthentication_handler.h",
-    "reauthentication_handler.mm",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
 
   deps = [
+    ":metrics_util",
+    ":password_util",
+    ":reauthentication_handler",
     ":system_strings",
-    "//base",
     "//ios/chrome/common/app_group",
-    "//ios/chrome/common/app_group:command",
+    "//ios/chrome/common/app_group:client",
+    "//ios/chrome/common/credential_provider",
+    "//ios/chrome/common/credential_provider:ui",
     "//ios/chrome/common/ui/colors",
     "//ios/chrome/common/ui/reauthentication",
     "//ios/chrome/credential_provider_extension/resources",
@@ -77,6 +82,7 @@ ios_appex_bundle("credential_provider_extension") {
 
   entitlements_target = ":entitlements"
   info_plist_target = ":tweak_info_plist"
+  xcode_product_bundle_id = "$chromium_bundle_id.CredentialProviderExtension"
 }
 
 generate_localizable_strings("system_strings") {
@@ -92,23 +98,45 @@ generate_localizable_strings("system_strings") {
   deps = [ _packed_resources_target ]
 }
 
-source_set("credential_provider_extension_providers") {
-  sources = [ "account_verification_provider.h" ]
-
-  assert_no_deps = [ "//ios/chrome/browser" ]
-
+source_set("reauthentication_handler") {
+  sources = [
+    "reauthentication_handler.h",
+    "reauthentication_handler.mm",
+  ]
   configs += [ "//build/config/compiler:enable_arc" ]
+  deps = [
+    "//base",
+    "//ios/chrome/common/app_group",
+    "//ios/chrome/common/app_group:command",
+    "//ios/chrome/common/ui/reauthentication",
+  ]
 }
 
-source_set("account_verification_provider") {
-  sources = [ "account_verification_provider.mm" ]
-
-  deps = [
-    ":credential_provider_extension_providers",
-    "//base",
+source_set("password_util") {
+  sources = [
+    "password_util.h",
+    "password_util.mm",
   ]
-
-  assert_no_deps = [ "//ios/chrome/browser" ]
-
   configs += [ "//build/config/compiler:enable_arc" ]
+  deps = [
+    "//base",
+    "//ios/chrome/common/app_group",
+  ]
+  libs = [
+    "Security.framework",
+    "Foundation.framework",
+  ]
+}
+
+source_set("metrics_util") {
+  sources = [
+    "metrics_util.h",
+    "metrics_util.mm",
+  ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+  deps = [
+    "//base",
+    "//ios/chrome/common/app_group",
+  ]
+  libs = [ "Foundation.framework" ]
 }

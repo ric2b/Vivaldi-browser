@@ -16,11 +16,13 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_hglobal.h"
 #include "printing/backend/print_backend_consts.h"
 #include "printing/backend/printing_info_win.h"
 #include "printing/backend/win_helper.h"
+#include "printing/mojom/print.mojom.h"
 
 namespace printing {
 
@@ -222,6 +224,8 @@ std::string PrintBackendWin::GetDefaultPrinterName() {
   DWORD size = MAX_PATH;
   TCHAR default_printer_name[MAX_PATH];
   std::string ret;
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   if (::GetDefaultPrinter(default_printer_name, &size))
     ret = base::WideToUTF8(default_printer_name);
   return ret;
@@ -267,13 +271,13 @@ bool PrintBackendWin::GetPrinterSemanticCapsAndDefaults(
     if (user_settings->dmFields & DM_DUPLEX) {
       switch (user_settings->dmDuplex) {
         case DMDUP_SIMPLEX:
-          caps.duplex_default = SIMPLEX;
+          caps.duplex_default = mojom::DuplexMode::kSimplex;
           break;
         case DMDUP_VERTICAL:
-          caps.duplex_default = LONG_EDGE;
+          caps.duplex_default = mojom::DuplexMode::kLongEdge;
           break;
         case DMDUP_HORIZONTAL:
-          caps.duplex_default = SHORT_EDGE;
+          caps.duplex_default = mojom::DuplexMode::kShortEdge;
           break;
         default:
           NOTREACHED();
@@ -285,7 +289,7 @@ bool PrintBackendWin::GetPrinterSemanticCapsAndDefaults(
   } else {
     LOG(WARNING) << "Fallback to color/simplex mode.";
     caps.color_default = caps.color_changeable;
-    caps.duplex_default = SIMPLEX;
+    caps.duplex_default = mojom::DuplexMode::kSimplex;
   }
 
   // Get printer capabilities. For more info see here:
@@ -295,10 +299,10 @@ bool PrintBackendWin::GetPrinterSemanticCapsAndDefaults(
   caps.color_model = printing::COLOR;
   caps.bw_model = printing::GRAY;
 
-  caps.duplex_modes.push_back(SIMPLEX);
+  caps.duplex_modes.push_back(mojom::DuplexMode::kSimplex);
   if (DeviceCapabilities(name, port, DC_DUPLEX, nullptr, nullptr) == 1) {
-    caps.duplex_modes.push_back(LONG_EDGE);
-    caps.duplex_modes.push_back(SHORT_EDGE);
+    caps.duplex_modes.push_back(mojom::DuplexMode::kLongEdge);
+    caps.duplex_modes.push_back(mojom::DuplexMode::kShortEdge);
   }
 
   caps.collate_capable =

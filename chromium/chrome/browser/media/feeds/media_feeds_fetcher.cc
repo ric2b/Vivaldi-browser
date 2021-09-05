@@ -4,9 +4,12 @@
 
 #include "chrome/browser/media/feeds/media_feeds_fetcher.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "components/schema_org/common/metadata.mojom.h"
 #include "components/schema_org/extractor.h"
 #include "components/schema_org/schema_org_entity_names.h"
+#include "components/schema_org/validator.h"
+#include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_status_code.h"
@@ -15,6 +18,9 @@
 
 namespace media_feeds {
 
+const char MediaFeedsFetcher::kFetchSizeKbHistogramName[] =
+    "Media.Feeds.Fetch.Size";
+
 MediaFeedsFetcher::MediaFeedsFetcher(
     scoped_refptr<::network::SharedURLLoaderFactory> url_loader_factory)
     : url_loader_factory_(url_loader_factory),
@@ -22,7 +28,9 @@ MediaFeedsFetcher::MediaFeedsFetcher(
 
 MediaFeedsFetcher::~MediaFeedsFetcher() = default;
 
-void MediaFeedsFetcher::FetchFeed(const GURL& url, MediaFeedCallback callback) {
+void MediaFeedsFetcher::FetchFeed(const GURL& url,
+                                  const bool bypass_cache,
+                                  MediaFeedCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   net::NetworkTrafficAnnotationTag traffic_annotation =
@@ -62,8 +70,16 @@ void MediaFeedsFetcher::FetchFeed(const GURL& url, MediaFeedCallback callback) {
   resource_request->headers.SetHeader(net::HttpRequestHeaders::kAccept,
                                       "application/ld+json");
   resource_request->redirect_mode = ::network::mojom::RedirectMode::kError;
-  resource_request->attach_same_site_cookies = true;
-  resource_request->site_for_cookies = net::SiteForCookies::FromUrl(url);
+  url::Origin origin = url::Origin::Create(url);
+  // Treat this request as same-site for the purposes of cookie inclusion.
+  resource_request->site_for_cookies = net::SiteForCookies::FromOrigin(origin);
+  resource_request->trusted_params = network::ResourceRequest::TrustedParams();
+  resource_request->trusted_params->isolation_info = net::IsolationInfo::Create(
+      net::IsolationInfo::RedirectMode::kUpdateNothing, origin, origin,
+      net::SiteForCookies::FromOrigin(origin));
+
+  if (bypass_cache)
+    resource_request->load_flags |= net::LOAD_BYPASS_CACHE;
 
   DCHECK(!pending_request_);
   pending_request_ = network::SimpleURLLoader::Create(
@@ -89,34 +105,61 @@ void MediaFeedsFetcher::OnURLFetchComplete(
   DCHECK(request);
 
   if (request->NetError() != net::OK) {
-    std::move(callback).Run(nullptr, Status::kRequestFailed);
+    std::move(callback).Run(nullptr, Status::kRequestFailed, false);
     return;
   }
 
   int response_code = 0;
-  if (request->ResponseInfo() && request->ResponseInfo()->headers)
-    response_code = request->ResponseInfo()->headers->response_code();
+  bool was_fetched_via_cache = false;
+
+  if (request->ResponseInfo()) {
+    was_fetched_via_cache = request->ResponseInfo()->was_fetched_via_cache;
+
+    if (request->ResponseInfo()->headers)
+      response_code = request->ResponseInfo()->headers->response_code();
+  }
+
+  if (response_code == net::HTTP_GONE) {
+    std::move(callback).Run(nullptr, Status::kGone, was_fetched_via_cache);
+    return;
+  }
 
   if (response_code != net::HTTP_OK) {
-    std::move(callback).Run(nullptr, Status::kRequestFailed);
+    std::move(callback).Run(nullptr, Status::kRequestFailed,
+                            was_fetched_via_cache);
     return;
   }
 
   if (!feed_data || feed_data->empty()) {
-    std::move(callback).Run(nullptr, Status::kNotFound);
+    std::move(callback).Run(nullptr, Status::kNotFound, was_fetched_via_cache);
     return;
+  }
+
+  // Record the fetch size in KB.
+  if (!feed_data->empty()) {
+    base::UmaHistogramMemoryKB(MediaFeedsFetcher::kFetchSizeKbHistogramName,
+                               feed_data->size() / 1000);
   }
 
   // Parse the received data.
-  schema_org::improved::mojom::EntityPtr parsed_entity =
-      extractor_.Extract(*feed_data);
+  extractor_.Extract(*feed_data,
+                     base::BindOnce(&MediaFeedsFetcher::OnParseComplete,
+                                    base::Unretained(this), std::move(callback),
+                                    was_fetched_via_cache));
+}
 
-  if (!parsed_entity) {
-    std::move(callback).Run(nullptr, Status::kInvalidFeedData);
+void MediaFeedsFetcher::OnParseComplete(
+    MediaFeedCallback callback,
+    bool was_fetched_via_cache,
+    schema_org::improved::mojom::EntityPtr parsed_entity) {
+  if (!schema_org::ValidateEntity(parsed_entity.get())) {
+    std::move(callback).Run(nullptr, Status::kInvalidFeedData,
+                            was_fetched_via_cache);
     return;
   }
 
-  std::move(callback).Run(std::move(parsed_entity), Status::kOk);
+  std::move(callback).Run(std::move(parsed_entity), Status::kOk,
+                          was_fetched_via_cache);
 }
 
 }  // namespace media_feeds

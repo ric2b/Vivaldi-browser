@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view_controller.h"
 
-#include "base/logging.h"
 #include "base/metrics/user_metrics.h"
+#include "base/notreached.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_long_press_delegate.h"
@@ -205,6 +205,10 @@ const CGFloat kTabGridAnimationsTotalDuration = 0.5;
 
 - (void)setPageBookmarked:(BOOL)bookmarked {
   self.view.bookmarkButton.spotlighted = bookmarked;
+}
+
+- (void)setBookmarkEnabled:(BOOL)enabled {
+  self.view.bookmarkButton.enabled = enabled;
 }
 
 - (void)setVoiceSearchEnabled:(BOOL)enabled {

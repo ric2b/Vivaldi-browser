@@ -102,7 +102,7 @@ suite(extension_item_tests.suiteName, function() {
 
   // Initialize an extension item before each test.
   setup(function() {
-    PolymerTest.clearBody();
+    document.body.innerHTML = '';
     mockDelegate = new MockItemDelegate();
     item = document.createElement('extensions-item');
     item.data = createExtensionInfo();
@@ -354,6 +354,15 @@ suite(extension_item_tests.suiteName, function() {
     testVisible(item, '#enableToggle', true);
     expectTrue(item.$['enableToggle'].disabled);
     item.set('data.disableReasons.blockedByPolicy', false);
+    flush();
+
+    testVisible(item, '#parentDisabledPermissionsToolTip', false);
+    item.set('data.disableReasons.parentDisabledPermissions', true);
+    flush();
+    testVisible(item, '#enableToggle', true);
+    expectFalse(item.$['enableToggle'].disabled);
+    testVisible(item, '#parentDisabledPermissionsToolTip', true);
+    item.set('data.disableReasons.parentDisabledPermissions', false);
     flush();
 
     item.set('data.disableReasons.custodianApprovalRequired', true);

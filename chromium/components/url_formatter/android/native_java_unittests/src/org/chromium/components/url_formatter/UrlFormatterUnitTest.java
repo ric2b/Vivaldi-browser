@@ -4,8 +4,6 @@
 
 package org.chromium.components.url_formatter;
 
-import android.annotation.SuppressLint;
-
 import org.junit.Assert;
 
 import org.chromium.base.annotations.CalledByNative;
@@ -30,7 +28,6 @@ public class UrlFormatterUnitTest {
         Assert.assertFalse(UrlFormatter.fixupUrl("0x100.0").isValid());
     }
 
-    @SuppressLint("AuthLeak")
     @CalledByNativeJavaTest
     public void testFormatUrlForDisplayOmitUsernamePassword() {
         Assert.assertEquals("http://google.com/path",

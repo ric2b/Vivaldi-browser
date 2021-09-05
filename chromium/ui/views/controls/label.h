@@ -35,6 +35,12 @@ class VIEWS_EXPORT Label : public View,
  public:
   METADATA_HEADER(Label);
 
+  enum MenuCommands {
+    kCopy = 1,
+    kSelectAll,
+    kLastCommandId = kSelectAll,
+  };
+
   // Helper to construct a Label that doesn't use the views typography spec.
   // Using this causes Label to obtain colors from ui::NativeTheme and line
   // spacing from gfx::FontList::GetHeight().
@@ -260,9 +266,6 @@ class VIEWS_EXPORT Label : public View,
  protected:
   // Create a single RenderText instance to actually be painted.
   virtual std::unique_ptr<gfx::RenderText> CreateRenderText() const;
-
-  // Draw a focus ring. The default implementation does nothing.
-  virtual void PaintFocusRing(gfx::Canvas* canvas) const;
 
   // Returns the preferred size and position of the text in local coordinates,
   // which may exceed the local bounds of the label.

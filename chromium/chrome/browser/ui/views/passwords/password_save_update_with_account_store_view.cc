@@ -30,6 +30,8 @@
 #include "ui/base/models/combobox_model_observer.h"
 #include "ui/base/models/simple_combobox_model.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/compositor/layer_animation_observer.h"
+#include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/bubble/bubble_frame_view.h"
@@ -39,86 +41,38 @@
 #include "ui/views/controls/editable_combobox/editable_combobox.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/fill_layout.h"
-#include "ui/views/layout/grid_layout.h"
+#include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/view.h"
+#include "ui/views/view_class_properties.h"
 
 namespace {
 
-enum PasswordSaveUpdateWithAccountStoreViewColumnSetType {
-  // | | (LEADING, FILL) | | (FILL, FILL) | |
-  // Used for the username/password line of the bubble, for the pending view.
-  DOUBLE_VIEW_COLUMN_SET_USERNAME,
-  DOUBLE_VIEW_COLUMN_SET_PASSWORD,
-  DOUBLE_VIEW_COLUMN_SET_DESTINATION,
-
-  // | | (LEADING, FILL) | | (FILL, FILL) | | (TRAILING, FILL) | |
-  // Used for the password line of the bubble, for the pending view.
-  // Views are label, password and the eye icon.
-  TRIPLE_VIEW_COLUMN_SET,
-};
-
-// Construct an appropriate ColumnSet for the given |type|, and add it
-// to |layout|.
-void BuildColumnSet(views::GridLayout* layout,
-                    PasswordSaveUpdateWithAccountStoreViewColumnSetType type) {
-  views::ColumnSet* column_set = layout->AddColumnSet(type);
-  const int column_divider = ChromeLayoutProvider::Get()->GetDistanceMetric(
-      views::DISTANCE_RELATED_CONTROL_HORIZONTAL);
-  switch (type) {
-    case DOUBLE_VIEW_COLUMN_SET_USERNAME:
-    case DOUBLE_VIEW_COLUMN_SET_PASSWORD:
-    case DOUBLE_VIEW_COLUMN_SET_DESTINATION:
-      column_set->AddColumn(views::GridLayout::LEADING, views::GridLayout::FILL,
-                            views::GridLayout::kFixedSize,
-                            views::GridLayout::USE_PREF, 0, 0);
-      column_set->AddPaddingColumn(views::GridLayout::kFixedSize,
-                                   column_divider);
-      column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
-                            1.0, views::GridLayout::USE_PREF, 0, 0);
-      break;
-    case TRIPLE_VIEW_COLUMN_SET:
-      column_set->AddColumn(views::GridLayout::LEADING, views::GridLayout::FILL,
-                            views::GridLayout::kFixedSize,
-                            views::GridLayout::USE_PREF, 0, 0);
-      column_set->AddPaddingColumn(views::GridLayout::kFixedSize,
-                                   column_divider);
-      column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
-                            1.0, views::GridLayout::USE_PREF, 0, 0);
-      column_set->AddPaddingColumn(views::GridLayout::kFixedSize,
-                                   column_divider);
-      column_set->AddColumn(
-          views::GridLayout::TRAILING, views::GridLayout::FILL,
-          views::GridLayout::kFixedSize, views::GridLayout::USE_PREF, 0, 0);
-      break;
-  }
+std::unique_ptr<views::View> CreateRow() {
+  auto row = std::make_unique<views::View>();
+  views::FlexLayout* row_layout =
+      row->SetLayoutManager(std::make_unique<views::FlexLayout>());
+  row_layout->SetOrientation(views::LayoutOrientation::kHorizontal)
+      .SetIgnoreDefaultMainAxisMargins(true)
+      .SetCollapseMargins(true)
+      .SetDefault(
+          views::kMarginsKey,
+          gfx::Insets(
+              /*vertical=*/0,
+              /*horizontal=*/ChromeLayoutProvider::Get()->GetDistanceMetric(
+                  views::DISTANCE_RELATED_CONTROL_HORIZONTAL)));
+  return row;
 }
 
 // Builds a credential row, adds the given elements to the layout.
 // |destination_field| is nullptr if the destination field shouldn't be shown.
-// |password_view_button| is an optional field. If it is a nullptr, a
-// DOUBLE_VIEW_COLUMN_SET_PASSWORD will be used for password row instead of
-// TRIPLE_VIEW_COLUMN_SET.
+// |password_view_button| is an optional field.
 void BuildCredentialRows(
-    views::GridLayout* layout,
+    views::View* parent_view,
     std::unique_ptr<views::View> destination_field,
     std::unique_ptr<views::View> username_field,
     std::unique_ptr<views::View> password_field,
     std::unique_ptr<views::ToggleImageButton> password_view_button) {
-  // TODO(crbug.com/1044038): Use an internationalized string instead.
-  int destination_label_width = 0;
-  int destination_field_height = 0;
-  std::unique_ptr<views::Label> destination_label;
-  if (destination_field) {
-    destination_label = std::make_unique<views::Label>(
-        base::ASCIIToUTF16("Destination"), views::style::CONTEXT_LABEL,
-        views::style::STYLE_PRIMARY);
-    destination_label->SetHorizontalAlignment(
-        gfx::HorizontalAlignment::ALIGN_LEFT);
-    destination_label_width = destination_label->GetPreferredSize().width();
-    destination_field_height = destination_field->GetPreferredSize().height();
-  }
-
   std::unique_ptr<views::Label> username_label(new views::Label(
       l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_USERNAME_LABEL),
       views::style::CONTEXT_LABEL, views::style::STYLE_PRIMARY));
@@ -129,56 +83,53 @@ void BuildCredentialRows(
       views::style::CONTEXT_LABEL, views::style::STYLE_PRIMARY));
   password_label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
 
-  int labels_width = std::max({destination_label_width,
-                               username_label->GetPreferredSize().width(),
+  int labels_width = std::max({username_label->GetPreferredSize().width(),
                                password_label->GetPreferredSize().width()});
-  int fields_height = std::max({destination_field_height,
-                                username_field->GetPreferredSize().height(),
+  int fields_height = std::max({username_field->GetPreferredSize().height(),
                                 password_field->GetPreferredSize().height()});
+
+  username_label->SetPreferredSize(gfx::Size(labels_width, fields_height));
+  password_label->SetPreferredSize(gfx::Size(labels_width, fields_height));
 
   // Destination row.
   if (destination_field) {
-    BuildColumnSet(layout, DOUBLE_VIEW_COLUMN_SET_DESTINATION);
-    layout->StartRow(views::GridLayout::kFixedSize,
-                     DOUBLE_VIEW_COLUMN_SET_DESTINATION);
-    layout->AddView(std::move(destination_label), 1, 1,
-                    views::GridLayout::LEADING, views::GridLayout::FILL,
-                    labels_width, 0);
-    layout->AddView(std::move(destination_field), 1, 1, views::GridLayout::FILL,
-                    views::GridLayout::FILL, 0, fields_height);
+    std::unique_ptr<views::View> destination_row = CreateRow();
 
-    layout->AddPaddingRow(views::GridLayout::kFixedSize,
-                          ChromeLayoutProvider::Get()->GetDistanceMetric(
-                              DISTANCE_CONTROL_LIST_VERTICAL));
+    destination_field->SetProperty(
+        views::kFlexBehaviorKey,
+        views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+                                 views::MaximumFlexSizeRule::kUnbounded));
+    destination_row->AddChildView(std::move(destination_field));
+
+    parent_view->AddChildView(std::move(destination_row));
   }
 
   // Username row.
-  BuildColumnSet(layout, DOUBLE_VIEW_COLUMN_SET_USERNAME);
-  layout->StartRow(views::GridLayout::kFixedSize,
-                   DOUBLE_VIEW_COLUMN_SET_USERNAME);
-  layout->AddView(std::move(username_label), 1, 1, views::GridLayout::LEADING,
-                  views::GridLayout::FILL, labels_width, 0);
-  layout->AddView(std::move(username_field), 1, 1, views::GridLayout::FILL,
-                  views::GridLayout::FILL, 0, fields_height);
+  std::unique_ptr<views::View> username_row = CreateRow();
+  username_row->AddChildView(std::move(username_label));
+  username_field->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+                               views::MaximumFlexSizeRule::kUnbounded));
+  username_row->AddChildView(std::move(username_field));
 
-  layout->AddPaddingRow(views::GridLayout::kFixedSize,
-                        ChromeLayoutProvider::Get()->GetDistanceMetric(
-                            DISTANCE_CONTROL_LIST_VERTICAL));
+  parent_view->AddChildView(std::move(username_row));
 
   // Password row.
-  PasswordSaveUpdateWithAccountStoreViewColumnSetType type =
-      password_view_button ? TRIPLE_VIEW_COLUMN_SET
-                           : DOUBLE_VIEW_COLUMN_SET_PASSWORD;
-  BuildColumnSet(layout, type);
-  layout->StartRow(views::GridLayout::kFixedSize, type);
-  layout->AddView(std::move(password_label), 1, 1, views::GridLayout::LEADING,
-                  views::GridLayout::FILL, labels_width, 0);
-  layout->AddView(std::move(password_field), 1, 1, views::GridLayout::FILL,
-                  views::GridLayout::FILL, 0, fields_height);
+  std::unique_ptr<views::View> password_row = CreateRow();
+  password_row->AddChildView(std::move(password_label));
+  password_field->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+                               views::MaximumFlexSizeRule::kUnbounded));
+  password_row->AddChildView(std::move(password_field));
+
   // The eye icon is also added to the layout if it was passed.
   if (password_view_button) {
-    layout->AddView(std::move(password_view_button));
+    password_row->AddChildView(std::move(password_view_button));
   }
+
+  parent_view->AddChildView(std::move(password_row));
 }
 
 // Create a vector which contains only the values in |items| and no elements.
@@ -272,9 +223,11 @@ std::unique_ptr<views::Combobox> CreateDestinationCombobox(
     const std::string& account,
     bool is_using_account_store) {
   std::vector<base::string16> destinations;
-  destinations.push_back(base::ASCIIToUTF16(account));
+  destinations.push_back(
+      base::ASCIIToUTF16("in your Google Account (" + account + ")"));
   // TODO(crbug.com/1044038): Use an internationalized string instead.
-  destinations.push_back(base::ASCIIToUTF16("Local"));
+  destinations.push_back(base::ASCIIToUTF16("only on this device"));
+
   auto combobox = std::make_unique<views::Combobox>(
       std::make_unique<ui::SimpleComboboxModel>(std::move(destinations)));
   if (is_using_account_store)
@@ -314,6 +267,22 @@ std::string GetSignedInEmail(Profile* profile) {
 }
 
 }  // namespace
+
+// // The class notifies the bubble when it is expanded completely.
+class PasswordSaveUpdateWithAccountStoreView::BubbleExpansionObserver
+    : public ui::ImplicitAnimationObserver {
+ public:
+  explicit BubbleExpansionObserver(
+      PasswordSaveUpdateWithAccountStoreView* bubble)
+      : bubble_(bubble) {}
+
+  void OnImplicitAnimationsCompleted() override {
+    bubble_->OnBubbleExpansionFinished();
+  }
+
+ private:
+  PasswordSaveUpdateWithAccountStoreView* bubble_;
+};
 
 PasswordSaveUpdateWithAccountStoreView::PasswordSaveUpdateWithAccountStoreView(
     content::WebContents* web_contents,
@@ -370,8 +339,19 @@ PasswordSaveUpdateWithAccountStoreView::PasswordSaveUpdateWithAccountStoreView(
     std::unique_ptr<views::ToggleImageButton> password_view_button =
         CreatePasswordViewButton(this, are_passwords_revealed_);
 
-    views::GridLayout* layout =
-        SetLayoutManager(std::make_unique<views::GridLayout>());
+    views::FlexLayout* layout =
+        SetLayoutManager(std::make_unique<views::FlexLayout>());
+    layout->SetOrientation(views::LayoutOrientation::kVertical)
+        .SetMainAxisAlignment(views::LayoutAlignment::kEnd)
+        .SetCrossAxisAlignment(views::LayoutAlignment::kStretch)
+        .SetIgnoreDefaultMainAxisMargins(true)
+        .SetCollapseMargins(true)
+        .SetDefault(
+            views::kMarginsKey,
+            gfx::Insets(
+                /*vertical=*/ChromeLayoutProvider::Get()->GetDistanceMetric(
+                    DISTANCE_CONTROL_LIST_VERTICAL),
+                /*horizontal=*/0));
 
     username_dropdown_ = username_dropdown.get();
     password_dropdown_ = password_dropdown.get();
@@ -379,8 +359,13 @@ PasswordSaveUpdateWithAccountStoreView::PasswordSaveUpdateWithAccountStoreView(
     password_view_button_ = password_view_button.get();
 
     BuildCredentialRows(
-        layout, std::move(destination_dropdown), std::move(username_dropdown),
-        std::move(password_dropdown), std::move(password_view_button));
+        /*parent_view=*/this, std::move(destination_dropdown),
+        std::move(username_dropdown), std::move(password_dropdown),
+        std::move(password_view_button));
+
+    // The account picker is only visible in Save bubbble, not Update bubble.
+    if (destination_dropdown_)
+      destination_dropdown_->SetVisible(!controller_.IsCurrentStateUpdate());
   }
 
   {
@@ -392,16 +377,16 @@ PasswordSaveUpdateWithAccountStoreView::PasswordSaveUpdateWithAccountStoreView(
       (dialog->controller_.*func)();
     };
 
-    DialogDelegate::SetAcceptCallback(base::BindOnce(
-        button_clicked, base::Unretained(this), &Controller::OnSaveClicked));
-    DialogDelegate::SetCancelCallback(base::BindOnce(
+    SetAcceptCallback(base::BindOnce(button_clicked, base::Unretained(this),
+                                     &Controller::OnSaveClicked));
+    SetCancelCallback(base::BindOnce(
         button_clicked, base::Unretained(this),
         is_update_bubble_ ? &Controller::OnNopeUpdateClicked
                           : &Controller::OnNeverForThisSiteClicked));
   }
 
-  DialogDelegate::SetFootnoteView(CreateFooterView());
-  UpdateDialogButtons();
+  SetFootnoteView(CreateFooterView());
+  UpdateDialogButtonsAndAccountPickerVisiblity();
 }
 
 PasswordSaveUpdateWithAccountStoreView::
@@ -441,7 +426,7 @@ void PasswordSaveUpdateWithAccountStoreView::OnContentChanged(
   if (is_update_state_before != controller_.IsCurrentStateUpdate() ||
       is_ok_button_enabled_before !=
           IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK)) {
-    UpdateDialogButtons();
+    UpdateDialogButtonsAndAccountPickerVisiblity();
     DialogModelChanged();
   }
 }
@@ -524,19 +509,42 @@ void PasswordSaveUpdateWithAccountStoreView::
                                  std::move(new_password));
 }
 
-void PasswordSaveUpdateWithAccountStoreView::UpdateDialogButtons() {
-  DialogDelegate::SetButtons(
-      (ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL));
-  DialogDelegate::SetButtonLabel(
+void PasswordSaveUpdateWithAccountStoreView::
+    UpdateDialogButtonsAndAccountPickerVisiblity() {
+  SetButtons((ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL));
+  SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(controller_.IsCurrentStateUpdate()
                                     ? IDS_PASSWORD_MANAGER_UPDATE_BUTTON
                                     : IDS_PASSWORD_MANAGER_SAVE_BUTTON));
-  DialogDelegate::SetButtonLabel(
+  SetButtonLabel(
       ui::DIALOG_BUTTON_CANCEL,
       l10n_util::GetStringUTF16(
           is_update_bubble_ ? IDS_PASSWORD_MANAGER_CANCEL_BUTTON
                             : IDS_PASSWORD_MANAGER_BUBBLE_BLACKLIST_BUTTON));
+  // Nothing to do if the bubble isn't visible yet.
+  if (!GetWidget())
+    return;
+
+  // Nothing else to do if the account picker hasn't been created.
+  if (!destination_dropdown_)
+    return;
+
+  // If the expanded bubble layer height isn't yet computed, do it.
+  if (expanded_bubble_height_ == -1) {
+    // We need to compute the layer height before any animation takes place.
+    ui::Layer* layer = GetWidget()->GetLayer();
+    expanded_bubble_height_ = layer->bounds().height();
+    // If the account picker is current invisible, account for the extra space
+    // added when it will become visible.
+    if (!destination_dropdown_->GetVisible()) {
+      expanded_bubble_height_ +=
+          destination_dropdown_->GetPreferredSize().height() +
+          ChromeLayoutProvider::Get()->GetDistanceMetric(
+              DISTANCE_CONTROL_LIST_VERTICAL);
+    }
+  }
+  StartResizing();
 }
 
 std::unique_ptr<views::View>
@@ -550,4 +558,31 @@ PasswordSaveUpdateWithAccountStoreView::CreateFooterView() {
   label->SetMultiLine(true);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   return label;
+}
+
+void PasswordSaveUpdateWithAccountStoreView::StartResizing() {
+  DCHECK(GetWidget());
+  DCHECK(destination_dropdown_);
+  expansion_observer_.reset();
+  ui::Layer* layer = GetWidget()->GetLayer();
+  ui::ScopedLayerAnimationSettings animator(layer->GetAnimator());
+  if (controller_.IsCurrentStateUpdate()) {
+    // We need to hide the account picker, do it immediately.
+    destination_dropdown_->SetVisible(false);
+    SizeToContents();
+  } else {
+    // We need to show the account picker: Expand the bubble first and then show
+    // the account picker.
+    expansion_observer_ = std::make_unique<BubbleExpansionObserver>(this);
+    animator.AddObserver(expansion_observer_.get());
+    gfx::Rect bounds = layer->bounds();
+    bounds.set_height(expanded_bubble_height_);
+    layer->SetBounds(bounds);
+  }
+}
+
+void PasswordSaveUpdateWithAccountStoreView::OnBubbleExpansionFinished() {
+  DCHECK(destination_dropdown_);
+  DCHECK(!controller_.IsCurrentStateUpdate());
+  destination_dropdown_->SetVisible(true);
 }

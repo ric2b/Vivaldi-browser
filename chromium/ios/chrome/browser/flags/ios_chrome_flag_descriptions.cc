@@ -23,10 +23,28 @@ const char kAutofillCreditCardUploadDescription[] =
     "Offers uploading Autofilled credit cards to Google Payments after form "
     "submission.";
 
+const char kAutofillEnableCardNicknameManagementName[] =
+    "Enable Autofill card nickname management";
+const char kAutofillEnableCardNicknameManagementDescription[] =
+    "When enabled, nicknames for credit cards will be able to be uploaded to "
+    "Payments or modified locally.";
+
 const char kAutofillEnableCompanyNameName[] =
     "Enable Autofill Company Name field";
 const char kAutofillEnableCompanyNameDescription[] =
     "When enabled, Company Name fields will be auto filled";
+
+const char kAutofillEnableGoogleIssuedCardName[] =
+    "Enable Autofill Google-issued card";
+const char kAutofillEnableGoogleIssuedCardDescription[] =
+    "When enabled, Google-issued cards will be available in the autofill "
+    "suggestions.";
+
+const char kAutofillEnableSurfacingServerCardNicknameName[] =
+    "Enable surfacing masked server card nicknames";
+const char kAutofillEnableSurfacingServerCardNicknameDescription[] =
+    "When enabled, if Google Payments cards were given nicknames in a Google "
+    "Pay app, Autofill will surface these nicknames in suggestions.";
 
 const char kAutofillEnforceMinRequiredFieldsForHeuristicsName[] =
     "Autofill Enforce Min Required Fields For Heuristics";
@@ -56,13 +74,6 @@ const char kAutofillNoLocalSaveOnUnmaskSuccessName[] =
 const char kAutofillNoLocalSaveOnUnmaskSuccessDescription[] =
     "When enabled, the server card unmask prompt will not include the checkbox "
     "to also save the card locally on the current device upon success.";
-
-const char kAutofillNoLocalSaveOnUploadSuccessName[] =
-    "Disable saving local copy of uploaded card when credit card upload "
-    "succeeds";
-const char kAutofillNoLocalSaveOnUploadSuccessDescription[] =
-    "When enabled, no local copy of server card will be saved when credit card "
-    "upload succeeds.";
 
 const char kAutofillPruneSuggestionsName[] = "Autofill Prune Suggestions";
 const char kAutofillPruneSuggestionsDescription[] =
@@ -102,6 +113,12 @@ const char kAutofillUseMobileLabelDisambiguationName[] =
 const char kAutofillUseMobileLabelDisambiguationDescription[] =
     "When enabled, Autofill suggestions' labels are displayed using a "
     "mobile-friendly format.";
+
+const char kBlockPopupInfobarMessagesUIName[] =
+    "Block Popup Infobars Messages UI";
+const char kBlockPopupInfobarMessagesUIDescription[] =
+    "When enabled Block Popup Infobars use the new Messages UI. "
+    "IOSInfobarUIReboot needs to be enabled as well for this to work.";
 
 extern const char kLogBreadcrumbsName[] = "Log Breadcrumb Events";
 extern const char kLogBreadcrumbsDescription[] =
@@ -180,18 +197,20 @@ const char kDownloadInfobarMessagesUIDescription[] =
 const char kDragAndDropName[] = "Drag and Drop";
 const char kDragAndDropDescription[] = "Enable support for drag and drop.";
 
+const char kEditBookmarksIOSName[] = "Edit Bookmarks IOS";
+const char kEditBookmarksIOSDescription[] =
+    "Enables support for the EditBookmarksEnabled enterprise policy on iOS";
+
 const char kEmbedderBlockRestoreUrlName[] =
     "Allow embedders to prevent certain URLs from restoring.";
 const char kEmbedderBlockRestoreUrlDescription[] =
     "Embedders can prevent URLs from restoring.";
 
-const char kEnableAutofillCreditCardUploadEditableCardholderNameName[] =
-    "Make cardholder name editable in dialog during credit card upload";
-const char kEnableAutofillCreditCardUploadEditableCardholderNameDescription[] =
-    "If enabled, in certain situations when offering credit card upload to "
-    "Google Payments, the cardholder name can be edited within the "
-    "offer-to-save dialog, which is prefilled with the name from the signed-in "
-    "Google Account.";
+const char kEnableAutofillCacheServerCardInfoName[] =
+    "Enable Autofill to cache unmasked server card info";
+const char kEnableAutofillCacheServerCardInfoDescription[] =
+    "If enabled, when a server card is unmasked, its info will be cached until "
+    "page navigation to simplify consecutive fills on the same page.";
 
 const char kEnableAutofillCreditCardUploadEditableExpirationDateName[] =
     "Make expiration date editable in dialog during credit card upload";
@@ -205,9 +224,9 @@ const char kEnableClipboardProviderImageSuggestionsName[] =
 const char kEnableClipboardProviderImageSuggestionsDescription[] =
     "Enable suggesting a search for the image copied to the clipboard";
 
-const char kUseJSForErrorPageName[] = "Enable new error page workflow";
-const char kUseJSForErrorPageDescription[] =
-    "Use JavaScript for the error pages";
+const char kEnableMyGoogleName[] = "Enable MyGoogle UI";
+const char kEnableMyGoogleDescription[] =
+    "Enable MyGoogle account management UI in iOS Settings";
 
 const char kEnablePersistentDownloadsName[] = "Enable persistent downloads";
 const char kEnablePersistentDownloadsDescription[] =
@@ -222,9 +241,10 @@ const char kEnableSyncUSSNigoriName[] = "Enable USS for sync encryption keys";
 const char kEnableSyncUSSNigoriDescription[] =
     "Enables the new, experimental implementation of sync encryption keys";
 
-const char kFindInPageiFrameName[] = "Find in Page in iFrames.";
-const char kFindInPageiFrameDescription[] =
-    "When enabled, Find In Page will search in iFrames.";
+const char kForceStartupSigninPromoName[] = "Display the startup sign-in promo";
+const char kForceStartupSigninPromoDescription[] =
+    "When enabled, the startup sign-in promo is always displayed when starting "
+    "Chrome.";
 
 const char kForceUnstackedTabstripName[] = "Force unstacked tabstrip.";
 const char kForceUnstackedTabstripDescription[] =
@@ -240,10 +260,6 @@ const char kFullscreenControllerBrowserScopedName[] =
 const char kFullscreenControllerBrowserScopedDescription[] =
     "When enabled, FullscreenController will be stored and retrieved using the "
     "Browser.";
-
-const char kIgnoresViewportScaleLimitsName[] = "Ignore Viewport Scale Limits";
-const char kIgnoresViewportScaleLimitsDescription[] =
-    "When enabled the page can always be scaled, regardless of author intent.";
 
 const char kInfobarOverlayUIName[] = "Use OverlayPresenter for infobars";
 const char kInfobarOverlayUIDescription[] =
@@ -276,6 +292,11 @@ const char kLockBottomToolbarDescription[] =
     "When enabled, the bottom toolbar will not get collapsed when scrolling "
     "into fullscreen mode.";
 
+const char kManagedBookmarksIOSName[] = "Managed Bookmarks IOS";
+const char kManagedBookmarksIOSDescription[] =
+    "When enabled, managed bookmarks set by an enterprise policy can be shown "
+    "in the bookmarks UI on iOS";
+
 const char kMarkHttpAsName[] = "Mark non-secure origins as non-secure";
 const char kMarkHttpAsDescription[] = "Change the UI treatment for HTTP pages";
 
@@ -284,10 +305,10 @@ const char kMobileGoogleSRPDescription[] =
     "Request the Mobile version of Google SRP by default when the desktop mode "
     "is requested by default.";
 
-const char kNonModalDialogsName[] = "Use non-modal JavaScript dialogs";
-const char kNonModalDialogsDescription[] =
-    "Presents JavaScript dialogs non-modally so that the user can change tabs "
-    "while a dialog is displayed.";
+const char kNewSigninArchitectureName[] = "Enable new sign-in architecture";
+const char kNewSigninArchitectureDescription[] =
+    "When enabled uses the new sign-in architecture based on core Bling "
+    "design paradigms.";
 
 const char kOmniboxPreserveDefaultMatchAgainstAsyncUpdateName[] =
     "Omnibox Preserve Default Match Against Async Update";
@@ -304,11 +325,17 @@ const char kOmniboxUIMaxAutocompleteMatchesDescription[] =
     "Changes the maximum number of autocomplete matches displayed in the "
     "Omnibox UI.";
 
-const char kOmniboxOnDeviceHeadSuggestionsName[] =
-    "Omnibox on device head suggestions";
-const char kOmniboxOnDeviceHeadSuggestionsDescription[] =
+const char kOmniboxOnDeviceHeadSuggestionsIncognitoName[] =
+    "Omnibox on device head suggestions (incognito only)";
+const char kOmniboxOnDeviceHeadSuggestionsIncognitoDescription[] =
     "Shows Google head non personalized search suggestions provided by a "
-    "compact on device model";
+    "compact on device model for incognito";
+
+const char kOmniboxOnDeviceHeadSuggestionsNonIncognitoName[] =
+    "Omnibox on device head suggestions (non-incognito only)";
+const char kOmniboxOnDeviceHeadSuggestionsNonIncognitoDescription[] =
+    "Shows Google head non personalized search suggestions provided by a "
+    "compact on device model for non-incognito";
 
 const char kOmniboxOnFocusSuggestionsName[] = "Omnibox on-focus suggestions";
 const char kOmniboxOnFocusSuggestionsDescription[] =
@@ -322,13 +349,19 @@ const char kOpenDownloadsInFilesAppDescription[] =
     "the tools menu or after pressing the 'Open in downloads' button invoked "
     "by pressing 'Open In...' after download completes.";
 
-const char kPageInfoChromeGuardName[] = "Third-party cookie blocking UI";
-const char kPageInfoChromeGuardDescription[] =
-    "Allows user to manage third-party cookie blocking from the page info";
+const char kImprovedCookieControlsName[] = "Third-party cookie blocking UI";
+const char kImprovedCookieControlsDescription[] =
+    "Allows user to manage third-party cookie blocking.";
 
 const char kPageInfoRefactoringName[] = "New design of the page info";
 const char kPageInfoRefactoringDescription[] =
     "Uses the new design for the page security info.";
+
+#if defined(__IPHONE_13_4)
+const char kPointerSupportName[] = "Enables pointer support on tablets";
+const char kPointerSupportDescription[] =
+    "Enables pointer support on tablets on iOS 13.4 and above.";
+#endif  // defined(__IPHONE_13_4)
 
 const char kQRCodeGenerationName[] = "QR Code Generation";
 const char kQRCodeGenerationDescription[] =
@@ -352,11 +385,6 @@ const char kSendTabToSelfName[] = "Send tab to self";
 const char kSendTabToSelfDescription[] =
     "Allows users to receive tabs that were pushed from another of their "
     "synced devices, in order to easily transition tabs between devices.";
-
-const char kSendTabToSelfBroadcastName[] = "Send tab to self broadcast";
-const char kSendTabToSelfBroadcastDescription[] =
-    "Allows users to broadcast the tab they send to all of their devices "
-    "instead of targetting only one device.";
 
 const char kSendUmaOverAnyNetwork[] =
     "Send UMA data over any network available.";
@@ -383,16 +411,6 @@ const char kSSLCommittedInterstitialsDescription[] =
     "When enabled, SSL interstitial pages will be committed rather than using "
     "an overlay on the page.";
 
-const char kForceStartupSigninPromoName[] = "Display the startup sign-in promo";
-const char kForceStartupSigninPromoDescription[] =
-    "When enabled, the startup sign-in promo is always displayed when starting "
-    "Chrome.";
-
-const char kNewSigninArchitectureName[] = "Enable new sign-in architecture";
-const char kNewSigninArchitectureDescription[] =
-    "When enabled uses the new sign-in architecture based on core Bling "
-    "design paradigms.";
-
 const char kSyncDeviceInfoInTransportModeName[] =
     "Enable syncing DeviceInfo in transport-only sync mode.";
 const char kSyncDeviceInfoInTransportModeDescription[] =
@@ -412,6 +430,15 @@ const char kTranslateInfobarMessagesUIName[] =
     "Enable Translate Infobar Messages UI";
 const char kTranslateInfobarMessagesUIDescription[] =
     "When enabled, the Translate Infobar uses the new Messages UI.";
+
+const char kURLBlocklistIOSName[] = "URL Blocklist Policy";
+const char kURLBlocklistIOSDescription[] =
+    "When enabled, URLs can be blocked/allowed by the URLBlocklist/URLAllowlist"
+    "enterprise policies.";
+
+const char kUseJSForErrorPageName[] = "Enable new error page workflow";
+const char kUseJSForErrorPageDescription[] =
+    "Use JavaScript for the error pages";
 
 const char kWalletServiceUseSandboxName[] = "Use Google Payments sandbox";
 const char kWalletServiceUseSandboxDescription[] =

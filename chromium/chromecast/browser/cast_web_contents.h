@@ -170,6 +170,9 @@ class CastWebContents {
     // the underlying OnRendererProcessStarted() method.
     virtual void OnRenderProcessReady(const base::Process& process) {}
 
+    // Notify media playback state changes for the underlying WebContents.
+    virtual void MediaPlaybackChanged(bool media_playing) {}
+
     // Adds |this| to the ObserverList in the implementation of
     // |cast_web_contents|.
     void Observe(CastWebContents* cast_web_contents);
@@ -361,11 +364,6 @@ class CastWebContents {
   // See html.spec.whatwg.org/multipage/web-messaging.html sect. 9.4.3
   // for more details on how the target origin policy is applied.
   // Should be called on UI thread.
-  // TODO(crbug.com/803242): Deprecated and will be shortly removed.
-  virtual void PostMessageToMainFrame(
-      const std::string& target_origin,
-      const std::string& data,
-      std::vector<mojo::ScopedMessagePipeHandle> channels) = 0;
   virtual void PostMessageToMainFrame(
       const std::string& target_origin,
       const std::string& data,
@@ -390,6 +388,10 @@ class CastWebContents {
   // valid sequence, enforced via SequenceChecker.
   virtual void AddObserver(Observer* observer) = 0;
   virtual void RemoveObserver(Observer* observer) = 0;
+
+  // Enable or disable devtools remote debugging for this WebContents and any
+  // inner WebContents that are spawned from it.
+  virtual void SetEnabledForRemoteDebugging(bool enabled) = 0;
 
   // Used to expose CastWebContents's |binder_registry_| to Delegate.
   // Delegate should register its mojo interface binders via this function

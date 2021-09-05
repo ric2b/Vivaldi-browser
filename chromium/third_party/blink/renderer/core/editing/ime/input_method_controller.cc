@@ -62,6 +62,7 @@
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/platform/geometry/double_rect.h"
 
 namespace blink {
 
@@ -391,8 +392,11 @@ int ComputeAutocapitalizeFlags(const Element* element) {
 
 enum class InputMethodController::TypingContinuation { kContinue, kEnd };
 
-InputMethodController::InputMethodController(LocalFrame& frame)
-    : frame_(&frame), has_composition_(false) {}
+InputMethodController::InputMethodController(LocalDOMWindow& window,
+                                             LocalFrame& frame)
+    : ExecutionContextLifecycleObserver(&window),
+      frame_(frame),
+      has_composition_(false) {}
 
 InputMethodController::~InputMethodController() = default;
 
@@ -402,7 +406,7 @@ bool InputMethodController::IsAvailable() const {
 
 Document& InputMethodController::GetDocument() const {
   DCHECK(IsAvailable());
-  return *Document::From(GetExecutionContext());
+  return *To<LocalDOMWindow>(GetExecutionContext())->document();
 }
 
 bool InputMethodController::HasComposition() const {
@@ -412,6 +416,10 @@ bool InputMethodController::HasComposition() const {
 
 inline Editor& InputMethodController::GetEditor() const {
   return GetFrame().GetEditor();
+}
+
+LocalFrame& InputMethodController::GetFrame() const {
+  return *frame_;
 }
 
 void InputMethodController::Clear() {
@@ -430,11 +438,6 @@ void InputMethodController::ContextDestroyed() {
   Clear();
   composition_range_ = nullptr;
   active_edit_context_ = nullptr;
-}
-
-void InputMethodController::DidAttachDocument(Document* document) {
-  DCHECK(document);
-  SetExecutionContext(document->ToExecutionContext());
 }
 
 void InputMethodController::SelectComposition() const {
@@ -770,7 +773,7 @@ void InputMethodController::CancelComposition() {
 
   // An open typing command that disagrees about current selection would cause
   // issues with typing later on.
-  TypingCommand::CloseTyping(frame_);
+  TypingCommand::CloseTyping(&GetFrame());
 
   // No DOM update after 'compositionend'.
   DispatchCompositionEndEvent(GetFrame(), g_empty_string);
@@ -1373,11 +1376,12 @@ void InputMethodController::GetLayoutBounds(WebRect* control_bounds,
   // Selection bounds are currently populated only for EditContext.
   // For editable elements we use GetCompositionCharacterBounds to fetch the
   // selection bounds.
-  DOMRect* editable_rect = element->getBoundingClientRect();
-  control_bounds->x = editable_rect->x();
-  control_bounds->y = editable_rect->y();
-  control_bounds->width = editable_rect->width();
-  control_bounds->height = editable_rect->height();
+  const DOMRect* editable_rect = element->getBoundingClientRect();
+  const DoubleRect editable_rect_double(editable_rect->x(), editable_rect->y(),
+                                        editable_rect->width(),
+                                        editable_rect->height());
+  // Return the IntRect containing the given DOMRect.
+  *control_bounds = EnclosingIntRect(editable_rect_double);
 }
 
 WebTextInputInfo InputMethodController::TextInputInfo() const {

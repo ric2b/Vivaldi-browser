@@ -105,9 +105,11 @@ class WaitForSwapDisplayClient : public DisplayClient {
     DCHECK(loop_);
     loop_->Quit();
   }
+  void SetWideColorEnabled(bool enabled) override {}
   void SetPreferredFrameInterval(base::TimeDelta interval) override {}
   base::TimeDelta GetPreferredFrameIntervalForFrameSinkId(
-      const FrameSinkId& id) override {
+      const FrameSinkId& id,
+      mojom::CompositorFrameSinkType* type) override {
     return BeginFrameArgs::MinInterval();
   }
 

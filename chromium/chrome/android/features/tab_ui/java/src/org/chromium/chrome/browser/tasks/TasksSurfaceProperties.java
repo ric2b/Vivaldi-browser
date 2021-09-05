@@ -27,6 +27,8 @@ public class TasksSurfaceProperties {
             new PropertyModel.WritableBooleanPropertyKey();
     public static final PropertyModel.WritableBooleanPropertyKey IS_INCOGNITO_DESCRIPTION_VISIBLE =
             new PropertyModel.WritableBooleanPropertyKey();
+    public static final PropertyModel.WritableBooleanPropertyKey IS_SURFACE_BODY_VISIBLE =
+            new PropertyModel.WritableBooleanPropertyKey();
     public static final PropertyModel.WritableBooleanPropertyKey IS_TAB_CAROUSEL_VISIBLE =
             new PropertyModel.WritableBooleanPropertyKey();
     public static final PropertyModel
@@ -66,14 +68,21 @@ public class TasksSurfaceProperties {
     public static final PropertyModel
             .WritableObjectPropertyKey<View.OnClickListener> VOICE_SEARCH_BUTTON_CLICK_LISTENER =
             new PropertyModel.WritableObjectPropertyKey<View.OnClickListener>();
+    public static final PropertyModel.WritableIntPropertyKey TASKS_SURFACE_BODY_TOP_MARGIN =
+            new PropertyModel.WritableIntPropertyKey();
+    public static final PropertyModel.WritableIntPropertyKey MV_TILES_CONTAINER_TOP_MARGIN =
+            new PropertyModel.WritableIntPropertyKey();
+    public static final PropertyModel.WritableIntPropertyKey TAB_SWITCHER_TITLE_TOP_MARGIN =
+            new PropertyModel.WritableIntPropertyKey();
     public static final PropertyKey[] ALL_KEYS = new PropertyKey[] {IS_FAKE_SEARCH_BOX_VISIBLE,
             IS_INCOGNITO, IS_INCOGNITO_DESCRIPTION_INITIALIZED, IS_INCOGNITO_DESCRIPTION_VISIBLE,
-            IS_TAB_CAROUSEL_VISIBLE, IS_VOICE_RECOGNITION_BUTTON_VISIBLE,
+            IS_SURFACE_BODY_VISIBLE, IS_TAB_CAROUSEL_VISIBLE, IS_VOICE_RECOGNITION_BUTTON_VISIBLE,
             INCOGNITO_COOKIE_CONTROLS_CARD_VISIBILITY,
             INCOGNITO_COOKIE_CONTROLS_ICON_CLICK_LISTENER, INCOGNITO_COOKIE_CONTROLS_TOGGLE_CHECKED,
             INCOGNITO_COOKIE_CONTROLS_TOGGLE_CHECKED_LISTENER,
             INCOGNITO_COOKIE_CONTROLS_TOGGLE_ENFORCEMENT, INCOGNITO_COOKIE_CONTROLS_MANAGER,
             INCOGNITO_LEARN_MORE_CLICK_LISTENER, FAKE_SEARCH_BOX_CLICK_LISTENER,
             FAKE_SEARCH_BOX_TEXT_WATCHER, MORE_TABS_CLICK_LISTENER, MV_TILES_VISIBLE,
-            VOICE_SEARCH_BUTTON_CLICK_LISTENER};
+            VOICE_SEARCH_BUTTON_CLICK_LISTENER, TASKS_SURFACE_BODY_TOP_MARGIN,
+            MV_TILES_CONTAINER_TOP_MARGIN, TAB_SWITCHER_TITLE_TOP_MARGIN};
 }

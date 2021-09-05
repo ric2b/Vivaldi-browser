@@ -2,6 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+
+
+// Identifiers for the default Crostini VM and container.
+/** @type {string} */ const DEFAULT_CROSTINI_VM = 'termina';
+/** @type {string} */ const DEFAULT_CROSTINI_CONTAINER = 'penguin';
+
+
+/**
+ * These values should remain consistent with their C++ counterpart
+ * (chrome/browser/chromeos/crostini/crostini_port_forwarder.h).
+ * @enum {number}
+ */
+const CrostiniPortProtocol = {
+  TCP: 0,
+  UDP: 1,
+};
+
 /**
  * @typedef {{path: string,
  *            pathDisplayText: string}}
@@ -18,8 +35,7 @@ let CrostiniSharedUsbDevice;
 /**
  * @typedef {{label: string,
  *            port_number: number,
- *            active: boolean,
- *            protocol_type: number}}
+ *            protocol_type: !CrostiniPortProtocol}}
  */
 let CrostiniPortSetting;
 
@@ -27,10 +43,17 @@ let CrostiniPortSetting;
  * @typedef {{succeeded: boolean,
  *            canResize: boolean,
  *            isUserChosenSize: boolean,
+ *            isLowSpaceAvailable: boolean,
  *            defaultIndex: number,
  *            ticks: !Array}}
  */
 let CrostiniDiskInfo;
+
+/**
+ * @typedef {{port_number: number,
+ *            protocol_type: !CrostiniPortProtocol}}
+ */
+let CrostiniPortActiveSetting;
 
 /**
  * @fileoverview A helper object used by the "Linux Apps" (Crostini) section
@@ -119,19 +142,23 @@ cr.define('settings', function() {
      * @param {string} vmName Name of vm to add port forwarding for.
      * @param {string} containerName Name of container to add port forwarding
      *     for.
-     * @param {string} portNumber Port number to start forwarding.
-     * @param {number} protocolIndex Protocol index for this port forward: {TCP
-     *     = 0, UDP = 1}
+     * @param {number} portNumber Port number to start forwarding.
+     * @param {!CrostiniPortProtocol} protocol Networking protocol to use.
      * @param {string} label Label for this port.
+     * @return {!Promise<boolean>} Whether the requested port was added and
+     * forwarded successfully.
      */
-    addCrostiniPortForward(
-        vmName, containerName, portNumber, protocolIndex, label) {}
+    addCrostiniPortForward(vmName, containerName, portNumber, protocol, label) {
+    }
 
     /**
      * @param {string} vmName Name of the VM to get disk info for.
+     * @param {boolean} requestFullInfo Whether to request full disk info, which
+     *     can take several seconds because it requires starting the VM. Set to
+     *     false for the main Crostini pages and true for the resize dialog.
      * @return {!Promise<CrostiniDiskInfo>} The requested information.
      */
-    getCrostiniDiskInfo(vmName) {}
+    getCrostiniDiskInfo(vmName, requestFullInfo) {}
 
     /**
      * Resizes a preallocated user-chosen-size Crostini VM disk to the requested
@@ -150,6 +177,74 @@ cr.define('settings', function() {
      * @return {!Promise<boolean>} Whether Crostini requires a restart or not.
      */
     checkCrostiniMicSharingStatus(proposedValue) {}
+
+    /**
+     * @param {string} vmName Name of vm to remove port forwarding for.
+     * @param {string} containerName Name of container to remove port forwarding
+     *     for.
+     * @param {number} portNumber Port number to stop forwarding and remove.
+     * @param {!CrostiniPortProtocol} protocol Networking protocol to use.
+     * @return {!Promise<boolean>} Whether requested port was deallocated and
+     * removed successfully.
+     */
+    removeCrostiniPortForward(vmName, containerName, portNumber, protocol) {}
+
+    /**
+     * @param {string} vmName Name of vm to remove all port forwarding for.
+     * @param {string} containerName Name of container to remove all port
+     *     forwarding for.
+     */
+    removeAllCrostiniPortForwards(vmName, containerName) {}
+
+    /**
+     * @param {string} vmName Name of vm to activate port forwarding for.
+     * @param {string} containerName Name of container to activate port
+     *     forwarding for.
+     * @param {number} portNumber Existing port number to activate.
+     * @param {!CrostiniPortProtocol} protocol Networking protocol for existing
+     * port rule to activate.
+     * @return {!Promise<boolean>} Whether the requested port was forwarded
+     * successfully
+     */
+    activateCrostiniPortForward(vmName, containerName, portNumber, protocol) {}
+
+    /**
+     * @param {string} vmName Name of vm to activate port forwarding for.
+     * @param {string} containerName Name of container to activate port
+     *     forwarding for.
+     * @param {number} portNumber Existing port number to activate.
+     * @param {!CrostiniPortProtocol} protocol Networking protocol for existing
+     * port rule to deactivate.
+     * @return {!Promise<boolean>} Whether the requested port was deallocated
+     * successfully.
+     */
+    deactivateCrostiniPortForward(vmName, containerName, portNumber, protocol) {
+    }
+
+    /**
+     * @return {!Promise<!Array<CrostiniPortActiveSetting>>}
+     */
+    getCrostiniActivePorts() {}
+
+    /**
+     * @return {!Promise<boolean>}
+     */
+    checkCrostiniIsRunning() {}
+
+    /**
+     * Shuts Crostini (Termina VM) down.
+     */
+    shutdownCrostini() {}
+
+    /**
+     * @param {boolean} enabled Set Crostini's access to the mic.
+     */
+    setCrostiniMicSharingEnabled(enabled) {}
+
+    /**
+     * @return {!Promise<boolean>} Return Crostini's access to the mic.
+     */
+    getCrostiniMicSharingEnabled() {}
   }
 
   /** @implements {settings.CrostiniBrowserProxy} */
@@ -235,16 +330,15 @@ cr.define('settings', function() {
     }
 
     /** @override */
-    addCrostiniPortForward(
-        vmName, containerName, portNumber, protocolIndex, label) {
+    addCrostiniPortForward(vmName, containerName, portNumber, protocol, label) {
       return cr.sendWithPromise(
-          'addCrostiniPortForward', vmName, containerName, portNumber,
-          protocolIndex, label);
+          'addCrostiniPortForward', vmName, containerName, portNumber, protocol,
+          label);
     }
 
     /** @override */
-    getCrostiniDiskInfo(vmName) {
-      return cr.sendWithPromise('getCrostiniDiskInfo', vmName);
+    getCrostiniDiskInfo(vmName, fullInfo) {
+      return cr.sendWithPromise('getCrostiniDiskInfo', vmName, fullInfo);
     }
 
     /** @override */
@@ -255,6 +349,57 @@ cr.define('settings', function() {
     /** @override */
     checkCrostiniMicSharingStatus(proposedValue) {
       return cr.sendWithPromise('checkCrostiniMicSharingStatus', proposedValue);
+    }
+
+    /** override */
+    removeCrostiniPortForward(vmName, containerName, portNumber, protocol) {
+      return cr.sendWithPromise(
+          'removeCrostiniPortForward', vmName, containerName, portNumber,
+          protocol);
+    }
+
+    /** override */
+    removeAllCrostiniPortForwards(vmName, containerName) {
+      chrome.send('removeAllCrostiniPortForwards', [vmName, containerName]);
+    }
+
+    /** override */
+    activateCrostiniPortForward(vmName, containerName, portNumber, protocol) {
+      return cr.sendWithPromise(
+          'activateCrostiniPortForward', vmName, containerName, portNumber,
+          protocol);
+    }
+
+    /** @override */
+    deactivateCrostiniPortForward(vmName, containerName, portNumber, protocol) {
+      return cr.sendWithPromise(
+          'deactivateCrostiniPortForward', vmName, containerName, portNumber,
+          protocol);
+    }
+
+    /** @override */
+    getCrostiniActivePorts() {
+      return cr.sendWithPromise('getCrostiniActivePorts');
+    }
+
+    /** @override */
+    checkCrostiniIsRunning() {
+      return cr.sendWithPromise('checkCrostiniIsRunning');
+    }
+
+    /** @override */
+    shutdownCrostini() {
+      chrome.send('shutdownCrostini');
+    }
+
+    /** @override */
+    setCrostiniMicSharingEnabled(enabled) {
+      chrome.send('setCrostiniMicSharingEnabled', [enabled]);
+    }
+
+    /** @override */
+    getCrostiniMicSharingEnabled() {
+      return cr.sendWithPromise('getCrostiniMicSharingEnabled');
     }
   }
 

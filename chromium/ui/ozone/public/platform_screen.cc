@@ -4,10 +4,19 @@
 
 #include "ui/ozone/public/platform_screen.h"
 
+#include "base/logging.h"
+
 namespace ui {
 
 PlatformScreen::PlatformScreen() = default;
 PlatformScreen::~PlatformScreen() = default;
+
+gfx::AcceleratedWidget PlatformScreen::GetLocalProcessWidgetAtPoint(
+    const gfx::Point& point,
+    const std::set<gfx::AcceleratedWidget>& ignore) const {
+  NOTIMPLEMENTED_LOG_ONCE();
+  return gfx::kNullAcceleratedWidget;
+}
 
 std::string PlatformScreen::GetCurrentWorkspace() {
   NOTIMPLEMENTED_LOG_ONCE();

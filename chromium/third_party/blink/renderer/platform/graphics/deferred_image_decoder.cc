@@ -123,6 +123,7 @@ struct DeferredFrameData {
       : orientation_(kDefaultImageOrientation), is_received_(false) {}
 
   ImageOrientation orientation_;
+  IntSize density_corrected_size_;
   base::TimeDelta duration_;
   bool is_received_;
 
@@ -191,20 +192,9 @@ sk_sp<PaintImageGenerator> DeferredImageDecoder::CreateGenerator() {
   scoped_refptr<SegmentReader> segment_reader =
       SegmentReader::CreateFromSkROBuffer(std::move(ro_buffer));
 
-  // ImageFrameGenerator has the latest known alpha state. There will be a
-  // performance boost if the image is opaque since we can avoid painting
-  // the background in this case.
-  // For multi-frame images, these maybe animated on the compositor thread.
-  // So we can not mark them as opaque unless all frames are opaque.
-  // TODO(khushalsagar): Check whether all frames being added to the
-  // generator are opaque when populating FrameMetadata below.
-  SkAlphaType alpha_type = kPremul_SkAlphaType;
-  if (frame_data_.size() == 1u && !frame_generator_->HasAlpha(0u))
-    alpha_type = kOpaque_SkAlphaType;
-
   SkImageInfo info =
       SkImageInfo::MakeN32(decoded_size.width(), decoded_size.height(),
-                           alpha_type, color_space_for_sk_images_);
+                           AlphaType(), color_space_for_sk_images_);
   if (image_is_high_bit_depth_)
     info = info.makeColorType(kRGBA_F16_SkColorType);
 
@@ -327,12 +317,18 @@ int DeferredImageDecoder::RepetitionCount() const {
                            : repetition_count_;
 }
 
-bool DeferredImageDecoder::FrameHasAlphaAtIndex(size_t index) const {
-  if (metadata_decoder_)
-    return metadata_decoder_->FrameHasAlphaAtIndex(index);
-  if (!frame_generator_->IsMultiFrame())
-    return frame_generator_->HasAlpha(index);
-  return true;
+SkAlphaType DeferredImageDecoder::AlphaType() const {
+  // ImageFrameGenerator has the latest known alpha state. There will be a
+  // performance boost if the image is opaque since we can avoid painting
+  // the background in this case.
+  // For multi-frame images, these maybe animated on the compositor thread.
+  // So we can not mark them as opaque unless all frames are opaque.
+  // TODO(khushalsagar): Check whether all frames being added to the
+  // generator are opaque when populating FrameMetadata below.
+  SkAlphaType alpha_type = kPremul_SkAlphaType;
+  if (frame_data_.size() == 1u && !frame_generator_->HasAlpha(0u))
+    alpha_type = kOpaque_SkAlphaType;
+  return alpha_type;
 }
 
 bool DeferredImageDecoder::FrameIsReceivedAtIndex(size_t index) const {
@@ -367,6 +363,15 @@ ImageOrientation DeferredImageDecoder::OrientationAtIndex(size_t index) const {
     return frame_data_[index].orientation_;
   return kDefaultImageOrientation;
 }
+
+IntSize DeferredImageDecoder::DensityCorrectedSizeAtIndex(size_t index) const {
+  if (metadata_decoder_)
+    return metadata_decoder_->DensityCorrectedSize();
+  if (index < frame_data_.size())
+    return frame_data_[index].density_corrected_size_;
+  return Size();
+}
+
 
 size_t DeferredImageDecoder::ByteSize() const {
   return rw_buffer_ ? rw_buffer_->size() : 0u;
@@ -432,6 +437,7 @@ void DeferredImageDecoder::PrepareLazyDecodedFrames() {
   for (size_t i = previous_size; i < frame_data_.size(); ++i) {
     frame_data_[i].duration_ = metadata_decoder_->FrameDurationAtIndex(i);
     frame_data_[i].orientation_ = metadata_decoder_->Orientation();
+    frame_data_[i].density_corrected_size_ = metadata_decoder_->DensityCorrectedSize();
     frame_data_[i].is_received_ = metadata_decoder_->FrameIsReceivedAtIndex(i);
   }
 

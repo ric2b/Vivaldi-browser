@@ -32,7 +32,8 @@ class WebGPUCommandSerializer final : public dawn_wire::CommandSerializer {
   WebGPUCommandSerializer(
       DawnDeviceClientID device_client_id,
       WebGPUCmdHelper* helper,
-      DawnClientMemoryTransferService* memory_transfer_service);
+      DawnClientMemoryTransferService* memory_transfer_service,
+      std::unique_ptr<TransferBuffer> c2s_transfer_buffer);
   ~WebGPUCommandSerializer() override;
 
   // Send WGPUDeviceProperties to the server side
@@ -45,6 +46,9 @@ class WebGPUCommandSerializer final : public dawn_wire::CommandSerializer {
   // dawn_wire::CommandSerializer implementation
   void* GetCmdSpace(size_t size) final;
   bool Flush() final;
+
+  // Called upon context lost.
+  void HandleGpuControlLostContext();
 
   // For the WebGPUInterface implementation of WebGPUImplementation
   WGPUDevice GetDevice() const;
@@ -61,7 +65,7 @@ class WebGPUCommandSerializer final : public dawn_wire::CommandSerializer {
   uint32_t c2s_buffer_default_size_ = 0;
   uint32_t c2s_put_offset_ = 0;
   std::unique_ptr<TransferBuffer> c2s_transfer_buffer_;
-  std::unique_ptr<ScopedTransferBufferPtr> c2s_buffer_;
+  ScopedTransferBufferPtr c2s_buffer_;
 };
 #endif
 
@@ -128,6 +132,7 @@ class WEBGPU_EXPORT WebGPUImplementation final : public WebGPUInterface,
   void GenUnverifiedSyncTokenCHROMIUM(GLbyte* sync_token) override;
   void VerifySyncTokensCHROMIUM(GLbyte** sync_tokens, GLsizei count) override;
   void WaitSyncTokenCHROMIUM(const GLbyte* sync_token) override;
+  bool HasGrContextSupport() const override;
 
   // ImplementationBase implementation.
   void IssueShallowFlush() override;
@@ -175,6 +180,7 @@ class WEBGPU_EXPORT WebGPUImplementation final : public WebGPUInterface,
       DawnDeviceClientID device_client_id) const;
   void FlushAllCommandSerializers();
   void ClearAllCommandSerializers();
+  bool AddNewCommandSerializer(DawnDeviceClientID device_client_id);
   base::flat_map<DawnDeviceClientID, std::unique_ptr<WebGPUCommandSerializer>>
       command_serializers_;
 #endif

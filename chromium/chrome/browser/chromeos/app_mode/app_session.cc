@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <signal.h>
 
+#include "ash/public/cpp/accessibility_controller.h"
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_update_service.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_mode_idle_app_name_notification.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_session_plugin_handler.h"
+#include "chrome/browser/chromeos/app_mode/kiosk_settings_navigation_throttle.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_app_launcher.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -64,6 +66,13 @@ bool IsPepperPlugin(const base::FilePath& plugin_path) {
 void RebootDevice() {
   PowerManagerClient::Get()->RequestRestart(
       power_manager::REQUEST_RESTART_OTHER, "kiosk app session");
+}
+
+void StartFloatingAccessibilityMenu() {
+  ash::AccessibilityController* accessibility_controller =
+      ash::AccessibilityController::Get();
+  if (accessibility_controller)
+    accessibility_controller->ShowFloatingMenuIfEnabled();
 }
 
 // Sends a SIGFPE signal to plugin subprocesses that matches |child_ids|
@@ -166,10 +175,47 @@ class AppSession::BrowserWindowHandler : public BrowserListObserver {
         browser->tab_strip_model()->GetActiveWebContents();
     std::string url_string =
         active_tab ? active_tab->GetURL().spec() : std::string();
-    LOG(WARNING) << "Browser opened in kiosk session"
-                 << ", url=" << url_string;
 
-    browser->window()->Close();
+    if (KioskSettingsNavigationThrottle::IsSettingsPage(url_string)) {
+      bool app_browser = browser->is_type_app() ||
+                         browser->is_type_app_popup() ||
+                         browser->is_type_popup();
+      // If this browser is not an app browser or another settings browser
+      // exists, close this one and navigate to |url_string| in the old browser
+      // or create a new app browser if none yet exists.
+      if (!app_browser || app_session_->settings_browser_) {
+        browser->window()->Close();
+        if (!app_session_->settings_browser_) {
+          // Create a new app browser.
+          NavigateParams nav_params(
+              app_session_->profile_, GURL(url_string),
+              ui::PageTransition::PAGE_TRANSITION_AUTO_TOPLEVEL);
+          nav_params.disposition = WindowOpenDisposition::NEW_POPUP;
+          Navigate(&nav_params);
+        } else {
+          // Navigate in the existing browser.
+          NavigateParams nav_params(
+              app_session_->settings_browser_, GURL(url_string),
+              ui::PageTransition::PAGE_TRANSITION_AUTO_TOPLEVEL);
+
+          Navigate(&nav_params);
+        }
+      } else {
+        app_session_->settings_browser_ = browser;
+        // We have to first call Restore() because the window was created as a
+        // fullscreen window, having no prior bounds.
+        // TODO(crbug.com/1015383): Figure out how to do it more cleanly.
+        browser->window()->Restore();
+        browser->window()->Maximize();
+      }
+    } else {
+      LOG(WARNING) << "Browser opened in kiosk session"
+                   << ", url=" << url_string;
+      browser->window()->Close();
+    }
+    // Call the callback to notify tests that browser was handled.
+    if (app_session_->on_handle_browser_callback_)
+      app_session_->on_handle_browser_callback_.Run();
   }
 
   // BrowserListObserver overrides:
@@ -187,6 +233,10 @@ class AppSession::BrowserWindowHandler : public BrowserListObserver {
     if (browser == browser_) {
       app_session_->OnLastAppWindowClosed();
     }
+
+    if (browser == app_session_->settings_browser_) {
+      app_session_->settings_browser_ = nullptr;
+    }
   }
 
   AppSession* const app_session_;
@@ -199,6 +249,7 @@ AppSession::AppSession()
 AppSession::~AppSession() {}
 
 void AppSession::Init(Profile* profile, const std::string& app_id) {
+  profile_ = profile;
   app_window_handler_ = std::make_unique<AppWindowHandler>(this);
   app_window_handler_->Init(profile, app_id);
 
@@ -206,6 +257,8 @@ void AppSession::Init(Profile* profile, const std::string& app_id) {
       std::make_unique<BrowserWindowHandler>(this, nullptr);
 
   plugin_handler_ = std::make_unique<KioskSessionPluginHandler>(this);
+
+  StartFloatingAccessibilityMenu();
 
   // For a demo app, we don't need to either setup the update service or
   // the idle app name notification.
@@ -236,14 +289,22 @@ void AppSession::Init(Profile* profile, const std::string& app_id) {
 }
 
 void AppSession::InitForWebKiosk(Browser* browser) {
-  // We should block all other browser window creation and terminate the session
-  // the browser window was closed.
+  profile_ = browser->profile();
+  // We should block all other browser window creation and terminate the
+  // session the browser window was closed.
   browser_window_handler_ =
       std::make_unique<BrowserWindowHandler>(this, browser);
+
+  StartFloatingAccessibilityMenu();
 }
 
 void AppSession::SetAttemptUserExitForTesting(base::OnceClosure closure) {
   attempt_user_exit_ = std::move(closure);
+}
+
+void AppSession::SetOnHandleBrowserCallbackForTesting(
+    base::RepeatingClosure closure) {
+  on_handle_browser_callback_ = std::move(closure);
 }
 
 void AppSession::OnAppWindowAdded(AppWindow* app_window) {

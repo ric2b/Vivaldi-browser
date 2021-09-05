@@ -10,13 +10,14 @@
 #include <dcomp.h>
 #include <wrl/client.h>
 
+#include "ui/gl/gl_export.h"
 #include "ui/gl/gl_surface_egl.h"
 
 namespace gl {
 
-class DirectCompositionChildSurfaceWin : public GLSurfaceEGL {
+class GL_EXPORT DirectCompositionChildSurfaceWin : public GLSurfaceEGL {
  public:
-  DirectCompositionChildSurfaceWin();
+  explicit DirectCompositionChildSurfaceWin(bool use_angle_texture_offset);
 
   // GLSurfaceEGL implementation.
   bool Initialize(GLSurfaceFormat format) override;
@@ -48,6 +49,9 @@ class DirectCompositionChildSurfaceWin : public GLSurfaceEGL {
 
   uint64_t dcomp_surface_serial() const { return dcomp_surface_serial_; }
 
+  void SetDCompSurfaceForTesting(
+      Microsoft::WRL::ComPtr<IDCompositionSurface> surface);
+
  protected:
   ~DirectCompositionChildSurfaceWin() override;
 
@@ -56,6 +60,8 @@ class DirectCompositionChildSurfaceWin : public GLSurfaceEGL {
   // true then the surface should be discarded without swapping any contents
   // to it. Returns false if this fails.
   bool ReleaseDrawTexture(bool will_discard);
+
+  const bool use_angle_texture_offset_;
 
   gfx::Size size_ = gfx::Size(1, 1);
   bool enable_dc_layers_ = false;

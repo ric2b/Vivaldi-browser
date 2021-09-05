@@ -24,6 +24,17 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/strings/grit/ui_strings.h"
 
+namespace {
+
+using QuietUiReason =
+    permissions::NotificationPermissionUiSelector::QuietUiReason;
+
+// The URL for when the user clicks the "Learn more" link.
+constexpr char kNotificationsHelpUrl[] =
+    "https://support.google.com/chrome/answer/3220216";
+
+}  // namespace
+
 GroupedPermissionInfoBarDelegate::~GroupedPermissionInfoBarDelegate() {
   permissions::PermissionUmaUtil::RecordInfobarDetailsExpanded(
       details_expanded_);
@@ -55,37 +66,92 @@ base::string16 GroupedPermissionInfoBarDelegate::GetCompactMessageText() const {
 }
 
 base::string16 GroupedPermissionInfoBarDelegate::GetCompactLinkText() const {
-  return l10n_util::GetStringUTF16(
-      IDS_NOTIFICATION_QUIET_PERMISSION_MINI_INFOBAR_DETAILS_LINK);
-}
-
-base::string16 GroupedPermissionInfoBarDelegate::GetDescriptionText() const {
-  auto* manager = permissions::PermissionRequestManager::FromWebContents(
-      permission_prompt_->web_contents());
-
-  switch (manager->ReasonForUsingQuietUi()) {
-    case permissions::NotificationPermissionUiSelector::QuietUiReason::
-        kEnabledInPrefs:
+  switch (QuietNotificationPermissionUiConfig::GetMiniInfobarExpandLinkText()) {
+    case QuietNotificationPermissionUiConfig::InfobarLinkTextVariation::kManage:
+      return l10n_util::GetStringUTF16(IDS_NOTIFICATION_BUTTON_MANAGE);
+    case QuietNotificationPermissionUiConfig::InfobarLinkTextVariation::
+        kDetails:
       return l10n_util::GetStringUTF16(
-          IDS_NOTIFICATION_QUIET_PERMISSION_PROMPT_MESSAGE);
-    case permissions::NotificationPermissionUiSelector::QuietUiReason::
-        kTriggeredByCrowdDeny:
-      return l10n_util::GetStringUTF16(
-          IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_CROWD_DENY_DESCRIPTION);
+          IDS_NOTIFICATION_QUIET_PERMISSION_MINI_INFOBAR_DETAILS_LINK);
   }
 
   NOTREACHED();
   return base::string16();
 }
 
+// TODO(crbug.com/1082737): Many methods of this class switches on the quiet UI
+// reason. Refactor this into separate subclasses instead.
+base::string16 GroupedPermissionInfoBarDelegate::GetDescriptionText() const {
+  auto* manager = permissions::PermissionRequestManager::FromWebContents(
+      permission_prompt_->web_contents());
+
+  switch (manager->ReasonForUsingQuietUi()) {
+    case QuietUiReason::kEnabledInPrefs:
+      return l10n_util::GetStringUTF16(
+          IDS_NOTIFICATION_QUIET_PERMISSION_PROMPT_MESSAGE);
+    case QuietUiReason::kTriggeredByCrowdDeny:
+      return l10n_util::GetStringUTF16(
+          IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_CROWD_DENY_DESCRIPTION);
+    case QuietUiReason::kTriggeredDueToAbusiveRequests:
+      return l10n_util::GetStringUTF16(
+          IDS_NOTIFICATION_QUIET_PERMISSION_INFOBAR_ABUSIVE_MESSAGE);
+  }
+
+  NOTREACHED();
+  return base::string16();
+}
+
+bool GroupedPermissionInfoBarDelegate::ShouldSecondaryButtonOpenSettings()
+    const {
+  auto* manager = permissions::PermissionRequestManager::FromWebContents(
+      permission_prompt_->web_contents());
+
+  switch (manager->ReasonForUsingQuietUi()) {
+    case QuietUiReason::kEnabledInPrefs:
+    case QuietUiReason::kTriggeredByCrowdDeny:
+      return true;
+    case QuietUiReason::kTriggeredDueToAbusiveRequests:
+      return false;
+  }
+
+  NOTREACHED();
+  return false;
+}
+
 int GroupedPermissionInfoBarDelegate::GetIconId() const {
   return IDR_ANDROID_INFOBAR_NOTIFICATIONS_OFF;
 }
 
+base::string16 GroupedPermissionInfoBarDelegate::GetLinkText() const {
+  auto* manager = permissions::PermissionRequestManager::FromWebContents(
+      permission_prompt_->web_contents());
+
+  // This will be used as the text of the link in the expanded state.
+  switch (manager->ReasonForUsingQuietUi()) {
+    case QuietUiReason::kEnabledInPrefs:
+    case QuietUiReason::kTriggeredByCrowdDeny:
+      return base::string16();
+    case QuietUiReason::kTriggeredDueToAbusiveRequests:
+      return l10n_util::GetStringUTF16(IDS_LEARN_MORE);
+  }
+}
+
+GURL GroupedPermissionInfoBarDelegate::GetLinkURL() const {
+  return GURL(kNotificationsHelpUrl);
+}
+
 bool GroupedPermissionInfoBarDelegate::LinkClicked(
     WindowOpenDisposition disposition) {
-  details_expanded_ = true;
-  return false;
+  // The link shown in the compact state should expand the infobar, and do
+  // nothing more. This is handled entirely in PermissionInfoBar.java.
+  if (!details_expanded_) {
+    details_expanded_ = true;
+    return false;
+  }
+
+  // The link shown in the expanded state is a `Learn more` link. Let the base
+  // class handle opening the URL returned by GetLinkURL().
+  return ConfirmInfoBarDelegate::LinkClicked(disposition);
 }
 
 void GroupedPermissionInfoBarDelegate::InfoBarDismissed() {
@@ -99,14 +165,40 @@ base::string16 GroupedPermissionInfoBarDelegate::GetMessageText() const {
 }
 
 bool GroupedPermissionInfoBarDelegate::Accept() {
-  if (permission_prompt_)
-    permission_prompt_->Accept();
+  if (!permission_prompt_)
+    return true;
+
+  auto* manager = permissions::PermissionRequestManager::FromWebContents(
+      permission_prompt_->web_contents());
+  switch (manager->ReasonForUsingQuietUi()) {
+    case QuietUiReason::kEnabledInPrefs:
+    case QuietUiReason::kTriggeredByCrowdDeny:
+      permission_prompt_->Accept();
+      break;
+    case QuietUiReason::kTriggeredDueToAbusiveRequests:
+      permission_prompt_->Deny();
+      break;
+  }
   return true;
 }
 
 bool GroupedPermissionInfoBarDelegate::Cancel() {
-  // The infobar needs to be kept open after the "Manage" button is clicked.
-  return false;
+  if (!permission_prompt_)
+    return true;
+
+  auto* manager = permissions::PermissionRequestManager::FromWebContents(
+      permission_prompt_->web_contents());
+  switch (manager->ReasonForUsingQuietUi()) {
+    case QuietUiReason::kEnabledInPrefs:
+    case QuietUiReason::kTriggeredByCrowdDeny:
+      // The infobar needs to be kept open after the "Manage" button is clicked.
+      return false;
+    case QuietUiReason::kTriggeredDueToAbusiveRequests:
+      permission_prompt_->Accept();
+      return true;
+  }
+  NOTREACHED();
+  return true;
 }
 
 // static
@@ -146,10 +238,25 @@ int GroupedPermissionInfoBarDelegate::GetButtons() const {
 
 base::string16 GroupedPermissionInfoBarDelegate::GetButtonLabel(
     InfoBarButton button) const {
-  return l10n_util::GetStringUTF16(
-      (button == BUTTON_OK)
-          ? IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_ALLOW_BUTTON
-          : IDS_NOTIFICATION_BUTTON_MANAGE);
+  auto* manager = permissions::PermissionRequestManager::FromWebContents(
+      permission_prompt_->web_contents());
+
+  switch (manager->ReasonForUsingQuietUi()) {
+    case QuietUiReason::kEnabledInPrefs:
+    case QuietUiReason::kTriggeredByCrowdDeny:
+      return l10n_util::GetStringUTF16(
+          (button == BUTTON_OK)
+              ? IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_ALLOW_BUTTON
+              : IDS_NOTIFICATION_BUTTON_MANAGE);
+    case QuietUiReason::kTriggeredDueToAbusiveRequests:
+      return l10n_util::GetStringUTF16(
+          (button == BUTTON_OK)
+              ? IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_CONTINUE_BLOCKING_BUTTON
+              : IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_COMPACT_ALLOW_BUTTON);
+  }
+
+  NOTREACHED();
+  return base::string16();
 }
 
 bool GroupedPermissionInfoBarDelegate::EqualsDelegate(

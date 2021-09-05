@@ -22,6 +22,8 @@ import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * Fragment to keep track of all the accessibility related preferences.
  */
@@ -79,6 +81,9 @@ public class AccessibilitySettings
         ChromeBaseCheckBoxPreference mAccessibilityTabSwitcherPref =
                 (ChromeBaseCheckBoxPreference) findPreference(
                         ChromePreferenceKeys.ACCESSIBILITY_TAB_SWITCHER);
+        if (ChromeApplication.isVivaldi()) {
+            getPreferenceScreen().removePreference(mAccessibilityTabSwitcherPref);
+        } else {
         if (AccessibilityUtil.isAccessibilityEnabled()) {
             mAccessibilityTabSwitcherPref.setChecked(
                     SharedPreferencesManager.getInstance().readBoolean(
@@ -86,7 +91,7 @@ public class AccessibilitySettings
         } else {
             getPreferenceScreen().removePreference(mAccessibilityTabSwitcherPref);
         }
-
+        } // Vivaldi
         Preference captions = findPreference(PREF_CAPTIONS);
         captions.setOnPreferenceClickListener(preference -> {
             Intent intent = new Intent(Settings.ACTION_CAPTIONING_SETTINGS);

@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/component_export.h"
-#include "base/optional.h"
 #include "services/network/public/mojom/cross_origin_embedder_policy.mojom-shared.h"
 
 namespace network {

@@ -124,6 +124,30 @@ bool EffectStack::AffectsProperties(PropertyHandleFilter filter) const {
   return false;
 }
 
+bool EffectStack::AffectsProperties(const CSSBitset& bitset,
+                                    KeyframeEffect::Priority priority) const {
+  for (const auto& sampled_effect : sampled_effects_) {
+    if (sampled_effect->GetPriority() != priority)
+      continue;
+    for (const auto& interpolation : sampled_effect->Interpolations()) {
+      const PropertyHandle& property = interpolation->GetProperty();
+      if (property.IsCSSCustomProperty() || !property.IsCSSProperty())
+        continue;
+      if (bitset.Has(property.GetCSSProperty().PropertyID()))
+        return true;
+    }
+  }
+  return false;
+}
+
+bool EffectStack::HasRevert() const {
+  for (const auto& sampled_effect : sampled_effects_) {
+    if (sampled_effect->Effect() && sampled_effect->Effect()->HasRevert())
+      return true;
+  }
+  return false;
+}
+
 ActiveInterpolationsMap EffectStack::ActiveInterpolations(
     EffectStack* effect_stack,
     const HeapVector<Member<const InertEffect>>* new_animations,

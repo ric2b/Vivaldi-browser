@@ -72,7 +72,7 @@ base::ModuleCache* CallStackProfileBuilder::GetModuleCache() {
 // suspended so must not take any locks, including indirectly through use of
 // heap allocation, LOG, CHECK, or DCHECK.
 void CallStackProfileBuilder::RecordMetadata(
-    base::ProfileBuilder::MetadataProvider* metadata_provider) {
+    const base::MetadataRecorder::MetadataProvider& metadata_provider) {
   if (work_id_recorder_) {
     unsigned int work_id = work_id_recorder_->RecordWorkId();
     // A work id of 0 indicates that the message loop has not yet started.
@@ -88,7 +88,7 @@ void CallStackProfileBuilder::RecordMetadata(
 void CallStackProfileBuilder::ApplyMetadataRetrospectively(
     base::TimeTicks period_start,
     base::TimeTicks period_end,
-    const MetadataItem& item) {
+    const base::MetadataRecorder::Item& item) {
   DCHECK_LE(period_start, period_end);
   DCHECK_LE(period_end, base::TimeTicks::Now());
 
@@ -150,8 +150,20 @@ void CallStackProfileBuilder::OnSampleCompleted(
     }
 
     // Write CallStackProfile::Location protobuf message.
+    uintptr_t instruction_pointer = frame.instruction_pointer;
+#if defined(OS_IOS)
+#if !TARGET_IPHONE_SIMULATOR
+    // Some iOS devices enable pointer authentication, which uses the
+    // higher-order bits of pointers to store a signature. Strip that signature
+    // off before computing the module_offset.
+    // TODO(crbug.com/1084272): Use the ptrauth_strip() macro once it is
+    // available.
+    instruction_pointer &= 0xFFFFFFFFF;
+#endif  // !TARGET_IPHONE_SIMULATOR
+#endif  // defined(OS_IOS)
+
     ptrdiff_t module_offset =
-        reinterpret_cast<const char*>(frame.instruction_pointer) -
+        reinterpret_cast<const char*>(instruction_pointer) -
         reinterpret_cast<const char*>(frame.module->GetBaseAddress());
     DCHECK_GE(module_offset, 0);
     location->set_address(static_cast<uint64_t>(module_offset));

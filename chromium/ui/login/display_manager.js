@@ -211,12 +211,6 @@ cr.define('cr.ui.login', function() {
     userCount_: 0,
 
     /**
-     * Number of reloadContent() calls since start for testing.
-     * @type {number}
-     */
-    reloadContentNumEvents_: 0,
-
-    /**
      * Stored OOBE configuration for newly registered screens.
      * @type {!OobeTypes.OobeConfiguration}
      */
@@ -265,9 +259,7 @@ cr.define('cr.ui.login', function() {
      * @return {boolean}
      */
     get showingViewsLogin() {
-      return loadTimeData.valueExists('showViewsLogin') &&
-          loadTimeData.getString('showViewsLogin') == 'on' &&
-          (this.displayType_ == DISPLAY_TYPE.GAIA_SIGNIN);
+      return this.displayType_ == DISPLAY_TYPE.GAIA_SIGNIN;
     },
 
     /**
@@ -727,6 +719,7 @@ cr.define('cr.ui.login', function() {
     registerScreen: function(el, attributes) {
       var screenId = el.id;
       assert(screenId);
+      assert(!this.screens_.includes(screenId), "Duplicate screen ID.");
 
       this.screens_.push(screenId);
       this.screensAttributes_.push(attributes);
@@ -811,7 +804,6 @@ cr.define('cr.ui.login', function() {
       var currentScreenId = this.screens_[this.currentStep_];
       var currentScreen = $(currentScreenId);
       this.updateScreenSize(currentScreen);
-      ++this.reloadContentNumEvents_;
     },
 
     /**

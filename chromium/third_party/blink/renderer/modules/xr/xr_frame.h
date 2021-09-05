@@ -22,6 +22,8 @@ class XRAnchorSet;
 class XRHitTestResult;
 class XRHitTestSource;
 class XRInputSource;
+class XRLightEstimate;
+class XRLightProbe;
 class XRPose;
 class XRReferenceSpace;
 class XRRigidTransform;
@@ -44,6 +46,7 @@ class XRFrame final : public ScriptWrappable {
   XRPose* getPose(XRSpace*, XRSpace*, ExceptionState&);
   XRWorldInformation* worldInformation() const { return world_information_; }
   XRAnchorSet* trackedAnchors() const;
+  XRLightEstimate* getLightEstimate(XRLightProbe*, ExceptionState&) const;
 
   void Trace(Visitor*) override;
 
@@ -71,6 +74,17 @@ class XRFrame final : public ScriptWrappable {
   std::unique_ptr<TransformationMatrix> GetAdjustedPoseMatrix(XRSpace*) const;
   XRPose* GetTargetRayPose(XRInputSource*, XRSpace*) const;
   XRPose* GetGripPose(XRInputSource*, XRSpace*) const;
+
+  // Helper that creates an anchor with the assumption that the conversion from
+  // passed in space to a stationary space is required.
+  // |native_origin_from_anchor| is a transform from |space|'s native origin to
+  // the desired anchor position (i.e. the origin-offset of the |space| is
+  // already taken into account).
+  ScriptPromise CreateAnchorFromNonStationarySpace(
+      ScriptState* script_state,
+      const blink::TransformationMatrix& native_origin_from_anchor,
+      XRSpace* space,
+      ExceptionState& exception_state);
 
   Member<XRWorldInformation> world_information_;
 

@@ -9,9 +9,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/notreached.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/string_piece.h"
@@ -64,7 +65,7 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
 
   void NotifyClientOnReceiveResponse(
       int status_code,
-      const std::vector<std::string>& extra_headers) {
+      const std::vector<std::pair<std::string, std::string>>& extra_headers) {
     DCHECK(client_remote_);
     auto response = mojom::URLResponseHead::New();
     response->headers = new net::HttpResponseHeaders(
@@ -72,7 +73,7 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
                            "Content-Type: image/png\n",
                            status_code));
     for (const auto& header : extra_headers)
-      response->headers->AddHeader(header);
+      response->headers->SetHeader(header.first, header.second);
 
     client_remote_->OnReceiveResponse(std::move(response));
   }
@@ -84,12 +85,12 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
 
   void NotifyClientOnReceiveRedirect(
       const net::RedirectInfo& redirect_info,
-      const std::vector<std::string>& extra_headers) {
+      const std::vector<std::pair<std::string, std::string>>& extra_headers) {
     auto response = mojom::URLResponseHead::New();
     response->headers = base::MakeRefCounted<net::HttpResponseHeaders>(
         base::StringPrintf("HTTP/1.1 %d\n", redirect_info.status_code));
     for (const auto& header : extra_headers)
-      response->headers->AddHeader(header);
+      response->headers->SetHeader(header.first, header.second);
 
     client_remote_->OnReceiveRedirect(redirect_info, std::move(response));
   }
@@ -202,14 +203,16 @@ class CorsURLLoaderTest : public testing::Test {
   }
 
   void NotifyLoaderClientOnReceiveResponse(
-      const std::vector<std::string>& extra_headers = {}) {
+      const std::vector<std::pair<std::string, std::string>>& extra_headers =
+          {}) {
     DCHECK(test_url_loader_factory_);
     test_url_loader_factory_->NotifyClientOnReceiveResponse(200, extra_headers);
   }
 
   void NotifyLoaderClientOnReceiveResponse(
       int status_code,
-      const std::vector<std::string>& extra_headers = {}) {
+      const std::vector<std::pair<std::string, std::string>>& extra_headers =
+          {}) {
     DCHECK(test_url_loader_factory_);
     test_url_loader_factory_->NotifyClientOnReceiveResponse(status_code,
                                                             extra_headers);
@@ -217,7 +220,8 @@ class CorsURLLoaderTest : public testing::Test {
 
   void NotifyLoaderClientOnReceiveRedirect(
       const net::RedirectInfo& redirect_info,
-      const std::vector<std::string>& extra_headers = {}) {
+      const std::vector<std::pair<std::string, std::string>>& extra_headers =
+          {}) {
     DCHECK(test_url_loader_factory_);
     test_url_loader_factory_->NotifyClientOnReceiveRedirect(redirect_info,
                                                             extra_headers);
@@ -228,11 +232,15 @@ class CorsURLLoaderTest : public testing::Test {
     test_url_loader_factory_->NotifyClientOnComplete(error_code);
   }
 
-  void FollowRedirect(const std::vector<std::string>& removed_headers = {},
-                      const net::HttpRequestHeaders& modified_headers =
-                          net::HttpRequestHeaders()) {
+  void FollowRedirect(
+      const std::vector<std::string>& removed_headers = {},
+      const net::HttpRequestHeaders& modified_headers =
+          net::HttpRequestHeaders(),
+      const net::HttpRequestHeaders& modified_cors_exempt_headers =
+          net::HttpRequestHeaders()) {
     DCHECK(url_loader_);
     url_loader_->FollowRedirect(removed_headers, modified_headers,
+                                modified_cors_exempt_headers,
                                 base::nullopt /*new_url*/);
   }
 
@@ -242,6 +250,7 @@ class CorsURLLoaderTest : public testing::Test {
     modified_headers.SetHeader(net::HttpRequestHeaders::kHost, "bar.test");
     url_loader_->FollowRedirect({},  // removed_headers
                                 modified_headers,
+                                {},              // modified_cors_exempt_headers
                                 base::nullopt);  // new_url
   }
 
@@ -666,7 +675,7 @@ TEST_F(CorsURLLoaderTest, CrossOriginRequestWithCorsMode) {
   RunUntilCreateLoaderAndStartCalled();
 
   NotifyLoaderClientOnReceiveResponse(
-      {"Access-Control-Allow-Origin: http://example.com"});
+      {{"Access-Control-Allow-Origin", "http://example.com"}});
   NotifyLoaderClientOnComplete(net::OK);
 
   RunUntilComplete();
@@ -686,7 +695,7 @@ TEST_F(CorsURLLoaderTest,
   RunUntilCreateLoaderAndStartCalled();
 
   NotifyLoaderClientOnReceiveResponse(
-      {"Access-Control-Allow-Origin: http://some-other-domain.com"});
+      {{"Access-Control-Allow-Origin", "http://some-other-domain.com"}});
   NotifyLoaderClientOnComplete(net::OK);
 
   RunUntilComplete();
@@ -725,7 +734,7 @@ TEST_F(CorsURLLoaderTest, CorsEnabledSameCustomSchemeRequest) {
   CreateLoaderAndStart(origin, url, mojom::RequestMode::kCors);
   RunUntilCreateLoaderAndStartCalled();
 
-  NotifyLoaderClientOnReceiveResponse({"Access-Control-Allow-Origin: *"});
+  NotifyLoaderClientOnReceiveResponse({{"Access-Control-Allow-Origin", "*"}});
   NotifyLoaderClientOnComplete(net::OK);
 
   RunUntilComplete();
@@ -740,7 +749,8 @@ TEST_F(CorsURLLoaderTest, CorsEnabledSameCustomSchemeRequest) {
   CreateLoaderAndStart(origin, url, mojom::RequestMode::kCors);
   RunUntilCreateLoaderAndStartCalled();
 
-  NotifyLoaderClientOnReceiveResponse({"Access-Control-Allow-Origin: null"});
+  NotifyLoaderClientOnReceiveResponse(
+      {{"Access-Control-Allow-Origin", "null"}});
   NotifyLoaderClientOnComplete(net::OK);
 
   RunUntilComplete();
@@ -759,7 +769,7 @@ TEST_F(CorsURLLoaderTest, StripUsernameAndPassword) {
   RunUntilCreateLoaderAndStartCalled();
 
   NotifyLoaderClientOnReceiveResponse(
-      {"Access-Control-Allow-Origin: http://example.com"});
+      {{"Access-Control-Allow-Origin", "http://example.com"}});
   NotifyLoaderClientOnComplete(net::OK);
 
   RunUntilComplete();
@@ -786,7 +796,7 @@ TEST_F(CorsURLLoaderTest, CorsCheckPassOnRedirect) {
 
   NotifyLoaderClientOnReceiveRedirect(
       CreateRedirectInfo(301, "GET", new_url),
-      {"Access-Control-Allow-Origin: https://example.com"});
+      {{"Access-Control-Allow-Origin", "https://example.com"}});
   RunUntilRedirectReceived();
 
   EXPECT_TRUE(IsNetworkLoaderStarted());
@@ -834,7 +844,7 @@ TEST_F(CorsURLLoaderTest, NetworkLoaderErrorDuringRedirect) {
 
   NotifyLoaderClientOnReceiveRedirect(
       CreateRedirectInfo(301, "GET", new_url),
-      {"Access-Control-Allow-Origin: https://example.com"});
+      {{"Access-Control-Allow-Origin", "https://example.com"}});
   RunUntilRedirectReceived();
 
   // Underlying network::URLLoader may call OnComplete with an error at anytime.
@@ -914,7 +924,7 @@ TEST_F(CorsURLLoaderTest, SameOriginToCrossOriginRedirect) {
   EXPECT_EQ(GetRequest().url, new_url);
 
   NotifyLoaderClientOnReceiveResponse(
-      {"Access-Control-Allow-Origin: https://example.com"});
+      {{"Access-Control-Allow-Origin", "https://example.com"}});
   NotifyLoaderClientOnComplete(net::OK);
   RunUntilComplete();
 
@@ -938,7 +948,7 @@ TEST_F(CorsURLLoaderTest, CrossOriginToCrossOriginRedirect) {
 
   NotifyLoaderClientOnReceiveRedirect(
       CreateRedirectInfo(301, "GET", new_url),
-      {"Access-Control-Allow-Origin: https://example.com"});
+      {{"Access-Control-Allow-Origin", "https://example.com"}});
   RunUntilRedirectReceived();
 
   EXPECT_TRUE(IsNetworkLoaderStarted());
@@ -950,7 +960,7 @@ TEST_F(CorsURLLoaderTest, CrossOriginToCrossOriginRedirect) {
   FollowRedirect();
 
   NotifyLoaderClientOnReceiveResponse(
-      {"Access-Control-Allow-Origin: https://example.com"});
+      {{"Access-Control-Allow-Origin", "https://example.com"}});
 
   NotifyLoaderClientOnComplete(net::OK);
   RunUntilComplete();
@@ -979,7 +989,7 @@ TEST_F(CorsURLLoaderTest, CrossOriginToOriginalOriginRedirect) {
 
   NotifyLoaderClientOnReceiveRedirect(
       CreateRedirectInfo(301, "GET", new_url),
-      {"Access-Control-Allow-Origin: https://example.com"});
+      {{"Access-Control-Allow-Origin", "https://example.com"}});
   RunUntilRedirectReceived();
 
   EXPECT_TRUE(IsNetworkLoaderStarted());
@@ -1024,7 +1034,7 @@ TEST_F(CorsURLLoaderTest, CrossOriginToAnotherCrossOriginRedirect) {
 
   NotifyLoaderClientOnReceiveRedirect(
       CreateRedirectInfo(301, "GET", new_url),
-      {"Access-Control-Allow-Origin: https://example.com"});
+      {{"Access-Control-Allow-Origin", "https://example.com"}});
   RunUntilRedirectReceived();
 
   EXPECT_TRUE(IsNetworkLoaderStarted());
@@ -1036,7 +1046,8 @@ TEST_F(CorsURLLoaderTest, CrossOriginToAnotherCrossOriginRedirect) {
   FollowRedirect();
 
   // The request is tained, so the origin is "null".
-  NotifyLoaderClientOnReceiveResponse({"Access-Control-Allow-Origin: null"});
+  NotifyLoaderClientOnReceiveResponse(
+      {{"Access-Control-Allow-Origin", "null"}});
   NotifyLoaderClientOnComplete(net::OK);
   RunUntilComplete();
 
@@ -1072,8 +1083,8 @@ TEST_F(CorsURLLoaderTest,
   EXPECT_EQ(GetRequest().method, "OPTIONS");
 
   NotifyLoaderClientOnReceiveResponse(
-      {"Access-Control-Allow-Origin: https://example.com",
-       "Access-Control-Allow-Methods: PATCH"});
+      {{"Access-Control-Allow-Origin", "https://example.com"},
+       {"Access-Control-Allow-Methods", "PATCH"}});
   RunUntilCreateLoaderAndStartCalled();
 
   // the actual request
@@ -1083,7 +1094,7 @@ TEST_F(CorsURLLoaderTest,
 
   NotifyLoaderClientOnReceiveRedirect(
       CreateRedirectInfo(301, "PATCH", new_url),
-      {"Access-Control-Allow-Origin: https://example.com"});
+      {{"Access-Control-Allow-Origin", "https://example.com"}});
   RunUntilRedirectReceived();
   EXPECT_TRUE(client().has_received_redirect());
   EXPECT_FALSE(client().has_received_completion());
@@ -1101,8 +1112,9 @@ TEST_F(CorsURLLoaderTest,
   EXPECT_EQ(GetRequest().request_initiator->Serialize(), "https://example.com");
 
   // The request is tainted, so the origin is "null".
-  NotifyLoaderClientOnReceiveResponse({"Access-Control-Allow-Origin: null",
-                                       "Access-Control-Allow-Methods: PATCH"});
+  NotifyLoaderClientOnReceiveResponse(
+      {{"Access-Control-Allow-Origin", "null"},
+       {"Access-Control-Allow-Methods", "PATCH"}});
   RunUntilCreateLoaderAndStartCalled();
 
   // the second actual request
@@ -1113,7 +1125,8 @@ TEST_F(CorsURLLoaderTest,
   EXPECT_EQ(GetRequest().request_initiator->Serialize(), "https://example.com");
 
   // The request is tainted, so the origin is "null".
-  NotifyLoaderClientOnReceiveResponse({"Access-Control-Allow-Origin: null"});
+  NotifyLoaderClientOnReceiveResponse(
+      {{"Access-Control-Allow-Origin", "null"}});
   NotifyLoaderClientOnComplete(net::OK);
   RunUntilComplete();
 
@@ -1165,7 +1178,7 @@ TEST_F(CorsURLLoaderTest, RedirectInfoShouldBeUsed) {
   EXPECT_EQ(GetRequest().method, "GET");
 
   NotifyLoaderClientOnReceiveResponse(
-      {"Access-Control-Allow-Origin: https://example.com"});
+      {{"Access-Control-Allow-Origin", "https://example.com"}});
   NotifyLoaderClientOnComplete(net::OK);
   RunUntilComplete();
 
@@ -1719,8 +1732,8 @@ TEST_F(CorsURLLoaderTest, RevalidationAndPreflight) {
   EXPECT_EQ(preflight_request_headers, "foo");
 
   NotifyLoaderClientOnReceiveResponse(
-      {"Access-Control-Allow-Origin: https://example.com",
-       "Access-Control-Allow-Headers: foo"});
+      {{"Access-Control-Allow-Origin", "https://example.com"},
+       {"Access-Control-Allow-Headers", "foo"}});
   RunUntilCreateLoaderAndStartCalled();
 
   // the actual request
@@ -1729,7 +1742,7 @@ TEST_F(CorsURLLoaderTest, RevalidationAndPreflight) {
   EXPECT_EQ(GetRequest().method, "GET");
 
   NotifyLoaderClientOnReceiveResponse(
-      {"Access-Control-Allow-Origin: https://example.com"});
+      {{"Access-Control-Allow-Origin", "https://example.com"}});
   NotifyLoaderClientOnComplete(net::OK);
   RunUntilComplete();
 
@@ -2104,7 +2117,7 @@ TEST_F(CorsURLLoaderTest, TrustedParamsWithUntrustedFactoryFailsBeforeCORS) {
     } else {
       RunUntilCreateLoaderAndStartCalled();
       NotifyLoaderClientOnReceiveResponse(
-          {"Access-Control-Allow-Origin: http://example.com"});
+          {{"Access-Control-Allow-Origin", "http://example.com"}});
       NotifyLoaderClientOnComplete(net::OK);
 
       RunUntilComplete();
@@ -2139,14 +2152,15 @@ TEST_F(CorsURLLoaderTest, RestrictedPrefetchSucceedsWithNIK) {
 
   // Fill up the |trusted_params| NetworkIsolationKey member.
   url::Origin request_origin = url::Origin::Create(request.url);
-  request.trusted_params->network_isolation_key =
-      net::NetworkIsolationKey(request_origin, request_origin);
+  request.trusted_params->isolation_info = net::IsolationInfo::Create(
+      net::IsolationInfo::RedirectMode::kUpdateNothing, request_origin,
+      request_origin, net::SiteForCookies());
 
   CreateLoaderAndStart(request);
   RunUntilCreateLoaderAndStartCalled();
 
   NotifyLoaderClientOnReceiveResponse(
-      {"Access-Control-Allow-Origin: http://example.com"});
+      {{"Access-Control-Allow-Origin", "http://example.com"}});
   NotifyLoaderClientOnComplete(net::OK);
 
   RunUntilComplete();
@@ -2161,7 +2175,7 @@ TEST_F(CorsURLLoaderTest, RestrictedPrefetchSucceedsWithNIK) {
 // Test that when a request has LOAD_RESTRICTED_PREFETCH but no
 // NetworkIsolationKey, CorsURLLoaderFactory rejects the request. This is
 // because the LOAD_RESTRICTED_PREFETCH flag must only appear on requests that
-// make use of their TrustedParams' |network_isolation_key|.
+// make use of their TrustedParams' |isolation_info|.
 TEST_F(CorsURLLoaderTest, RestrictedPrefetchFailsWithoutNIK) {
   ResetFactory(base::nullopt, kRendererProcessId, true /* is_trusted */,
                true /* ignore_isolated_world_origin */,
@@ -2223,7 +2237,7 @@ TEST_F(CorsURLLoaderTest, TAOCheckFailOnCrossOriginResource1) {
   CreateLoaderAndStart(origin, url, mojom::RequestMode::kCors);
   RunUntilCreateLoaderAndStartCalled();
   NotifyLoaderClientOnReceiveResponse(
-      {"Access-Control-Allow-Origin: https://example.com"});
+      {{"Access-Control-Allow-Origin", "https://example.com"}});
   NotifyLoaderClientOnComplete(net::OK);
   RunUntilComplete();
 
@@ -2239,7 +2253,8 @@ TEST_F(CorsURLLoaderTest, TAOCheckFailOnCrossOriginResource2) {
   CreateLoaderAndStart(origin, url, mojom::RequestMode::kNoCors);
   RunUntilCreateLoaderAndStartCalled();
   // null does not work in this case since the tainted origin flag won't be set.
-  NotifyLoaderClientOnReceiveResponse({"Access-Control-Allow-Origin: null"});
+  NotifyLoaderClientOnReceiveResponse(
+      {{"Access-Control-Allow-Origin", "null"}});
   NotifyLoaderClientOnComplete(net::OK);
   RunUntilComplete();
 
@@ -2253,7 +2268,7 @@ TEST_F(CorsURLLoaderTest, TAOCheckPassOnCrossOriginResource) {
   CreateLoaderAndStart(origin, url, mojom::RequestMode::kNoCors);
   RunUntilCreateLoaderAndStartCalled();
   NotifyLoaderClientOnReceiveResponse(
-      {"Timing-Allow-Origin: https://example.com"});
+      {{"Timing-Allow-Origin", "https://example.com"}});
   NotifyLoaderClientOnComplete(net::OK);
   RunUntilComplete();
 
@@ -2270,7 +2285,7 @@ TEST_F(CorsURLLoaderTest, TAOCheckFailRedirect1) {
   RunUntilCreateLoaderAndStartCalled();
   NotifyLoaderClientOnReceiveRedirect(
       CreateRedirectInfo(301, "GET", new_url),
-      {"Timing-Allow-Origin: https://example.com"});
+      {{"Timing-Allow-Origin", "https://example.com"}});
   RunUntilRedirectReceived();
 
   EXPECT_TRUE(client().response_head()->timing_allow_passed);
@@ -2280,7 +2295,8 @@ TEST_F(CorsURLLoaderTest, TAOCheckFailRedirect1) {
 
   // This is insufficient: tainted origin flag will be set.
   NotifyLoaderClientOnReceiveResponse(
-      {"Timing-Allow-Origin: https://example.com, https://other.example.com"});
+      {{"Timing-Allow-Origin",
+        "https://example.com, https://other.example.com"}});
   NotifyLoaderClientOnComplete(net::OK);
   RunUntilComplete();
 
@@ -2303,7 +2319,7 @@ TEST_F(CorsURLLoaderTest, TAOCheckFailRedirect2) {
   ClearHasReceivedRedirect();
   FollowRedirect();
 
-  NotifyLoaderClientOnReceiveResponse({"Timing-Allow-Origin: *"});
+  NotifyLoaderClientOnReceiveResponse({{"Timing-Allow-Origin", "*"}});
   NotifyLoaderClientOnComplete(net::OK);
   RunUntilComplete();
 
@@ -2320,7 +2336,7 @@ TEST_F(CorsURLLoaderTest, TAOCheckPassRedirect1) {
   RunUntilCreateLoaderAndStartCalled();
   NotifyLoaderClientOnReceiveRedirect(
       CreateRedirectInfo(301, "GET", new_url),
-      {"Timing-Allow-Origin: https://example.com"});
+      {{"Timing-Allow-Origin", "https://example.com"}});
   RunUntilRedirectReceived();
 
   EXPECT_TRUE(client().response_head()->timing_allow_passed);
@@ -2328,7 +2344,7 @@ TEST_F(CorsURLLoaderTest, TAOCheckPassRedirect1) {
   ClearHasReceivedRedirect();
   FollowRedirect();
 
-  NotifyLoaderClientOnReceiveResponse({"Timing-Allow-Origin: null"});
+  NotifyLoaderClientOnReceiveResponse({{"Timing-Allow-Origin", "null"}});
   NotifyLoaderClientOnComplete(net::OK);
   RunUntilComplete();
 
@@ -2345,7 +2361,7 @@ TEST_F(CorsURLLoaderTest, TAOCheckPassRedirect2) {
   RunUntilCreateLoaderAndStartCalled();
   NotifyLoaderClientOnReceiveRedirect(
       CreateRedirectInfo(301, "GET", new_url),
-      {"Timing-Allow-Origin: https://example.com"});
+      {{"Timing-Allow-Origin", "https://example.com"}});
   RunUntilRedirectReceived();
 
   EXPECT_TRUE(client().response_head()->timing_allow_passed);
@@ -2353,7 +2369,7 @@ TEST_F(CorsURLLoaderTest, TAOCheckPassRedirect2) {
   ClearHasReceivedRedirect();
   FollowRedirect();
 
-  NotifyLoaderClientOnReceiveResponse({"Timing-Allow-Origin: null"});
+  NotifyLoaderClientOnReceiveResponse({{"Timing-Allow-Origin", "null"}});
   NotifyLoaderClientOnComplete(net::OK);
   RunUntilComplete();
 

@@ -16,6 +16,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -40,7 +41,6 @@ import org.chromium.chrome.browser.password_manager.settings.PasswordSettings;
 import org.chromium.chrome.browser.privacy.settings.PrivacySettings;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.search_engines.settings.SearchEngineSettings;
-import org.chromium.chrome.browser.site_settings.SiteSettings;
 import org.chromium.chrome.browser.sync.SyncTestRule;
 import org.chromium.chrome.browser.sync.settings.SignInPreference;
 import org.chromium.chrome.browser.sync.settings.SignInPreference.State;
@@ -48,6 +48,7 @@ import org.chromium.chrome.browser.sync.settings.SyncAndServicesSettings;
 import org.chromium.chrome.browser.tracing.settings.DeveloperSettings;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
+import org.chromium.components.browser_ui.site_settings.SiteSettings;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -60,10 +61,19 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 public class MainSettingsFragmentTest {
     private static final String SEARCH_ENGINE_SHORT_NAME = "Google";
 
+    private final HomepageTestRule mHomepageTestRule = new HomepageTestRule();
+
+    private final SyncTestRule mSyncTestRule = new SyncTestRule();
+
+    private final SettingsActivityTestRule<MainSettings> mSettingsActivityTestRule =
+            new SettingsActivityTestRule<>(MainSettings.class);
+
+    // SettingsActivity needs to be initialized and destroyed with the mock
+    // signin environment setup in SyncTestRule
     @Rule
-    public HomepageTestRule mHomepageTestRule = new HomepageTestRule();
-    @Rule
-    public SyncTestRule mSyncTestRule = new SyncTestRule();
+    public final RuleChain mRuleChain = RuleChain.outerRule(mSyncTestRule)
+                                                .around(mHomepageTestRule)
+                                                .around(mSettingsActivityTestRule);
 
     @Mock
     public TemplateUrlService mMockTemplateUrlService;
@@ -78,11 +88,13 @@ public class MainSettingsFragmentTest {
     public void setup() {
         MockitoAnnotations.initMocks(this);
         DeveloperSettings.setIsEnabledForTests(true);
+        NightModeUtils.setNightModeSupportedForTesting(true);
     }
 
     @After
     public void tearDown() {
         DeveloperSettings.setIsEnabledForTests(null);
+        NightModeUtils.setNightModeSupportedForTesting(null);
         if (mActualTemplateUrlService != null) {
             // Reset the actual service if the mock is used.
             TemplateUrlServiceFactory.setInstanceForTesting(mActualTemplateUrlService);
@@ -90,10 +102,8 @@ public class MainSettingsFragmentTest {
     }
 
     private void launchSettingsActivity() {
-        SettingsActivity activity =
-                mSyncTestRule.startSettingsActivity(MainSettings.class.getName());
-
-        mMainSettings = (MainSettings) activity.getMainFragment();
+        mSettingsActivityTestRule.startSettingsActivity();
+        mMainSettings = mSettingsActivityTestRule.getFragment();
         Assert.assertNotNull("SettingsActivity failed to launch.", mMainSettings);
     }
 
@@ -187,7 +197,7 @@ public class MainSettingsFragmentTest {
     @Test
     @SmallTest
     public void testAccountSignIn() throws InterruptedException {
-        Account account = mSyncTestRule.setUpTestAccountAndSignIn();
+        Account account = mSyncTestRule.setUpAccountAndSignInForTesting();
         mSyncTestRule.signOut();
 
         launchSettingsActivity();

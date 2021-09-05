@@ -14,12 +14,13 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check_op.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -394,16 +395,6 @@ WebContents* PrerenderManager::SwapInternal(const GURL& url,
       prerender_data->contents()->prerender_contents();
   if (prerender_web_contents && web_contents == prerender_web_contents)
     return nullptr;  // Do not swap in to ourself.
-
-  // Do not swap if the target WebContents is not the only WebContents in its
-  // current BrowsingInstance.
-  if (web_contents->GetSiteInstance()->GetRelatedActiveContentsCount() != 1u) {
-    DCHECK_GT(web_contents->GetSiteInstance()->GetRelatedActiveContentsCount(),
-              1u);
-    prerender_data->contents()->Destroy(
-        FINAL_STATUS_NON_EMPTY_BROWSING_INSTANCE);
-    return nullptr;
-  }
 
   DCHECK(prerender_data->contents()->prerendering_has_started());
 
@@ -949,10 +940,6 @@ void PrerenderManager::PeriodicCleanup() {
   for (auto* contents : prerender_contents)
     contents->DestroyWhenUsingTooManyResources();
 
-  // Measure how long the resource checks took. http://crbug.com/305419.
-  UMA_HISTOGRAM_TIMES("Prerender.PeriodicCleanupResourceCheckTime",
-                      resource_timer.Elapsed());
-
   base::ElapsedTimer cleanup_timer;
 
   // Perform deferred cleanup work.
@@ -964,10 +951,6 @@ void PrerenderManager::PeriodicCleanup() {
   DeleteToDeletePrerenders();
 
   CleanUpOldNavigations(&prefetches_, base::TimeDelta::FromMinutes(30));
-
-  // Measure how long a the various cleanup tasks took. http://crbug.com/305419.
-  UMA_HISTOGRAM_TIMES("Prerender.PeriodicCleanupDeleteContentsTime",
-                      cleanup_timer.Elapsed());
 }
 
 void PrerenderManager::PostCleanupTask() {

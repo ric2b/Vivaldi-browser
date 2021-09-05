@@ -8,12 +8,15 @@
 #include "base/time/time.h"
 #include "chromeos/network/network_configuration_handler.h"
 #include "chromeos/network/network_connection_handler.h"
+#include "chromeos/network/network_event_log.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/user_manager/user.h"
+#include "components/user_manager/user_manager.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
 namespace chromeos {
@@ -23,6 +26,7 @@ namespace {
 const char kNetworkMetadataPref[] = "network_metadata";
 const char kLastConnectedTimestampPref[] = "last_connected_timestamp";
 const char kIsFromSync[] = "is_from_sync";
+const char kOwner[] = "owner";
 
 std::string GetPath(const std::string& guid, const std::string& subkey) {
   return base::StringPrintf("%s.%s", guid.c_str(), subkey.c_str());
@@ -74,13 +78,31 @@ void NetworkMetadataStore::ConnectSucceeded(const std::string& service_path) {
   bool is_first_connection =
       GetLastConnectedTimestamp(network->guid()).is_zero();
 
-  UpdateLastConnectedTimestamp(network->guid());
+  SetLastConnectedTimestamp(network->guid(),
+                            base::Time::Now().ToDeltaSinceWindowsEpoch());
 
   if (is_first_connection) {
     for (auto& observer : observers_) {
       observer.OnFirstConnectionToNetwork(network->guid());
     }
   }
+}
+
+void NetworkMetadataStore::OnConfigurationCreated(
+    const std::string& service_path,
+    const std::string& guid) {
+  if (!user_manager::UserManager::IsInitialized())
+    return;
+
+  const user_manager::User* user =
+      user_manager::UserManager::Get()->GetActiveUser();
+  if (!user) {
+    NET_LOG(EVENT)
+        << "Network added with no active user, owner metadata not recorded.";
+    return;
+  }
+
+  SetPref(guid, kOwner, base::Value(user->username_hash()));
 }
 
 void NetworkMetadataStore::OnConfigurationModified(
@@ -97,6 +119,10 @@ void NetworkMetadataStore::OnConfigurationModified(
   // (autoconnect, dns, etc.) won't affect the ability to connect to a network.
   if (set_properties->HasKey(shill::kPassphraseProperty)) {
     SetPref(guid, kLastConnectedTimestampPref, base::Value(0));
+  }
+
+  for (auto& observer : observers_) {
+    observer.OnNetworkUpdate(guid, set_properties);
   }
 }
 
@@ -128,13 +154,6 @@ void NetworkMetadataStore::RemoveNetworkFromPref(
   pref_service->Set(kNetworkMetadataPref, writeable_dict);
 }
 
-void NetworkMetadataStore::UpdateLastConnectedTimestamp(
-    const std::string& network_guid) {
-  double timestamp =
-      base::Time::Now().ToDeltaSinceWindowsEpoch().InMillisecondsF();
-  SetPref(network_guid, kLastConnectedTimestampPref, base::Value(timestamp));
-}
-
 void NetworkMetadataStore::SetIsConfiguredBySync(
     const std::string& network_guid) {
   SetPref(network_guid, kIsFromSync, base::Value(true));
@@ -152,6 +171,13 @@ base::TimeDelta NetworkMetadataStore::GetLastConnectedTimestamp(
   return base::TimeDelta::FromMillisecondsD(timestamp->GetDouble());
 }
 
+void NetworkMetadataStore::SetLastConnectedTimestamp(
+    const std::string& network_guid,
+    const base::TimeDelta& timestamp) {
+  double timestamp_f = timestamp.InMillisecondsF();
+  SetPref(network_guid, kLastConnectedTimestampPref, base::Value(timestamp_f));
+}
+
 bool NetworkMetadataStore::GetIsConfiguredBySync(
     const std::string& network_guid) {
   const base::Value* is_from_sync = GetPref(network_guid, kIsFromSync);
@@ -160,6 +186,21 @@ bool NetworkMetadataStore::GetIsConfiguredBySync(
   }
 
   return is_from_sync->GetBool();
+}
+
+bool NetworkMetadataStore::GetIsCreatedByUser(const std::string& network_guid) {
+  const base::Value* owner = GetPref(network_guid, kOwner);
+  if (!owner) {
+    return false;
+  }
+
+  const user_manager::User* user =
+      user_manager::UserManager::Get()->GetActiveUser();
+  if (!user) {
+    return false;
+  }
+
+  return owner->GetString() == user->username_hash();
 }
 
 void NetworkMetadataStore::SetPref(const std::string& network_guid,
@@ -171,7 +212,7 @@ void NetworkMetadataStore::SetPref(const std::string& network_guid,
   if (!network)
     return;
 
-  if (network->IsPrivate()) {
+  if (network->IsPrivate() && profile_pref_service_) {
     base::Value profile_dict =
         profile_pref_service_->GetDictionary(kNetworkMetadataPref)->Clone();
     profile_dict.SetPath(GetPath(network_guid, key), std::move(value));
@@ -199,7 +240,7 @@ const base::Value* NetworkMetadataStore::GetPref(
     return nullptr;
   }
 
-  if (network->IsPrivate()) {
+  if (network->IsPrivate() && profile_pref_service_) {
     const base::Value* profile_dict =
         profile_pref_service_->GetDictionary(kNetworkMetadataPref);
     return profile_dict->FindPath(GetPath(network_guid, key));

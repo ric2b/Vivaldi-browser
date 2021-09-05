@@ -25,6 +25,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/one_shot_event.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -2813,8 +2814,9 @@ TEST_F(ExtensionServiceTest, UpdateExtensionDuringShutdown) {
 
   // Update should fail and extension should not be updated.
   path = data_dir().AppendASCII("good2.crx");
-  bool updated = service()->UpdateExtension(
-      CRXFileInfo(good_crx, GetTestVerifierFormat(), path), true, NULL);
+  CRXFileInfo crx_info(path, GetTestVerifierFormat());
+  crx_info.extension_id = good_crx;
+  bool updated = service()->UpdateExtension(crx_info, true, nullptr);
   ASSERT_FALSE(updated);
   ASSERT_EQ("1.0.0.0", registry()
                            ->enabled_extensions()
@@ -4654,6 +4656,54 @@ TEST_F(ExtensionServiceTest, DisableExtension) {
   EXPECT_EQ(0u, registry()->blacklisted_extensions().size());
 }
 
+// Tests performing actions on extension Omaha attributes.
+TEST_F(ExtensionServiceTest, PerformActionBasedOnOmahaAttributes) {
+  InitializeEmptyExtensionService();
+
+  InstallCRX(data_dir().AppendASCII("good.crx"), INSTALL_NEW);
+  EXPECT_TRUE(registry()->enabled_extensions().GetByID(good_crx));
+
+  base::Value attributes(base::Value::Type::DICTIONARY);
+  attributes.SetKey("_malware", base::Value(true));
+  EXPECT_EQ(1u, registry()->enabled_extensions().size());
+
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+  service()->PerformActionBasedOnOmahaAttributes(good_crx, attributes);
+  EXPECT_EQ(disable_reason::DISABLE_REMOTELY_FOR_MALWARE,
+            prefs->GetDisableReasons(good_crx));
+  EXPECT_TRUE(prefs->IsExtensionBlacklisted(good_crx));
+
+  attributes.SetKey("_malware", base::Value(false));
+  service()->PerformActionBasedOnOmahaAttributes(good_crx, attributes);
+  EXPECT_EQ(1u, registry()->enabled_extensions().size());
+  EXPECT_EQ(0, prefs->GetDisableReasons(good_crx));
+  EXPECT_FALSE(prefs->IsExtensionBlacklisted(good_crx));
+}
+
+// Tests not re-enabling previously remotely disabled extension if it's not the
+// only reason but the disable reasons should be gone.
+TEST_F(ExtensionServiceTest, NoEnableRemotelyDisabledExtension) {
+  InitializeEmptyExtensionService();
+
+  InstallCRX(data_dir().AppendASCII("good.crx"), INSTALL_NEW);
+  EXPECT_TRUE(registry()->enabled_extensions().GetByID(good_crx));
+
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+  service()->DisableExtension(good_crx,
+                              disable_reason::DISABLE_REMOTELY_FOR_MALWARE |
+                                  disable_reason::DISABLE_USER_ACTION);
+  EXPECT_TRUE(registry()->disabled_extensions().GetByID(good_crx));
+  service()->BlacklistExtensionForTest(good_crx);
+  EXPECT_TRUE(prefs->IsExtensionBlacklisted(good_crx));
+
+  base::Value empty_attr(base::Value::Type::DICTIONARY);
+  service()->PerformActionBasedOnOmahaAttributes(good_crx, empty_attr);
+  EXPECT_TRUE(registry()->disabled_extensions().GetByID(good_crx));
+  EXPECT_FALSE(prefs->GetDisableReasons(good_crx) &
+               disable_reason::DISABLE_REMOTELY_FOR_MALWARE);
+  EXPECT_FALSE(prefs->IsExtensionBlacklisted(good_crx));
+}
+
 TEST_F(ExtensionServiceTest, TerminateExtension) {
   InitializeEmptyExtensionService();
 
@@ -4970,8 +5020,7 @@ TEST_F(ExtensionServiceTest, ClearExtensionData) {
       net::CanonicalCookie::Create(ext_url, "dummy=value", base::Time::Now(),
                                    base::nullopt /* server_time */);
   cookie_store->SetCanonicalCookieAsync(
-      std::move(cookie), ext_url.scheme(),
-      net::CookieOptions::MakeAllInclusive(),
+      std::move(cookie), ext_url, net::CookieOptions::MakeAllInclusive(),
       base::BindOnce(&ExtensionCookieCallback::SetCookieCallback,
                      base::Unretained(&callback)));
   content::RunAllTasksUntilIdle();
@@ -5126,7 +5175,7 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
     bool set_result = false;
     base::RunLoop run_loop;
     cookie_manager_remote->SetCanonicalCookie(
-        *cc.get(), origin1.scheme(), net::CookieOptions::MakeAllInclusive(),
+        *cc.get(), origin1, net::CookieOptions::MakeAllInclusive(),
         base::BindOnce(&SetCookieSaveData, &set_result,
                        run_loop.QuitClosure()));
     run_loop.Run();
@@ -5977,33 +6026,6 @@ TEST_F(ExtensionServiceTest, LoadAndRelocalizeExtensions) {
   EXPECT_EQ("no l10n", loaded_[2]->name());
 }
 
-class ExtensionsReadyRecorder : public content::NotificationObserver {
- public:
-  ExtensionsReadyRecorder() : ready_(false) {
-    registrar_.Add(this, NOTIFICATION_EXTENSIONS_READY_DEPRECATED,
-                   content::NotificationService::AllSources());
-  }
-
-  void set_ready(bool value) { ready_ = value; }
-  bool ready() { return ready_; }
-
- private:
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override {
-    switch (type) {
-      case NOTIFICATION_EXTENSIONS_READY_DEPRECATED:
-        ready_ = true;
-        break;
-      default:
-        NOTREACHED();
-    }
-  }
-
-  content::NotificationRegistrar registrar_;
-  bool ready_;
-};
-
 // Test that we get enabled/disabled correctly for all the pref/command-line
 // combinations. We don't want to derive from the ExtensionServiceTest class
 // for this test, so we use ExtensionServiceTestSimple.
@@ -6022,13 +6044,17 @@ TEST_F(ExtensionServiceTestSimple, Enabledness) {
 #endif
 
   LoadErrorReporter::Init(false);  // no noisy errors
-  ExtensionsReadyRecorder recorder;
-
   std::unique_ptr<base::CommandLine> command_line;
 
   // The profile lifetimes must not overlap: services may use global variables.
   {
     auto profile = std::make_unique<TestingProfile>();
+    bool ready = false;
+    auto on_ready = [](bool* ready) { *ready = true; };
+    ExtensionSystem::Get(profile.get())
+        ->ready()
+        .Post(FROM_HERE, base::BindOnce(on_ready, &ready));
+
     base::FilePath install_dir =
         profile->GetPath().AppendASCII(kInstallDirectoryName);
 
@@ -6040,13 +6066,17 @@ TEST_F(ExtensionServiceTestSimple, Enabledness) {
     EXPECT_TRUE(service->extensions_enabled());
     service->Init();
     content::RunAllTasksUntilIdle();
-    EXPECT_TRUE(recorder.ready());
+    EXPECT_TRUE(ready);
   }
 
   {
-    // If either the command line or pref is set, we are disabled.
-    recorder.set_ready(false);
     auto profile = std::make_unique<TestingProfile>();
+    bool ready = false;
+    auto on_ready = [](bool* ready) { *ready = true; };
+    ExtensionSystem::Get(profile.get())
+        ->ready()
+        .Post(FROM_HERE, base::BindOnce(on_ready, &ready));
+
     base::FilePath install_dir =
         profile->GetPath().AppendASCII(kInstallDirectoryName);
     command_line->AppendSwitch(::switches::kDisableExtensions);
@@ -6056,12 +6086,17 @@ TEST_F(ExtensionServiceTestSimple, Enabledness) {
     EXPECT_FALSE(service->extensions_enabled());
     service->Init();
     content::RunAllTasksUntilIdle();
-    EXPECT_TRUE(recorder.ready());
+    EXPECT_TRUE(ready);
   }
 
   {
-    recorder.set_ready(false);
     auto profile = std::make_unique<TestingProfile>();
+    bool ready = false;
+    auto on_ready = [](bool* ready) { *ready = true; };
+    ExtensionSystem::Get(profile.get())
+        ->ready()
+        .Post(FROM_HERE, base::BindOnce(on_ready, &ready));
+
     base::FilePath install_dir =
         profile->GetPath().AppendASCII(kInstallDirectoryName);
     profile->GetPrefs()->SetBoolean(prefs::kDisableExtensions, true);
@@ -6071,12 +6106,17 @@ TEST_F(ExtensionServiceTestSimple, Enabledness) {
     EXPECT_FALSE(service->extensions_enabled());
     service->Init();
     content::RunAllTasksUntilIdle();
-    EXPECT_TRUE(recorder.ready());
+    EXPECT_TRUE(ready);
   }
 
   {
-    recorder.set_ready(false);
     auto profile = std::make_unique<TestingProfile>();
+    bool ready = false;
+    auto on_ready = [](bool* ready) { *ready = true; };
+    ExtensionSystem::Get(profile.get())
+        ->ready()
+        .Post(FROM_HERE, base::BindOnce(on_ready, &ready));
+
     base::FilePath install_dir =
         profile->GetPath().AppendASCII(kInstallDirectoryName);
     profile->GetPrefs()->SetBoolean(prefs::kDisableExtensions, true);
@@ -6087,7 +6127,7 @@ TEST_F(ExtensionServiceTestSimple, Enabledness) {
     EXPECT_FALSE(service->extensions_enabled());
     service->Init();
     content::RunAllTasksUntilIdle();
-    EXPECT_TRUE(recorder.ready());
+    EXPECT_TRUE(ready);
   }
 
   // Execute any pending deletion tasks.
@@ -7597,6 +7637,45 @@ TEST_F(ExtensionServiceTest,
   // Extension should behave similar to force installed on restart.
   EXPECT_TRUE(policy->MustRemainInstalled(extension, nullptr));
   EXPECT_FALSE(policy->UserMayModifySettings(extension, nullptr));
+}
+
+TEST_F(ExtensionServiceTest, InstallingUnacknowledgedExternalExtension) {
+  InitializeEmptyExtensionServiceWithTestingPrefs();
+  {
+    ManagementPrefUpdater pref(profile_->GetTestingPrefService());
+    // Mark good.crx for recommended installation.
+    pref.SetIndividualExtensionAutoInstalled(
+        good_crx, "http://example.com/update_url", false);
+  }
+
+  base::FilePath path = data_dir().AppendASCII("good.crx");
+  std::string version_str = "1.0.0.0";
+  // Install an external extension.
+  std::unique_ptr<ExternalInstallInfoFile> info = CreateExternalExtension(
+      good_crx, version_str, path, Manifest::EXTERNAL_PREF_DOWNLOAD,
+      Extension::NO_FLAGS);
+  MockExternalProvider* provider =
+      AddMockExternalProvider(Manifest::EXTERNAL_PREF_DOWNLOAD);
+  provider->UpdateOrAddExtension(std::move(info));
+  WaitForExternalExtensionInstalled();
+
+  const Extension* extension =
+      registry()->enabled_extensions().GetByID(good_crx);
+  ASSERT_TRUE(extension);
+  EXPECT_EQ(good_crx, extension->id());
+  EXPECT_EQ(Manifest::EXTERNAL_PREF_DOWNLOAD, extension->location());
+  EXPECT_EQ(version_str, extension->VersionString());
+
+  ExtensionManagement::InstallationMode installation_mode =
+      ExtensionManagementFactory::GetForBrowserContext(profile())
+          ->GetInstallationMode(extension);
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+
+  EXPECT_EQ(ExtensionManagement::INSTALLATION_RECOMMENDED, installation_mode);
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(good_crx));
+  EXPECT_TRUE(prefs->IsExternalExtensionAcknowledged(extension->id()));
+  EXPECT_EQ(disable_reason::DISABLE_NONE, prefs->GetDisableReasons(good_crx));
+  EXPECT_FALSE(prefs->IsExtensionDisabled(good_crx));
 }
 
 // Regression test for crbug.com/460699. Ensure PluginManager doesn't crash even

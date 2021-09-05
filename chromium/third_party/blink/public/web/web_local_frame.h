@@ -13,13 +13,14 @@
 #include "base/optional.h"
 #include "base/unguessable_token.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/common/css/page_size_type.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
-#include "third_party/blink/public/common/frame/sandbox_flags.h"
 #include "third_party/blink/public/common/frame/user_activation_update_source.h"
 #include "third_party/blink/public/common/messaging/transferable_message.h"
 #include "third_party/blink/public/mojom/ad_tagging/ad_frame.mojom-shared.h"
 #include "third_party/blink/public/mojom/commit_result/commit_result.mojom-shared.h"
+#include "third_party/blink/public/mojom/devtools/devtools_agent.mojom-shared.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-shared.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-shared.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
@@ -53,8 +54,6 @@ class WebAutofillClient;
 class WebContentCaptureClient;
 class WebContentSettingsClient;
 class WebDocument;
-class WebDoubleSize;
-class WebDOMMessageEvent;
 class WebLocalFrameClient;
 class WebFrameWidget;
 class WebInputMethodController;
@@ -67,17 +66,24 @@ class WebString;
 class WebTextCheckClient;
 class WebURL;
 class WebView;
-class WebCosmeticFilterClient;
-enum class WebTreeScopeType;
 struct FramePolicy;
 struct TransferableMessage;
 struct WebAssociatedURLLoaderOptions;
 struct WebConsoleMessage;
 struct WebIsolatedWorldInfo;
+struct WebPrintPageDescription;
 struct WebPrintParams;
 struct WebPrintPresetOptions;
 struct WebScriptSource;
 struct WebSourceLocation;
+
+namespace mojom {
+enum class TreeScopeType;
+}
+
+// Vivaldi
+class WebCosmeticFilterClient;
+
 
 // Interface for interacting with in process frames. This contains methods that
 // require interacting with a frame's document.
@@ -94,9 +100,10 @@ class WebLocalFrame : public WebFrame {
       WebView*,
       WebLocalFrameClient*,
       blink::InterfaceRegistry*,
+      const base::UnguessableToken& frame_token,
       WebFrame* opener = nullptr,
       const WebString& name = WebString(),
-      mojom::WebSandboxFlags = mojom::WebSandboxFlags::kNone,
+      network::mojom::WebSandboxFlags = network::mojom::WebSandboxFlags::kNone,
       const FeaturePolicy::FeatureState& opener_feature_state =
           FeaturePolicy::FeatureState());
 
@@ -125,6 +132,7 @@ class WebLocalFrame : public WebFrame {
   BLINK_EXPORT static WebLocalFrame* CreateProvisional(
       WebLocalFrameClient*,
       blink::InterfaceRegistry*,
+      const base::UnguessableToken& frame_token,
       WebFrame* previous_web_frame,
       const FramePolicy&,
       const WebString& name);
@@ -132,9 +140,11 @@ class WebLocalFrame : public WebFrame {
   // Creates a new local child of this frame. Similar to the other methods that
   // create frames, the returned frame should be freed by calling Close() when
   // it's no longer needed.
-  virtual WebLocalFrame* CreateLocalChild(WebTreeScopeType,
-                                          WebLocalFrameClient*,
-                                          blink::InterfaceRegistry*) = 0;
+  virtual WebLocalFrame* CreateLocalChild(
+      mojom::TreeScopeType,
+      WebLocalFrameClient*,
+      blink::InterfaceRegistry*,
+      const base::UnguessableToken& frame_token) = 0;
 
   // Returns the WebFrame associated with the current V8 context. This
   // function can return 0 if the context is associated with a Document that
@@ -188,9 +198,9 @@ class WebLocalFrame : public WebFrame {
   // kind of lookup what |window.open(..., name)| would in Javascript.
   virtual WebFrame* FindFrameByName(const WebString& name) = 0;
 
-  // Sets an embedding token for the frame. This token is propagated to the
-  // remote parent of this frame (via the browser) such that it can uniquely
-  // refer to this frame.
+  // Sets an embedding token for the document in this frame. This token is
+  // propagated to the remote parent of this frame (via the browser) such
+  // that it can uniquely refer to the document in this frame.
   virtual void SetEmbeddingToken(
       const base::UnguessableToken& embedding_token) = 0;
 
@@ -271,16 +281,11 @@ class WebLocalFrame : public WebFrame {
   // Returns the type of @page size styling for the given page.
   virtual PageSizeType GetPageSizeType(int page_index) = 0;
 
-  // Returns the preferred page size and margins in pixels, assuming 96
-  // pixels per inch. pageSize, marginTop, marginRight, marginBottom,
-  // marginLeft must be initialized to the default values that are used if
-  // auto is specified.
-  virtual void PageSizeAndMarginsInPixels(int page_index,
-                                          WebDoubleSize& page_size,
-                                          int& margin_top,
-                                          int& margin_right,
-                                          int& margin_bottom,
-                                          int& margin_left) = 0;
+  // Gets the description for the specified page. This includes preferred page
+  // size and margins in pixels, assuming 96 pixels per inch. The size and
+  // margins must be initialized to the default values that are used if auto is
+  // specified.
+  virtual void GetPageDescription(int page_index, WebPrintPageDescription*) = 0;
 
   // Scripting --------------------------------------------------------------
 
@@ -393,8 +398,10 @@ class WebLocalFrame : public WebFrame {
   // Debugging -----------------------------------------------------------
 
   virtual void BindDevToolsAgent(
-      mojo::ScopedInterfaceEndpointHandle devtools_agent_host_ptr_info,
-      mojo::ScopedInterfaceEndpointHandle devtools_agent_request) = 0;
+      CrossVariantMojoAssociatedRemote<mojom::DevToolsAgentHostInterfaceBase>
+          devtools_agent_host_remote,
+      CrossVariantMojoAssociatedReceiver<mojom::DevToolsAgentInterfaceBase>
+          devtools_agent_receiver) = 0;
 
   // Editing -------------------------------------------------------------
   virtual void UnmarkText() = 0;
@@ -406,11 +413,6 @@ class WebLocalFrame : public WebFrame {
   virtual bool FirstRectForCharacterRange(unsigned location,
                                           unsigned length,
                                           WebRect&) const = 0;
-
-  // Returns the index of a character in the Frame's text stream at the given
-  // point. The point is in the viewport coordinate space. Will return
-  // WTF::notFound if the point is invalid.
-  virtual size_t CharacterIndexForPoint(const gfx::Point&) const = 0;
 
   // Supports commands like Undo, Redo, Cut, Copy, Paste, SelectAll,
   // Unselect, etc. See EditorCommand.cpp for the full list of supported
@@ -528,7 +530,8 @@ class WebLocalFrame : public WebFrame {
   // where the notion of FrameReplicationState is relevant to.
   // Returns the effective sandbox flags which are inherited from their parent
   // frame.
-  virtual mojom::WebSandboxFlags EffectiveSandboxFlagsForTesting() const = 0;
+  virtual network::mojom::WebSandboxFlags EffectiveSandboxFlagsForTesting()
+      const = 0;
 
   // Returns false if this frame, or any parent frame is sandboxed and does not
   // have the flag "allow-downloads" set.
@@ -569,11 +572,6 @@ class WebLocalFrame : public WebFrame {
   virtual void CopyImageAtForTesting(const gfx::Point&) = 0;
 
   // Events --------------------------------------------------------------
-
-  // Dispatches a message event on the current DOMWindow in this WebFrame.
-  virtual void DispatchMessageEventWithOriginCheck(
-      const WebSecurityOrigin& intended_target_origin,
-      const WebDOMMessageEvent&) = 0;
 
   // TEMP: Usage count for chrome.loadtimes deprecation.
   // This will be removed following the deprecation.
@@ -620,12 +618,15 @@ class WebLocalFrame : public WebFrame {
   // Loading ------------------------------------------------------------------
 
   // Returns an AssociatedURLLoader that is associated with this frame.  The
-  // loader will, for example, be cancelled when WebFrame::stopLoading is
-  // called.
+  // loader will, for example, be cancelled when StopLoading is called.
   //
-  // FIXME: stopLoading does not yet cancel an associated loader!!
+  // FIXME: StopLoading does not yet cancel an associated loader!!
   virtual WebAssociatedURLLoader* CreateAssociatedURLLoader(
       const WebAssociatedURLLoaderOptions&) = 0;
+
+  // This API is deprecated and only required by PepperURLLoaderHost::Close(),
+  // and so it should not be used on a regular basis.
+  virtual void StopLoading() = 0;
 
   // Geometry -----------------------------------------------------------------
 
@@ -692,6 +693,11 @@ class WebLocalFrame : public WebFrame {
   virtual bool CapturePaintPreview(const WebRect& bounds,
                                    cc::PaintCanvas* canvas) = 0;
 
+  // FrameOverlay ----------------------------------------------------------
+
+  // Overlay this frame with a solid color. Only valid for the main frame.
+  virtual void SetMainFrameOverlayColor(SkColor) = 0;
+
   // Focus --------------------------------------------------------------
 
   // Returns whether the keyboard should be suppressed for the currently focused
@@ -750,6 +756,10 @@ class WebLocalFrame : public WebFrame {
   // empty ((0,0), (0,0)).
   virtual WebRect GetSelectionBoundsRectForTesting() const = 0;
 
+  // Returns the position of the frame's origin relative to the viewport (ie the
+  // local root).
+  virtual gfx::Point GetPositionInViewportForTesting() const = 0;
+
   virtual void SetLifecycleState(mojom::FrameLifecycleState state) = 0;
 
   virtual void WasHidden() = 0;
@@ -762,7 +772,9 @@ class WebLocalFrame : public WebFrame {
   virtual void SetAllowsCrossBrowsingInstanceFrameLookup() = 0;
 
  protected:
-  explicit WebLocalFrame(WebTreeScopeType scope) : WebFrame(scope) {}
+  explicit WebLocalFrame(mojom::TreeScopeType scope,
+                         const base::UnguessableToken& frame_token)
+      : WebFrame(scope, frame_token) {}
 
   // Inherited from WebFrame, but intentionally hidden: it never makes sense
   // to directly call these on a WebLocalFrame.

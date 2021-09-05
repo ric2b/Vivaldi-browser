@@ -11,6 +11,10 @@
 #include "ash/assistant/model/assistant_interaction_model_observer.h"
 #include "ash/assistant/model/assistant_response_observer.h"
 #include "ash/assistant/ui/base/assistant_scroll_view.h"
+#include "ash/public/cpp/assistant/controller/assistant_controller.h"
+#include "ash/public/cpp/assistant/controller/assistant_controller_observer.h"
+#include "ash/public/cpp/assistant/controller/assistant_interaction_controller.h"
+#include "base/scoped_observer.h"
 #include "chromeos/services/assistant/public/mojom/assistant.mojom-forward.h"
 
 namespace ui {
@@ -52,6 +56,8 @@ class ElementAnimator;
 //       through OnAllViewsAnimatedIn().
 class COMPONENT_EXPORT(ASSISTANT_UI) AnimatedContainerView
     : public AssistantScrollView,
+      public AssistantScrollView::Observer,
+      public AssistantControllerObserver,
       public AssistantInteractionModelObserver,
       public AssistantResponseObserver {
  public:
@@ -63,6 +69,9 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AnimatedContainerView
   // AssistantScrollView:
   void PreferredSizeChanged() override;
   void OnChildViewRemoved(View* observed_view, View* child) override;
+
+  // AssistantControllerObserver:
+  void OnAssistantControllerDestroying() override;
 
   // AssistantInteractionModelObserver:
   void OnCommittedQueryChanged(const AssistantQuery& query) override;
@@ -143,6 +152,9 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AnimatedContainerView
   // reduces layout passes.
   bool propagate_preferred_size_changed_ = true;
 
+  // Whether the animate-out animation is in progress.
+  bool animate_out_in_progress_ = false;
+
   // Whether the fade-out animation is in progress.
   bool fade_out_in_progress_ = false;
 
@@ -152,6 +164,15 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AnimatedContainerView
   // before we have an opportunity to remove their associated views.
   scoped_refptr<const AssistantResponse> response_;
   scoped_refptr<const AssistantResponse> queued_response_;
+
+  ScopedObserver<AssistantController, AssistantControllerObserver>
+      assistant_controller_observer_{this};
+
+  ScopedObserver<AssistantInteractionController,
+                 AssistantInteractionModelObserver,
+                 &AssistantInteractionController::AddModelObserver,
+                 &AssistantInteractionController::RemoveModelObserver>
+      assistant_interaction_model_observer_{this};
 
   base::WeakPtrFactory<AnimatedContainerView> weak_factory_{this};
 

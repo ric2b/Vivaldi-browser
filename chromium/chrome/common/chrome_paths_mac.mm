@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/base_paths.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #import "base/mac/foundation_util.h"
 #include "base/memory/free_deleter.h"
 #include "base/path_service.h"
@@ -62,8 +62,9 @@ char* ProductDirNameForBundle(NSBundle* chrome_bundle) {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
       product_dir_name = "Google/Chrome";
 #else
-      // TODO (gisli@vivaldi.com):  Should use CrProductDirName but
-      // did not find which Info.plist it should go.
+      // NOTE(tomas@vivaldi.com): Vivaldi only sets CrProductDirName for
+      // snapshots and internal builds. This is the name of the default
+      // profile folder.
       //product_dir_name = "Chromium";
       product_dir_name = "Vivaldi";
 #endif

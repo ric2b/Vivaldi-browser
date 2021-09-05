@@ -4,7 +4,8 @@
 
 #include "chrome/browser/web_applications/extensions/bookmark_app_icon_manager.h"
 
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_registrar.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
@@ -139,6 +140,15 @@ void BookmarkAppIconManager::ReadAllIcons(const web_app::AppId& app_id,
   DCHECK(app);
   ReadExtensionIcons(profile_, app_id, GetBookmarkAppDownloadedIconSizes(app),
                      std::move(callback));
+}
+
+void BookmarkAppIconManager::ReadAllShortcutIcons(
+    const web_app::AppId& app_id,
+    ReadShortcutIconsCallback callback) const {
+  // TODO(https://crbug.com/926083): This needs to be implemented to support
+  // Manifest update and local installs.
+  NOTIMPLEMENTED();
+  std::move(callback).Run(std::vector<std::map<SquareSizePx, SkBitmap>>());
 }
 
 void BookmarkAppIconManager::ReadSmallestIcon(const web_app::AppId& app_id,

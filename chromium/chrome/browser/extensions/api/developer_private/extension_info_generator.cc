@@ -42,6 +42,7 @@
 #include "extensions/browser/path_util.h"
 #include "extensions/browser/ui_util.h"
 #include "extensions/browser/warning_service.h"
+#include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/install_warning.h"
 #include "extensions/common/manifest.h"
@@ -61,6 +62,11 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/skbitmap_operations.h"
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+#include "chrome/browser/supervised_user/supervised_user_service.h"
+#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 namespace extensions {
 
@@ -184,20 +190,22 @@ void ConstructCommands(CommandService* command_service,
     command_value.is_extension_action = is_extension_action;
     return command_value;
   };
+  // TODO(https://crbug.com/1067130): Extensions shouldn't be able to specify
+  // commands for actions they don't have, so we should just be able to query
+  // for a single action type.
   bool active = false;
   Command browser_action;
-  if (command_service->GetBrowserActionCommand(extension_id,
-                                               CommandService::ALL,
-                                               &browser_action,
-                                               &active)) {
+  if (command_service->GetExtensionActionCommand(
+          extension_id, ActionInfo::TYPE_BROWSER, CommandService::ALL,
+          &browser_action, &active)) {
     commands->push_back(construct_command(browser_action, active, true));
   }
 
   Command page_action;
-  if (command_service->GetPageActionCommand(extension_id,
-                                            CommandService::ALL,
-                                            &page_action,
-                                            &active)) {
+  active = false;
+  if (command_service->GetExtensionActionCommand(
+          extension_id, ActionInfo::TYPE_PAGE, CommandService::ALL,
+          &page_action, &active)) {
     commands->push_back(construct_command(page_action, active, true));
   }
 
@@ -404,7 +412,12 @@ ExtensionInfoGenerator::ExtensionInfoGenerator(
       warning_service_(WarningService::Get(browser_context)),
       error_console_(ErrorConsole::Get(browser_context)),
       image_loader_(ImageLoader::Get(browser_context)),
-      pending_image_loads_(0u) {}
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+      supervised_user_service_(
+          SupervisedUserServiceFactory::GetForBrowserContext(browser_context)),
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
+      pending_image_loads_(0u) {
+}
 
 ExtensionInfoGenerator::~ExtensionInfoGenerator() {
 }
@@ -556,9 +569,19 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
       0;
   info->disable_reasons.blocked_by_policy =
       (disable_reasons & disable_reason::DISABLE_BLOCKED_BY_POLICY) != 0;
-  info->disable_reasons.custodian_approval_required =
+  bool custodian_approval_required =
       (disable_reasons & disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED) !=
       0;
+  info->disable_reasons.custodian_approval_required =
+      custodian_approval_required;
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  bool permissions_increase =
+      (disable_reasons & disable_reason::DISABLE_PERMISSIONS_INCREASE) != 0;
+  info->disable_reasons.parent_disabled_permissions =
+      !supervised_user_service_
+           ->GetSupervisedUserExtensionsMayRequestPermissionsPref() &&
+      (custodian_approval_required || permissions_increase);
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
   // Error collection.
   bool error_console_enabled =

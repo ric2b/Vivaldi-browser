@@ -38,15 +38,15 @@ PaintWorklet* PaintWorklet::From(LocalDOMWindow& window) {
   PaintWorklet* supplement =
       Supplement<LocalDOMWindow>::From<PaintWorklet>(window);
   if (!supplement && window.GetFrame()) {
-    supplement = MakeGarbageCollected<PaintWorklet>(window.GetFrame());
+    supplement = MakeGarbageCollected<PaintWorklet>(window);
     ProvideTo(window, supplement);
   }
   return supplement;
 }
 
-PaintWorklet::PaintWorklet(LocalFrame* frame)
-    : Worklet(frame->GetDocument()),
-      Supplement<LocalDOMWindow>(*frame->DomWindow()),
+PaintWorklet::PaintWorklet(LocalDOMWindow& window)
+    : Worklet(window),
+      Supplement<LocalDOMWindow>(window),
       pending_generator_registry_(
           MakeGarbageCollected<PaintWorkletPendingGeneratorRegistry>()),
       worklet_id_(NextId()),
@@ -250,13 +250,13 @@ WorkletGlobalScopeProxy* PaintWorklet::CreateGlobalScope() {
   if (!is_paint_off_thread_ ||
       GetNumberOfGlobalScopes() < kNumGlobalScopesPerThread) {
     return MakeGarbageCollected<PaintWorkletGlobalScopeProxy>(
-        Document::From(GetExecutionContext())->GetFrame(), ModuleResponsesMap(),
-        GetNumberOfGlobalScopes() + 1);
+        To<LocalDOMWindow>(GetExecutionContext())->GetFrame(),
+        ModuleResponsesMap(), GetNumberOfGlobalScopes() + 1);
   }
 
   if (!proxy_client_) {
     proxy_client_ = PaintWorkletProxyClient::Create(
-        Document::From(GetExecutionContext()), worklet_id_);
+        To<LocalDOMWindow>(GetExecutionContext()), worklet_id_);
   }
 
   auto* worker_clients = MakeGarbageCollected<WorkerClients>();

@@ -9,11 +9,11 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
@@ -26,6 +26,7 @@
 #include "chrome/test/base/android/android_browser_test.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -44,8 +45,7 @@ class ProfileDeleteMediaBrowserTest : public AndroidBrowserTest {
     base::ScopedAllowBlockingForTesting allow_blocking;
     EXPECT_TRUE(base::CreateDirectory(media_cache_path));
     std::string data = "foo";
-    base::WriteFile(media_cache_path.AppendASCII("foo"), data.c_str(),
-                    data.size());
+    base::WriteFile(media_cache_path.AppendASCII("foo"), data);
 
     AndroidBrowserTest::SetUp();
   }

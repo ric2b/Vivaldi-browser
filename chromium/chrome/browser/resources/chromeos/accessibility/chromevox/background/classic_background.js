@@ -30,9 +30,7 @@ goog.require('TtsBackground');
 
 
 /**
- * This object manages the global and persistent state for ChromeVox.
- * It listens for messages from the content scripts on pages and
- * interprets them.
+ * This is the legacy ChromeVox background object.
  */
 ChromeVoxBackground = class {
   constructor() {
@@ -118,13 +116,16 @@ ChromeVoxBackground = class {
     if (pref == 'earcons') {
       AbstractEarcons.enabled = !!value;
     } else if (pref == 'sticky' && announce) {
-      if (value) {
-        ChromeVox.tts.speak(
-            Msgs.getMsg('sticky_mode_enabled'), QueueMode.FLUSH);
-      } else {
-        ChromeVox.tts.speak(
-            Msgs.getMsg('sticky_mode_disabled'), QueueMode.FLUSH);
+      if (typeof (value) != 'boolean') {
+        throw new Error('Unexpected sticky mode value ' + value);
       }
+      chrome.accessibilityPrivate.setKeyboardListener(true, !!value);
+      new Output()
+          .withInitialSpeechProperties(AbstractTts.PERSONALITY_ANNOTATION)
+          .withString(
+              value ? Msgs.getMsg('sticky_mode_enabled') :
+                      Msgs.getMsg('sticky_mode_disabled'))
+          .go();
     } else if (pref == 'typingEcho' && announce) {
       let announceStr = '';
       switch (value) {
@@ -144,7 +145,10 @@ ChromeVoxBackground = class {
           break;
       }
       if (announceStr) {
-        ChromeVox.tts.speak(announceStr, QueueMode.QUEUE);
+        new Output()
+            .withInitialSpeechProperties(AbstractTts.PERSONALITY_ANNOTATION)
+            .withString(announceStr)
+            .go();
       }
     } else if (pref == 'brailleCaptions') {
       BrailleCaptionsBackground.setActive(!!value);
@@ -346,20 +350,24 @@ ChromeVoxBackground = class {
   getCurrentVoice() {
     return this.backgroundTts_.currentVoice;
   }
+
+  /**
+   * Initializes classic background object.
+   */
+  static init() {
+    // Create the background page object and export a function window['speak']
+    // so that other background pages can access it. Also export the prefs
+    // object for access by the options page.
+    const background = new ChromeVoxBackground();
+
+    // TODO: this needs to be cleaned up (move to init?).
+    window['speak'] = goog.bind(background.tts.speak, background.tts);
+    ChromeVoxState.backgroundTts = background.backgroundTts_;
+    // Export the prefs object for access by the options page.
+    window['prefs'] = ChromeVoxPrefs.instance;
+    // Export the braille translator manager for access by the options page.
+    window['braille_translator_manager'] =
+        background.backgroundBraille_.getTranslatorManager();
+    window['getCurrentVoice'] = background.getCurrentVoice.bind(background);
+  }
 };
-
-
-// Create the background page object and export a function window['speak']
-// so that other background pages can access it. Also export the prefs object
-// for access by the options page.
-const background = new ChromeVoxBackground();
-
-// TODO: this needs to be cleaned up (move to init?).
-window['speak'] = goog.bind(background.tts.speak, background.tts);
-ChromeVoxState.backgroundTts = background.backgroundTts_;
-// Export the prefs object for access by the options page.
-window['prefs'] = ChromeVoxPrefs.instance;
-// Export the braille translator manager for access by the options page.
-window['braille_translator_manager'] =
-    background.backgroundBraille_.getTranslatorManager();
-window['getCurrentVoice'] = background.getCurrentVoice.bind(background);

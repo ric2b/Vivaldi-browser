@@ -4,8 +4,9 @@
 
 #include "chrome/browser/safe_browsing/android/services_delegate_android.h"
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/telemetry/android/android_telemetry_service.h"
 #include "chrome/browser/safe_browsing/telemetry/telemetry_service.h"
@@ -42,9 +43,6 @@ ServicesDelegateAndroid::ServicesDelegateAndroid(
 ServicesDelegateAndroid::~ServicesDelegateAndroid() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 }
-
-void ServicesDelegateAndroid::InitializeCsdService(
-    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {}
 
 const scoped_refptr<SafeBrowsingDatabaseManager>&
 ServicesDelegateAndroid::database_manager() const {
@@ -85,10 +83,6 @@ void ServicesDelegateAndroid::RegisterDelayedAnalysisCallback(
 void ServicesDelegateAndroid::AddDownloadManager(
     content::DownloadManager* download_manager) {}
 
-ClientSideDetectionService* ServicesDelegateAndroid::GetCsdService() {
-  return nullptr;
-}
-
 void ServicesDelegateAndroid::StartOnIOThread(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const V4ProtocolConfig& v4_config) {
@@ -115,10 +109,6 @@ void ServicesDelegateAndroid::RemoveTelemetryService(Profile* profile) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (telemetry_service_ && telemetry_service_->profile() == profile)
     telemetry_service_.reset();
-}
-
-std::string ServicesDelegateAndroid::GetSafetyNetId() const {
-  return database_manager_->GetSafetyNetId();
 }
 
 }  // namespace safe_browsing

@@ -146,7 +146,6 @@
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
-#include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/graphics/paint/cull_rect.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
@@ -160,7 +159,6 @@
 #include "third_party/blink/renderer/platform/scheduler/public/page_lifecycle_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
-#include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/widget/widget_base.h"
 
 #include "ui/gfx/skia_util.h"
@@ -239,26 +237,31 @@ class EmptyEventListener final : public NativeEventListener {
 
 // WebView ----------------------------------------------------------------
 
-WebView* WebView::Create(WebViewClient* client,
-                         bool is_hidden,
-                         bool compositing_enabled,
-                         WebView* opener,
-                         mojo::ScopedInterfaceEndpointHandle page_handle) {
-  return WebViewImpl::Create(client, is_hidden, compositing_enabled,
-                             static_cast<WebViewImpl*>(opener),
-                             std::move(page_handle));
+WebView* WebView::Create(
+    WebViewClient* client,
+    bool is_hidden,
+    bool compositing_enabled,
+    WebView* opener,
+    CrossVariantMojoAssociatedReceiver<mojom::PageBroadcastInterfaceBase>
+        page_handle) {
+  return WebViewImpl::Create(
+      client,
+      is_hidden ? mojom::blink::PageVisibilityState::kHidden
+                : mojom::blink::PageVisibilityState::kVisible,
+      compositing_enabled, static_cast<WebViewImpl*>(opener),
+      std::move(page_handle));
 }
 
 WebViewImpl* WebViewImpl::Create(
     WebViewClient* client,
-    bool is_hidden,
+    mojom::blink::PageVisibilityState visibility,
     bool compositing_enabled,
     WebViewImpl* opener,
-    mojo::ScopedInterfaceEndpointHandle page_handle) {
+    mojo::PendingAssociatedReceiver<mojom::blink::PageBroadcast> page_handle) {
   // Take a self-reference for WebViewImpl that is released by calling Close(),
   // then return a raw pointer to the caller.
   auto web_view = base::AdoptRef(new WebViewImpl(
-      client, is_hidden, compositing_enabled, opener, std::move(page_handle)));
+      client, visibility, compositing_enabled, opener, std::move(page_handle)));
   web_view->AddRef();
   return web_view.get();
 }
@@ -279,20 +282,20 @@ void WebViewImpl::SetPrerendererClient(
                                  *AsView().page, prerenderer_client));
 }
 
-WebViewImpl::WebViewImpl(WebViewClient* client,
-                         bool is_hidden,
-                         bool does_composite,
-                         WebViewImpl* opener,
-                         mojo::ScopedInterfaceEndpointHandle page_handle)
+WebViewImpl::WebViewImpl(
+    WebViewClient* client,
+    mojom::blink::PageVisibilityState visibility,
+    bool does_composite,
+    WebViewImpl* opener,
+    mojo::PendingAssociatedReceiver<mojom::blink::PageBroadcast> page_handle)
     : as_view_(client),
       chrome_client_(MakeGarbageCollected<ChromeClientImpl>(this)),
       minimum_zoom_level_(PageZoomFactorToZoomLevel(kMinimumPageZoomFactor)),
       maximum_zoom_level_(PageZoomFactorToZoomLevel(kMaximumPageZoomFactor)),
       does_composite_(does_composite),
       fullscreen_controller_(std::make_unique<FullscreenController>(this)),
-      receiver_(this,
-                mojo::PendingAssociatedReceiver<mojom::blink::PageBroadcast>(
-                    std::move(page_handle))) {
+      lifecycle_state_(mojom::blink::PageLifecycleState::New()),
+      receiver_(this, std::move(page_handle)) {
   if (!AsView().client) {
     DCHECK(!does_composite_);
   }
@@ -303,9 +306,9 @@ WebViewImpl::WebViewImpl(WebViewClient* client,
       Page::CreateOrdinary(page_clients, opener ? opener->GetPage() : nullptr);
   CoreInitializer::GetInstance().ProvideModulesToPage(*AsView().page,
                                                       AsView().client);
-  SetVisibilityState(
-      is_hidden ? PageVisibilityState::kHidden : PageVisibilityState::kVisible,
-      /*is_initial_state=*/true);
+
+  SetVisibilityState(visibility, /*is_initial_state=*/true);
+  lifecycle_state_->visibility = visibility;
 
   // When not compositing, keep the Page in the loop so that it will paint all
   // content into the root layer, as multiple layers can only be used when
@@ -418,14 +421,6 @@ void WebViewImpl::HandleMouseDown(LocalFrame& main_frame,
 #endif
 }
 
-void WebViewImpl::SetDisplayMode(blink::mojom::DisplayMode mode) {
-  display_mode_ = mode;
-  if (!MainFrameImpl() || !MainFrameImpl()->GetFrameView())
-    return;
-
-  MainFrameImpl()->GetFrameView()->SetDisplayMode(mode);
-}
-
 void WebViewImpl::MouseContextMenu(const WebMouseEvent& event) {
   if (!MainFrameImpl() || !MainFrameImpl()->GetFrameView())
     return;
@@ -435,11 +430,10 @@ void WebViewImpl::MouseContextMenu(const WebMouseEvent& event) {
   WebMouseEvent transformed_event =
       TransformWebMouseEvent(MainFrameImpl()->GetFrameView(), event);
   transformed_event.menu_source_type = kMenuSourceMouse;
-  PhysicalOffset position_in_root_frame = PhysicalOffset::FromFloatPointRound(
-      FloatPoint(transformed_event.PositionInRootFrame()));
 
   // Find the right target frame. See issue 1186900.
-  HitTestResult result = HitTestResultForRootFramePos(position_in_root_frame);
+  HitTestResult result = HitTestResultForRootFramePos(
+      FloatPoint(transformed_event.PositionInRootFrame()));
   Frame* target_frame;
   if (result.InnerNodeOrImageMapImage())
     target_frame = result.InnerNodeOrImageMapImage()->GetDocument().GetFrame();
@@ -541,8 +535,8 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
   bool event_cancelled = false;  // for disambiguation
 
   // Fling events are not sent to the renderer.
-  CHECK(event.GetType() != WebInputEvent::kGestureFlingStart);
-  CHECK(event.GetType() != WebInputEvent::kGestureFlingCancel);
+  CHECK(event.GetType() != WebInputEvent::Type::kGestureFlingStart);
+  CHECK(event.GetType() != WebInputEvent::Type::kGestureFlingCancel);
 
   WebGestureEvent scaled_event =
       TransformWebGestureEvent(MainFrameImpl()->GetFrameView(), event);
@@ -550,7 +544,7 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
   // Special handling for double tap and scroll events as we don't want to
   // hit test for them.
   switch (event.GetType()) {
-    case WebInputEvent::kGestureDoubleTap:
+    case WebInputEvent::Type::kGestureDoubleTap:
       if (web_settings_->DoubleTapToZoomEnabled() &&
           MinimumPageScaleFactor() != MaximumPageScaleFactor()) {
         if (auto* main_frame = MainFrameImpl()) {
@@ -566,9 +560,9 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
       MainFrameImpl()->FrameWidgetImpl()->Client()->DidHandleGestureEvent(
           event, event_cancelled);
       return event_result;
-    case WebInputEvent::kGestureScrollBegin:
-    case WebInputEvent::kGestureScrollEnd:
-    case WebInputEvent::kGestureScrollUpdate:
+    case WebInputEvent::Type::kGestureScrollBegin:
+    case WebInputEvent::Type::kGestureScrollEnd:
+    case WebInputEvent::Type::kGestureScrollUpdate:
       // Scrolling-related gesture events invoke EventHandler recursively for
       // each frame down the chain, doing a single-frame hit-test per frame.
       // This matches handleWheelEvent.  Perhaps we could simplify things by
@@ -596,13 +590,13 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
   // Handle link highlighting outside the main switch to avoid getting lost in
   // the complicated set of cases handled below.
   switch (event.GetType()) {
-    case WebInputEvent::kGestureShowPress:
+    case WebInputEvent::Type::kGestureShowPress:
       // Queue a highlight animation, then hand off to regular handler.
       EnableTapHighlightAtPoint(targeted_event);
       break;
-    case WebInputEvent::kGestureTapCancel:
-    case WebInputEvent::kGestureTap:
-    case WebInputEvent::kGestureLongPress:
+    case WebInputEvent::Type::kGestureTapCancel:
+    case WebInputEvent::Type::kGestureTap:
+    case WebInputEvent::Type::kGestureLongPress:
       GetPage()->GetLinkHighlight().StartHighlightAnimationIfNeeded();
       break;
     default:
@@ -610,7 +604,7 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
   }
 
   switch (event.GetType()) {
-    case WebInputEvent::kGestureTap: {
+    case WebInputEvent::Type::kGestureTap: {
       {
         ContextMenuAllowedScope scope;
         event_result =
@@ -629,13 +623,13 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
       last_hidden_page_popup_ = nullptr;
       break;
     }
-    case WebInputEvent::kGestureTwoFingerTap:
-    case WebInputEvent::kGestureLongPress:
-    case WebInputEvent::kGestureLongTap: {
+    case WebInputEvent::Type::kGestureTwoFingerTap:
+    case WebInputEvent::Type::kGestureLongPress:
+    case WebInputEvent::Type::kGestureLongTap: {
       if (!MainFrameImpl() || !MainFrameImpl()->GetFrameView())
         break;
 
-      if (event.GetType() == WebInputEvent::kGestureLongTap &&
+      if (event.GetType() == WebInputEvent::Type::kGestureLongTap &&
           !MainFrameImpl()
                ->GetFrame()
                ->GetEventHandler()
@@ -652,7 +646,7 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
 
       break;
     }
-    case WebInputEvent::kGestureTapDown: {
+    case WebInputEvent::Type::kGestureTapDown: {
       // Touch pinch zoom and scroll on the page (outside of a popup) must hide
       // the popup. In case of a touch scroll or pinch zoom, this function is
       // called with GestureTapDown rather than a GSB/GSU/GSE or GPB/GPU/GPE.
@@ -669,7 +663,7 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
               targeted_event);
       break;
     }
-    case WebInputEvent::kGestureTapCancel: {
+    case WebInputEvent::Type::kGestureTapCancel: {
       // Don't have this value persist outside of a single tap gesture.
       last_hidden_page_popup_ = nullptr;
       event_result =
@@ -677,13 +671,13 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
               targeted_event);
       break;
     }
-    case WebInputEvent::kGestureShowPress: {
+    case WebInputEvent::Type::kGestureShowPress: {
       event_result =
           MainFrameImpl()->GetFrame()->GetEventHandler().HandleGestureEvent(
               targeted_event);
       break;
     }
-    case WebInputEvent::kGestureTapUnconfirmed: {
+    case WebInputEvent::Type::kGestureTapUnconfirmed: {
       event_result =
           MainFrameImpl()->GetFrame()->GetEventHandler().HandleGestureEvent(
               targeted_event);
@@ -756,9 +750,9 @@ void WebViewImpl::AcceptLanguagesChanged() {
 }
 
 WebInputEventResult WebViewImpl::HandleKeyEvent(const WebKeyboardEvent& event) {
-  DCHECK((event.GetType() == WebInputEvent::kRawKeyDown) ||
-         (event.GetType() == WebInputEvent::kKeyDown) ||
-         (event.GetType() == WebInputEvent::kKeyUp));
+  DCHECK((event.GetType() == WebInputEvent::Type::kRawKeyDown) ||
+         (event.GetType() == WebInputEvent::Type::kKeyDown) ||
+         (event.GetType() == WebInputEvent::Type::kKeyUp));
   TRACE_EVENT2("input", "WebViewImpl::handleKeyEvent", "type",
                WebInputEvent::GetName(event.GetType()), "text",
                String(event.text).Utf8());
@@ -777,7 +771,7 @@ WebInputEventResult WebViewImpl::HandleKeyEvent(const WebKeyboardEvent& event) {
     page_popup_->HandleKeyEvent(event);
     // We need to ignore the next Char event after this otherwise pressing
     // enter when selecting an item in the popup will go to the page.
-    if (WebInputEvent::kRawKeyDown == event.GetType())
+    if (WebInputEvent::Type::kRawKeyDown == event.GetType())
       suppress_next_keypress_event_ = true;
     return WebInputEventResult::kHandledSystem;
   }
@@ -790,7 +784,7 @@ WebInputEventResult WebViewImpl::HandleKeyEvent(const WebKeyboardEvent& event) {
   WebInputEventResult result =
       focused_local_frame->GetEventHandler().KeyEvent(event);
   if (result != WebInputEventResult::kNotHandled) {
-    if (WebInputEvent::kRawKeyDown == event.GetType()) {
+    if (WebInputEvent::Type::kRawKeyDown == event.GetType()) {
       // Suppress the next keypress event unless the focused node is a plugin
       // node.  (Flash needs these keypress events to handle non-US keyboards.)
       Element* element = FocusedElement();
@@ -815,12 +809,12 @@ WebInputEventResult WebViewImpl::HandleKeyEvent(const WebKeyboardEvent& event) {
 #if !defined(OS_MACOSX)
   const WebInputEvent::Type kContextMenuKeyTriggeringEventType =
 #if defined(OS_WIN)
-      WebInputEvent::kKeyUp;
+      WebInputEvent::Type::kKeyUp;
 #else
-      WebInputEvent::kRawKeyDown;
+      WebInputEvent::Type::kRawKeyDown;
 #endif
   const WebInputEvent::Type kShiftF10TriggeringEventType =
-      WebInputEvent::kRawKeyDown;
+      WebInputEvent::Type::kRawKeyDown;
 
   bool is_unmodified_menu_key =
       !(event.GetModifiers() & WebInputEvent::kInputModifiers) &&
@@ -841,7 +835,7 @@ WebInputEventResult WebViewImpl::HandleKeyEvent(const WebKeyboardEvent& event) {
 
 WebInputEventResult WebViewImpl::HandleCharEvent(
     const WebKeyboardEvent& event) {
-  DCHECK_EQ(event.GetType(), WebInputEvent::kChar);
+  DCHECK_EQ(event.GetType(), WebInputEvent::Type::kChar);
   TRACE_EVENT1("input", "WebViewImpl::handleCharEvent", "text",
                String(event.text).Utf8());
 
@@ -1255,6 +1249,11 @@ void WebViewImpl::CleanupPagePopup() {
   DisablePopupMouseWheelEventListener();
 }
 
+void WebViewImpl::UpdatePagePopup() {
+  if (page_popup_)
+    page_popup_->Update();
+}
+
 void WebViewImpl::EnablePopupMouseWheelEventListener(
     WebLocalFrameImpl* local_root) {
   DCHECK(!popup_mouse_wheel_event_listener_);
@@ -1592,16 +1591,6 @@ void WebViewImpl::BeginFrame(base::TimeTicks last_frame_time) {
   PageWidgetDelegate::Animate(*AsView().page, last_frame_time);
 }
 
-void WebViewImpl::DidBeginFrame() {
-  if (!MainFrameImpl() || !MainFrameImpl()->GetFrame())
-    return;
-  if (Document* document = MainFrameImpl()->GetFrame()->GetDocument()) {
-    DocumentLifecycle::AllowThrottlingScope throttling_scope(
-        document->Lifecycle());
-    PageWidgetDelegate::DidBeginFrame(*MainFrameImpl()->GetFrame());
-  }
-}
-
 void WebViewImpl::BeginUpdateLayers() {
   if (MainFrameImpl())
     update_layers_start_time_.emplace(base::TimeTicks::Now());
@@ -1616,25 +1605,6 @@ void WebViewImpl::EndUpdateLayers() {
     probe::LayerTreeDidChange(MainFrameImpl()->GetFrame());
   }
   update_layers_start_time_.reset();
-}
-
-void WebViewImpl::BeginCommitCompositorFrame() {
-  if (MainFrameImpl()) {
-    commit_compositor_frame_start_time_.emplace(base::TimeTicks::Now());
-  }
-}
-
-void WebViewImpl::EndCommitCompositorFrame(base::TimeTicks commit_start_time) {
-  // Some tests call this without ever beginning a frame.
-  if (MainFrameImpl() && commit_compositor_frame_start_time_) {
-    MainFrameImpl()
-        ->GetFrame()
-        ->View()
-        ->EnsureUkmAggregator()
-        .RecordImplCompositorSample(commit_compositor_frame_start_time_.value(),
-                                    commit_start_time, base::TimeTicks::Now());
-  }
-  commit_compositor_frame_start_time_.reset();
 }
 
 void WebViewImpl::RecordStartOfFrameMetrics() {
@@ -1683,6 +1653,8 @@ void WebViewImpl::UpdateLifecycle(WebLifecycleUpdate requested_update,
       *AsView().page, *MainFrameImpl()->GetFrame(), requested_update, reason);
   if (requested_update != WebLifecycleUpdate::kAll)
     return;
+
+  UpdatePagePopup();
 
   // There is no background color for non-composited WebViews (eg printing).
   if (does_composite_) {
@@ -1814,7 +1786,7 @@ WebInputEventResult WebViewImpl::HandleInputEvent(
   // If a drag-and-drop operation is in progress, ignore input events except
   // PointerCancel.
   if (MainFrameImpl()->FrameWidgetImpl()->DoingDragAndDrop() &&
-      input_event.GetType() != WebInputEvent::kPointerCancel)
+      input_event.GetType() != WebInputEvent::Type::kPointerCancel)
     return WebInputEventResult::kHandledSuppressed;
 
   if (WebDevToolsAgentImpl* devtools = MainFrameDevToolsAgentImpl()) {
@@ -1846,13 +1818,13 @@ WebInputEventResult WebViewImpl::HandleInputEvent(
 
   Document& main_frame_document = *MainFrameImpl()->GetFrame()->GetDocument();
 
-  if (input_event.GetType() != WebInputEvent::kMouseMove) {
+  if (input_event.GetType() != WebInputEvent::Type::kMouseMove) {
     FirstMeaningfulPaintDetector::From(main_frame_document).NotifyInputEvent();
   }
 
-  if (input_event.GetType() != WebInputEvent::kMouseMove &&
-      input_event.GetType() != WebInputEvent::kMouseEnter &&
-      input_event.GetType() != WebInputEvent::kMouseLeave) {
+  if (input_event.GetType() != WebInputEvent::Type::kMouseMove &&
+      input_event.GetType() != WebInputEvent::Type::kMouseEnter &&
+      input_event.GetType() != WebInputEvent::Type::kMouseLeave) {
     InteractiveDetector* interactive_detector(
         InteractiveDetector::From(main_frame_document));
     if (interactive_detector) {
@@ -1874,7 +1846,7 @@ WebInputEventResult WebViewImpl::HandleInputEvent(
 
   // Skip the pointerrawupdate for mouse capture case.
   if (mouse_capture_element_ &&
-      input_event.GetType() == WebInputEvent::kPointerRawUpdate)
+      input_event.GetType() == WebInputEvent::Type::kPointerRawUpdate)
     return WebInputEventResult::kHandledSystem;
 
   if (mouse_capture_element_ &&
@@ -1895,29 +1867,29 @@ WebInputEventResult WebViewImpl::HandleCapturedMouseEvent(
   HTMLPlugInElement* element = mouse_capture_element_;
 
   // Not all platforms call mouseCaptureLost() directly.
-  if (input_event.GetType() == WebInputEvent::kMouseUp)
+  if (input_event.GetType() == WebInputEvent::Type::kMouseUp)
     MouseCaptureLost();
 
   AtomicString event_type;
   switch (input_event.GetType()) {
-    case WebInputEvent::kMouseEnter:
+    case WebInputEvent::Type::kMouseEnter:
       event_type = event_type_names::kMouseover;
       break;
-    case WebInputEvent::kMouseMove:
+    case WebInputEvent::Type::kMouseMove:
       event_type = event_type_names::kMousemove;
       break;
-    case WebInputEvent::kPointerRawUpdate:
+    case WebInputEvent::Type::kPointerRawUpdate:
       // There will be no mouse event for rawupdate events.
       event_type = event_type_names::kPointerrawupdate;
       break;
-    case WebInputEvent::kMouseLeave:
+    case WebInputEvent::Type::kMouseLeave:
       event_type = event_type_names::kMouseout;
       break;
-    case WebInputEvent::kMouseDown:
+    case WebInputEvent::Type::kMouseDown:
       event_type = event_type_names::kMousedown;
       LocalFrame::NotifyUserActivation(element->GetDocument().GetFrame());
       break;
-    case WebInputEvent::kMouseUp:
+    case WebInputEvent::Type::kMouseUp:
       event_type = event_type_names::kMouseup;
       break;
     default:
@@ -1943,12 +1915,6 @@ WebInputEventResult WebViewImpl::HandleCapturedMouseEvent(
 void WebViewImpl::SetCursorVisibilityState(bool is_visible) {
   if (AsView().page)
     AsView().page->SetIsCursorVisible(is_visible);
-}
-
-void WebViewImpl::OnFallbackCursorModeToggled(bool is_on) {
-  DCHECK(MainFrameImpl());
-  MainFrameImpl()->GetFrame()->GetEventHandler().SetIsFallbackCursorModeOn(
-      is_on);
 }
 
 void WebViewImpl::MouseCaptureLost() {
@@ -2154,19 +2120,6 @@ void WebViewImpl::SetFocusedFrame(WebFrame* frame) {
   }
   LocalFrame* core_frame = To<WebLocalFrameImpl>(frame)->GetFrame();
   core_frame->GetPage()->GetFocusController().SetFocusedFrame(core_frame);
-}
-
-void WebViewImpl::SetInitialFocus(bool reverse) {
-  if (!AsView().page)
-    return;
-  Frame* frame = GetPage()->GetFocusController().FocusedOrMainFrame();
-  if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
-    if (Document* document = local_frame->GetDocument())
-      document->ClearFocusedElement();
-  }
-  GetPage()->GetFocusController().SetInitialFocus(
-      reverse ? mojom::blink::FocusType::kBackward
-              : mojom::blink::FocusType::kForward);
 }
 
 // TODO(dglazkov): Remove and replace with Node:hasEditableStyle.
@@ -2390,15 +2343,6 @@ void WebViewImpl::AdvanceFocus(bool reverse) {
               : mojom::blink::FocusType::kForward);
 }
 
-void WebViewImpl::AdvanceFocusAcrossFrames(mojom::blink::FocusType type,
-                                           WebRemoteFrame* from,
-                                           WebLocalFrame* to) {
-  // TODO(alexmos): Pass in proper with sourceCapabilities.
-  GetPage()->GetFocusController().AdvanceFocusAcrossFrames(
-      type, To<WebRemoteFrameImpl>(from)->GetFrame(),
-      To<WebLocalFrameImpl>(to)->GetFrame());
-}
-
 double WebViewImpl::ZoomLevel() {
   return zoom_level_;
 }
@@ -2533,8 +2477,15 @@ void WebViewImpl::SetPageLifecycleState(
   Page* page = GetPage();
   if (!page)
     return;
-  Scheduler()->SetPageFrozen(state->is_frozen);
 
+  if (state->visibility != lifecycle_state_->visibility) {
+    SetVisibilityState(state->visibility, /*is_initial_state =*/false);
+  }
+  if (state->is_frozen != lifecycle_state_->is_frozen) {
+    Scheduler()->SetPageFrozen(state->is_frozen);
+  }
+
+  lifecycle_state_ = std::move(state);
   // Tell the browser that the freezing or resuming was successful.
   std::move(callback).Run();
 }
@@ -2855,12 +2806,12 @@ void WebViewImpl::AudioStateChanged(bool is_audio_playing) {
   GetPage()->GetPageScheduler()->AudioStateChanged(is_audio_playing);
 }
 
-WebHitTestResult WebViewImpl::HitTestResultAt(const gfx::Point& point) {
+WebHitTestResult WebViewImpl::HitTestResultAt(const gfx::PointF& point) {
   return CoreHitTestResultAt(point);
 }
 
 HitTestResult WebViewImpl::CoreHitTestResultAt(
-    const gfx::Point& point_in_viewport) {
+    const gfx::PointF& point_in_viewport) {
   // TODO(crbug.com/843128): When we do async hit-testing, we might try to do
   // hit-testing when the local main frame is not valid anymore. Look into if we
   // can avoid getting here earlier in the pipeline.
@@ -2870,8 +2821,8 @@ HitTestResult WebViewImpl::CoreHitTestResultAt(
   DocumentLifecycle::AllowThrottlingScope throttling_scope(
       MainFrameImpl()->GetFrame()->GetDocument()->Lifecycle());
   LocalFrameView* view = MainFrameImpl()->GetFrameView();
-  PhysicalOffset point_in_root_frame =
-      view->ViewportToFrame(PhysicalOffset(IntPoint(point_in_viewport)));
+  FloatPoint point_in_root_frame =
+      view->ViewportToFrame(FloatPoint(point_in_viewport));
   return HitTestResultForRootFramePos(point_in_root_frame);
 }
 
@@ -3068,12 +3019,6 @@ bool WebViewImpl::IsActive() const {
   return GetPage() ? GetPage()->GetFocusController().IsActive() : false;
 }
 
-void WebViewImpl::SetDomainRelaxationForbidden(bool forbidden,
-                                               const WebString& scheme) {
-  SchemeRegistry::SetDomainRelaxationForbiddenForURLScheme(forbidden,
-                                                           String(scheme));
-}
-
 void WebViewImpl::SetWindowFeatures(const WebWindowFeatures& features) {
   AsView().page->SetWindowFeatures(features);
 }
@@ -3184,6 +3129,15 @@ void WebViewImpl::MainFrameScrollOffsetChanged() {
   }
 }
 
+void WebViewImpl::TextAutosizerPageInfoChanged(
+    const WebTextAutosizerPageInfo& page_info) {
+  DCHECK(MainFrameImpl());
+  local_main_frame_host_remote_->TextAutosizerPageInfoChanged(
+      mojom::blink::TextAutosizerPageInfo::New(
+          page_info.main_frame_width, page_info.main_frame_layout_width,
+          page_info.device_scale_adjustment));
+}
+
 void WebViewImpl::SetBackgroundColorOverride(SkColor color) {
   DCHECK(does_composite_);
 
@@ -3208,12 +3162,6 @@ void WebViewImpl::SetZoomFactorOverride(float zoom_factor) {
   SetZoomLevel(ZoomLevel());
 }
 
-void WebViewImpl::SetMainFrameOverlayColor(SkColor color) {
-  DCHECK(AsView().page->MainFrame());
-  if (auto* local_frame = DynamicTo<LocalFrame>(AsView().page->MainFrame()))
-    local_frame->SetMainFrameColorOverlay(color);
-}
-
 Element* WebViewImpl::FocusedElement() const {
   LocalFrame* frame = AsView().page->GetFocusController().FocusedFrame();
   if (!frame)
@@ -3227,7 +3175,7 @@ Element* WebViewImpl::FocusedElement() const {
 }
 
 HitTestResult WebViewImpl::HitTestResultForRootFramePos(
-    const PhysicalOffset& pos_in_root_frame) {
+    const FloatPoint& pos_in_root_frame) {
   auto* main_frame = DynamicTo<LocalFrame>(AsView().page->MainFrame());
   if (!main_frame)
     return HitTestResult();
@@ -3246,7 +3194,7 @@ WebHitTestResult WebViewImpl::HitTestResultForTap(
   if (!main_frame)
     return HitTestResult();
 
-  WebGestureEvent tap_event(WebInputEvent::kGestureTap,
+  WebGestureEvent tap_event(WebInputEvent::Type::kGestureTap,
                             WebInputEvent::kNoModifiers, base::TimeTicks::Now(),
                             WebGestureDevice::kTouchscreen);
   // GestureTap is only ever from a touchscreen.
@@ -3426,25 +3374,22 @@ PageScheduler* WebViewImpl::Scheduler() const {
   return GetPage()->GetPageScheduler();
 }
 
-void WebViewImpl::SetVisibilityState(PageVisibilityState visibility_state,
-                                     bool is_initial_state) {
+void WebViewImpl::SetVisibilityState(
+    mojom::blink::PageVisibilityState visibility_state,
+    bool is_initial_state) {
   DCHECK(GetPage());
+  if (!is_initial_state) {
+    // Preserve the side effects of visibility change.
+    AsView().client->OnPageVisibilityChanged(visibility_state);
+  }
   GetPage()->SetVisibilityState(visibility_state, is_initial_state);
-  GetPage()->GetPageScheduler()->SetPageVisible(visibility_state ==
-                                                PageVisibilityState::kVisible);
+  GetPage()->GetPageScheduler()->SetPageVisible(
+      visibility_state == mojom::blink::PageVisibilityState::kVisible);
 }
 
-PageVisibilityState WebViewImpl::GetVisibilityState() {
+mojom::blink::PageVisibilityState WebViewImpl::GetVisibilityState() {
   DCHECK(GetPage());
   return GetPage()->GetVisibilityState();
-}
-
-void WebViewImpl::ForceNextWebGLContextCreationToFail() {
-  CoreInitializer::GetInstance().ForceNextWebGLContextCreationToFail();
-}
-
-void WebViewImpl::ForceNextDrawingBufferCreationToFail() {
-  DrawingBuffer::ForceNextDrawingBufferCreationToFail();
 }
 
 float WebViewImpl::DeviceScaleFactor() const {
@@ -3476,65 +3421,61 @@ void WebViewImpl::SetPageFrozen(bool frozen) {
 }
 
 void WebViewImpl::PutPageIntoBackForwardCache() {
-  SetVisibilityState(PageVisibilityState::kHidden, /*is_initial_state=*/false);
+  DCHECK(GetPage());
 
-  Page* page = AsView().page;
-  if (page) {
-    for (Frame* frame = page->MainFrame(); frame;
-         frame = frame->Tree().TraverseNext()) {
-      if (frame->DomWindow() && frame->DomWindow()->IsLocalDOMWindow()) {
-        frame->DomWindow()->ToLocalDOMWindow()->DispatchPagehideEvent(
-            PageTransitionEventPersistence::kPageTransitionEventPersisted);
-      }
+  SetVisibilityState(mojom::blink::PageVisibilityState::kHidden,
+                     /*is_initial_state=*/false);
+
+  for (Frame* frame = GetPage()->MainFrame(); frame;
+       frame = frame->Tree().TraverseNext()) {
+    if (frame->DomWindow() && frame->DomWindow()->IsLocalDOMWindow()) {
+      frame->DomWindow()->ToLocalDOMWindow()->DispatchPagehideEvent(
+          PageTransitionEventPersistence::kPageTransitionEventPersisted);
     }
   }
 
   // Freeze the page.
   Scheduler()->SetPageFrozen(/*frozen =*/true);
   // Hook eviction.
-  if (page) {
-    for (Frame* frame = page->MainFrame(); frame;
-         frame = frame->Tree().TraverseNext()) {
-      auto* local_frame = DynamicTo<LocalFrame>(frame);
-      if (!local_frame)
-        continue;
-      local_frame->HookBackForwardCacheEviction();
-    }
+  for (Frame* frame = GetPage()->MainFrame(); frame;
+       frame = frame->Tree().TraverseNext()) {
+    auto* local_frame = DynamicTo<LocalFrame>(frame);
+    if (!local_frame)
+      continue;
+    local_frame->HookBackForwardCacheEviction();
   }
 }
 
 void WebViewImpl::RestorePageFromBackForwardCache(
     base::TimeTicks navigation_start) {
+  DCHECK(GetPage());
+
   // Unhook eviction.
-  Page* page = AsView().page;
-  if (page) {
-    for (Frame* frame = page->MainFrame(); frame;
-         frame = frame->Tree().TraverseNext()) {
-      auto* local_frame = DynamicTo<LocalFrame>(frame);
-      if (!local_frame)
-        continue;
-      local_frame->RemoveBackForwardCacheEviction();
-    }
+  for (Frame* frame = GetPage()->MainFrame(); frame;
+       frame = frame->Tree().TraverseNext()) {
+    auto* local_frame = DynamicTo<LocalFrame>(frame);
+    if (!local_frame)
+      continue;
+    local_frame->RemoveBackForwardCacheEviction();
   }
 
   // Resume the page.
   Scheduler()->SetPageFrozen(/*frozen =*/false);
-  if (page) {
-    for (Frame* frame = page->MainFrame(); frame;
-         frame = frame->Tree().TraverseNext()) {
-      if (frame->DomWindow() && frame->DomWindow()->IsLocalDOMWindow()) {
-        frame->DomWindow()->ToLocalDOMWindow()->DispatchPersistedPageshowEvent(
-            navigation_start);
-        if (frame->IsMainFrame()) {
-          UMA_HISTOGRAM_BOOLEAN(
-              "BackForwardCache.MainFrameHasPageshowListenersOnRestore",
-              frame->DomWindow()->ToLocalDOMWindow()->HasEventListeners(
-                  event_type_names::kPageshow));
-        }
+  for (Frame* frame = GetPage()->MainFrame(); frame;
+       frame = frame->Tree().TraverseNext()) {
+    if (frame->DomWindow() && frame->DomWindow()->IsLocalDOMWindow()) {
+      frame->DomWindow()->ToLocalDOMWindow()->DispatchPersistedPageshowEvent(
+          navigation_start);
+      if (frame->IsMainFrame()) {
+        UMA_HISTOGRAM_BOOLEAN(
+            "BackForwardCache.MainFrameHasPageshowListenersOnRestore",
+            frame->DomWindow()->ToLocalDOMWindow()->HasEventListeners(
+                event_type_names::kPageshow));
       }
     }
   }
-  SetVisibilityState(PageVisibilityState::kVisible, /*is_initial_state=*/false);
+  SetVisibilityState(mojom::blink::PageVisibilityState::kVisible,
+                     /*is_initial_state=*/false);
 }
 
 WebFrameWidget* WebViewImpl::MainFrameWidget() {

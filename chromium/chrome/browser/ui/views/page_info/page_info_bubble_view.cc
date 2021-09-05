@@ -19,6 +19,7 @@
 #include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/certificate_viewer.h"
+#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -111,7 +112,7 @@ void AddColumnWithSideMargin(views::GridLayout* layout, int margin, int id) {
   views::ColumnSet* column_set = layout->AddColumnSet(id);
   column_set->AddPaddingColumn(views::GridLayout::kFixedSize, margin);
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 1.0,
-                        views::GridLayout::USE_PREF, 0, 0);
+                        views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   column_set->AddPaddingColumn(views::GridLayout::kFixedSize, margin);
 }
 
@@ -321,17 +322,17 @@ void BubbleHeaderView::AddPasswordReuseButtons(bool is_saved_password) {
             : IDS_PAGE_INFO_CHANGE_PASSWORD_BUTTON;
   }
 
-  std::unique_ptr<views::MdTextButton::LabelButton> change_password_button;
+  std::unique_ptr<views::MdTextButton> change_password_button;
   if (change_password_template) {
-    change_password_button = views::MdTextButton::CreateSecondaryUiBlueButton(
+    change_password_button = views::MdTextButton::Create(
         button_listener_, l10n_util::GetStringUTF16(change_password_template));
+    change_password_button->SetProminent(true);
     change_password_button->SetID(
         PageInfoBubbleView::VIEW_ID_PAGE_INFO_BUTTON_CHANGE_PASSWORD);
   }
-  auto whitelist_password_reuse_button =
-      views::MdTextButton::CreateSecondaryUiButton(
-          button_listener_, l10n_util::GetStringUTF16(
-                                IDS_PAGE_INFO_WHITELIST_PASSWORD_REUSE_BUTTON));
+  auto whitelist_password_reuse_button = views::MdTextButton::Create(
+      button_listener_,
+      l10n_util::GetStringUTF16(IDS_PAGE_INFO_WHITELIST_PASSWORD_REUSE_BUTTON));
   whitelist_password_reuse_button->SetID(
       PageInfoBubbleView::VIEW_ID_PAGE_INFO_BUTTON_WHITELIST_PASSWORD_REUSE);
 
@@ -504,7 +505,7 @@ PageInfoBubbleView::PageInfoBubbleView(
   constexpr int kColumnId = 0;
   views::ColumnSet* column_set = layout->AddColumnSet(kColumnId);
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 1.0,
-                        views::GridLayout::USE_PREF, 0, 0);
+                        views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
 
   layout->StartRow(views::GridLayout::kFixedSize, kColumnId);
   header_ = layout->AddView(
@@ -538,9 +539,6 @@ PageInfoBubbleView::PageInfoBubbleView(
   // before PageInfo updates trigger child layouts.
   SetSize(GetPreferredSize());
 
-  // When |web_contents| is not from a Tab, |web_contents| does not have a
-  // |TabSpecificContentSettings| and need to create one; otherwise, noop.
-  TabSpecificContentSettings::CreateForWebContents(web_contents);
   presenter_ = std::make_unique<PageInfo>(
       std::make_unique<ChromePageInfoDelegate>(web_contents), web_contents,
       url);
@@ -707,7 +705,8 @@ void PageInfoBubbleView::SetPermissionInfo(
   chosen_object_set->AddPaddingColumn(views::GridLayout::kFixedSize,
                                       side_margin);
   chosen_object_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
-                               1.0, views::GridLayout::USE_PREF,
+                               1.0,
+                               views::GridLayout::ColumnSize::kUsePreferred,
                                views::GridLayout::kFixedSize, 0);
   chosen_object_set->AddPaddingColumn(views::GridLayout::kFixedSize,
                                       side_margin);
@@ -820,10 +819,8 @@ void PageInfoBubbleView::SetIdentityInfo(const IdentityInfo& identity_info) {
               PageInfo::SITE_IDENTITY_STATUS_EV_CERT &&
           identity_info.connection_status ==
               PageInfo::SITE_CONNECTION_STATUS_ENCRYPTED) {
-        // An EV cert is required to have an organization name, a city
-        // (localityName), and country, but state is "if any".
+        // An EV cert is required to have an organization name and a country.
         if (!certificate_->subject().organization_names.empty() &&
-            !certificate_->subject().locality_name.empty() &&
             !certificate_->subject().country_name.empty()) {
           subtitle_text = l10n_util::GetStringFUTF16(
               IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_VERIFIED,
@@ -923,25 +920,27 @@ void PageInfoBubbleView::LayoutPermissionsLikeUiRow(views::GridLayout* layout,
   // *----------------------------------------------*
   views::ColumnSet* permissions_set = layout->AddColumnSet(column_id);
   permissions_set->AddPaddingColumn(views::GridLayout::kFixedSize, side_margin);
-  permissions_set->AddColumn(views::GridLayout::CENTER,
-                             views::GridLayout::CENTER,
-                             views::GridLayout::kFixedSize,
-                             views::GridLayout::FIXED, kIconColumnWidth, 0);
+  permissions_set->AddColumn(
+      views::GridLayout::CENTER, views::GridLayout::CENTER,
+      views::GridLayout::kFixedSize, views::GridLayout::ColumnSize::kFixed,
+      kIconColumnWidth, 0);
   permissions_set->AddPaddingColumn(
       views::GridLayout::kFixedSize,
       layout_provider->GetDistanceMetric(
           views::DISTANCE_RELATED_LABEL_HORIZONTAL));
-  permissions_set->AddColumn(
-      views::GridLayout::LEADING, views::GridLayout::CENTER, 1.0,
-      views::GridLayout::USE_PREF, views::GridLayout::kFixedSize, 0);
+  permissions_set->AddColumn(views::GridLayout::LEADING,
+                             views::GridLayout::CENTER, 1.0,
+                             views::GridLayout::ColumnSize::kUsePreferred,
+                             views::GridLayout::kFixedSize, 0);
   permissions_set->AddPaddingColumn(
       views::GridLayout::kFixedSize,
       layout_provider->GetDistanceMetric(
           views::DISTANCE_RELATED_CONTROL_HORIZONTAL));
-  permissions_set->AddColumn(
-      views::GridLayout::TRAILING, views::GridLayout::FILL,
-      views::GridLayout::kFixedSize, views::GridLayout::USE_PREF,
-      views::GridLayout::kFixedSize, 0);
+  permissions_set->AddColumn(views::GridLayout::TRAILING,
+                             views::GridLayout::FILL,
+                             views::GridLayout::kFixedSize,
+                             views::GridLayout::ColumnSize::kUsePreferred,
+                             views::GridLayout::kFixedSize, 0);
   permissions_set->AddPaddingColumn(views::GridLayout::kFixedSize, side_margin);
 }
 

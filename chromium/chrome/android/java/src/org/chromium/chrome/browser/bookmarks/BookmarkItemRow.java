@@ -14,8 +14,8 @@ import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
 import org.chromium.chrome.browser.ui.favicon.IconType;
 import org.chromium.chrome.browser.ui.favicon.LargeIconBridge.LargeIconCallback;
-import org.chromium.chrome.browser.ui.favicon.RoundedIconGenerator;
 import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 
 import org.chromium.chrome.browser.ChromeApplication;
 
@@ -59,8 +59,8 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
     }
 
     @Override
-    BookmarkItem setBookmarkId(BookmarkId bookmarkId) {
-        BookmarkItem item = super.setBookmarkId(bookmarkId);
+    BookmarkItem setBookmarkId(BookmarkId bookmarkId, @Location int location) {
+        BookmarkItem item = super.setBookmarkId(bookmarkId, location);
         mUrl = item.getUrl();
         mStartIconView.setImageDrawable(null);
         mTitleView.setText(item.getTitle());

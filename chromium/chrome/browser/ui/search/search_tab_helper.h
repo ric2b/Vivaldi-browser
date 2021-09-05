@@ -20,7 +20,6 @@
 #include "chrome/browser/search/instant_service_observer.h"
 #include "chrome/browser/ui/omnibox/omnibox_tab_helper.h"
 #include "chrome/browser/ui/search/search_ipc_router.h"
-#include "chrome/common/search.mojom-forward.h"
 #include "chrome/common/search/instant_types.h"
 #include "chrome/common/search/ntp_logging_events.h"
 #include "components/ntp_tiles/ntp_tile_impression.h"
@@ -147,6 +146,7 @@ class SearchTabHelper : public content::WebContentsObserver,
                          bool prevent_inline_autocomplete) override;
   void DeleteAutocompleteMatch(uint8_t line) override;
   void StopAutocomplete(bool clear_result) override;
+  void ToggleSuggestionGroupIdVisibility(int32_t suggestion_group_id) override;
   void LogCharTypedToRepaintLatency(uint32_t latency_ms) override;
   void BlocklistPromo(const std::string& promo_id) override;
   void OpenExtensionsPage(double button,

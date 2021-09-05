@@ -39,10 +39,10 @@
 #include "build/build_config.h"
 #include "cc/animation/animation_host.h"
 #include "cc/layers/picture_layer.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_rect.h"
-#include "third_party/blink/public/platform/web_text_autosizer_page_info.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_autofill_client.h"
@@ -251,7 +251,7 @@ Page* ChromeClientImpl::CreateWindowDelegate(
     const FrameLoadRequest& r,
     const AtomicString& name,
     const WebWindowFeatures& features,
-    mojom::blink::WebSandboxFlags sandbox_flags,
+    network::mojom::blink::WebSandboxFlags sandbox_flags,
     const FeaturePolicy::FeatureState& opener_feature_state,
     const SessionStorageNamespaceId& session_storage_namespace_id) {
   if (!web_view_->Client())
@@ -268,8 +268,7 @@ Page* ChromeClientImpl::CreateWindowDelegate(
           WebLocalFrameImpl::FromFrame(frame),
           WrappedResourceRequest(r.GetResourceRequest()), features, frame_name,
           static_cast<WebNavigationPolicy>(r.GetNavigationPolicy()),
-          static_cast<mojom::blink::WebSandboxFlags>(sandbox_flags),
-          opener_feature_state, session_storage_namespace_id));
+          sandbox_flags, opener_feature_state, session_storage_namespace_id));
   if (!new_view)
     return nullptr;
   return new_view->GetPage();
@@ -436,8 +435,17 @@ IntRect ChromeClientImpl::ViewportToScreen(
   if (client) {
     client->ConvertViewportToWindow(&screen_rect);
     WebRect view_rect = client->ViewRect();
-    screen_rect.x += view_rect.x;
-    screen_rect.y += view_rect.y;
+
+    base::CheckedNumeric<int> screen_rect_x = screen_rect.x;
+    base::CheckedNumeric<int> screen_rect_y = screen_rect.y;
+
+    screen_rect_x += view_rect.x;
+    screen_rect_y += view_rect.y;
+
+    screen_rect.x =
+        screen_rect_x.ValueOrDefault(std::numeric_limits<int>::max());
+    screen_rect.y =
+        screen_rect_y.ValueOrDefault(std::numeric_limits<int>::max());
   }
 
   return screen_rect;
@@ -728,21 +736,24 @@ void ChromeClientImpl::SetCursorOverridden(bool overridden) {
 void ChromeClientImpl::AutoscrollStart(const gfx::PointF& viewport_point,
                                        LocalFrame* local_frame) {
   // TODO(dcheng): Why is this null check necessary?
-  if (FrameWidget* widget = local_frame->GetWidgetForLocalRoot())
-    widget->Client()->AutoscrollStart(viewport_point);
+  if (WebFrameWidgetBase* widget =
+          WebLocalFrameImpl::FromFrame(local_frame)->LocalRootFrameWidget())
+    widget->AutoscrollStart(viewport_point);
 }
 
 void ChromeClientImpl::AutoscrollFling(const gfx::Vector2dF& velocity,
                                        LocalFrame* local_frame) {
   // TODO(dcheng): Why is this null check necessary?
-  if (FrameWidget* widget = local_frame->GetWidgetForLocalRoot())
-    widget->Client()->AutoscrollFling(velocity);
+  if (WebFrameWidgetBase* widget =
+          WebLocalFrameImpl::FromFrame(local_frame)->LocalRootFrameWidget())
+    widget->AutoscrollFling(velocity);
 }
 
 void ChromeClientImpl::AutoscrollEnd(LocalFrame* local_frame) {
   // TODO(dcheng): Why is this null check necessary?
-  if (FrameWidget* widget = local_frame->GetWidgetForLocalRoot())
-    widget->Client()->AutoscrollEnd();
+  if (WebFrameWidgetBase* widget =
+          WebLocalFrameImpl::FromFrame(local_frame)->LocalRootFrameWidget())
+    widget->AutoscrollEnd();
 }
 
 String ChromeClientImpl::AcceptLanguages() {
@@ -906,27 +917,6 @@ void ChromeClientImpl::NotifySwapTime(LocalFrame& frame,
       base::NullCallback(), ConvertToBaseOnceCallback(std::move(callback)));
 }
 
-void ChromeClientImpl::FallbackCursorModeLockCursor(LocalFrame* frame,
-                                                    bool left,
-                                                    bool right,
-                                                    bool up,
-                                                    bool down) {
-  FrameWidget* widget = frame->GetWidgetForLocalRoot();
-  if (!widget)
-    return;
-  if (WebWidgetClient* client = widget->Client())
-    client->FallbackCursorModeLockCursor(left, right, up, down);
-}
-
-void ChromeClientImpl::FallbackCursorModeSetCursorVisibility(LocalFrame* frame,
-                                                             bool visible) {
-  FrameWidget* widget = frame->GetWidgetForLocalRoot();
-  if (!widget)
-    return;
-  if (WebWidgetClient* client = widget->Client())
-    client->FallbackCursorModeSetCursorVisibility(visible);
-}
-
 void ChromeClientImpl::RequestBeginMainFrameNotExpected(LocalFrame& frame,
                                                         bool request) {
   frame.GetWidgetForLocalRoot()->RequestBeginMainFrameNotExpected(request);
@@ -966,21 +956,6 @@ void ChromeClientImpl::SetEventListenerProperties(
   }
 
   widget->SetEventListenerProperties(event_class, properties);
-
-  WebWidgetClient* client = widget->Client();
-  if (event_class == cc::EventListenerClass::kTouchStartOrMove ||
-      event_class == cc::EventListenerClass::kTouchEndOrCancel) {
-    client->SetHasTouchEventHandlers(
-        widget->EventListenerProperties(
-            cc::EventListenerClass::kTouchStartOrMove) !=
-            cc::EventListenerProperties::kNone ||
-        widget->EventListenerProperties(
-            cc::EventListenerClass::kTouchEndOrCancel) !=
-            cc::EventListenerProperties::kNone);
-  } else if (event_class == cc::EventListenerClass::kPointerRawUpdate) {
-    client->SetHasPointerRawUpdateEventHandlers(
-        properties != cc::EventListenerProperties::kNone);
-  }
 }
 
 cc::EventListenerProperties ChromeClientImpl::EventListenerProperties(
@@ -1244,7 +1219,7 @@ WebAutofillClient* ChromeClientImpl::AutofillClientFromFrame(
 
 void ChromeClientImpl::DidUpdateTextAutosizerPageInfo(
     const WebTextAutosizerPageInfo& page_info) {
-  web_view_->Client()->DidUpdateTextAutosizerPageInfo(page_info);
+  web_view_->TextAutosizerPageInfoChanged(page_info);
 }
 
 void ChromeClientImpl::DocumentDetached(Document& document) {
@@ -1252,6 +1227,10 @@ void ChromeClientImpl::DocumentDetached(Document& document) {
     if (it->FrameOrNull() == document.GetFrame())
       it->DisconnectClient();
   }
+}
+
+double ChromeClientImpl::UserZoomFactor() const {
+  return PageZoomLevelToZoomFactor(web_view_->ZoomLevel());
 }
 
 }  // namespace blink

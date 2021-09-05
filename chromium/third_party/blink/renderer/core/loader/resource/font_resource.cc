@@ -119,6 +119,8 @@ scoped_refptr<FontCustomPlatformData> FontResource::GetCustomFontData() {
 
     if (!font_data_)
       SetStatus(ResourceStatus::kDecodeError);
+    else
+      ClearData();
   }
   return font_data_;
 }
@@ -171,11 +173,6 @@ void FontResource::NotifyClientsLongLimitExceeded() {
   ResourceClientWalker<FontResourceClient> walker(Clients());
   while (FontResourceClient* client = walker.Next())
     client->FontLoadLongLimitExceeded(this);
-}
-
-void FontResource::AllClientsAndObserversRemoved() {
-  font_data_ = nullptr;
-  Resource::AllClientsAndObserversRemoved();
 }
 
 void FontResource::NotifyFinished() {

@@ -27,8 +27,14 @@ ASH_PUBLIC_EXPORT extern const base::Feature kContextualNudges;
 // Enables shortcuts on corners of the display.
 ASH_PUBLIC_EXPORT extern const base::Feature kCornerShortcuts;
 
+// Enables indicators to hint where displays are connected.
+ASH_PUBLIC_EXPORT extern const base::Feature kDisplayAlignAssist;
+
 // Enables a modal dialog when resolution or refresh rate change.
 ASH_PUBLIC_EXPORT extern const base::Feature kDisplayChangeModal;
+
+// Enables identification overlays on each display.
+ASH_PUBLIC_EXPORT extern const base::Feature kDisplayIdentification;
 
 // Enables the docked (a.k.a. picture-in-picture) magnifier.
 // TODO(afakhry): Remove this after the feature is fully launched.
@@ -38,6 +44,9 @@ ASH_PUBLIC_EXPORT extern const base::Feature kDockedMagnifier;
 // Enables dragging and snapping an overview window in clamshell mode.
 // TODO(crbug.com/890029): Remove this when the feature is fully launched.
 ASH_PUBLIC_EXPORT extern const base::Feature kDragToSnapInClamshellMode;
+
+// Enables resizing/moving the selection region for partial screenshot.
+ASH_PUBLIC_EXPORT extern const base::Feature kMovablePartialScreenshot;
 
 // Enables rounded corners in overview mode for testing.
 // TODO(crbug.com/903486): Remove this when new rounded corners implementation
@@ -111,9 +120,6 @@ ASH_PUBLIC_EXPORT extern const base::Feature kTrilinearFiltering;
 // Enables running an external binary which provides lock screen authentication.
 ASH_PUBLIC_EXPORT extern const base::Feature kUnlockWithExternalBinary;
 
-// Enables views login.
-ASH_PUBLIC_EXPORT extern const base::Feature kViewsLogin;
-
 // Enables using the BluetoothSystem Mojo interface for Bluetooth operations.
 ASH_PUBLIC_EXPORT extern const base::Feature kUseBluetoothSystemInAsh;
 
@@ -125,6 +131,9 @@ ASH_PUBLIC_EXPORT extern const base::Feature kSupervisedUserDeprecationNotice;
 // launched.
 ASH_PUBLIC_EXPORT extern const base::Feature
     kSwapSideVolumeButtonsForOrientation;
+
+// Enables shelf app scaling.
+ASH_PUBLIC_EXPORT extern const base::Feature kShelfAppScaling;
 
 // Enables background blur for the app list, shelf, unified system tray,
 // autoclick menu, etc. Also enables the AppsGridView mask layer, slower devices
@@ -153,6 +162,12 @@ ASH_PUBLIC_EXPORT extern const base::Feature kHideShelfControlsInTabletMode;
 // Enables sliders for setting mic gain levels in the more audio settings
 // section in the system tray.
 ASH_PUBLIC_EXPORT extern const base::Feature kSystemTrayMicGainSetting;
+
+// Enables special handling of Chrome tab drags from a WebUI tab strip.
+// These will be treated similarly to a window drag, showing split view
+// indicators in tablet mode, etc. The functionality is behind a flag
+// right now since it is under development.
+ASH_PUBLIC_EXPORT extern const base::Feature kWebUITabStripTabDragIntegration;
 
 ASH_PUBLIC_EXPORT bool IsAllowAmbientEQEnabled();
 
@@ -184,8 +199,6 @@ ASH_PUBLIC_EXPORT bool IsSeparateNetworkIconsEnabled();
 
 ASH_PUBLIC_EXPORT bool IsTrilinearFilteringEnabled();
 
-ASH_PUBLIC_EXPORT bool IsViewsLoginEnabled();
-
 ASH_PUBLIC_EXPORT bool IsSupervisedUserDeprecationNoticeEnabled();
 
 ASH_PUBLIC_EXPORT bool IsSwapSideVolumeButtonsForOrientationEnabled();
@@ -209,6 +222,16 @@ ASH_PUBLIC_EXPORT bool AreContextualNudgesEnabled();
 ASH_PUBLIC_EXPORT bool IsCornerShortcutsEnabled();
 
 ASH_PUBLIC_EXPORT bool IsSystemTrayMicGainSettingEnabled();
+
+ASH_PUBLIC_EXPORT bool IsDisplayIdentificationEnabled();
+
+ASH_PUBLIC_EXPORT bool IsWebUITabStripTabDragIntegrationEnabled();
+
+ASH_PUBLIC_EXPORT bool IsDisplayAlignmentAssistanceEnabled();
+
+ASH_PUBLIC_EXPORT bool IsMovablePartialScreenshotEnabled();
+
+ASH_PUBLIC_EXPORT bool IsAppScalingEnabled();
 
 // These two functions are supposed to be temporary functions to set or get
 // whether "WebUITabStrip" feature is enabled from Chrome.

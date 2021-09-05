@@ -4,6 +4,8 @@
 
 #include "components/feed/core/common/pref_names.h"
 
+#include <string>
+
 #include "components/feed/core/common/user_classifier.h"
 #include "components/prefs/pref_registry_simple.h"
 
@@ -35,6 +37,8 @@ const char kThrottlerRequestCountListPrefName[] =
     "feedv2.request_throttler.request_counts";
 const char kThrottlerLastRequestTime[] =
     "feedv2.request_throttler.last_request_time";
+const char kDebugStreamData[] = "feedv2.debug_stream_data";
+const char kRequestSchedule[] = "feedv2.request_schedule";
 
 }  // namespace prefs
 
@@ -49,6 +53,8 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterListPref(feed::prefs::kThrottlerRequestCountListPrefName);
   registry->RegisterTimePref(feed::prefs::kThrottlerLastRequestTime,
                              base::Time());
+  registry->RegisterStringPref(feed::prefs::kDebugStreamData, std::string());
+  registry->RegisterDictionaryPref(feed::prefs::kRequestSchedule);
   UserClassifier::RegisterProfilePrefs(registry);
 }
 

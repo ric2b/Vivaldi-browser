@@ -25,7 +25,6 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.compat.ApiHelperForN;
 import org.chromium.ui.mojom.CursorType;
-import org.chromium.ui.touchless.TouchlessEventHandler;
 
 /**
  * Class to acquire, position, and remove anchor views from the implementing View.
@@ -348,13 +347,12 @@ public class ViewAndroidDelegate {
     /**
      * Notify the client of the position of the bottom controls.
      * @param bottomControlsOffsetY The Y offset of the bottom controls in physical pixels.
-     * @param bottomContentOffsetY The Y offset of the content in physical pixels.
      * @param bottomControlsMinHeightOffsetY The current bottom controls min-height in physical
      *                                       pixels.
      */
     @CalledByNative
-    public void onBottomControlsChanged(int bottomControlsOffsetY, int bottomContentOffsetY,
-            int bottomControlsMinHeightOffsetY) {}
+    public void onBottomControlsChanged(
+            int bottomControlsOffsetY, int bottomControlsMinHeightOffsetY) {}
 
     /**
      * @return The Visual Viewport bottom inset in pixels.
@@ -443,27 +441,6 @@ public class ViewAndroidDelegate {
     private void requestFocus() {
         ViewGroup containerView = getContainerView();
         if (containerView != null) ViewUtils.requestFocus(containerView);
-    }
-
-    @CalledByNative
-    private static boolean hasTouchlessEventHandler() {
-        return TouchlessEventHandler.hasTouchlessEventHandler();
-    }
-
-    @CalledByNative
-    private static boolean onUnconsumedKeyboardEventAck(int nativeCode) {
-        return TouchlessEventHandler.onUnconsumedKeyboardEventAck(nativeCode);
-    }
-
-    @CalledByNative
-    private static void fallbackCursorModeLockCursor(
-            boolean left, boolean right, boolean up, boolean down) {
-        TouchlessEventHandler.fallbackCursorModeLockCursor(left, right, up, down);
-    }
-
-    @CalledByNative
-    private static void fallbackCursorModeSetCursorVisibility(boolean visible) {
-        TouchlessEventHandler.fallbackCursorModeSetCursorVisibility(visible);
     }
 
     /**

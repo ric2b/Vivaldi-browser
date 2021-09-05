@@ -9,7 +9,7 @@
 
 #include "ash/ambient/ui/ambient_assistant_dialog_plate.h"
 #include "ash/ambient/ui/assistant_response_container_view.h"
-#include "ash/assistant/assistant_controller.h"
+#include "ash/assistant/assistant_controller_impl.h"
 #include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/assistant/util/assistant_util.h"
@@ -44,13 +44,10 @@ AmbientAssistantContainerView::AmbientAssistantContainerView()
   DCHECK(delegate_);
   InitLayout();
 
-  // |delegate_| must outlive |this|.
-  delegate_->AddUiModelObserver(this);
+  assistant_ui_model_observer_.Add(AssistantUiController::Get());
 }
 
-AmbientAssistantContainerView::~AmbientAssistantContainerView() {
-  delegate_->RemoveUiModelObserver(this);
-}
+AmbientAssistantContainerView::~AmbientAssistantContainerView() = default;
 
 const char* AmbientAssistantContainerView::GetClassName() const {
   return "AmbientAssistantContainerView";

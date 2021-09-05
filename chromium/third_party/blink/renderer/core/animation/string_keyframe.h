@@ -81,7 +81,10 @@ class CORE_EXPORT StringKeyframe : public Keyframe {
 
   bool HasCssProperty() const;
 
-  void AddKeyframePropertiesToV8Object(V8ObjectBuilder&) const override;
+  void AddKeyframePropertiesToV8Object(V8ObjectBuilder&,
+                                       Element*) const override;
+
+  Keyframe* Clone() const override;
 
   void Trace(Visitor*) override;
 
@@ -109,6 +112,7 @@ class CORE_EXPORT StringKeyframe : public Keyframe {
     }
 
     bool IsNeutral() const final { return !value_; }
+    bool IsRevert() const final;
     Keyframe::PropertySpecificKeyframe* NeutralKeyframe(
         double offset,
         scoped_refptr<TimingFunction> easing) const final;
@@ -145,6 +149,7 @@ class CORE_EXPORT StringKeyframe : public Keyframe {
     }
 
     bool IsNeutral() const final { return value_.IsNull(); }
+    bool IsRevert() const final { return false; }
     PropertySpecificKeyframe* NeutralKeyframe(
         double offset,
         scoped_refptr<TimingFunction> easing) const final;
@@ -156,7 +161,6 @@ class CORE_EXPORT StringKeyframe : public Keyframe {
   };
 
  private:
-  Keyframe* Clone() const override;
   Keyframe::PropertySpecificKeyframe* CreatePropertySpecificKeyframe(
       const PropertyHandle&,
       EffectModel::CompositeOperation effect_composite,

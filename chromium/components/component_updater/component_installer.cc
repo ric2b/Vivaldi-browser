@@ -12,6 +12,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
@@ -164,6 +165,7 @@ void ComponentInstaller::Install(
     const base::FilePath& unpack_path,
     const std::string& /*public_key*/,
     std::unique_ptr<InstallParams> /*install_params*/,
+    ProgressCallback /*progress_callback*/,
     Callback callback) {
   std::unique_ptr<base::DictionaryValue> manifest;
   base::Version version;
@@ -420,6 +422,8 @@ void ComponentInstaller::FinishRegistration(
   if (!cus->RegisterComponent(crx)) {
     LOG(ERROR) << "Component registration failed for "
                << installer_policy_->GetName();
+    if (!callback.is_null())
+      std::move(callback).Run();
     return;
   }
 

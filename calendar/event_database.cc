@@ -66,6 +66,7 @@ bool EventDatabase::CreateEventTable() {
       "rrule LONGVARCHAR,"
       "organizer LONGVARCHAR,"
       "timezone LONGVARCHAR,"
+      "is_template INTEGER DEFAULT 0 NOT NULL,"
       "created INTEGER,"
       "last_modified INTEGER"
       ")");
@@ -80,10 +81,10 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
       "(calendar_id, alarm_id, title, description, "
       "start, end, all_day, is_recurring, start_recurring, end_recurring, "
       "location, url, etag, href, uid, event_type_id, task, complete, trash, "
-      "trash_time, sequence, ical, rrule, organizer, timezone, created, "
-      "last_modified) "
+      "trash_time, sequence, ical, rrule, organizer, timezone, is_template, "
+      "created, last_modified) "
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-      "?, ?, ?, ?, ?, ?)"));
+      "?, ?, ?, ?, ?, ?, ?)"));
 
   statement.BindInt64(0, row.calendar_id());
   statement.BindInt64(1, row.alarm_id());
@@ -111,8 +112,9 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
   statement.BindString(22, row.rrule());
   statement.BindString(23, row.organizer());
   statement.BindString(24, row.timezone());
-  statement.BindInt64(25, base::Time().Now().ToInternalValue());
+  statement.BindInt(25, row.is_template() ? 1 : 0);
   statement.BindInt64(26, base::Time().Now().ToInternalValue());
+  statement.BindInt64(27, base::Time().Now().ToInternalValue());
 
   if (!statement.Run()) {
     return 0;
@@ -123,7 +125,23 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
 bool EventDatabase::GetAllCalendarEvents(EventRows* events) {
   events->clear();
   sql::Statement s(GetDB().GetCachedStatement(
-      SQL_FROM_HERE, "SELECT" CALENDAR_EVENT_ROW_FIELDS " FROM events "));
+      SQL_FROM_HERE, "SELECT" CALENDAR_EVENT_ROW_FIELDS " FROM events "
+                     "where is_template = 0"));
+
+  while (s.Step()) {
+    EventRow event;
+    FillEventRow(s, &event);
+    events->push_back(event);
+  }
+
+  return true;
+}
+
+bool EventDatabase::GetAllCalendarEventTemplates(EventRows* events) {
+  events->clear();
+  sql::Statement s(GetDB().GetCachedStatement(
+      SQL_FROM_HERE, "SELECT" CALENDAR_EVENT_ROW_FIELDS " FROM events "
+                     "where is_template = 1"));
 
   while (s.Step()) {
     EventRow event;
@@ -216,6 +234,7 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   base::string16 ical = s.ColumnString16(22);
   std::string rrule = s.ColumnString(23);
   std::string organizer = s.ColumnString(24);
+  std::string timezone = s.ColumnString(25);
 
   event->set_id(id);
   event->set_calendar_id(calendar_id);
@@ -242,6 +261,7 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   event->set_ical(ical);
   event->set_rrule(rrule);
   event->set_organizer(organizer);
+  event->set_timezone(timezone);
 }
 
 bool EventDatabase::DeleteEvent(calendar::EventID event_id) {
@@ -335,6 +355,21 @@ bool EventDatabase::MigrateCalendarToVersion6() {
   if (!GetDB().DoesColumnExist("calendar", "timezone")) {
     if (!GetDB().Execute("ALTER TABLE calendar "
                          "ADD COLUMN timezone LONGVARCHAR"))
+      return false;
+  }
+  return true;
+}
+
+// Updates to version 8. Adds column is_template to events table
+bool EventDatabase::MigrateCalendarToVersion8() {
+  if (!GetDB().DoesTableExist("events")) {
+    NOTREACHED() << "events table should exist before migration";
+    return false;
+  }
+
+  if (!GetDB().DoesColumnExist("events", "is_template")) {
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN is_template INTEGER DEFAULT 0 NOT NULL"))
       return false;
   }
   return true;

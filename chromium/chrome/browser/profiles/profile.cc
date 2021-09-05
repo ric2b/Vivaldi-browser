@@ -43,6 +43,12 @@
 #include "chromeos/constants/chromeos_switches.h"
 #endif
 
+#if defined(OS_ANDROID)
+#include "base/android/jni_string.h"
+#include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/profiles/android/jni_headers/OTRProfileID_jni.h"
+#endif
+
 #if !defined(OS_ANDROID)
 #include "chrome/browser/first_run/first_run.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -57,8 +63,8 @@
 #if DCHECK_IS_ON()
 
 #include <set>
+#include "base/check_op.h"
 #include "base/lazy_instance.h"
-#include "base/logging.h"
 #include "base/synchronization/lock.h"
 
 namespace {
@@ -102,6 +108,63 @@ class ChromeVariationsClient : public variations::VariationsClient {
 };
 
 }  // namespace
+
+Profile::OTRProfileID::OTRProfileID(const std::string& profile_id)
+    : profile_id_(profile_id) {}
+
+// static
+const Profile::OTRProfileID Profile::OTRProfileID::PrimaryID() {
+  return OTRProfileID("profile::primary_otr");
+}
+
+// static
+int Profile::OTRProfileID::first_unused_index_ = 0;
+
+// static
+Profile::OTRProfileID Profile::OTRProfileID::CreateUnique(
+    const std::string& profile_id_prefix) {
+  return OTRProfileID(base::StringPrintf("%s-%i", profile_id_prefix.c_str(),
+                                         first_unused_index_++));
+}
+
+const std::string& Profile::OTRProfileID::ToString() const {
+  return profile_id_;
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const Profile::OTRProfileID& profile_id) {
+  out << profile_id.ToString();
+  return out;
+}
+
+#if defined(OS_ANDROID)
+base::android::ScopedJavaLocalRef<jobject>
+Profile::OTRProfileID::ConvertToJavaOTRProfileID(JNIEnv* env) const {
+  return Java_OTRProfileID_Constructor(
+      env, base::android::ConvertUTF16ToJavaString(
+               env, base::ASCIIToUTF16(profile_id_)));
+}
+
+// static
+Profile::OTRProfileID Profile::OTRProfileID::ConvertFromJavaOTRProfileID(
+    JNIEnv* env,
+    const base::android::JavaRef<jobject>& j_otr_profile_id) {
+  return OTRProfileID(
+      base::UTF16ToASCII(base::android::ConvertJavaStringToUTF16(
+          env, Java_OTRProfileID_getProfileID(env, j_otr_profile_id))));
+}
+
+// static
+base::android::ScopedJavaLocalRef<jobject>
+JNI_OTRProfileID_CreateUniqueOTRProfileID(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jstring>& j_profile_id_prefix) {
+  Profile::OTRProfileID profile_id =
+      Profile::OTRProfileID::CreateUnique(base::UTF16ToASCII(
+          base::android::ConvertJavaStringToUTF16(env, j_profile_id_prefix)));
+  return profile_id.ConvertToJavaOTRProfileID(env);
+}
+#endif
 
 Profile::Profile()
     : restored_last_session_(false),
@@ -219,8 +282,6 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
                                std::string());
   registry->RegisterStringPref(prefs::kAccessibilityCaptionsTextShadow,
                                std::string());
-  registry->RegisterBooleanPref(prefs::kLiveCaptionEnabled, false);
-  registry->RegisterFilePathPref(prefs::kSODAPath, base::FilePath());
 #if !defined(OS_ANDROID)
   registry->RegisterDictionaryPref(prefs::kPartitionDefaultZoomLevel);
   registry->RegisterDictionaryPref(prefs::kPartitionPerHostZoomLevels);
@@ -273,7 +334,8 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterListPref(prefs::kMediaRouterTabMirroringSources);
 
   registry->RegisterDictionaryPref(prefs::kWebShareVisitedTargets);
-  registry->RegisterDictionaryPref(prefs::kExcludedSchemes);
+  registry->RegisterDictionaryPref(
+      prefs::kProtocolHandlerPerOriginAllowedProtocols);
 
   // Instead of registering new prefs here, please create a static method and
   // invoke it from RegisterProfilePrefs() in
@@ -311,6 +373,10 @@ bool Profile::IsSystemProfile() const {
   return is_system_profile_;
 }
 
+bool Profile::IsPrimaryOTRProfile() {
+  return IsOffTheRecord() && GetOTRProfileID() == OTRProfileID::PrimaryID();
+}
+
 bool Profile::CanUseDiskWhenOffTheRecord() {
 #if defined(OS_CHROMEOS)
   // Guest mode on ChromeOS uses an in-memory file system to store the profile
@@ -330,11 +396,15 @@ bool Profile::ShouldPersistSessionCookies() {
   return false;
 }
 
-mojo::Remote<network::mojom::NetworkContext> Profile::CreateNetworkContext(
+void Profile::ConfigureNetworkContextParams(
     bool in_memory,
-    const base::FilePath& relative_partition_path) {
-  return ProfileNetworkContextServiceFactory::GetForContext(this)
-      ->CreateNetworkContext(in_memory, relative_partition_path);
+    const base::FilePath& relative_partition_path,
+    network::mojom::NetworkContextParams* network_context_params,
+    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
+  ProfileNetworkContextServiceFactory::GetForContext(this)
+      ->ConfigureNetworkContextParams(in_memory, relative_partition_path,
+                                      network_context_params,
+                                      cert_verifier_creation_params);
 }
 
 bool Profile::IsNewProfile() {
@@ -351,6 +421,9 @@ bool Profile::IsNewProfile() {
 }
 
 void Profile::MaybeSendDestroyedNotification() {
+  TRACE_EVENT1("shutdown", "Profile::MaybeSendDestroyedNotification", "profile",
+               this);
+
   if (!sent_destroyed_notification_) {
     sent_destroyed_notification_ = true;
 
@@ -407,8 +480,23 @@ void Profile::NotifyOffTheRecordProfileCreated(Profile* off_the_record) {
     observer.OnOffTheRecordProfileCreated(off_the_record);
 }
 
+Profile* Profile::GetPrimaryOTRProfile() {
+  return GetOffTheRecordProfile(OTRProfileID::PrimaryID());
+}
+
+bool Profile::HasPrimaryOTRProfile() {
+  return HasOffTheRecordProfile(OTRProfileID::PrimaryID());
+}
+
 variations::VariationsClient* Profile::GetVariationsClient() {
   if (!chrome_variations_client_)
     chrome_variations_client_ = std::make_unique<ChromeVariationsClient>(this);
   return chrome_variations_client_.get();
+}
+
+void Profile::DestroyOffTheRecordProfile() {
+  OTRProfileID primary_otr_id = OTRProfileID::PrimaryID();
+  if (!HasOffTheRecordProfile(primary_otr_id))
+    return;
+  DestroyOffTheRecordProfile(GetOffTheRecordProfile(primary_otr_id));
 }

@@ -132,6 +132,8 @@ xcode_cache = struct(
    x11c505wk = xcode_enum('xcode_ios_11c505wk', 'xcode_ios_11c505wk.app'),
    x11c29 = xcode_enum('xcode_ios_11c29', 'xcode_ios_11c29.app'),
    x11m382q = xcode_enum('xcode_ios_11m382q', 'xcode_ios_11m382q.app'),
+   x11e146 = xcode_enum('xcode_ios_11e146', 'xcode_ios_11e146.app'),
+   x11n605cwk = xcode_enum('xcode_ios_11n605cwk', 'xcode_ios_11n605cwk.app'),
 )
 
 
@@ -220,7 +222,7 @@ defaults = args.defaults(
     ssd = args.COMPUTE,
     use_clang_coverage = False,
     use_java_coverage = False,
-    should_exonerate_flaky_failures = False,
+    resultdb_bigquery_exports = [],
 
     # Provide vars for bucket and executable so users don't have to
     # unnecessarily make wrapper functions
@@ -254,7 +256,7 @@ def builder(
     goma_jobs=args.DEFAULT,
     use_clang_coverage=args.DEFAULT,
     use_java_coverage=args.DEFAULT,
-    should_exonerate_flaky_failures=args.DEFAULT,
+    resultdb_bigquery_exports=args.DEFAULT,
     **kwargs):
   """Define a builder.
 
@@ -328,8 +330,9 @@ def builder(
     * use_java_coverage - a boolean indicating whether java coverage should be
       used. If True, the 'use_java_coverage" field will be set in the
       '$build/code_coverage' property. By default, considered False.
-    * should_exonerate_flaky_failures - a boolean indicathing whether the
-      builder should exonerate a test failure if it's known to be flaky on ToT.
+    * resultdb_bigquery_exports - a list of resultdb.export_test_results(...)
+      specifying parameters for exporting test results to BigQuery. By default,
+      do not export.
     * kwargs - Additional keyword arguments to forward on to `luci.builder`.
   """
   # We don't have any need of an explicit dimensions dict,
@@ -421,13 +424,6 @@ def builder(
   if code_coverage != None:
     properties['$build/code_coverage'] = code_coverage
 
-  should_exonerate_flaky_failures = defaults.get_value(
-      'should_exonerate_flaky_failures', should_exonerate_flaky_failures)
-  if should_exonerate_flaky_failures:
-    properties['$build/test_utils'] = {
-      'should_exonerate_flaky_failures': True,
-    }
-
   kwargs = dict(kwargs)
   bucket = defaults.get_value('bucket', bucket)
   if bucket != args.COMPUTE:
@@ -443,6 +439,11 @@ def builder(
       name = name,
       dimensions = dimensions,
       properties = properties,
+      resultdb_settings = resultdb.settings(
+          enable = True,
+          bq_exports = defaults.get_value(
+              'resultdb_bigquery_exports', resultdb_bigquery_exports),
+      ),
       **kwargs
   )
 

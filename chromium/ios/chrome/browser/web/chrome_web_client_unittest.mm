@@ -15,24 +15,37 @@
 #import "base/test/ios/wait_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "components/captive_portal/core/captive_portal_detector.h"
+#include "components/security_interstitials/core/unsafe_resource.h"
+#include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/passwords/password_manager_features.h"
+#import "ios/chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
+#import "ios/chrome/browser/safe_browsing/safe_browsing_error.h"
+#import "ios/chrome/browser/safe_browsing/safe_browsing_unsafe_resource_container.h"
+#import "ios/chrome/browser/safe_browsing/safe_browsing_url_allow_list.h"
+#import "ios/chrome/browser/ssl/captive_portal_detector_tab_helper.h"
+#import "ios/chrome/browser/ssl/captive_portal_detector_tab_helper_delegate.h"
 #import "ios/chrome/browser/web/error_page_util.h"
 #include "ios/chrome/browser/web/features.h"
+#import "ios/components/security_interstitials/ios_blocking_page_tab_helper.h"
 #include "ios/web/common/features.h"
 #import "ios/web/common/web_view_creation_util.h"
 #import "ios/web/public/test/error_test_util.h"
 #import "ios/web/public/test/fakes/test_web_state.h"
 #import "ios/web/public/test/js_test_util.h"
 #include "ios/web/public/test/scoped_testing_web_client.h"
+#include "net/http/http_status_code.h"
 #include "net/ssl/ssl_info.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
+#include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -307,6 +320,21 @@ TEST_F(ChromeWebClientTest, PrepareErrorPageWithSSLInfo) {
         page = error_html;
       });
   web::TestWebState test_web_state;
+  security_interstitials::IOSBlockingPageTabHelper::CreateForWebState(
+      &test_web_state);
+
+  // Use a test URLLoaderFactory so that the captive portal detector doesn't
+  // make an actual network request.
+  network::TestURLLoaderFactory test_loader_factory;
+  test_loader_factory.AddResponse(
+      captive_portal::CaptivePortalDetector::kDefaultURL, "",
+      net::HTTP_NO_CONTENT);
+  id captive_portal_detector_tab_helper_delegate = [OCMockObject
+      mockForProtocol:@protocol(CaptivePortalDetectorTabHelperDelegate)];
+  CaptivePortalDetectorTabHelper::CreateForWebState(
+      &test_web_state, captive_portal_detector_tab_helper_delegate,
+      &test_loader_factory);
+
   test_web_state.SetBrowserState(browser_state());
   web_client.PrepareErrorPage(&test_web_state, GURL(kTestUrl), error,
                               /*is_post=*/false,
@@ -322,8 +350,53 @@ TEST_F(ChromeWebClientTest, PrepareErrorPageWithSSLInfo) {
   EXPECT_TRUE([page containsString:error_string]);
 }
 
+// Tests PrepareErrorPage for a safe browsing error, which results in a
+// committed safe browsing interstitial.
+TEST_F(ChromeWebClientTest, PrepareErrorPageForSafeBrowsingError) {
+  // Store an unsafe resource in |web_state|'s container.
+  web::TestWebState web_state;
+  SafeBrowsingUrlAllowList::CreateForWebState(&web_state);
+  SafeBrowsingUnsafeResourceContainer::CreateForWebState(&web_state);
+  security_interstitials::IOSBlockingPageTabHelper::CreateForWebState(
+      &web_state);
+  security_interstitials::UnsafeResource resource;
+  resource.threat_type = safe_browsing::SB_THREAT_TYPE_URL_PHISHING;
+  resource.url = GURL("http://www.chromium.test");
+  resource.resource_type = safe_browsing::ResourceType::kMainFrame;
+  resource.web_state_getter = web_state.CreateDefaultGetter();
+  SafeBrowsingUnsafeResourceContainer::FromWebState(&web_state)
+      ->StoreUnsafeResource(resource);
+
+  NSError* error = [NSError errorWithDomain:kSafeBrowsingErrorDomain
+                                       code:kUnsafeResourceErrorCode
+                                   userInfo:nil];
+  __block bool callback_called = false;
+  __block NSString* page = nil;
+  base::OnceCallback<void(NSString*)> callback =
+      base::BindOnce(^(NSString* error_html) {
+        callback_called = true;
+        page = error_html;
+      });
+
+  ChromeWebClient web_client;
+  web_client.PrepareErrorPage(&web_state, GURL(kTestUrl), error,
+                              /*is_post=*/false,
+                              /*is_off_the_record=*/false,
+                              /*info=*/base::Optional<net::SSLInfo>(),
+                              /*navigation_id=*/0, std::move(callback));
+
+  EXPECT_TRUE(callback_called);
+  NSString* error_string = l10n_util::GetNSString(IDS_PHISHING_V4_HEADING);
+  EXPECT_TRUE([page containsString:error_string]);
+}
+
 // Tests the default user agent for different views.
 TEST_F(ChromeWebClientTest, DefaultUserAgent) {
+  if (@available(iOS 13, *)) {
+  } else {
+    // The feature is only available on iOS 13.
+    return;
+  }
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
       {web::features::kUseDefaultUserAgentInWebClient, web::kMobileGoogleSRP},
@@ -373,6 +446,7 @@ TEST_F(ChromeWebClientTest, DefaultUserAgent) {
   EXPECT_EQ(web::UserAgentType::DESKTOP,
             web_client.GetDefaultUserAgent(mock_regular_regular_view,
                                            non_google_url));
+
   EXPECT_EQ(
       web::UserAgentType::MOBILE,
       web_client.GetDefaultUserAgent(mock_regular_regular_view, google_url));

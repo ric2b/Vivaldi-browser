@@ -10,14 +10,60 @@
 #include "ash/test/ash_test_base.h"
 #include "base/macros.h"
 #include "base/optional.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/timer/timer.h"
+#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "url/gurl.h"
 
 namespace ash {
 namespace assistant {
 namespace util {
 
+using chromeos::assistant::mojom::AssistantEntryPoint;
+using chromeos::assistant::mojom::AssistantQuerySource;
+
 using DeepLinkUtilTest = AshTestBase;
+
+TEST_F(DeepLinkUtilTest, AppendOrReplaceEntryPointParam) {
+  // Iterate over all possible entry point values.
+  for (int i = 0; i < static_cast<int>(AssistantEntryPoint::kMaxValue); ++i) {
+    // Test append.
+    ASSERT_EQ("googleassistant://send-query?q=weather&entryPoint=" +
+                  base::NumberToString(i),
+              AppendOrReplaceEntryPointParam(
+                  GURL("googleassistant://send-query?q=weather"),
+                  static_cast<AssistantEntryPoint>(i))
+                  .spec());
+    // Test replace.
+    ASSERT_EQ("googleassistant://send-query?q=weather&entryPoint=" +
+                  base::NumberToString(i),
+              AppendOrReplaceEntryPointParam(
+                  GURL("googleassistant://send-query?q=weather&entryPoint=foo"),
+                  static_cast<AssistantEntryPoint>(i))
+                  .spec());
+  }
+}
+
+TEST_F(DeepLinkUtilTest, AppendOrReplaceQuerySourceParam) {
+  // Iterate over all possible query source values.
+  for (int i = 0; i < static_cast<int>(AssistantQuerySource::kMaxValue); ++i) {
+    // Test append.
+    ASSERT_EQ("googleassistant://send-query?q=weather&querySource=" +
+                  base::NumberToString(i),
+              AppendOrReplaceQuerySourceParam(
+                  GURL("googleassistant://send-query?q=weather"),
+                  static_cast<AssistantQuerySource>(i))
+                  .spec());
+    // Test replace.
+    ASSERT_EQ(
+        "googleassistant://send-query?q=weather&querySource=" +
+            base::NumberToString(i),
+        AppendOrReplaceQuerySourceParam(
+            GURL("googleassistant://send-query?q=weather&querySource=foo"),
+            static_cast<AssistantQuerySource>(i))
+            .spec());
+  }
+}
 
 TEST_F(DeepLinkUtilTest, CreateAlarmTimerDeeplink) {
   // OK: Simple case.
@@ -27,9 +73,17 @@ TEST_F(DeepLinkUtilTest, CreateAlarmTimerDeeplink) {
       CreateAlarmTimerDeepLink(AlarmTimerAction::kAddTimeToTimer, "1",
                                base::TimeDelta::FromMinutes(1))
           .value());
-  ASSERT_EQ("googleassistant://alarm-timer?action=stopAlarmTimerRinging",
-            CreateAlarmTimerDeepLink(AlarmTimerAction::kStopRinging,
-                                     base::nullopt, base::nullopt)
+  ASSERT_EQ("googleassistant://alarm-timer?action=pauseTimer&id=1",
+            CreateAlarmTimerDeepLink(AlarmTimerAction::kPauseTimer, "1",
+                                     base::nullopt)
+                .value());
+  ASSERT_EQ("googleassistant://alarm-timer?action=removeAlarmOrTimer&id=1",
+            CreateAlarmTimerDeepLink(AlarmTimerAction::kRemoveAlarmOrTimer, "1",
+                                     base::nullopt)
+                .value());
+  ASSERT_EQ("googleassistant://alarm-timer?action=resumeTimer&id=1",
+            CreateAlarmTimerDeepLink(AlarmTimerAction::kResumeTimer, "1",
+                                     base::nullopt)
                 .value());
 
   // For invalid deeplink params, we will hit DCHECK since this API isn't meant
@@ -40,15 +94,6 @@ TEST_F(DeepLinkUtilTest, CreateAlarmTimerDeeplink) {
          const base::StringPiece stack_trace) {}));
 
   ASSERT_EQ(base::nullopt,
-            CreateAlarmTimerDeepLink(AlarmTimerAction::kStopRinging, "1",
-                                     base::nullopt));
-  ASSERT_EQ(base::nullopt, CreateAlarmTimerDeepLink(
-                               AlarmTimerAction::kStopRinging, base::nullopt,
-                               base::TimeDelta::FromMinutes(1)));
-  ASSERT_EQ(base::nullopt,
-            CreateAlarmTimerDeepLink(AlarmTimerAction::kStopRinging, "1",
-                                     base::TimeDelta::FromMinutes(1)));
-  ASSERT_EQ(base::nullopt,
             CreateAlarmTimerDeepLink(AlarmTimerAction::kAddTimeToTimer, "1",
                                      base::nullopt));
   ASSERT_EQ(base::nullopt, CreateAlarmTimerDeepLink(
@@ -57,6 +102,36 @@ TEST_F(DeepLinkUtilTest, CreateAlarmTimerDeeplink) {
   ASSERT_EQ(base::nullopt,
             CreateAlarmTimerDeepLink(AlarmTimerAction::kAddTimeToTimer,
                                      base::nullopt, base::nullopt));
+
+  ASSERT_EQ(base::nullopt,
+            CreateAlarmTimerDeepLink(AlarmTimerAction::kPauseTimer,
+                                     base::nullopt, base::nullopt));
+  ASSERT_EQ(base::nullopt, CreateAlarmTimerDeepLink(
+                               AlarmTimerAction::kPauseTimer, base::nullopt,
+                               base::TimeDelta::FromMinutes(1)));
+  ASSERT_EQ(base::nullopt,
+            CreateAlarmTimerDeepLink(AlarmTimerAction::kPauseTimer, "1",
+                                     base::TimeDelta::FromMinutes(1)));
+
+  ASSERT_EQ(base::nullopt,
+            CreateAlarmTimerDeepLink(AlarmTimerAction::kRemoveAlarmOrTimer,
+                                     base::nullopt, base::nullopt));
+  ASSERT_EQ(base::nullopt, CreateAlarmTimerDeepLink(
+                               AlarmTimerAction::kRemoveAlarmOrTimer,
+                               base::nullopt, base::TimeDelta::FromMinutes(1)));
+  ASSERT_EQ(base::nullopt,
+            CreateAlarmTimerDeepLink(AlarmTimerAction::kRemoveAlarmOrTimer, "1",
+                                     base::TimeDelta::FromMinutes(1)));
+
+  ASSERT_EQ(base::nullopt,
+            CreateAlarmTimerDeepLink(AlarmTimerAction::kResumeTimer,
+                                     base::nullopt, base::nullopt));
+  ASSERT_EQ(base::nullopt, CreateAlarmTimerDeepLink(
+                               AlarmTimerAction::kResumeTimer, base::nullopt,
+                               base::TimeDelta::FromMinutes(1)));
+  ASSERT_EQ(base::nullopt,
+            CreateAlarmTimerDeepLink(AlarmTimerAction::kResumeTimer, "1",
+                                     base::TimeDelta::FromMinutes(1)));
 }
 
 TEST_F(DeepLinkUtilTest, CreateAssistantQueryDeepLink) {
@@ -118,11 +193,11 @@ TEST_F(DeepLinkUtilTest, GetDeepLinkParams) {
 
 TEST_F(DeepLinkUtilTest, GetDeepLinkParam) {
   std::map<std::string, std::string> params = {
-      {"action", "0"},         {"category", "1"},
-      {"durationMs", "60000"}, {"href", "https://g.co/"},
-      {"id", "timer_id_1"},    {"index", "1"},
-      {"page", "main"},        {"q", "query"},
-      {"relaunch", "true"},    {"veId", "1"},
+      {"action", "0"},      {"category", "1"},    {"durationMs", "60000"},
+      {"eid", "1"},         {"entryPoint", "1"},  {"href", "https://g.co/"},
+      {"id", "timer_id_1"}, {"index", "1"},       {"page", "main"},
+      {"q", "query"},       {"querySource", "1"}, {"relaunch", "true"},
+      {"veId", "1"},
   };
 
   auto AssertDeepLinkParamEq = [&params](
@@ -135,11 +210,14 @@ TEST_F(DeepLinkUtilTest, GetDeepLinkParam) {
   AssertDeepLinkParamEq("0", DeepLinkParam::kAction);
   AssertDeepLinkParamEq("1", DeepLinkParam::kCategory);
   AssertDeepLinkParamEq("60000", DeepLinkParam::kDurationMs);
+  AssertDeepLinkParamEq("1", DeepLinkParam::kEid);
+  AssertDeepLinkParamEq("1", DeepLinkParam::kEntryPoint);
   AssertDeepLinkParamEq("https://g.co/", DeepLinkParam::kHref);
   AssertDeepLinkParamEq("timer_id_1", DeepLinkParam::kId);
   AssertDeepLinkParamEq("1", DeepLinkParam::kIndex);
   AssertDeepLinkParamEq("main", DeepLinkParam::kPage);
   AssertDeepLinkParamEq("query", DeepLinkParam::kQuery);
+  AssertDeepLinkParamEq("1", DeepLinkParam::kQuerySource);
   AssertDeepLinkParamEq("true", DeepLinkParam::kRelaunch);
   AssertDeepLinkParamEq("1", DeepLinkParam::kVeId);
 
@@ -153,11 +231,14 @@ TEST_F(DeepLinkUtilTest, GetDeepLinkParam) {
   AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kAction);
   AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kCategory);
   AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kDurationMs);
+  AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kEid);
+  AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kEntryPoint);
   AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kHref);
   AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kId);
   AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kIndex);
   AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kPage);
   AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kQuery);
+  AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kQuerySource);
   AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kRelaunch);
   AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kVeId);
 }
@@ -175,8 +256,12 @@ TEST_F(DeepLinkUtilTest, GetDeepLinkParamAsAlarmTimerAction) {
   // Case: Deep link parameter present, well formed.
   params["action"] = "addTimeToTimer";
   AssertDeepLinkParamEq(AlarmTimerAction::kAddTimeToTimer);
-  params["action"] = "stopAlarmTimerRinging";
-  AssertDeepLinkParamEq(AlarmTimerAction::kStopRinging);
+  params["action"] = "pauseTimer";
+  AssertDeepLinkParamEq(AlarmTimerAction::kPauseTimer);
+  params["action"] = "removeAlarmOrTimer";
+  AssertDeepLinkParamEq(AlarmTimerAction::kRemoveAlarmOrTimer);
+  params["action"] = "resumeTimer";
+  AssertDeepLinkParamEq(AlarmTimerAction::kResumeTimer);
 
   // Case: Deep link parameter present, non AlarmTimerAction value.
   params["action"] = "true";
@@ -218,6 +303,31 @@ TEST_F(DeepLinkUtilTest, GetDeepLinkParamAsBool) {
   // Case: Deep link parameter absent.
   params.clear();
   AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kRelaunch);
+}
+
+TEST_F(DeepLinkUtilTest, GetDeepLinkParamAsEntryPoint) {
+  std::map<std::string, std::string> params;
+
+  auto AssertDeepLinkParamEq =
+      [&params](const base::Optional<AssistantEntryPoint>& expected,
+                DeepLinkParam param) {
+        ASSERT_EQ(expected, GetDeepLinkParamAsEntryPoint(params, param));
+      };
+
+  // Case: Deep link parameter present, well formed.
+  for (int i = 0; i < static_cast<int>(AssistantEntryPoint::kMaxValue); ++i) {
+    params["entryPoint"] = base::NumberToString(i);
+    AssertDeepLinkParamEq(static_cast<AssistantEntryPoint>(i),
+                          DeepLinkParam::kEntryPoint);
+  }
+
+  // Case: Deep link parameter present, non-entry point value.
+  params["entryPoint"] = "non-entry point";
+  AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kEntryPoint);
+
+  // Case: Deep link parameter absent.
+  params.clear();
+  AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kEntryPoint);
 }
 
 TEST_F(DeepLinkUtilTest, GetDeepLinkParamAsGURL) {
@@ -286,6 +396,31 @@ TEST_F(DeepLinkUtilTest, GetDeepLinkParamAsInt64) {
   // Case: Deep link parameter present, non-int value.
   params["durationMs"] = "true";
   AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kDurationMs);
+}
+
+TEST_F(DeepLinkUtilTest, GetDeepLinkParamAsQuerySource) {
+  std::map<std::string, std::string> params;
+
+  auto AssertDeepLinkParamEq =
+      [&params](const base::Optional<AssistantQuerySource>& expected,
+                DeepLinkParam param) {
+        ASSERT_EQ(expected, GetDeepLinkParamAsQuerySource(params, param));
+      };
+
+  // Case: Deep link parameter present, well formed.
+  for (int i = 0; i < static_cast<int>(AssistantQuerySource::kMaxValue); ++i) {
+    params["querySource"] = base::NumberToString(i);
+    AssertDeepLinkParamEq(static_cast<AssistantQuerySource>(i),
+                          DeepLinkParam::kQuerySource);
+  }
+
+  // Case: Deep link parameter present, non-query source value.
+  params["querySource"] = "non-query source";
+  AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kQuerySource);
+
+  // Case: Deep link parameter absent.
+  params.clear();
+  AssertDeepLinkParamEq(base::nullopt, DeepLinkParam::kQuerySource);
 }
 
 TEST_F(DeepLinkUtilTest, GetDeepLinkParamAsTimeDelta) {

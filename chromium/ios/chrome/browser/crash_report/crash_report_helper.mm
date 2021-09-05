@@ -18,6 +18,7 @@
 #include "components/upload_list/crash_upload_list.h"
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/crash_report/breakpad_helper.h"
+#include "ios/chrome/browser/crash_report/crash_keys_helper.h"
 #import "ios/chrome/browser/crash_report/crash_report_user_application_state.h"
 #import "ios/chrome/browser/crash_report/crash_reporter_breadcrumb_observer.h"
 #import "ios/chrome/browser/ui/util/multi_window_support.h"
@@ -37,12 +38,6 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-namespace breakpad {
-// IMPORTANT: be careful if ever increasing this value, Breakpad reports have an
-// overall size limit
-const int kBreadcrumbsKeyCount = 6;
-}
 
 // WebStateListObserver that allows loaded urls to be sent to the crash server.
 @interface CrashReporterURLObserver
@@ -318,7 +313,7 @@ const NSString* kDocumentMimeType = @"application/pdf";
 - (void)closingDocumentInTab:(NSString*)tabId {
   NSString* mime = (NSString*)[self getTabInfo:@"mime" forTab:tabId];
   if ([kDocumentMimeType isEqualToString:mime])
-    breakpad_helper::SetCurrentTabIsPDF(false);
+    crash_keys::SetCurrentTabIsPDF(false);
   [self removeTabInfo:@"mime" forTab:tabId];
 }
 
@@ -406,7 +401,7 @@ const NSString* kDocumentMimeType = @"application/pdf";
     return;
 
   [self setTabInfo:@"mime" withValue:kDocumentMimeType forTab:tabID];
-  breakpad_helper::SetCurrentTabIsPDF(true);
+  crash_keys::SetCurrentTabIsPDF(true);
 }
 
 @end
@@ -454,8 +449,6 @@ void ClearStateForWebStateList(WebStateList* web_state_list) {
 void MonitorBreadcrumbManager(BreadcrumbManager* breadcrumb_manager) {
   [[CrashReporterBreadcrumbObserver uniqueInstance]
       observeBreadcrumbManager:breadcrumb_manager];
-  [CrashReporterBreadcrumbObserver uniqueInstance].breadcrumbsKeyCount =
-      kBreadcrumbsKeyCount;
 }
 
 void StopMonitoringBreadcrumbManager(BreadcrumbManager* breadcrumb_manager) {

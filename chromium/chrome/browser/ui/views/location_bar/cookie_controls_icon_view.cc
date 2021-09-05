@@ -5,7 +5,6 @@
 #include "chrome/browser/ui/views/location_bar/cookie_controls_icon_view.h"
 
 #include <memory>
-#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/cookie_controls/cookie_controls_controller.h"
@@ -62,7 +61,7 @@ void CookieControlsIconView::OnBlockedCookiesCountChanged(int blocked_cookies) {
 }
 
 bool CookieControlsIconView::ShouldBeVisible() const {
-  if (delegate()->IsLocationBarUserInputInProgress())
+  if (delegate()->ShouldHidePageActionIcons())
     return false;
 
   if (HasAssociatedBubble())

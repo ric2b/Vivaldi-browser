@@ -26,7 +26,7 @@ namespace {
 
 gfx::PointF ComputeEventLocation(const blink::WebInputEvent& event) {
   if (blink::WebInputEvent::IsMouseEventType(event.GetType()) ||
-      event.GetType() == blink::WebInputEvent::kMouseWheel) {
+      event.GetType() == blink::WebInputEvent::Type::kMouseWheel) {
     return static_cast<const blink::WebMouseEvent&>(event).PositionInWidget();
   }
   if (blink::WebInputEvent::IsTouchEventType(event.GetType())) {
@@ -141,8 +141,8 @@ bool RenderWidgetTargeter::TargetingRequest::MergeEventIfPossible(
     const blink::WebInputEvent& new_event) {
   if (event && !blink::WebInputEvent::IsTouchEventType(new_event.GetType()) &&
       !blink::WebInputEvent::IsGestureEventType(new_event.GetType()) &&
-      ui::CanCoalesce(new_event, *event.get())) {
-    ui::Coalesce(new_event, event.get());
+      event->CanCoalesce(new_event)) {
+    event->Coalesce(new_event);
     return true;
   }
   return false;
@@ -185,7 +185,7 @@ void RenderWidgetTargeter::FindTargetAndDispatch(
     const blink::WebInputEvent& event,
     const ui::LatencyInfo& latency) {
   DCHECK(blink::WebInputEvent::IsMouseEventType(event.GetType()) ||
-         event.GetType() == blink::WebInputEvent::kMouseWheel ||
+         event.GetType() == blink::WebInputEvent::Type::kMouseWheel ||
          blink::WebInputEvent::IsTouchEventType(event.GetType()) ||
          (blink::WebInputEvent::IsGestureEventType(event.GetType()) &&
           (static_cast<const blink::WebGestureEvent&>(event).SourceDevice() ==
@@ -240,6 +240,13 @@ void RenderWidgetTargeter::ResolveTargetingRequest(TargetingRequest request) {
                  ? middle_click_result_
                  : delegate_->FindTargetSynchronously(request_target,
                                                       *request.GetEvent());
+    // |result.target_location| is utilized to update the position in widget for
+    // an event. If we are in autoscroll mode, we used cached data. So we need
+    // to update the target location of the |result|.
+    if (is_autoscroll_in_progress_) {
+      result.target_location = request_target_location;
+    }
+
     if (!is_autoscroll_in_progress_ &&
         IsMouseMiddleClick(*request.GetEvent())) {
       if (!result.should_query_view)
@@ -463,12 +470,12 @@ void RenderWidgetTargeter::FoundTarget(
     // make sure the final up event gets sent to the same document to reset it
     // a proper state. See VB-42829. Regular Chrome does not have this problem
     // as there is only one document in action.
-    if (request->GetEvent()->GetType() == blink::WebInputEvent::kMouseDown &&
+    if (request->GetEvent()->GetType() == blink::WebInputEvent::Type::kMouseDown &&
         (request->GetEvent()->GetModifiers() &
            blink::WebInputEvent::kLeftButtonDown)) {
       vivaldi_active_down_target_ = target;
     } else if (request->GetEvent()->GetType() ==
-                  blink::WebInputEvent::kMouseUp &&
+                  blink::WebInputEvent::Type::kMouseUp &&
                        vivaldi_active_down_target_) {
       if (target && (vivaldi_active_down_target_ != target)) {
         delegate_->DispatchEventToTarget(request->GetRootView(),

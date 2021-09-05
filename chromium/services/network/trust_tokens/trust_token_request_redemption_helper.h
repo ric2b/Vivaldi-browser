@@ -12,8 +12,10 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/strings/string_piece_forward.h"
+#include "net/log/net_log_with_source.h"
 #include "services/network/public/mojom/trust_tokens.mojom.h"
 #include "services/network/trust_tokens/proto/public.pb.h"
+#include "services/network/trust_tokens/suitable_trust_token_origin.h"
 #include "services/network/trust_tokens/trust_token_key_commitment_getter.h"
 #include "services/network/trust_tokens/trust_token_request_helper.h"
 #include "url/origin.h"
@@ -57,21 +59,47 @@ class TrustTokenRequestRedemptionHelper : public TrustTokenRequestHelper {
   // Class Cryptographer executes the underlying cryptographic operations
   // required for redemption. The API is intended to correspond closely to the
   // BoringSSL API.
+  //
+  // Usage:
+  //   1x Initialize; then, if it succeeds,
+  //   1x BeginRedemption; then, if it succeeds,
+  //   1x ConfirmRedemption
   class Cryptographer {
    public:
     virtual ~Cryptographer() = default;
 
+    // Initializes the delegate. |issuer_configured_batch_size| must be the
+    // "batchsize" value, and |signed_Redemption_record_verification_key| the
+    // "srrkey" value, from an issuer-provided key commitment result.
+    //
+    // Returns true on success and false if the batch size or key is
+    // unacceptable or an internal error occurred in the underlying
+    // cryptographic library.
+    virtual bool Initialize(
+        int issuer_configured_batch_size,
+        base::StringPiece signed_redemption_record_verification_key) = 0;
+
     // Given a trust token to redeem and parameters to encode in the redemption
-    // request, returns an ASCII string suitable for attachment in the
-    // Sec-Trust-Token header, or nullopt on error.
+    // request, returns a base64-encoded string suitable for attachment in the
+    // Sec-Trust-Token header, or nullopt on error. The exact format of the
+    // redemption request is currently considered an implementation detail of
+    // the underlying cryptographic code.
+    //
+    // Some representation of each of |verification_key_to_bind| and
+    // |top_level_origin| is embedded in the redemption request so that a token
+    // redemption can be bound to a particular top-level origin and client-owned
+    // key pair; see the design doc for more details.
     virtual base::Optional<std::string> BeginRedemption(
         TrustToken token,
-        base::StringPiece verification_key,
+        base::StringPiece verification_key_to_bind,
         const url::Origin& top_level_origin) = 0;
 
-    // Given a base64-encoded redemption response header, validates and extracts
-    // the signed redemption record (SRR) contained in the header. If
-    // successful, returns the SRR. Otherwise, returns nullptr.
+    // Given a base64-encoded Sec-Trust-Token redemption response header,
+    // validates and extracts the signed redemption record (SRR) contained in
+    // the header. If successful, returns the SRR. Otherwise, returns nullopt.
+    //
+    // The Trust Tokens design doc is currently the normative source for the
+    // SRR's format.
     virtual base::Optional<std::string> ConfirmRedemption(
         base::StringPiece response_header) = 0;
   };
@@ -98,12 +126,13 @@ class TrustTokenRequestRedemptionHelper : public TrustTokenRequestHelper {
   // |cryptographer| are delegates that help execute the protocol; see
   // their class comments.
   TrustTokenRequestRedemptionHelper(
-      const url::Origin& top_level_origin,
+      SuitableTrustTokenOrigin top_level_origin,
       mojom::TrustTokenRefreshPolicy refresh_policy,
       TrustTokenStore* token_store,
-      std::unique_ptr<TrustTokenKeyCommitmentGetter> key_commitment_getter,
+      const TrustTokenKeyCommitmentGetter* key_commitment_getter,
       std::unique_ptr<KeyPairGenerator> key_pair_generator,
-      std::unique_ptr<Cryptographer> cryptographer);
+      std::unique_ptr<Cryptographer> cryptographer,
+      net::NetLogWithSource net_log = net::NetLogWithSource());
   ~TrustTokenRequestRedemptionHelper() override;
 
   // Executes the outbound part of a Trust Tokens redemption operation,
@@ -142,8 +171,9 @@ class TrustTokenRequestRedemptionHelper : public TrustTokenRequestHelper {
   //
   // If both of these steps are successful, stores the tokens in |token_store_|
   // and returns kOk. Otherwise, returns kBadResponse.
-  mojom::TrustTokenOperationStatus Finalize(
-      mojom::URLResponseHead* response) override;
+  void Finalize(
+      mojom::URLResponseHead* response,
+      base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done) override;
 
  private:
   // Continuation of |Begin| after asynchronous key commitment fetching
@@ -161,19 +191,30 @@ class TrustTokenRequestRedemptionHelper : public TrustTokenRequestHelper {
 
   // |issuer_|, |top_level_origin_|, and |refresh_policy_| are parameters
   // determining the scope and control flow of the redemption operation.
-  url::Origin issuer_;
-  const url::Origin top_level_origin_;
+  //
+  // |issuer_| needs to be a nullable type because it is initialized in |Begin|,
+  // but, once initialized, it will never be empty over the course of the
+  // operation's execution.
+  base::Optional<SuitableTrustTokenOrigin> issuer_;
+  const SuitableTrustTokenOrigin top_level_origin_;
   const mojom::TrustTokenRefreshPolicy refresh_policy_;
 
-  // |signing_key_| and |verification_key_| are generated speculatively near the
+  // |bound_signing_key_| and |bound_verification_key_| form the key pair
+  // "bound" to the redemption; they are generated speculatively near the
   // beginning of redemption and committed to storage if the operation succeeds.
-  std::string signing_key_;
-  std::string verification_key_;
+  std::string bound_signing_key_;
+  std::string bound_verification_key_;
+  // |token_verification_key_| is the token issuance verification key
+  // corresponding to the token being redeemed. It's stored here speculatively
+  // when beginning redemption so that it can be placed in persistent storage
+  // alongside the SRR if redemption succeeds.
+  std::string token_verification_key_;
 
   TrustTokenStore* const token_store_;
-  const std::unique_ptr<TrustTokenKeyCommitmentGetter> key_commitment_getter_;
+  const TrustTokenKeyCommitmentGetter* const key_commitment_getter_;
   const std::unique_ptr<KeyPairGenerator> key_pair_generator_;
   const std::unique_ptr<Cryptographer> cryptographer_;
+  net::NetLogWithSource net_log_;
 
   base::WeakPtrFactory<TrustTokenRequestRedemptionHelper> weak_factory_{this};
 };

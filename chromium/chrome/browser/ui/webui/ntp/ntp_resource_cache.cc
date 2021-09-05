@@ -41,6 +41,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/content_settings/core/common/cookie_controls_enforcement.h"
 #include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/google/core/common/google_util.h"
@@ -316,10 +317,10 @@ void NTPResourceCache::CreateNewTabIncognitoHTML() {
   replacements["cookieControlsDescription"] =
       l10n_util::GetStringUTF8(IDS_NEW_TAB_OTR_THIRD_PARTY_COOKIE_SUBLABEL);
   // Ensure passing off-the-record profile; |profile_| might not be incognito.
-  DCHECK(profile_->HasOffTheRecordProfile());
+  DCHECK(profile_->HasPrimaryOTRProfile());
   replacements["cookieControlsToggleChecked"] =
       CookieControlsServiceFactory::GetForProfile(
-          profile_->GetOffTheRecordProfile())
+          profile_->GetPrimaryOTRProfile())
               ->GetToggleCheckedValue()
           ? "checked"
           : "";
@@ -539,7 +540,7 @@ void NTPResourceCache::CreateNewTabHTML() {
 
 void NTPResourceCache::CreateNewTabIncognitoCSS() {
   const ui::ThemeProvider& tp = ThemeService::GetThemeProviderForProfile(
-      profile_->GetOffTheRecordProfile());
+      profile_->GetPrimaryOTRProfile());
 
   // Generate the replacements.
   ui::TemplateReplacements substitutions;

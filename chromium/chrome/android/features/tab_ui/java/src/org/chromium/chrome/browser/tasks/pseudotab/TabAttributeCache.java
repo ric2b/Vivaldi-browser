@@ -15,7 +15,6 @@ import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabImpl;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
@@ -93,7 +92,7 @@ public class TabAttributeCache {
             }
         };
 
-        mTabModelObserver = new EmptyTabModelObserver() {
+        mTabModelObserver = new TabModelObserver() {
             @Override
             public void tabClosureCommitted(Tab tab) {
                 int id = tab.getId();
@@ -150,7 +149,8 @@ public class TabAttributeCache {
      * @param id The ID of the {@link PseudoTab}.
      * @param title The title
      */
-    static void setTitleForTesting(int id, String title) {
+    @VisibleForTesting
+    public static void setTitleForTesting(int id, String title) {
         cacheTitle(id, title);
     }
 
@@ -202,7 +202,8 @@ public class TabAttributeCache {
      * @param id The ID of the {@link PseudoTab}.
      * @param rootId The root ID
      */
-    static void setRootIdForTesting(int id, int rootId) {
+    @VisibleForTesting
+    public static void setRootIdForTesting(int id, int rootId) {
         cacheRootId(id, rootId);
     }
 
@@ -318,8 +319,11 @@ public class TabAttributeCache {
      */
     public void destroy() {
         mTabModelSelectorTabObserver.destroy();
-        mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(false).removeObserver(
-                mTabModelObserver);
+        TabModelFilter tabModelFilter =
+                mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(false);
+        if (tabModelFilter != null) {
+            tabModelFilter.removeObserver(mTabModelObserver);
+        }
         mTabModelSelector.removeObserver(mTabModelSelectorObserver);
     }
 }

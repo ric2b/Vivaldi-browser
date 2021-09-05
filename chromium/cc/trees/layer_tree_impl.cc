@@ -1585,6 +1585,10 @@ FrameRateCounter* LayerTreeImpl::frame_rate_counter() const {
   return host_impl_->fps_counter();
 }
 
+base::Optional<int> LayerTreeImpl::current_universal_throughput() {
+  return host_impl_->current_universal_throughput();
+}
+
 MemoryHistory* LayerTreeImpl::memory_history() const {
   return host_impl_->memory_history();
 }
@@ -1627,7 +1631,7 @@ bool LayerTreeImpl::PinchGestureActive() const {
   return host_impl_->pinch_gesture_active();
 }
 
-viz::BeginFrameArgs LayerTreeImpl::CurrentBeginFrameArgs() const {
+const viz::BeginFrameArgs& LayerTreeImpl::CurrentBeginFrameArgs() const {
   return host_impl_->CurrentBeginFrameArgs();
 }
 
@@ -1945,9 +1949,9 @@ ScrollbarSet LayerTreeImpl::ScrollbarsFor(ElementId scroll_element_id) const {
   if (it != element_id_to_scrollbar_layer_ids_.end()) {
     const ScrollbarLayerIds& layer_ids = it->second;
     if (layer_ids.horizontal != Layer::INVALID_ID)
-      scrollbars.insert(LayerById(layer_ids.horizontal)->ToScrollbarLayer());
+      scrollbars.insert(ToScrollbarLayer(LayerById(layer_ids.horizontal)));
     if (layer_ids.vertical != Layer::INVALID_ID)
-      scrollbars.insert(LayerById(layer_ids.vertical)->ToScrollbarLayer());
+      scrollbars.insert(ToScrollbarLayer(LayerById(layer_ids.vertical)));
   }
   return scrollbars;
 }
@@ -2158,7 +2162,7 @@ LayerImpl* LayerTreeImpl::FindFirstScrollingLayerOrScrollbarThatIsHitByPoint(
   auto HitTestScrollingLayerOrScrollbarFunctor =
       [this](const LayerImpl* layer) {
         return layer->HitTestable() &&
-               (layer->is_scrollbar() ||
+               (layer->IsScrollbarLayer() ||
                 (property_trees()->scroll_tree.FindNodeFromElementId(
                     layer->element_id())));
       };

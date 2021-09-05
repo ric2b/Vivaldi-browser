@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "components/password_manager/core/browser/password_manager_util.h"
+#include "components/password_manager/core/browser/password_manager_features_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/sync_client.h"
@@ -31,9 +31,9 @@ PasswordModelTypeController::PasswordModelTypeController(
       identity_manager_(identity_manager),
       sync_service_(sync_service),
       state_changed_callback_(state_changed_callback),
-      account_storage_opt_in_watcher_(
-          identity_manager_,
+      account_storage_settings_watcher_(
           pref_service_,
+          sync_service_,
           base::BindRepeating(
               &PasswordModelTypeController::OnOptInStateMaybeChanged,
               base::Unretained(this))) {
@@ -79,10 +79,13 @@ void PasswordModelTypeController::Stop(syncer::ShutdownReason shutdown_reason,
 
 syncer::DataTypeController::PreconditionState
 PasswordModelTypeController::GetPreconditionState() const {
-  if (sync_mode_ == syncer::SyncMode::kFull)
+  // If Sync-the-feature is enabled, then the user has opted in to that, and no
+  // additional opt-in is required here.
+  if (sync_service_->IsSyncFeatureEnabled())
     return PreconditionState::kPreconditionsMet;
-  return password_manager_util::IsOptedInForAccountStorage(pref_service_,
-                                                           sync_service_)
+  // If Sync-the-feature is *not* enabled, then password sync should only be
+  // turned on if the user has opted in to the account-scoped storage.
+  return features_util::IsOptedInForAccountStorage(pref_service_, sync_service_)
              ? PreconditionState::kPreconditionsMet
              : PreconditionState::kMustStopAndClearData;
 }
@@ -94,7 +97,7 @@ void PasswordModelTypeController::OnStateChanged(syncer::SyncService* sync) {
 }
 
 void PasswordModelTypeController::OnAccountsCookieDeletedByUserAction() {
-  password_manager_util::ClearAccountStorageSettingsForAllUsers(pref_service_);
+  features_util::ClearAccountStorageSettingsForAllUsers(pref_service_);
 }
 
 void PasswordModelTypeController::OnOptInStateMaybeChanged() {

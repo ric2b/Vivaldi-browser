@@ -8,6 +8,8 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/optional.h"
+#include "base/strings/string_util.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -60,6 +62,7 @@
 #include "extensions/browser/extensions_browser_interface_binders.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/browser/url_request_util.h"
+#include "extensions/common/extension_urls.h"
 #include "extensions/common/features/feature_channel.h"
 
 #if defined(OS_CHROMEOS)
@@ -76,6 +79,9 @@
 namespace extensions {
 
 namespace {
+
+const char kCrxUrlPath[] = "/service/update2/crx";
+const char kJsonUrlPath[] = "/service/update2/json";
 
 // If true, the extensions client will behave as though there is always a
 // new chrome update.
@@ -130,13 +136,7 @@ bool ChromeExtensionsBrowserClient::IsSameContext(
     content::BrowserContext* second) {
   Profile* first_profile = Profile::FromBrowserContext(first);
   Profile* second_profile = Profile::FromBrowserContext(second);
-  // TODO(crbug.com/727487): We need to check both ways because of offscreen
-  // presentation profiles, which are not registered with the original profile.
-  // This can be reverted to check just first->IsSameProfile(second) when Bug
-  // 727487 is fixed and presentations have a proper profile type.  See Bug
-  // 664351 for background.
-  return first_profile->IsSameProfile(second_profile) ||
-         second_profile->IsSameProfile(first_profile);
+  return first_profile->IsSameProfile(second_profile);
 }
 
 bool ChromeExtensionsBrowserClient::HasOffTheRecordContext(
@@ -329,8 +329,7 @@ ChromeExtensionsBrowserClient::GetExtensionSystemFactory() {
 }
 
 void ChromeExtensionsBrowserClient::RegisterBrowserInterfaceBindersForFrame(
-    service_manager::BinderMapWithContext<content::RenderFrameHost*>*
-        binder_map,
+    mojo::BinderMapWithContext<content::RenderFrameHost*>* binder_map,
     content::RenderFrameHost* render_frame_host,
     const Extension* extension) const {
   PopulateExtensionFrameBinders(binder_map, render_frame_host, extension);
@@ -450,8 +449,17 @@ void ChromeExtensionsBrowserClient::AttachExtensionTaskManagerTag(
 scoped_refptr<update_client::UpdateClient>
 ChromeExtensionsBrowserClient::CreateUpdateClient(
     content::BrowserContext* context) {
+  base::Optional<GURL> override_url;
+  GURL update_url = extension_urls::GetWebstoreUpdateUrl();
+  if (update_url != extension_urls::GetDefaultWebstoreUpdateUrl()) {
+    if (update_url.path() == kCrxUrlPath) {
+      override_url = update_url.GetWithEmptyPath().Resolve(kJsonUrlPath);
+    } else {
+      override_url = update_url;
+    }
+  }
   return update_client::UpdateClientFactory(
-      ChromeUpdateClientConfig::Create(context));
+      ChromeUpdateClientConfig::Create(context, override_url));
 }
 
 std::unique_ptr<content::BluetoothChooser>

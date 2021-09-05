@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -381,7 +381,8 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
       cache_info_dict->SetInteger("network_changes", cache->network_changes());
 
       cache->GetAsListValue(cache_contents_list.get(),
-                            /*include_staleness=*/true);
+                            true /* include_staleness */,
+                            HostCache::SerializationType::kDebug);
       cache_info_dict->Set("entries", std::move(cache_contents_list));
 
       dict->Set("cache", std::move(cache_info_dict));

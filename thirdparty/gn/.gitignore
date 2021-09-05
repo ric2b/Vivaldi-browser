@@ -53,6 +53,7 @@ GTAGS
 Session.vim
 tags
 Thumbs.db
+/.linux-sysroot
 # Settings directories for eclipse
 /.externalToolBuilders/
 /.settings/

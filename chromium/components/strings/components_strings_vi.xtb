@@ -10,6 +10,7 @@
 <translation id="1030706264415084469"><ph name="URL" /> muốn lưu trữ vĩnh viễn một lượng lớn dữ liệu trên thiết bị của bạn</translation>
 <translation id="1032854598605920125">Xoay theo chiều kim đồng hồ</translation>
 <translation id="1036348656032585052">Tắt</translation>
+<translation id="1038106730571050514">Hiển thị các đề xuất</translation>
 <translation id="1038842779957582377">tên không biết</translation>
 <translation id="1041998700806130099">Thông báo tờ công việc</translation>
 <translation id="1050038467049342496">Đóng các ứng dụng khác</translation>
@@ -160,6 +161,7 @@
 <translation id="161042844686301425">Lục lam</translation>
 <translation id="1620510694547887537">Máy ảnh</translation>
 <translation id="1623104350909869708">Ngăn trang này tạo hộp thoại bổ sung</translation>
+<translation id="1623253368136559158">Di chuyển camera</translation>
 <translation id="16338877384480380">Architecture-B</translation>
 <translation id="1638780421120290329">Không thể lưu thẻ</translation>
 <translation id="1639239467298939599">Đang tải</translation>
@@ -195,7 +197,6 @@
 <translation id="1736420071277903564">Máy tính</translation>
 <translation id="1740951997222943430">Nhập tháng hết hạn hợp lệ</translation>
 <translation id="1741613555002899862">Phải được chỉ định và là một chuỗi hợp lệ khi DnsOverHttpsMode là <ph name="SECURE_DNS_MODE_SECURE" />.</translation>
-<translation id="1743520634839655729">Để thanh toán nhanh hơn vào lần tới, hãy lưu địa chỉ thanh toán, tên và thẻ vào thiết bị này và Tài khoản Google của bạn.</translation>
 <translation id="1743570585616704562">Không nhận dạng được</translation>
 <translation id="1745880797583122200">Trình duyệt của bạn được quản lý</translation>
 <translation id="1746113442205726301">Trục Y của hình ảnh</translation>
@@ -218,6 +219,7 @@
 <translation id="1838374766361614909">Xóa tìm kiếm</translation>
 <translation id="1839551713262164453">Không xác thực được các giá trị của chính sách do xảy ra lỗi</translation>
 <translation id="1842969606798536927">Thanh toán</translation>
+<translation id="1852694792039666893">Sử dụng Tài khoản Google của bạn để tạo mật khẩu mạnh</translation>
 <translation id="1871208020102129563">Proxy được đặt để sử dụng máy chủ proxy cố định chứ không phải URL tập lệnh .pac.</translation>
 <translation id="1871284979644508959">Trường bắt buộc</translation>
 <translation id="1875512691959384712">Google Biểu mẫu</translation>
@@ -268,6 +270,7 @@ Nếu bạn từ chối, các tùy chọn cài đặt quyền riêng tư của b
 <translation id="2094505752054353250">Miền không khớp</translation>
 <translation id="2096368010154057602">Khu vực hành chính</translation>
 <translation id="2099652385553570808">Dập 3 ghim bên trái</translation>
+<translation id="2101225219012730419">Phiên bản:</translation>
 <translation id="2102134110707549001">Đề xuất mật khẩu mạnh…</translation>
 <translation id="2107021941795971877">Hỗ trợ in</translation>
 <translation id="2108755909498034140">Khởi động lại máy tính của bạn</translation>
@@ -400,11 +403,13 @@ Nếu bạn từ chối, các tùy chọn cài đặt quyền riêng tư của b
 <translation id="2666092431469916601">Hàng đầu</translation>
 <translation id="2666117266261740852">Đóng các tab hoặc ứng dụng khác</translation>
 <translation id="2674170444375937751">Bạn có chắc chắn muốn xóa những trang này khỏi lịch sử duyệt web của mình không?</translation>
+<translation id="2674804415323431591">Ẩn các đề xuất</translation>
 <translation id="2676271551327853224">Roc-8K</translation>
 <translation id="2677748264148917807">Rời khỏi</translation>
 <translation id="2684561033061424857">11x12</translation>
 <translation id="2687555958734450033">Phù hợp nhất</translation>
 <translation id="2691924980723297736">Cảnh báo an toàn</translation>
+<translation id="2696268945573510710">Sử dụng mật khẩu lưu trữ trong Tài khoản Google của bạn</translation>
 <translation id="2699302886720511147">Thẻ được chấp nhận</translation>
 <translation id="2701514975700770343">Hướng xuống</translation>
 <translation id="2702801445560668637">Danh sách đọc</translation>
@@ -442,6 +447,7 @@ Nếu bạn từ chối, các tùy chọn cài đặt quyền riêng tư của b
 <translation id="2856444702002559011">Những kẻ tấn công có thể đang cố gắng đánh cắp thông tin của bạn từ <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (ví dụ: mật khẩu, thư hoặc thẻ tín dụng). <ph name="BEGIN_LEARN_MORE_LINK" />Tìm hiểu thêm<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2878197950673342043">Gấp kiểu áp phích</translation>
 <translation id="2878424575911748999">A1</translation>
+<translation id="2880660355386638022">Vị trí cửa sổ</translation>
 <translation id="2881276955470682203">Lưu thẻ?</translation>
 <translation id="2882949212241984732">Gấp 2 cửa</translation>
 <translation id="2903493209154104877">Địa chỉ</translation>
@@ -452,6 +458,7 @@ Nếu bạn từ chối, các tùy chọn cài đặt quyền riêng tư của b
 <translation id="2915068235268646559">Sự cố từ <ph name="CRASH_TIME" /></translation>
 <translation id="2916038427272391327">Đóng các chương trình khác</translation>
 <translation id="2922350208395188000">Không thể kiểm tra chứng chỉ của máy chủ.</translation>
+<translation id="2924027812781652774">Đăng nhập để sử dụng mật khẩu lưu trữ trong Tài khoản Google của bạn</translation>
 <translation id="2925673989565098301">Phương thức giao hàng</translation>
 <translation id="2928905813689894207">Ðịa chỉ thanh toán</translation>
 <translation id="2929525460561903222">{SHIPPING_ADDRESS,plural, =0{<ph name="SHIPPING_ADDRESS_PREVIEW" />}=1{<ph name="SHIPPING_ADDRESS_PREVIEW" /> và <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES" /> địa chỉ giao hàng khác}other{<ph name="SHIPPING_ADDRESS_PREVIEW" /> và <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES" /> địa chỉ giao hàng khác}}</translation>
@@ -641,6 +648,7 @@ Nếu bạn từ chối, các tùy chọn cài đặt quyền riêng tư của b
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Kiểm tra proxy, tường lửa và cấu hình DNS<ph name="END_LINK" /></translation>
 <translation id="372429172604983730">Các ứng dụng có thể gây ra lỗi này gồm có phần mềm diệt vi-rút, tường lửa và lọc web hoặc phần mềm proxy.</translation>
 <translation id="373042150751172459">B4 (Phong bì)</translation>
+<translation id="3731873414101415120">Các trang web bạn truy cập và nội dung của các trang không an toàn</translation>
 <translation id="3736520371357197498">Nếu bạn hiểu các rủi ro bảo mật, bạn có thể <ph name="BEGIN_LINK" />truy cập trang web không an toàn này<ph name="END_LINK" /> trước khi các chương trình nguy hiểm bị xóa.</translation>
 <translation id="3744899669254331632">Bạn không thể truy cập <ph name="SITE" /> ngay bây giờ vì trang web này đã gửi thông tin đăng nhập hỗn độn mà Chromium không thể xử lý. Lỗi mạng và các cuộc tấn công thường chỉ diễn ra tạm thời nên trang này có thể sẽ hoạt động sau.</translation>
 <translation id="3745099705178523657">Sau khi bạn xác nhận, thông tin chi tiết thẻ trong Tài khoản Google của bạn sẽ được chia sẻ với trang web này.</translation>
@@ -872,6 +880,7 @@ Nếu bạn từ chối, các tùy chọn cài đặt quyền riêng tư của b
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Chạy Chẩn đoán mạng của Windows<ph name="END_LINK" /></translation>
 <translation id="4726672564094551039">Tải lại chính sách</translation>
 <translation id="4728558894243024398">Nền tảng</translation>
+<translation id="4731638775147756694">Quản trị viên đã chặn ứng dụng này</translation>
 <translation id="4731967714531604179">Prc2 (Phong bì)</translation>
 <translation id="4733082559415072992"><ph name="URL" /> muốn sử dụng thông tin vị trí thiết bị của bạn</translation>
 <translation id="4736825316280949806">Khởi động lại Chromium</translation>
@@ -907,6 +916,7 @@ Nếu bạn từ chối, các tùy chọn cài đặt quyền riêng tư của b
 <translation id="4877083676943085827">{COUNT,plural, =0{Không có}=1{<ph name="EXAMPLE_DOMAIN_1" />}=2{<ph name="EXAMPLE_DOMAIN_1" />, <ph name="EXAMPLE_DOMAIN_2" />}other{<ph name="EXAMPLE_DOMAIN_1" />, <ph name="EXAMPLE_DOMAIN_2" />, <ph name="AND_MORE" />}}</translation>
 <translation id="4877422487531841831">Cụm từ tìm kiếm <ph name="TEXT" /></translation>
 <translation id="4879491255372875719">Tự động (mặc định)</translation>
+<translation id="4879725228911483934">Mở và đặt các cửa sổ trên màn hình của bạn</translation>
 <translation id="4880827082731008257">Lịch sử tìm kiếm</translation>
 <translation id="4881695831933465202">Mở</translation>
 <translation id="4892518386797173871">Phía sau</translation>
@@ -1073,6 +1083,7 @@ Nếu bạn từ chối, các tùy chọn cài đặt quyền riêng tư của b
 <translation id="5523118979700054094">Tên chính sách</translation>
 <translation id="55293785478302737">May viền</translation>
 <translation id="553484882784876924">Prc6 (Phong bì)</translation>
+<translation id="5536214594743852365">Hiển thị phần "<ph name="SECTION" />"</translation>
 <translation id="5539243836947087108">Bè nổi</translation>
 <translation id="5540224163453853">Không thể tìm thấy bài viết đã yêu cầu.</translation>
 <translation id="5541086400771735334">Hộp thư 7</translation>
@@ -1216,7 +1227,6 @@ Nếu bạn từ chối, các tùy chọn cài đặt quyền riêng tư của b
 <translation id="6116338172782435947">Xem văn bản và hình ảnh đã sao chép sang khay nhớ tạm</translation>
 <translation id="6120179357481664955">Ghi nhớ mã nhận dạng sản phẩm duy nhất (UPI) của bạn?</translation>
 <translation id="6124432979022149706">Trình kết nối của Chrome Enterprise</translation>
-<translation id="6135641591018127088">Sử dụng Tài khoản Google của bạn để tạo mật khẩu mạnh</translation>
 <translation id="6146055958333702838">Kiểm tra mọi dây cáp rồi khởi động lại bộ định tuyến, modem hoặc các thiết bị
     mạng khác mà bạn có thể đang sử dụng.</translation>
 <translation id="614940544461990577">Hãy thử:</translation>
@@ -1242,6 +1252,7 @@ Nếu bạn từ chối, các tùy chọn cài đặt quyền riêng tư của b
 <translation id="6263376278284652872">Dấu trang trên <ph name="DOMAIN" /></translation>
 <translation id="6264485186158353794">Quay lại an toàn</translation>
 <translation id="6266934640124581640">Xanh mòng két nhạt</translation>
+<translation id="6272383483618007430">Google Update</translation>
 <translation id="6276112860590028508">Các trang từ danh sách đọc của bạn sẽ xuất hiện tại đây</translation>
 <translation id="627746635834430766">Để thanh toán nhanh hơn vào lần tiếp theo, hãy lưu địa chỉ thanh toán và thẻ vào Tài khoản Google của bạn.</translation>
 <translation id="6279516281132775660">Chrome <ph name="BEGIN_EMPHASIS" />sẽ không lưu<ph name="END_EMPHASIS" /> những thông tin sau đây:
@@ -1262,7 +1273,6 @@ Nếu bạn từ chối, các tùy chọn cài đặt quyền riêng tư của b
 <translation id="6328639280570009161">Thử tắt dự đoán mạng</translation>
 <translation id="6328784461820205019">"Kết nối của bạn không phải là kết nối riêng tư" hoặc "&lt;span class="error-code"&gt;NET::ERR_CERT_AUTHORITY_INVALID&lt;/span&gt;" hoặc "&lt;span class="error-code"&gt;ERR_CERT_COMMON_NAME_INVALID&lt;/span&gt;" hoặc "&lt;span class="error-code"&gt;NET::ERR_CERT_WEAK_SIGNATURE_ALGORITHM&lt;/span&gt;" hoặc "&lt;span class="error-code"&gt;ERR_CERT_SYMANTEC_LEGACY&lt;/span&gt;" hoặc "Lỗi chứng chỉ SSL"</translation>
 <translation id="6328786501058569169">Đây là trang web lừa đảo</translation>
-<translation id="6333334544069706521">Sử dụng mật khẩu lưu trữ trong Tài khoản Google của bạn</translation>
 <translation id="6337133576188860026">Bộ nhớ đệm còn chưa đầy <ph name="SIZE" />. Một số trang web có thể tải chậm hơn vào lần tới bạn truy cập.</translation>
 <translation id="6337534724793800597">Lọc chính sách theo tên</translation>
 <translation id="6353505687280762741">{COUNT,plural, =0{Không có}=1{1 mật khẩu (cho <ph name="DOMAIN_LIST" />, đã đồng bộ hóa)}=2{2 mật khẩu (cho <ph name="DOMAIN_LIST" />, đã đồng bộ hóa)}other{# mật khẩu (cho <ph name="DOMAIN_LIST" />, đã đồng bộ hóa)}}</translation>
@@ -1274,7 +1284,6 @@ Nếu bạn từ chối, các tùy chọn cài đặt quyền riêng tư của b
 <translation id="6380497234672085559">A0</translation>
 <translation id="6383221683286411806">Nếu tiếp tục, bạn có thể bị tính phí.</translation>
 <translation id="6386120369904791316">{COUNT,plural, =1{1 đề xuất khác}other{# đề xuất khác}}</translation>
-<translation id="6387754724289022810">Để thanh toán nhanh hơn vào lần tiếp theo, hãy lưu địa chỉ thanh toán và thẻ vào Tài khoản Google của bạn và thiết bị này.</translation>
 <translation id="6389470377220713856">Tên trên thẻ</translation>
 <translation id="6390200185239044127">Gấp đôi kiểu chữ Z</translation>
 <translation id="6390662030813198813">Engineering-E</translation>
@@ -1410,6 +1419,7 @@ Nếu bạn từ chối, các tùy chọn cài đặt quyền riêng tư của b
 <translation id="7050187094878475250">Bạn đã cố gắng truy cập <ph name="DOMAIN" /> nhưng máy chủ đã hiển thị chứng chỉ có thời gian hiệu lực quá dài để có thể tin cậy.</translation>
 <translation id="705310974202322020">{NUM_CARDS,plural, =1{Không thể lưu thẻ này ngay bây giờ}other{Không thể lưu các thẻ này ngay bây giờ}}</translation>
 <translation id="7053983685419859001">Chặn</translation>
+<translation id="7058163556978339998"><ph name="BROWSER" /> đã xác minh rằng trang web này có chứng chỉ do <ph name="ISSUER" /> cấp.</translation>
 <translation id="7062635574500127092">Xanh mòng két</translation>
 <translation id="7064851114919012435">Thông tin liên hệ</translation>
 <translation id="70705239631109039">Kết nối của bạn không đủ an toàn</translation>
@@ -1473,6 +1483,7 @@ Thông tin chi tiết bổ sung:
 <translation id="7313965965371928911">Cảnh báo <ph name="BEGIN_LINK" />Duyệt web an toàn<ph name="END_LINK" /></translation>
 <translation id="7319430975418800333">A3</translation>
 <translation id="7320336641823683070">Trợ giúp kết nối</translation>
+<translation id="7323804146520582233">Ẩn phần "<ph name="SECTION" />"</translation>
 <translation id="733354035281974745">Ghi đè tài khoản trên thiết bị</translation>
 <translation id="7333654844024768166">Bạn vừa nhập mật khẩu vào một trang web lừa đảo. Chromium khuyên bạn nên truy cập vào <ph name="WEBSITE_1" />, <ph name="WEBSITE_2" />, <ph name="WEBSITE_3" /> và các trang web khác mà bạn dùng mật khẩu này rồi đổi mật khẩu ngay bây giờ.</translation>
 <translation id="7334320624316649418">&amp;Làm lại sắp xếp lại</translation>
@@ -1597,7 +1608,6 @@ Thông tin chi tiết bổ sung:
 <translation id="7763386264682878361">Trình phân tích cú pháp tệp kê khai thanh toán</translation>
 <translation id="7764225426217299476">Thêm địa chỉ</translation>
 <translation id="7766518757692125295">Viền</translation>
-<translation id="7767271804335921384">Quản trị viên đã chặn ứng dụng này</translation>
 <translation id="7770259615151589601">Designated-Long</translation>
 <translation id="7773005668374414287">Cùng thứ tự hướng lên</translation>
 <translation id="777702478322588152">Quận</translation>
@@ -1626,6 +1636,7 @@ Thông tin chi tiết bổ sung:
 <translation id="7887885240995164102">Vào chế độ hình trong hình</translation>
 <translation id="7888575728750733395">In theo mục đích tái tạo</translation>
 <translation id="7904208859782148177">C3 (Phong bì)</translation>
+<translation id="7923775243649974918">Di chuyển camera</translation>
 <translation id="7932579305932748336">Phủ</translation>
 <translation id="79338296614623784">Nhập số điện thoại hợp lệ</translation>
 <translation id="7934052535022478634">Thanh toán hoàn tất</translation>
@@ -1665,6 +1676,7 @@ Thông tin chi tiết bổ sung:
 <translation id="8074253406171541171">10x13 (Phong bì)</translation>
 <translation id="8078141288243656252">Không thể chú thích khi xoay</translation>
 <translation id="8079031581361219619">Tải lại trang web?</translation>
+<translation id="808089508890593134">Google</translation>
 <translation id="8086971161893892807">Bản nháp</translation>
 <translation id="8088680233425245692">Không xem được bài viết.</translation>
 <translation id="808894953321890993">Đổi mật khẩu</translation>
@@ -1782,6 +1794,7 @@ Thông tin chi tiết bổ sung:
 <translation id="8606726445206553943">Sử dụng các thiết bị MIDI của bạn</translation>
 <translation id="861775596732816396">Kích thước 4</translation>
 <translation id="8622948367223941507">Legal-Extra</translation>
+<translation id="8623885649813806493">Không có mật khẩu nào khớp. Hiển thị tất cả các mật khẩu đã lưu.</translation>
 <translation id="8625384913736129811">Lưu thẻ này vào thiết bị này</translation>
 <translation id="8663226718884576429">Tóm tắt đơn hàng, <ph name="TOTAL_LABEL" />, chi tiết khác</translation>
 <translation id="867224526087042813">Chữ ký</translation>

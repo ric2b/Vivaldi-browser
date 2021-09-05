@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2015-2020 Vivaldi Technologies AS. All rights reserved
 
 #include "sync/vivaldi_profile_sync_service_factory.h"
 
@@ -22,6 +22,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/common/channel_info.h"
+#include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/network_time/network_time_tracker.h"
@@ -149,6 +150,11 @@ KeyedService* VivaldiProfileSyncServiceFactory::BuildServiceInstanceFor(
       VivaldiAccountManagerFactory::GetForProfile(profile)));
 
   vss->Initialize();
+
+  // Hook PSS into PersonalDataManager (a circular dependency).
+  autofill::PersonalDataManager* pdm =
+    autofill::PersonalDataManagerFactory::GetForProfile(profile);
+  pdm->OnSyncServiceInitialized(vss.get());
 
   return vss.release();
 }

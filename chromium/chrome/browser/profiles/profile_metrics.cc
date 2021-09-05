@@ -6,10 +6,11 @@
 
 #include <vector>
 
+#include "base/check_op.h"
 #include "base/files/file_path.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
+#include "base/notreached.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -183,11 +184,13 @@ profile_metrics::BrowserProfileType ProfileMetrics::GetBrowserProfileType(
   // should be checked after them.
   if (profile->IsRegularProfile())
     return profile_metrics::BrowserProfileType::kRegular;
+
+  // TODO(https://crrev.com/1033903): To be updated after updating
+  // |IsIncognitoProfile| to return false for non-primary OTR profiles.
   if (profile->IsIncognitoProfile()) {
-    return profile->IsIndependentOffTheRecordProfile()
-               ? profile_metrics::BrowserProfileType::
-                     kIndependentIncognitoProfile
-               : profile_metrics::BrowserProfileType::kIncognito;
+    return profile->IsPrimaryOTRProfile()
+               ? profile_metrics::BrowserProfileType::kIncognito
+               : profile_metrics::BrowserProfileType::kOtherOffTheRecordProfile;
   }
 
   NOTREACHED();

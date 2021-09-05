@@ -9,7 +9,8 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -406,6 +407,7 @@ void URLFetcherCore::OnReceivedRedirect(URLRequest* request,
     stopped_on_redirect_ = true;
     url_ = redirect_info.new_url;
     response_code_ = request_->GetResponseCode();
+    response_headers_ = request_->response_headers();
     proxy_server_ = request_->proxy_server();
     was_cached_ = request_->was_cached();
     total_received_bytes_ += request_->GetTotalReceivedBytes();

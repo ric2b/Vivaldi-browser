@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
+#include "third_party/blink/renderer/core/css/property_registry.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -25,10 +26,12 @@
 #include "third_party/blink/renderer/core/style/shape_value.h"
 #include "third_party/blink/renderer/core/style/style_difference.h"
 #include "third_party/blink/renderer/core/style/style_generated_image.h"
+#include "third_party/blink/renderer/core/style/style_initial_data.h"
 #include "third_party/blink/renderer/core/testing/color_scheme_helper.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "third_party/blink/renderer/platform/transforms/scale_transform_operation.h"
 #include "ui/base/ui_base_features.h"
 
 namespace blink {
@@ -88,12 +91,10 @@ TEST(ComputedStyleTest, FocusRingWidth) {
     static uint16_t outline_width = 4;
     style->SetOutlineWidth(outline_width);
 
-    double expected_width =
-        LayoutTheme::GetTheme().IsFocusRingOutset() ? outline_width : 3.5;
+    double expected_width = 3.5;
     EXPECT_EQ(expected_width, style->GetOutlineStrokeWidthForFocusRing());
 
-    expected_width =
-        LayoutTheme::GetTheme().IsFocusRingOutset() ? outline_width : 1.0;
+    expected_width = 1.0;
     style->SetEffectiveZoom(0.5);
     EXPECT_EQ(expected_width, style->GetOutlineStrokeWidthForFocusRing());
 #endif
@@ -107,8 +108,6 @@ TEST(ComputedStyleTest, FocusRingOutset) {
   style->SetEffectiveZoom(4.75);
   if (::features::IsFormControlsRefreshEnabled()) {
     EXPECT_EQ(4, style->OutlineOutsetExtent());
-    style->SetEffectiveAppearance(kRadioPart);
-    EXPECT_EQ(6, style->OutlineOutsetExtent());
   } else {
 #if defined(OS_MACOSX)
     EXPECT_EQ(4, style->OutlineOutsetExtent());
@@ -171,7 +170,12 @@ TEST(ComputedStyleTest,
   scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
   scoped_refptr<ComputedStyle> other = ComputedStyle::Clone(*style);
 
-  TransformOperations operations(true);
+  TransformOperations operations;
+  // An operation is necessary since having either a non-empty transform list
+  // or a transform animation will set HasTransform();
+  operations.Operations().push_back(
+      ScaleTransformOperation::Create(1, 1, TransformOperation::kScale));
+
   style->SetTransform(operations);
   other->SetTransform(operations);
 
@@ -523,6 +527,134 @@ TEST(ComputedStyleTest, CustomPropertiesEqual_Data) {
   EXPECT_FALSE(style1->CustomPropertiesEqual(properties, *style2));
 }
 
+TEST(ComputedStyleTest, CustomPropertiesInheritance_FastPath) {
+  auto dummy = std::make_unique<DummyPageHolder>(IntSize(0, 0));
+  css_test_helpers::RegisterProperty(dummy->GetDocument(), "--x", "<length>",
+                                     "0px", true);
+
+  scoped_refptr<ComputedStyle> old_style = ComputedStyle::Create();
+  scoped_refptr<ComputedStyle> new_style = ComputedStyle::Create();
+
+  using UnitType = CSSPrimitiveValue::UnitType;
+
+  const auto* value1 = CSSNumericLiteralValue::Create(1.0, UnitType::kPixels);
+  const auto* value2 = CSSNumericLiteralValue::Create(2.0, UnitType::kPixels);
+
+  EXPECT_FALSE(old_style->HasVariableDeclaration());
+  EXPECT_FALSE(old_style->HasVariableReference());
+  EXPECT_FALSE(new_style->HasVariableReference());
+  EXPECT_FALSE(new_style->HasVariableDeclaration());
+
+  // Removed variable
+  old_style->SetVariableValue("--x", value1, true);
+  EXPECT_EQ(ComputedStyle::Difference::kIndependentInherited,
+            ComputedStyle::ComputeDifference(old_style.get(), new_style.get()));
+
+  old_style = ComputedStyle::Create();
+  new_style = ComputedStyle::Create();
+
+  // Added a new variable
+  new_style->SetVariableValue("--x", value2, true);
+  EXPECT_EQ(ComputedStyle::Difference::kIndependentInherited,
+            ComputedStyle::ComputeDifference(old_style.get(), new_style.get()));
+
+  // Change value of variable
+  old_style->SetVariableValue("--x", value1, true);
+  new_style->SetVariableValue("--x", value2, true);
+  new_style->SetHasVariableReference();
+  EXPECT_FALSE(new_style->HasVariableDeclaration());
+  EXPECT_TRUE(new_style->HasVariableReference());
+  EXPECT_EQ(ComputedStyle::Difference::kIndependentInherited,
+            ComputedStyle::ComputeDifference(old_style.get(), new_style.get()));
+
+  old_style = ComputedStyle::Create();
+  new_style = ComputedStyle::Create();
+
+  // New styles with variable declaration don't force style recalc
+  old_style->SetVariableValue("--x", value1, true);
+  new_style->SetVariableValue("--x", value2, true);
+  new_style->SetHasVariableDeclaration();
+  EXPECT_TRUE(new_style->HasVariableDeclaration());
+  EXPECT_FALSE(new_style->HasVariableReference());
+  EXPECT_EQ(ComputedStyle::Difference::kIndependentInherited,
+            ComputedStyle::ComputeDifference(old_style.get(), new_style.get()));
+
+  old_style = ComputedStyle::Create();
+  new_style = ComputedStyle::Create();
+
+  // New styles with variable reference don't force style recalc
+  old_style->SetVariableValue("--x", value1, true);
+  new_style->SetVariableValue("--x", value2, true);
+  new_style->SetHasVariableDeclaration();
+  new_style->SetHasVariableReference();
+  EXPECT_TRUE(new_style->HasVariableDeclaration());
+  EXPECT_TRUE(new_style->HasVariableReference());
+  EXPECT_EQ(ComputedStyle::Difference::kIndependentInherited,
+            ComputedStyle::ComputeDifference(old_style.get(), new_style.get()));
+}
+
+TEST(ComputedStyleTest, CustomPropertiesInheritance_StyleRecalc) {
+  auto dummy = std::make_unique<DummyPageHolder>(IntSize(0, 0));
+  css_test_helpers::RegisterProperty(dummy->GetDocument(), "--x", "<length>",
+                                     "0px", true);
+
+  scoped_refptr<ComputedStyle> old_style = ComputedStyle::Create();
+  scoped_refptr<ComputedStyle> new_style = ComputedStyle::Create();
+
+  using UnitType = CSSPrimitiveValue::UnitType;
+
+  const auto* value1 = CSSNumericLiteralValue::Create(1.0, UnitType::kPixels);
+  const auto* value2 = CSSNumericLiteralValue::Create(2.0, UnitType::kPixels);
+
+  EXPECT_FALSE(old_style->HasVariableDeclaration());
+  EXPECT_FALSE(old_style->HasVariableReference());
+  EXPECT_FALSE(new_style->HasVariableReference());
+  EXPECT_FALSE(new_style->HasVariableDeclaration());
+
+  // Removed variable value
+  // Old styles with variable reference force style recalc
+  old_style->SetHasVariableReference();
+  old_style->SetVariableValue("--x", value2, true);
+  EXPECT_TRUE(old_style->HasVariableReference());
+  EXPECT_EQ(ComputedStyle::Difference::kInherited,
+            ComputedStyle::ComputeDifference(old_style.get(), new_style.get()));
+
+  old_style = ComputedStyle::Create();
+  new_style = ComputedStyle::Create();
+
+  // New variable value
+  // Old styles with variable declaration force style recalc
+  old_style->SetHasVariableDeclaration();
+  new_style->SetVariableValue("--x", value2, true);
+  EXPECT_TRUE(old_style->HasVariableDeclaration());
+  EXPECT_EQ(ComputedStyle::Difference::kInherited,
+            ComputedStyle::ComputeDifference(old_style.get(), new_style.get()));
+
+  old_style = ComputedStyle::Create();
+  new_style = ComputedStyle::Create();
+
+  // Change variable value
+  // Old styles with variable declaration force style recalc
+  old_style->SetVariableValue("--x", value1, true);
+  new_style->SetVariableValue("--x", value2, true);
+  old_style->SetHasVariableDeclaration();
+  EXPECT_TRUE(old_style->HasVariableDeclaration());
+  EXPECT_EQ(ComputedStyle::Difference::kInherited,
+            ComputedStyle::ComputeDifference(old_style.get(), new_style.get()));
+
+  old_style = ComputedStyle::Create();
+  new_style = ComputedStyle::Create();
+
+  // Change variable value
+  // Old styles with variable reference force style recalc
+  old_style->SetVariableValue("--x", value1, true);
+  new_style->SetVariableValue("--x", value2, true);
+  old_style->SetHasVariableReference();
+  EXPECT_TRUE(old_style->HasVariableReference());
+  EXPECT_EQ(ComputedStyle::Difference::kInherited,
+            ComputedStyle::ComputeDifference(old_style.get(), new_style.get()));
+}
+
 TEST(ComputedStyleTest, ApplyColorSchemeLightOnDark) {
   ScopedCSSColorSchemeForTest scoped_property_enabled(true);
   ScopedCSSColorSchemeUARenderingForTest scoped_ua_enabled(true);
@@ -568,8 +700,7 @@ TEST(ComputedStyleTest, ApplyInternalLightDarkColor) {
   auto* ua_context = MakeGarbageCollected<CSSParserContext>(
       kUASheetMode, SecureContextMode::kInsecureContext);
   const CSSValue* internal_light_dark = CSSParser::ParseSingleValue(
-      CSSPropertyID::kColor, "-internal-light-dark-color(black, white)",
-      ua_context);
+      CSSPropertyID::kColor, "-internal-light-dark(black, white)", ua_context);
 
   ColorSchemeHelper color_scheme_helper(dummy_page_holder_->GetDocument());
   color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
@@ -609,7 +740,7 @@ TEST(ComputedStyleTest, ApplyInternalLightDarkColor) {
     ScopedCSSCascadeForTest scoped_cascade_enabled(true);
 
     auto* color_declaration =
-        ParseDeclarationBlock("color:-internal-light-dark-color(black, white)");
+        ParseDeclarationBlock("color:-internal-light-dark(black, white)");
     auto* dark_declaration = ParseDeclarationBlock("color-scheme:dark");
     auto* light_declaration = ParseDeclarationBlock("color-scheme:light");
 
@@ -627,6 +758,52 @@ TEST(ComputedStyleTest, ApplyInternalLightDarkColor) {
     EXPECT_EQ(Color::kBlack,
               style->VisitedDependentColor(GetCSSPropertyColor()));
   }
+}
+
+TEST(ComputedStyleTest, ApplyInternalLightDarkBackgroundImage) {
+  using css_test_helpers::ParseDeclarationBlock;
+
+  ScopedCSSCascadeForTest scoped_cascade_enabled(true);
+  ScopedCSSColorSchemeForTest scoped_property_enabled(true);
+  ScopedCSSColorSchemeUARenderingForTest scoped_ua_enabled(true);
+
+  std::unique_ptr<DummyPageHolder> dummy_page_holder_ =
+      std::make_unique<DummyPageHolder>(IntSize(0, 0), nullptr);
+  const ComputedStyle* initial = &ComputedStyle::InitialStyle();
+
+  ColorSchemeHelper color_scheme_helper(dummy_page_holder_->GetDocument());
+  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  StyleResolverState state(dummy_page_holder_->GetDocument(),
+                           *dummy_page_holder_->GetDocument().documentElement(),
+                           initial, initial);
+
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+  state.SetStyle(style);
+
+  auto* bgimage_declaration = ParseDeclarationBlock(
+      "background-image:-internal-light-dark(none, url(dummy.png))",
+      kUASheetMode);
+  auto* dark_declaration = ParseDeclarationBlock("color-scheme:dark");
+  auto* light_declaration = ParseDeclarationBlock("color-scheme:light");
+
+  EXPECT_FALSE(style->HasNonInheritedLightDarkValue());
+
+  StyleCascade cascade1(state);
+  cascade1.MutableMatchResult().AddMatchedProperties(bgimage_declaration);
+  cascade1.MutableMatchResult().AddMatchedProperties(dark_declaration);
+  cascade1.Apply();
+  EXPECT_TRUE(style->HasBackgroundImage());
+  EXPECT_TRUE(style->HasNonInheritedLightDarkValue());
+
+  style = ComputedStyle::Create();
+  state.SetStyle(style);
+
+  StyleCascade cascade2(state);
+  cascade2.MutableMatchResult().AddMatchedProperties(bgimage_declaration);
+  cascade2.MutableMatchResult().AddMatchedProperties(light_declaration);
+  cascade2.Apply();
+  EXPECT_FALSE(style->HasBackgroundImage());
+  EXPECT_TRUE(style->HasNonInheritedLightDarkValue());
 }
 
 TEST(ComputedStyleTest, StrokeWidthZoomAndCalc) {
@@ -660,6 +837,143 @@ TEST(ComputedStyleTest, StrokeWidthZoomAndCalc) {
   ASSERT_TRUE(numeric_value);
   EXPECT_TRUE(numeric_value->IsPx());
   EXPECT_EQ(10, numeric_value->DoubleValue());
+}
+
+TEST(ComputedStyleTest, InitialVariableNamesEmpty) {
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+  EXPECT_TRUE(style->GetVariableNames().IsEmpty());
+}
+
+TEST(ComputedStyleTest, InitialVariableNames) {
+  using css_test_helpers::CreateLengthRegistration;
+
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+
+  PropertyRegistry* registry = MakeGarbageCollected<PropertyRegistry>();
+  registry->RegisterProperty("--x", *CreateLengthRegistration("--x", 1));
+  registry->RegisterProperty("--y", *CreateLengthRegistration("--y", 2));
+  style->SetInitialData(StyleInitialData::Create(*registry));
+
+  EXPECT_EQ(2u, style->GetVariableNames().size());
+  EXPECT_TRUE(style->GetVariableNames().Contains("--x"));
+  EXPECT_TRUE(style->GetVariableNames().Contains("--y"));
+}
+
+TEST(ComputedStyleTest, InheritedVariableNames) {
+  using css_test_helpers::CreateVariableData;
+
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+
+  const bool inherited = true;
+  style->SetVariableData("--a", CreateVariableData("foo"), inherited);
+  style->SetVariableData("--b", CreateVariableData("bar"), inherited);
+
+  EXPECT_EQ(2u, style->GetVariableNames().size());
+  EXPECT_TRUE(style->GetVariableNames().Contains("--a"));
+  EXPECT_TRUE(style->GetVariableNames().Contains("--b"));
+}
+
+TEST(ComputedStyleTest, NonInheritedVariableNames) {
+  using css_test_helpers::CreateVariableData;
+
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+
+  const bool inherited = true;
+  style->SetVariableData("--a", CreateVariableData("foo"), !inherited);
+  style->SetVariableData("--b", CreateVariableData("bar"), !inherited);
+
+  EXPECT_EQ(2u, style->GetVariableNames().size());
+  EXPECT_TRUE(style->GetVariableNames().Contains("--a"));
+  EXPECT_TRUE(style->GetVariableNames().Contains("--b"));
+}
+
+TEST(ComputedStyleTest, InheritedAndNonInheritedVariableNames) {
+  using css_test_helpers::CreateVariableData;
+
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+
+  const bool inherited = true;
+  style->SetVariableData("--a", CreateVariableData("foo"), inherited);
+  style->SetVariableData("--b", CreateVariableData("bar"), inherited);
+  style->SetVariableData("--d", CreateVariableData("foz"), !inherited);
+  style->SetVariableData("--c", CreateVariableData("baz"), !inherited);
+
+  EXPECT_EQ(4u, style->GetVariableNames().size());
+  EXPECT_TRUE(style->GetVariableNames().Contains("--a"));
+  EXPECT_TRUE(style->GetVariableNames().Contains("--b"));
+  EXPECT_TRUE(style->GetVariableNames().Contains("--c"));
+  EXPECT_TRUE(style->GetVariableNames().Contains("--d"));
+}
+
+TEST(ComputedStyleTest, InitialAndInheritedAndNonInheritedVariableNames) {
+  using css_test_helpers::CreateLengthRegistration;
+  using css_test_helpers::CreateVariableData;
+
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+
+  PropertyRegistry* registry = MakeGarbageCollected<PropertyRegistry>();
+  registry->RegisterProperty("--b", *CreateLengthRegistration("--b", 1));
+  registry->RegisterProperty("--e", *CreateLengthRegistration("--e", 2));
+  style->SetInitialData(StyleInitialData::Create(*registry));
+
+  const bool inherited = true;
+  style->SetVariableData("--a", CreateVariableData("foo"), inherited);
+  style->SetVariableData("--b", CreateVariableData("bar"), inherited);
+  style->SetVariableData("--d", CreateVariableData("foz"), !inherited);
+  style->SetVariableData("--c", CreateVariableData("baz"), !inherited);
+
+  EXPECT_EQ(5u, style->GetVariableNames().size());
+  EXPECT_TRUE(style->GetVariableNames().Contains("--a"));
+  EXPECT_TRUE(style->GetVariableNames().Contains("--b"));
+  EXPECT_TRUE(style->GetVariableNames().Contains("--c"));
+  EXPECT_TRUE(style->GetVariableNames().Contains("--d"));
+  EXPECT_TRUE(style->GetVariableNames().Contains("--e"));
+}
+
+TEST(ComputedStyleTest, BorderWidthZoom) {
+  std::unique_ptr<DummyPageHolder> dummy_page_holder_ =
+      std::make_unique<DummyPageHolder>(IntSize(0, 0), nullptr);
+
+  const ComputedStyle* initial = &ComputedStyle::InitialStyle();
+
+  StyleResolverState state(dummy_page_holder_->GetDocument(),
+                           *dummy_page_holder_->GetDocument().documentElement(),
+                           initial, initial);
+
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+  style->SetEffectiveZoom(2);
+  style->SetBorderLeftStyle(EBorderStyle::kSolid);
+  style->SetOutlineStyle(EBorderStyle::kSolid);
+  style->SetColumnRuleStyle(EBorderStyle::kSolid);
+  state.SetStyle(style);
+
+  const struct {
+    CSSIdentifierValue* css_value;
+    double expected_px;
+    STACK_ALLOCATED();
+  } tests[] = {
+      {CSSIdentifierValue::Create(CSSValueID::kThin), 1.0},
+      {CSSIdentifierValue::Create(CSSValueID::kMedium), 3.0},
+      {CSSIdentifierValue::Create(CSSValueID::kThick), 5.0},
+  };
+
+  for (const auto& test : tests) {
+    for (const auto* property :
+         {&GetCSSPropertyBorderLeftWidth(), &GetCSSPropertyOutlineWidth(),
+          &GetCSSPropertyColumnRuleWidth()}) {
+      const Longhand& longhand = To<Longhand>(*property);
+      longhand.ApplyValue(state, *test.css_value);
+      auto* computed_value = longhand.CSSValueFromComputedStyleInternal(
+          *style, style->SvgStyle(), nullptr /* layout_object */,
+          false /* allow_visited_style */);
+      AtomicString prop_name = longhand.GetCSSPropertyName().ToAtomicString();
+      ASSERT_TRUE(computed_value) << prop_name;
+      auto* numeric_value = DynamicTo<CSSNumericLiteralValue>(computed_value);
+      ASSERT_TRUE(numeric_value) << prop_name;
+      EXPECT_TRUE(numeric_value->IsPx()) << prop_name;
+      EXPECT_EQ(test.expected_px, numeric_value->DoubleValue()) << prop_name;
+    }
+  }
 }
 
 }  // namespace blink

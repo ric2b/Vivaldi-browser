@@ -7,12 +7,12 @@
 #include <string>
 
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service.h"
 #include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_function.h"
 
 namespace extensions {
 
@@ -29,7 +29,7 @@ class ContentBlockingEventRouter
   // adblock_filter::RuleService::Observer implementation.
   void OnRuleServiceStateLoaded(
       adblock_filter::RuleService* rule_service) override;
-  void OnRulesFetchComplete(
+  void OnRulesSourceUpdated(
       const adblock_filter::RuleSource& rule_source) override;
   void OnGroupStateChanged(adblock_filter::RuleGroup group) override;
   void OnExceptionListChanged(
@@ -380,7 +380,7 @@ class ContentBlockingGetAllExceptionListsFunction : public AdBlockFunction {
   DISALLOW_COPY_AND_ASSIGN(ContentBlockingGetAllExceptionListsFunction);
 };
 
-class ContentBlockingGetBlockedUrlsInfoFunction : public ExtensionFunction {
+class ContentBlockingGetBlockedUrlsInfoFunction : public AdBlockFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("contentBlocking.getBlockedUrlsInfo",
                              CONTENT_BLOCKING_GET_BLOCKED_URLS_INFO)
@@ -388,10 +388,42 @@ class ContentBlockingGetBlockedUrlsInfoFunction : public ExtensionFunction {
 
  private:
   ~ContentBlockingGetBlockedUrlsInfoFunction() override = default;
-  // ExtensionFunction:
-  ResponseAction Run() override;
+  // AdBlockFunction:
+  ResponseValue RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 
   DISALLOW_COPY_AND_ASSIGN(ContentBlockingGetBlockedUrlsInfoFunction);
+};
+
+class ContentBlockingGetBlockedDomainCountersFunction : public AdBlockFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("contentBlocking.getBlockedDomainCounters",
+                             CONTENT_BLOCKING_GET_BLOCKED_DOMAIN_COUNTERS)
+  ContentBlockingGetBlockedDomainCountersFunction() = default;
+
+ private:
+  ~ContentBlockingGetBlockedDomainCountersFunction() override = default;
+  // AdBlockFunction:
+  ResponseValue RunWithService(
+      adblock_filter::RuleService* rules_service) override;
+
+  DISALLOW_COPY_AND_ASSIGN(ContentBlockingGetBlockedDomainCountersFunction);
+};
+
+class ContentBlockingClearBlockedDomainCountersFunction
+    : public AdBlockFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("contentBlocking.clearBlockedDomainCounters",
+                             CONTENT_BLOCKING_CLEAR_BLOCKED_DOMAIN_COUNTERS)
+  ContentBlockingClearBlockedDomainCountersFunction() = default;
+
+ private:
+  ~ContentBlockingClearBlockedDomainCountersFunction() override = default;
+  // AdBlockFunction:
+  ResponseValue RunWithService(
+      adblock_filter::RuleService* rules_service) override;
+
+  DISALLOW_COPY_AND_ASSIGN(ContentBlockingClearBlockedDomainCountersFunction);
 };
 
 class ContentBlockingIsExemptOfFilteringFunction : public AdBlockFunction {

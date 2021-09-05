@@ -61,6 +61,7 @@
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fetch/global_fetch.h"
+#include "third_party/blink/renderer/core/frame/reporting_context.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/worker_inspector_controller.h"
 #include "third_party/blink/renderer/core/inspector/worker_thread_debugger.h"
@@ -742,6 +743,16 @@ bool ServiceWorkerGlobalScope::FetchClassicImportedScript(
       script_url, out_response_url, out_source_code, out_cached_meta_data);
 }
 
+ResourceLoadScheduler::ThrottleOptionOverride
+ServiceWorkerGlobalScope::GetThrottleOptionOverride() const {
+  if (is_installing_ && base::FeatureList::IsEnabled(
+                            features::kThrottleInstallingServiceWorker)) {
+    return ResourceLoadScheduler::ThrottleOptionOverride::
+        kStoppableAsThrottleable;
+  }
+  return ResourceLoadScheduler::ThrottleOptionOverride::kNone;
+}
+
 const AtomicString& ServiceWorkerGlobalScope::InterfaceName() const {
   return event_target_names::kServiceWorkerGlobalScope;
 }
@@ -783,6 +794,10 @@ bool ServiceWorkerGlobalScope::HasRelatedFetchEvent(
     const KURL& request_url) const {
   auto it = unresponded_fetch_event_counts_.find(request_url);
   return it != unresponded_fetch_event_counts_.end();
+}
+
+int ServiceWorkerGlobalScope::GetOutstandingThrottledLimit() const {
+  return features::kInstallingServiceWorkerOutstandingThrottledLimit.Get();
 }
 
 void ServiceWorkerGlobalScope::importScripts(const Vector<String>& urls,
@@ -1244,8 +1259,25 @@ void ServiceWorkerGlobalScope::DidHandleContentDeleteEvent(
 
 void ServiceWorkerGlobalScope::SetIsInstalling(bool is_installing) {
   is_installing_ = is_installing;
-  if (is_installing)
+  UpdateFetcherThrottleOptionOverride();
+  if (is_installing) {
+    // Mark the scheduler as "hidden" to enable network throttling while the
+    // service worker is installing.
+    if (base::FeatureList::IsEnabled(
+            features::kThrottleInstallingServiceWorker)) {
+      GetThread()->GetScheduler()->OnLifecycleStateChanged(
+          scheduler::SchedulingLifecycleState::kHidden);
+    }
     return;
+  }
+
+  // Disable any network throttling that was enabled while the service worker
+  // was in the installing state.
+  if (base::FeatureList::IsEnabled(
+          features::kThrottleInstallingServiceWorker)) {
+    GetThread()->GetScheduler()->OnLifecycleStateChanged(
+        scheduler::SchedulingLifecycleState::kNotThrottled);
+  }
 
   // Installing phase is finished; record the stats for the scripts that are
   // stored in Cache storage during installation.
@@ -1528,8 +1560,9 @@ void ServiceWorkerGlobalScope::InitializeGlobalScope(
     mojom::blink::ServiceWorkerRegistrationObjectInfoPtr registration_info,
     mojom::blink::ServiceWorkerObjectInfoPtr service_worker_info,
     mojom::blink::FetchHandlerExistence fetch_hander_existence,
-    std::unique_ptr<PendingURLLoaderFactoryBundle>
-        subresource_loader_factories) {
+    std::unique_ptr<PendingURLLoaderFactoryBundle> subresource_loader_factories,
+    mojo::PendingReceiver<mojom::blink::ReportingObserver>
+        reporting_observer_receiver) {
   DCHECK(IsContextThread());
   DCHECK(!global_scope_initialized_);
 
@@ -1562,6 +1595,10 @@ void ServiceWorkerGlobalScope::InitializeGlobalScope(
       GetExecutionContext(), std::move(service_worker_info));
 
   SetFetchHandlerExistence(fetch_hander_existence);
+
+  if (reporting_observer_receiver) {
+    ReportingContext::From(this)->Bind(std::move(reporting_observer_receiver));
+  }
 
   global_scope_initialized_ = true;
   if (!pause_evaluation_)
@@ -2217,7 +2254,8 @@ void ServiceWorkerGlobalScope::StartPaymentRequestEvent(
       PaymentEventDataConversion::ToPaymentRequestEventInit(
           ScriptController()->GetScriptState(), std::move(event_data)),
       std::move(payment_handler_host), respond_with_observer,
-      wait_until_observer);
+      wait_until_observer,
+      ExecutionContext::From(ScriptController()->GetScriptState()));
 
   DispatchExtendableEventWithRespondWith(event, wait_until_observer,
                                          respond_with_observer);

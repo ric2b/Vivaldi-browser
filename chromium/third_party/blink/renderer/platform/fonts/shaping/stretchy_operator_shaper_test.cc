@@ -19,6 +19,7 @@ namespace {
 const UChar32 kLeftBraceCodePoint = '{';
 const UChar32 kOverBraceCodePoint = 0x23DE;
 const UChar32 kArabicMathOperatorHahWithDalCodePoint = 0x1EEF1;
+const UChar32 kNAryWhiteVerticalBarCodePoint = 0x2AFF;
 float kSizeError = .1;
 
 ShapeResultTestInfo* TestInfo(const scoped_refptr<ShapeResult>& result) {
@@ -50,7 +51,8 @@ class StretchyOperatorShaperTest : public testing::Test {
 
 // See createStretchy() in
 // third_party/blink/web_tests/external/wpt/mathml/tools/operator-dictionary.py
-TEST_F(StretchyOperatorShaperTest, GlyphVariants) {
+// Broken on all platforms by updated to 'operators.woff'. crbug.com/1082250
+TEST_F(StretchyOperatorShaperTest, DISABLED_GlyphVariants) {
   Font math = CreateMathFont("operators.woff");
 
   StretchyOperatorShaper vertical_shaper(
@@ -91,7 +93,8 @@ TEST_F(StretchyOperatorShaperTest, GlyphVariants) {
 
       // Metrics of horizontal size variants.
       {
-        auto metrics = horizontal_shaper.GetMetrics(&math, target_size);
+        StretchyOperatorShaper::Metrics metrics;
+        horizontal_shaper.Shape(&math, target_size, &metrics);
         EXPECT_NEAR(metrics.advance, (i + 1) * 1000, kSizeError);
         EXPECT_NEAR(metrics.ascent, 1000, kSizeError);
         EXPECT_FLOAT_EQ(metrics.descent, 0);
@@ -100,7 +103,8 @@ TEST_F(StretchyOperatorShaperTest, GlyphVariants) {
       // Metrics of vertical size variants.
 
       {
-        auto metrics = vertical_shaper.GetMetrics(&math, target_size);
+        StretchyOperatorShaper::Metrics metrics;
+        vertical_shaper.Shape(&math, target_size, &metrics);
         EXPECT_NEAR(metrics.advance, 1000, kSizeError);
         EXPECT_NEAR(metrics.ascent, (i + 1) * 1000, kSizeError);
         EXPECT_FLOAT_EQ(metrics.descent, 0);
@@ -170,7 +174,8 @@ TEST_F(StretchyOperatorShaperTest, GlyphVariants) {
 
     // Metrics of horizontal assembly.
     {
-      auto metrics = horizontal_shaper.GetMetrics(&math, target_size);
+      StretchyOperatorShaper::Metrics metrics;
+      horizontal_shaper.Shape(&math, target_size, &metrics);
       EXPECT_NEAR(metrics.advance, target_size, kSizeError);
       EXPECT_NEAR(metrics.ascent, 1000, kSizeError);
       EXPECT_FLOAT_EQ(metrics.descent, 0);
@@ -178,7 +183,8 @@ TEST_F(StretchyOperatorShaperTest, GlyphVariants) {
 
     // Metrics of vertical assembly.
     {
-      auto metrics = vertical_shaper.GetMetrics(&math, target_size);
+      StretchyOperatorShaper::Metrics metrics;
+      vertical_shaper.Shape(&math, target_size, &metrics);
       EXPECT_NEAR(metrics.advance, 1000, kSizeError);
       EXPECT_NEAR(metrics.ascent, target_size, kSizeError);
       EXPECT_FLOAT_EQ(metrics.descent, 0);
@@ -258,6 +264,45 @@ TEST_F(StretchyOperatorShaperTest, GlyphVariants) {
     target_size = 1500 * HarfBuzzRunGlyphData::kMaxGlyphs + 1750;
     horizontal_shaper.Shape(&math, target_size);
     vertical_shaper.Shape(&math, target_size);
+  }
+}
+
+// See third_party/blink/web_tests/external/wpt/mathml/tools/largeop.py
+TEST_F(StretchyOperatorShaperTest, MathItalicCorrection) {
+  {
+    Font math = CreateMathFont(
+        "largeop-displayoperatorminheight2000-2AFF-italiccorrection3000.woff");
+    StretchyOperatorShaper shaper(
+        kNAryWhiteVerticalBarCodePoint,
+        OpenTypeMathStretchData::StretchAxis::Vertical);
+
+    // Base size.
+    StretchyOperatorShaper::Metrics metrics;
+    shaper.Shape(&math, 0, &metrics);
+    EXPECT_EQ(metrics.italic_correction, 0);
+
+    // Larger variant.
+    float target_size = 2000 - kSizeError;
+    shaper.Shape(&math, target_size, &metrics);
+    EXPECT_EQ(metrics.italic_correction, 3000);
+  }
+
+  {
+    Font math = CreateMathFont(
+        "largeop-displayoperatorminheight7000-2AFF-italiccorrection5000.woff");
+    StretchyOperatorShaper shaper(
+        kNAryWhiteVerticalBarCodePoint,
+        OpenTypeMathStretchData::StretchAxis::Vertical);
+
+    // Base size.
+    StretchyOperatorShaper::Metrics metrics;
+    shaper.Shape(&math, 0, &metrics);
+    EXPECT_EQ(metrics.italic_correction, 0);
+
+    // Glyph assembly.
+    float target_size = 7000;
+    shaper.Shape(&math, target_size, &metrics);
+    EXPECT_EQ(metrics.italic_correction, 5000);
   }
 }
 

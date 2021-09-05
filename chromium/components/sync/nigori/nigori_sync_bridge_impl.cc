@@ -686,16 +686,6 @@ KeystoreKeysHandler* NigoriSyncBridgeImpl::GetKeystoreKeysHandler() {
   return this;
 }
 
-std::string NigoriSyncBridgeImpl::GetLastKeystoreKey() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  const std::vector<std::string> keystore_keys =
-      state_.keystore_keys_cryptographer->keystore_keys();
-  if (keystore_keys.empty()) {
-    return std::string();
-  }
-  return keystore_keys.back();
-}
-
 bool NigoriSyncBridgeImpl::NeedKeystoreKey() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Explicitly asks the server for keystore keys if it's first-time sync, i.e.
@@ -736,10 +726,14 @@ bool NigoriSyncBridgeImpl::SetKeystoreKeys(
     const base::Optional<sync_pb::NigoriKey> keystore_decryptor_key =
         TryDecryptPendingKeystoreDecryptorToken(
             sync_pb::EncryptedData(*state_.pending_keystore_decryptor_token));
-    // TODO(crbug.com/1057655): capture ModelError.
-    UpdateCryptographer(
+
+    base::Optional<ModelError> error = UpdateCryptographer(
         sync_pb::EncryptedData(*state_.pending_keys),
         BuildDecryptionKeyBagForRemoteKeybag(keystore_decryptor_key));
+    if (error.has_value()) {
+      processor_->ReportError(*error);
+      return false;
+    }
 
     broadcasting_observer_->OnCryptographerStateChanged(
         state_.cryptographer.get(), state_.pending_keys.has_value());

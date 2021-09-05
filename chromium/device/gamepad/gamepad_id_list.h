@@ -36,6 +36,7 @@ enum class GamepadId : uint32_t {
 
   // ID values for supported devices.
   kAsusTekProduct4500 = 0x0b054500,
+  kBroadcomProduct8502 = 0x0a5c8502,
   kDragonRiseProduct0006 = 0x00790006,
   kDragonRiseProduct0011 = 0x00790011,
   kGoogleProduct2c40 = 0x18d12c40,
@@ -103,7 +104,9 @@ class DEVICE_GAMEPAD_EXPORT GamepadIdList {
   // Returns a GamepadId value suitable for identifying a specific model of
   // gamepad. If the gamepad is not contained in the list of known gamepads,
   // returns kUnknownGamepad.
-  GamepadId GetGamepadId(uint16_t vendor_id, uint16_t product_id) const;
+  GamepadId GetGamepadId(base::StringPiece product_name,
+                         uint16_t vendor_id,
+                         uint16_t product_id) const;
 
   // Return the XInput flavor (Xbox, Xbox 360, or Xbox One) for the device with
   // the specified |vendor_id| and |product_id|, or kXInputTypeNone if the

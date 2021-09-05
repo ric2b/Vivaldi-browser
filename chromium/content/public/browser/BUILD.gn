@@ -26,7 +26,10 @@ jumbo_source_set("browser_sources") {
   visibility = [ "//content/*" ]
   sources = [
     "accessibility_tree_formatter.h",
+    "allow_service_worker_result.cc",
+    "allow_service_worker_result.h",
     "android/android_overlay_provider.h",
+    "android/app_web_message_port.h",
     "android/child_process_importance.h",
     "android/compositor.h",
     "android/compositor_client.h",
@@ -124,11 +127,14 @@ jumbo_source_set("browser_sources") {
     "content_index_provider.h",
     "context_menu_params.cc",
     "context_menu_params.h",
+    "cookie_access_details.cc",
+    "cookie_access_details.h",
     "cookie_store_factory.h",
     "cors_exempt_headers.cc",
     "cors_exempt_headers.h",
     "cors_origin_pattern_setter.cc",
     "cors_origin_pattern_setter.h",
+    "dedicated_worker_id.h",
     "dedicated_worker_service.h",
     "desktop_capture.cc",
     "desktop_capture.h",
@@ -160,6 +166,8 @@ jumbo_source_set("browser_sources") {
     "download_manager_delegate.h",
     "download_request_utils.h",
     "download_utils.h",
+    "eye_dropper.h",
+    "eye_dropper_listener.h",
     "favicon_status.cc",
     "favicon_status.h",
     "feature_observer_client.h",
@@ -184,11 +192,9 @@ jumbo_source_set("browser_sources") {
     "hid_chooser.h",
     "hid_delegate.h",
     "histogram_fetcher.h",
+    "idle_manager.h",
     "installability_error.cc",
     "installability_error.h",
-    "interstitial_page.h",
-    "interstitial_page_delegate.cc",
-    "interstitial_page_delegate.h",
     "invalidate_type.h",
     "javascript_dialog_manager.cc",
     "javascript_dialog_manager.h",
@@ -267,6 +273,7 @@ jumbo_source_set("browser_sources") {
     "picture_in_picture_window_controller.h",
     "platform_notification_context.h",
     "platform_notification_service.h",
+    "presentation_receiver_flags.h",
     "presentation_request.cc",
     "presentation_request.h",
     "presentation_screen_availability_listener.h",
@@ -278,6 +285,8 @@ jumbo_source_set("browser_sources") {
     "push_messaging_service.h",
     "quota_permission_context.h",
     "reload_type.h",
+    "render_document_host_user_data.cc",
+    "render_document_host_user_data.h",
     "render_frame_host.h",
     "render_frame_metadata_provider.h",
     "render_process_host.h",
@@ -319,6 +328,7 @@ jumbo_source_set("browser_sources") {
     "session_storage_namespace.h",
     "session_storage_usage_info.h",
     "shared_cors_origin_access_list.h",
+    "shared_worker_id.h",
     "shared_worker_instance.cc",
     "shared_worker_instance.h",
     "shared_worker_service.h",
@@ -392,8 +402,6 @@ jumbo_source_set("browser_sources") {
     "webrtc_log.cc",
     "webrtc_log.h",
     "websocket_handshake_request_info.h",
-    "webvr_service_provider.cc",
-    "webvr_service_provider.h",
   ]
   configs += [
     "//build/config:precompiled_headers",
@@ -519,7 +527,10 @@ jumbo_source_set("browser_sources") {
       "xr_runtime_manager.h",
     ]
 
-    public_deps += [ "//device/vr/public/mojom" ]
+    public_deps += [
+      "//device/vr/public/cpp",
+      "//device/vr/public/mojom",
+    ]
   }
 }
 

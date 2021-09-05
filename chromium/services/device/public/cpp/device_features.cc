@@ -20,7 +20,11 @@ const base::Feature kWinrtGeolocationImplementation{
 #if defined(VIVALDI_BUILD)
   "WinrtGeolocationImplementation", base::FEATURE_ENABLED_BY_DEFAULT};
 #else
-  "WinrtGeolocationImplementation", base::FEATURE_DISABLED_BY_DEFAULT
-};
+  "WinrtGeolocationImplementation", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(VIVALDI_BUILD)
+// Enables usage of the CoreLocation API for LocationProvider instead of
+// NetworkLocationProvider for macOS.
+const base::Feature kMacCoreLocationImplementation{
+    "kMacCoreLocationImplementation", base::FEATURE_DISABLED_BY_DEFAULT};
+
 }  // namespace features

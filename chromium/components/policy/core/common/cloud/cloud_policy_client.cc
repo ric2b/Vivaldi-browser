@@ -135,26 +135,35 @@ CloudPolicyClient::CloudPolicyClient(
     const std::string& machine_id,
     const std::string& machine_model,
     const std::string& brand_code,
+    const std::string& attested_device_id,
     const std::string& ethernet_mac_address,
     const std::string& dock_mac_address,
     const std::string& manufacture_date,
+    SigningService* signing_service,
     DeviceManagementService* service,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-    SigningService* signing_service,
     DeviceDMTokenCallback device_dm_token_callback)
     : machine_id_(machine_id),
       machine_model_(machine_model),
       brand_code_(brand_code),
+      attested_device_id_(attested_device_id),
       ethernet_mac_address_(ethernet_mac_address),
       dock_mac_address_(dock_mac_address),
       manufacture_date_(manufacture_date),
-      service_(service),  // Can be null for unit tests.
       signing_service_(signing_service),
+      service_(service),  // Can be null for unit tests.
       device_dm_token_callback_(device_dm_token_callback),
       url_loader_factory_(url_loader_factory) {}
 
-CloudPolicyClient::~CloudPolicyClient() {
-}
+CloudPolicyClient::CloudPolicyClient(
+    DeviceManagementService* service,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    DeviceDMTokenCallback device_dm_token_callback)
+    : service_(service),  // Can be null for unit tests.
+      device_dm_token_callback_(device_dm_token_callback),
+      url_loader_factory_(url_loader_factory) {}
+
+CloudPolicyClient::~CloudPolicyClient() = default;
 
 void CloudPolicyClient::SetupRegistration(
     const std::string& dm_token,
@@ -182,7 +191,7 @@ void CloudPolicyClient::SetupRegistration(
 // Reusing IDs would mean the server could track clients by their registration
 // attempts.
 void CloudPolicyClient::SetClientId(const std::string& client_id) {
-  client_id_ = client_id.empty() ?  base::GenerateGUID() : client_id;
+  client_id_ = client_id.empty() ? base::GenerateGUID() : client_id;
 }
 
 void CloudPolicyClient::Register(const RegistrationParameters& parameters,
@@ -225,7 +234,7 @@ void CloudPolicyClient::RegisterWithCertificate(
 
   em::CertificateBasedDeviceRegistrationData data;
   data.set_certificate_type(em::CertificateBasedDeviceRegistrationData::
-      ENTERPRISE_ENROLLMENT_CERTIFICATE);
+                                ENTERPRISE_ENROLLMENT_CERTIFICATE);
   data.set_device_certificate(pem_certificate_chain);
 
   em::DeviceRegisterRequest* request = data.mutable_device_register_request();
@@ -356,8 +365,7 @@ void CloudPolicyClient::FetchPolicy() {
         request->mutable_device_state_key_update_request();
     for (std::vector<std::string>::const_iterator key(
              state_keys_to_upload_.begin());
-         key != state_keys_to_upload_.end();
-         ++key) {
+         key != state_keys_to_upload_.end(); ++key) {
       key_update_request->add_server_backed_state_keys(*key);
     }
   }
@@ -408,8 +416,12 @@ void CloudPolicyClient::UploadPolicyValidationReport(
   request_jobs_.push_back(service_->CreateJob(std::move(config)));
 }
 
-void CloudPolicyClient::FetchRobotAuthCodes(std::unique_ptr<DMAuth> auth,
-                                            RobotAuthCodeCallback callback) {
+void CloudPolicyClient::FetchRobotAuthCodes(
+    std::unique_ptr<DMAuth> auth,
+    enterprise_management::DeviceServiceApiAccessRequest::DeviceType
+        device_type,
+    const std::string& oauth_scopes,
+    RobotAuthCodeCallback callback) {
   CHECK(is_registered());
   DCHECK(auth->has_dm_token());
 
@@ -427,8 +439,8 @@ void CloudPolicyClient::FetchRobotAuthCodes(std::unique_ptr<DMAuth> auth,
       config->request()->mutable_service_api_access_request();
   request->set_oauth2_client_id(
       GaiaUrls::GetInstance()->oauth2_chrome_client_id());
-  request->add_auth_scopes(GaiaConstants::kAnyApiOAuth2Scope);
-  request->set_device_type(em::DeviceServiceApiAccessRequest::CHROME_OS);
+  request->add_auth_scopes(oauth_scopes);
+  request->set_device_type(device_type);
 
   policy_fetch_request_job_ = service_->CreateJob(std::move(config));
 }
@@ -674,6 +686,7 @@ void CloudPolicyClient::UpdateGcmId(
 void CloudPolicyClient::ClientCertProvisioningStartCsr(
     const std::string& cert_scope,
     const std::string& cert_profile_id,
+    const std::string& cert_profile_version,
     const std::string& public_key,
     ClientCertProvisioningStartCsrCallback callback) {
   CHECK(is_registered());
@@ -693,6 +706,7 @@ void CloudPolicyClient::ClientCertProvisioningStartCsr(
 
   request->set_certificate_scope(cert_scope);
   request->set_cert_profile_id(cert_profile_id);
+  request->set_policy_version(cert_profile_version);
   request->set_public_key(public_key);
   // Sets the request type, no actual data is required.
   request->mutable_start_csr_request();
@@ -703,6 +717,7 @@ void CloudPolicyClient::ClientCertProvisioningStartCsr(
 void CloudPolicyClient::ClientCertProvisioningFinishCsr(
     const std::string& cert_scope,
     const std::string& cert_profile_id,
+    const std::string& cert_profile_version,
     const std::string& public_key,
     const std::string& va_challenge_response,
     const std::string& signature,
@@ -724,6 +739,7 @@ void CloudPolicyClient::ClientCertProvisioningFinishCsr(
 
   request->set_certificate_scope(cert_scope);
   request->set_cert_profile_id(cert_profile_id);
+  request->set_policy_version(cert_profile_version);
   request->set_public_key(public_key);
 
   em::FinishCsrRequest* finish_csr_request =
@@ -739,6 +755,7 @@ void CloudPolicyClient::ClientCertProvisioningFinishCsr(
 void CloudPolicyClient::ClientCertProvisioningDownloadCert(
     const std::string& cert_scope,
     const std::string& cert_profile_id,
+    const std::string& cert_profile_version,
     const std::string& public_key,
     ClientCertProvisioningDownloadCertCallback callback) {
   CHECK(is_registered());
@@ -758,6 +775,7 @@ void CloudPolicyClient::ClientCertProvisioningDownloadCert(
 
   request->set_certificate_scope(cert_scope);
   request->set_cert_profile_id(cert_profile_id);
+  request->set_policy_version(cert_profile_version);
   request->set_public_key(public_key);
   // Sets the request type, no actual data is required.
   request->mutable_download_cert_request();
@@ -766,13 +784,7 @@ void CloudPolicyClient::ClientCertProvisioningDownloadCert(
 }
 
 void CloudPolicyClient::UpdateServiceAccount(const std::string& account_email) {
-  // The service account identity is always set on policy data, so don't notify
-  // the observers if it's the same as it was during the previous fetch.
-  if (service_account_email_ == account_email)
-    return;
-
-  service_account_email_ = account_email;
-  NotifyServiceAccountChanged();
+  NotifyServiceAccountSet(account_email);
 }
 
 void CloudPolicyClient::AddObserver(Observer* observer) {
@@ -958,8 +970,7 @@ void CloudPolicyClient::OnPolicyFetchCompleted(
       const em::PolicyFetchResponse& response = policy_response.responses(i);
       em::PolicyData policy_data;
       if (!policy_data.ParseFromString(response.policy_data()) ||
-          !policy_data.IsInitialized() ||
-          !policy_data.has_policy_type()) {
+          !policy_data.IsInitialized() || !policy_data.has_policy_type()) {
         LOG(WARNING) << "Invalid PolicyData received, ignoring";
         continue;
       }
@@ -969,8 +980,8 @@ void CloudPolicyClient::OnPolicyFetchCompleted(
         entity_id = policy_data.settings_entity_id();
       std::pair<std::string, std::string> key(type, entity_id);
       if (base::Contains(responses_, key)) {
-        LOG(WARNING) << "Duplicate PolicyFetchResponse for type: "
-            << type << ", entity: " << entity_id << ", ignoring";
+        LOG(WARNING) << "Duplicate PolicyFetchResponse for type: " << type
+                     << ", entity: " << entity_id << ", ignoring";
         continue;
       }
       responses_[key] = std::make_unique<em::PolicyFetchResponse>(response);
@@ -1049,7 +1060,8 @@ void CloudPolicyClient::OnDeviceAttributeUpdatePermissionCompleted(
   if (status == DM_STATUS_SUCCESS &&
       response.device_attribute_update_permission_response().has_result() &&
       response.device_attribute_update_permission_response().result() ==
-      em::DeviceAttributeUpdatePermissionResponse::ATTRIBUTE_UPDATE_ALLOWED) {
+          em::DeviceAttributeUpdatePermissionResponse::
+              ATTRIBUTE_UPDATE_ALLOWED) {
     success = true;
   }
 
@@ -1075,7 +1087,7 @@ void CloudPolicyClient::OnDeviceAttributeUpdated(
   if (status == DM_STATUS_SUCCESS &&
       response.device_attribute_update_response().has_result() &&
       response.device_attribute_update_response().result() ==
-      em::DeviceAttributeUpdateResponse::ATTRIBUTE_UPDATE_SUCCESS) {
+          em::DeviceAttributeUpdateResponse::ATTRIBUTE_UPDATE_SUCCESS) {
     success = true;
   }
 
@@ -1371,9 +1383,10 @@ void CloudPolicyClient::NotifyClientError() {
     observer.OnClientError(this);
 }
 
-void CloudPolicyClient::NotifyServiceAccountChanged() {
+void CloudPolicyClient::NotifyServiceAccountSet(
+    const std::string& account_email) {
   for (auto& observer : observers_)
-    observer.OnServiceAccountChanged(this);
+    observer.OnServiceAccountSet(this, account_email);
 }
 
 void CloudPolicyClient::CreateDeviceRegisterRequest(
@@ -1391,6 +1404,9 @@ void CloudPolicyClient::CreateDeviceRegisterRequest(
     request->set_machine_model(machine_model_);
   if (!brand_code_.empty())
     request->set_brand_code(brand_code_);
+  if (!attested_device_id_.empty())
+    request->mutable_device_register_identification()->set_attested_device_id(
+        attested_device_id_);
   if (!ethernet_mac_address_.empty())
     request->set_ethernet_mac_address(ethernet_mac_address_);
   if (!dock_mac_address_.empty())

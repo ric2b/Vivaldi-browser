@@ -108,7 +108,7 @@ public class CrashReporterTest {
             crashReporterController.checkForPendingCrashReports();
         });
         // Expect that a Bundle containing { "foo": "bar" } is returned.
-        callbackHelper.waitForCallback(callbackHelper.getCallCount());
+        callbackHelper.waitForFirst();
         Bundle crashKeys = callbackHelper.getResult();
         Assert.assertArrayEquals(crashKeys.keySet().toArray(new String[0]), new String[] {"foo"});
         Assert.assertEquals(crashKeys.getString("foo"), "bar");

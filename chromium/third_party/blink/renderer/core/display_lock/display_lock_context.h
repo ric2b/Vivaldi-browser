@@ -75,27 +75,11 @@ class CORE_EXPORT DisplayLockContext final
     kStyleUpdateDescendants
   };
 
-  // See GetScopedForcedUpdate() for description.
-  class CORE_EXPORT ScopedForcedUpdate {
-    DISALLOW_NEW();
-
-   public:
-    ScopedForcedUpdate(ScopedForcedUpdate&&);
-    ~ScopedForcedUpdate();
-
-   private:
-    friend class DisplayLockContext;
-
-    ScopedForcedUpdate(DisplayLockContext*);
-
-    UntracedMember<DisplayLockContext> context_ = nullptr;
-  };
-
   explicit DisplayLockContext(Element*);
   ~DisplayLockContext() = default;
 
-  // Called by style to update the current state of subtree-visibility.
-  void SetRequestedState(ESubtreeVisibility state);
+  // Called by style to update the current state of content-visibility.
+  void SetRequestedState(EContentVisibility state);
   // Called by style to adjust the element's style based on the current state.
   void AdjustElementStyle(ComputedStyle* style) const;
 
@@ -139,13 +123,6 @@ class CORE_EXPORT DisplayLockContext final
   // Returns true if this context is locked.
   bool IsLocked() const { return is_locked_; }
 
-  // Returns a ScopedForcedUpdate object which for the duration of its lifetime
-  // will allow updates to happen on this element's subtree. For the element
-  // itself, the frame rect will still be the same as at the time the lock was
-  // acquired. Only one ScopedForcedUpdate can be retrieved from the same
-  // context at a time.
-  ScopedForcedUpdate GetScopedForcedUpdate();
-
   bool UpdateForced() const { return update_forced_; }
 
   // This is called when the element with which this context is associated is
@@ -179,6 +156,9 @@ class CORE_EXPORT DisplayLockContext final
 
   void NotifyCompositingRequirementsUpdateWasBlocked() {
     needs_compositing_requirements_update_ = true;
+  }
+  void NotifyCompositingDescendantDependentFlagUpdateWasBlocked() {
+    needs_compositing_dependent_flag_update_ = true;
   }
 
   // Notify this element will be disconnected.
@@ -218,6 +198,10 @@ class CORE_EXPORT DisplayLockContext final
   void Trace(Visitor*) override;
 
  private:
+  // Give access to |NotifyForcedUpdateScopeStarted()| and
+  // |NotifyForcedUpdateScopeEnded()|.
+  friend class DisplayLockUtilities;
+
   // Test friends.
   friend class DisplayLockContextRenderingTest;
   friend class DisplayLockContextTest;
@@ -229,6 +213,10 @@ class CORE_EXPORT DisplayLockContext final
   // Request that this context be unlocked. Called when style determines that
   // the subtree rooted at this element should be rendered.
   void RequestUnlock();
+
+  // Called in |DisplayLockUtilities| to notify the state of scope.
+  void NotifyForcedUpdateScopeStarted();
+  void NotifyForcedUpdateScopeEnded();
 
   // Records the locked context counts on the document as well as context that
   // block all activation.
@@ -260,10 +248,6 @@ class CORE_EXPORT DisplayLockContext final
   bool IsElementDirtyForStyleRecalc() const;
   bool IsElementDirtyForLayout() const;
   bool IsElementDirtyForPrePaint() const;
-
-  // When ScopedForcedUpdate is destroyed, it calls this function. See
-  // GetScopedForcedUpdate() for more information.
-  void NotifyForcedUpdateScopeEnded();
 
   // Helper to schedule an animation to delay lifecycle updates for the next
   // frame.
@@ -317,7 +301,7 @@ class CORE_EXPORT DisplayLockContext final
 
   WeakMember<Element> element_;
   WeakMember<Document> document_;
-  ESubtreeVisibility state_ = ESubtreeVisibility::kVisible;
+  EContentVisibility state_ = EContentVisibility::kVisible;
 
   // See StyleEngine's |whitespace_reattach_set_|.
   // Set of elements that had at least one rendered children removed
@@ -328,7 +312,8 @@ class CORE_EXPORT DisplayLockContext final
   // style recalc on them.
   HeapHashSet<Member<Element>> whitespace_reattach_set_;
 
-  bool update_forced_ = false;
+  // If non-zero, then the update has been forced.
+  int update_forced_ = 0;
 
   StyleType blocked_style_traversal_type_ = kStyleUpdateNotRequired;
   // Signifies whether we've blocked a layout tree reattachment on |element_|'s
@@ -340,6 +325,7 @@ class CORE_EXPORT DisplayLockContext final
   bool needs_prepaint_subtree_walk_ = false;
   bool needs_graphics_layer_collection_ = false;
   bool needs_compositing_requirements_update_ = false;
+  bool needs_compositing_dependent_flag_update_ = false;
 
   // Will be true if child traversal was blocked on a previous layout run on the
   // locked element. We need to keep track of this to ensure that on the next
@@ -378,10 +364,6 @@ class CORE_EXPORT DisplayLockContext final
 
   bool render_affecting_state_[static_cast<int>(
       RenderAffectingState::kNumRenderAffectingStates)] = {false};
-
-  // TODO(vmpstr): This is only needed while we're still sending activation
-  // events.
-  base::WeakPtrFactory<DisplayLockContext> weak_factory_{this};
 };
 
 }  // namespace blink

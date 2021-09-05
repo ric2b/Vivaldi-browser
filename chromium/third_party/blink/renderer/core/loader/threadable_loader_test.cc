@@ -16,6 +16,7 @@
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/platform/web_url_response.h"
 #include "third_party/blink/public/platform/web_worker_fetch_context.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/loader/threadable_loader.h"
 #include "third_party/blink/renderer/core/loader/threadable_loader_client.h"
 #include "third_party/blink/renderer/core/loader/worker_fetch_context.h"
@@ -166,10 +167,13 @@ class ThreadableLoaderTestHelper final {
   void CreateLoader(ThreadableLoaderClient* client) {
     ResourceLoaderOptions resource_loader_options;
     loader_ = MakeGarbageCollected<ThreadableLoader>(
-        *GetDocument().ToExecutionContext(), client, resource_loader_options);
+        *dummy_page_holder_->GetFrame().DomWindow(), client,
+        resource_loader_options);
   }
 
-  void StartLoader(const ResourceRequest& request) { loader_->Start(request); }
+  void StartLoader(ResourceRequest request) {
+    loader_->Start(std::move(request));
+  }
 
   void CancelLoader() { loader_->Cancel(); }
   void CancelAndClearLoader() {
@@ -193,8 +197,6 @@ class ThreadableLoaderTestHelper final {
   }
 
  private:
-  Document& GetDocument() { return dummy_page_holder_->GetDocument(); }
-
   std::unique_ptr<DummyPageHolder> dummy_page_holder_;
   Checkpoint checkpoint_;
   Persistent<ThreadableLoader> loader_;
@@ -212,7 +214,7 @@ class ThreadableLoaderTest : public testing::Test {
     request.SetRequestContext(mojom::RequestContextType::OBJECT);
     request.SetMode(request_mode);
     request.SetCredentialsMode(network::mojom::CredentialsMode::kOmit);
-    helper_->StartLoader(request);
+    helper_->StartLoader(std::move(request));
   }
 
   void CancelLoader() { helper_->CancelLoader(); }

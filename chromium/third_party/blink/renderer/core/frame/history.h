@@ -45,7 +45,7 @@ class ScriptState;
 
 // This class corresponds to the History interface.
 class CORE_EXPORT History final : public ScriptWrappable,
-                                  public DOMWindowClient {
+                                  public ExecutionContextClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(History);
 
@@ -53,7 +53,7 @@ class CORE_EXPORT History final : public ScriptWrappable,
   explicit History(LocalFrame*);
 
   unsigned length(ExceptionState&) const;
-  ScriptValue state(v8::Isolate*, ExceptionState&);
+  ScriptValue state(ScriptState*, ExceptionState&);
 
   void back(ScriptState*, ExceptionState&);
   void forward(ScriptState*, ExceptionState&);
@@ -74,7 +74,6 @@ class CORE_EXPORT History final : public ScriptWrappable,
   void setScrollRestoration(const String& value, ExceptionState&);
   String scrollRestoration(ExceptionState&);
 
-  bool stateChanged() const;
   bool IsSameAsCurrentState(SerializedScriptValue*) const;
 
   void Trace(Visitor*) override;

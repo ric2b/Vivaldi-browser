@@ -596,6 +596,22 @@ base::CancelableTaskTracker::TaskId CalendarService::GetAllAccounts(
       base::Bind(callback, accounts));
 }
 
+base::CancelableTaskTracker::TaskId CalendarService::GetAllEventTemplates(
+    const QueryCalendarCallback& callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  std::shared_ptr<EventQueryResults> query_results =
+      std::shared_ptr<EventQueryResults>(new EventQueryResults());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&CalendarBackend::GetAllEventTemplates, calendar_backend_,
+                 query_results),
+      base::Bind(callback, query_results));
+}
+
 void CalendarService::ScheduleTask(base::OnceClosure task) {
   DCHECK(thread_checker_.CalledOnValidThread());
   CHECK(backend_task_runner_);

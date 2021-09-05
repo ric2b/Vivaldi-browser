@@ -12,6 +12,8 @@ extern NSString* const kConfirmationAlertMoreInfoAccessibilityIdentifier;
 extern NSString* const kConfirmationAlertTitleAccessibilityIdentifier;
 extern NSString* const kConfirmationAlertSubtitleAccessibilityIdentifier;
 extern NSString* const kConfirmationAlertPrimaryActionAccessibilityIdentifier;
+extern NSString* const
+    kConfirmationAlertBarPrimaryActionAccessibilityIdentifier;
 
 @protocol ConfirmationAlertActionHandler;
 
@@ -23,6 +25,9 @@ extern NSString* const kConfirmationAlertPrimaryActionAccessibilityIdentifier;
 // The headline below the image. Must be set before the view is loaded.
 @property(nonatomic, strong) NSString* titleString;
 
+// Text style for the title. If nil, will default to UIFontTextStyleTitle1.
+@property(nonatomic, strong) NSString* titleTextStyle;
+
 // The subtitle below the title. Must be set before the view is loaded.
 @property(nonatomic, strong) NSString* subtitleString;
 
@@ -33,8 +38,27 @@ extern NSString* const kConfirmationAlertPrimaryActionAccessibilityIdentifier;
 // The text for the primary action. Must be set before the view is loaded.
 @property(nonatomic, strong) NSString* primaryActionString;
 
-// The image name. Must be set before the view is loaded.
-@property(nonatomic, strong) NSString* imageName;
+// The image. Must be set before the view is loaded.
+@property(nonatomic, strong) UIImage* image;
+
+// Sets the custom spacing between the image and the title / subtitle. Must be
+// set before the view is loaded.
+@property(nonatomic, assign) CGFloat customSpacingAfterImage;
+
+// The accessibility label for the image view. If nil, the image won't be
+// accessible.
+@property(nonatomic, strong) NSString* imageAccessibilityLabel;
+
+// Value to determine whether or not the image's size should be scaled.
+@property(nonatomic) BOOL imageHasFixedSize;
+
+// Controls if, when we run out of view space, we should hide the action button
+// instead of the image.
+@property(nonatomic) BOOL alwaysShowImage;
+
+// The style of the primary action button added to the toolbar. Must be set if
+// both alwaysShowImage and primaryActionAvailable are set to YES.
+@property(nonatomic) UIBarButtonSystemItem primaryActionBarButtonStyle;
 
 // Controls if there is a help button in the view. Must be set before the
 // view is loaded.
@@ -45,6 +69,17 @@ extern NSString* const kConfirmationAlertPrimaryActionAccessibilityIdentifier;
 
 // The action handler for interactions in this View Controller.
 @property(nonatomic, weak) id<ConfirmationAlertActionHandler> actionHandler;
+
+// Returns an image generated from the content of this view controller.
+@property(nonatomic, readonly) UIImage* content;
+
+// The button for the primary action. Nil if not available.
+@property(nonatomic, readonly) UIButton* primaryActionButton;
+
+// Enables pointer support.
+#if defined(__IPHONE_13_4)
+@property(nonatomic) BOOL pointerInteractionEnabled API_AVAILABLE(ios(13.4));
+#endif  // defined(__IPHONE_13_4)
 
 @end
 

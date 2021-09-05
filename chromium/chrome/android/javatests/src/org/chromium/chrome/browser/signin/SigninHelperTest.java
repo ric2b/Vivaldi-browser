@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.signin;
 import android.accounts.Account;
 import android.support.test.filters.SmallTest;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -17,9 +16,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.signin.MockChangeEventChecker;
-import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountUtils;
-import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.signin.test.util.AccountHolder;
 import org.chromium.components.signin.test.util.AccountManagerTestRule;
 
@@ -38,39 +35,31 @@ public class SigninHelperTest {
         mEventChecker = new MockChangeEventChecker();
     }
 
-    @After
-    public void tearDown() {
-        AccountManagerFacadeProvider.resetAccountManagerFacadeForTests();
-    }
-
     @Test
     @SmallTest
     @RetryOnFailure
     public void testSimpleAccountRename() {
-        setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("A", "B");
-        SigninHelper.updateAccountRenameData(mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker, "A");
         Assert.assertEquals("B", getNewSignedInAccountName());
     }
 
     @Test
     @SmallTest
     public void testNotSignedInAccountRename() {
-        setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("B", "C");
-        SigninHelper.updateAccountRenameData(mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker, "A");
         Assert.assertNull(getNewSignedInAccountName());
     }
 
     @Test
     @SmallTest
     public void testSimpleAccountRenameTwice() {
-        setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("A", "B");
-        SigninHelper.updateAccountRenameData(mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker, "A");
         Assert.assertEquals("B", getNewSignedInAccountName());
         mEventChecker.insertRenameEvent("B", "C");
-        SigninHelper.updateAccountRenameData(mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker, "B");
         Assert.assertEquals("C", getNewSignedInAccountName());
     }
 
@@ -78,10 +67,9 @@ public class SigninHelperTest {
     @SmallTest
     @RetryOnFailure
     public void testNotSignedInAccountRename2() {
-        setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("B", "C");
         mEventChecker.insertRenameEvent("C", "D");
-        SigninHelper.updateAccountRenameData(mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker, "A");
         Assert.assertNull(getNewSignedInAccountName());
     }
 
@@ -89,13 +77,12 @@ public class SigninHelperTest {
     @SmallTest
     @RetryOnFailure
     public void testChainedAccountRename2() {
-        setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("Z", "Y"); // Unrelated.
         mEventChecker.insertRenameEvent("A", "B");
         mEventChecker.insertRenameEvent("Y", "X"); // Unrelated.
         mEventChecker.insertRenameEvent("B", "C");
         mEventChecker.insertRenameEvent("C", "D");
-        SigninHelper.updateAccountRenameData(mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker, "A");
         Assert.assertEquals("D", getNewSignedInAccountName());
     }
 
@@ -103,7 +90,6 @@ public class SigninHelperTest {
     @SmallTest
     @RetryOnFailure
     public void testLoopedAccountRename() {
-        setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("Z", "Y"); // Unrelated.
         mEventChecker.insertRenameEvent("A", "B");
         mEventChecker.insertRenameEvent("Y", "X"); // Unrelated.
@@ -113,12 +99,8 @@ public class SigninHelperTest {
         Account account = AccountUtils.createAccountFromName("D");
         AccountHolder accountHolder = AccountHolder.builder(account).build();
         mAccountManagerTestRule.addAccount(accountHolder);
-        SigninHelper.updateAccountRenameData(mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker, "A");
         Assert.assertEquals("D", getNewSignedInAccountName());
-    }
-
-    private void setSignedInAccountName(String account) {
-        ChromeSigninController.get().setSignedInAccountName(account);
     }
 
     private String getNewSignedInAccountName() {

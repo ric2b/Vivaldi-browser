@@ -34,48 +34,40 @@ const char kDesktopImageType[] = "desktop-image";
 #endif
 const char kCSSModsType[] = "css-mods";
 const char kCSSModsData[] = "css";
-const char kDefaultFallbackImageBase64[] = "R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
+const char kCSSModsExtenssion[] = ".css";
 
 }
 
 VivaldiDataSource::VivaldiDataSource(Profile* profile) {
   profile = profile->GetOriginalProfile();
 
-  // Initialize data_class_handlers_ early as it is accessed from UI and IO
-  // threads in StartDataRequest.
+  std::vector<std::pair<std::string, std::unique_ptr<VivaldiDataClassHandler>>>
+      handlers;
 #if defined(OS_WIN)
-  data_class_handlers_.emplace(
+  handlers.emplace_back(
       kDesktopImageType,
       std::make_unique<DesktopWallpaperDataClassHandlerWin>());
 #endif  // defined(OS_WIN)
-  data_class_handlers_.emplace(
+  handlers.emplace_back(
       VIVALDI_DATA_URL_PATH_MAPPING_DIR,
       std::make_unique<LocalImageDataClassHandler>(
           profile, extensions::VivaldiDataSourcesAPI::PATH_MAPPING_URL));
-  data_class_handlers_.emplace(
-      VIVALDI_DATA_URL_THUMBNAIL_DIR,
+  handlers.emplace_back(
+      vivaldi::kVivaldiDataUrlThumbnailDir,
       std::make_unique<LocalImageDataClassHandler>(
           profile, extensions::VivaldiDataSourcesAPI::THUMBNAIL_URL));
-  data_class_handlers_.emplace(
+  handlers.emplace_back(
       VIVALDI_DATA_URL_NOTES_ATTACHMENT,
       std::make_unique<NotesAttachmentDataClassHandler>(profile));
-  data_class_handlers_.emplace(
+  handlers.emplace_back(
       kCSSModsType, std::make_unique<CSSModsDataClassHandler>(profile));
 
-  std::string data;
-  base::Base64Decode(kDefaultFallbackImageBase64, &data);
-  fallback_image_data_ =
-    new base::RefCountedBytes(
-      reinterpret_cast<const unsigned char *>
-        (data.c_str()), (size_t)data.length());
+  data_class_handlers_ =
+      base::flat_map<std::string, std::unique_ptr<VivaldiDataClassHandler>>(
+          std::move(handlers));
 }
 
 VivaldiDataSource::~VivaldiDataSource() {
-  // URLDatamanager in Chromium ensures that all URLDataSource instances
-  // are deleted on the UI thread after all StartDataRequest completed. So we
-  // cannot race here against any StartDataRequest calls and it is
-  // safe to destruct any data the instance owns including all
-  // VivaldiDataClassHandler implementations.
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 }
 
@@ -84,87 +76,67 @@ std::string VivaldiDataSource::GetSource() {
 }
 
 bool VivaldiDataSource::IsCSSRequest(const std::string& path) const {
-  std::string type;
-  std::string data;
+  base::StringPiece type;
+  base::StringPiece data;
 
   ExtractRequestTypeAndData(path, type, data);
 
-  size_t css_offset = data.find(".css");
-  if (type == kCSSModsType &&
-      (data == kCSSModsData || css_offset == data.length() - 4)) {
-    return true;
-  }
-  return false;
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
-VivaldiDataSource::TaskRunnerForRequestPath(const std::string& path) {
-  if (IsCSSRequest(path)) {
-    // Use UI thread to load CSS since its construction touches non-thread-safe
-    // gfx::Font names in ui::ResourceBundle.
-    return base::CreateSingleThreadTaskRunner(
-        {content::BrowserThread::UI});
-  }
-  // nullptr means the IO thread.
-  return nullptr;
+  return type == kCSSModsType &&
+      (data == kCSSModsData || data.ends_with(kCSSModsExtenssion));
 }
 
 void VivaldiDataSource::StartDataRequest(
     const GURL& path,
     const content::WebContents::Getter& wc_getter,
     content::URLDataSource::GotDataCallback callback) {
-  std::string type;
-  std::string data;
+  base::StringPiece type;
+  base::StringPiece data;
 
-  ExtractRequestTypeAndData(path.path(), type, data);
+  ExtractRequestTypeAndData(path.path_piece(), type, data);
 
-  bool success = false;
   auto it = data_class_handlers_.find(type);
   if (it != data_class_handlers_.end()) {
-    success = it->second->GetData(data, std::move(callback));
-    if (!success) {
-      NOTIMPLEMENTED();
-      // TODO: Callback is invalid here, implement handlers to never
-      // return false.
-      // std::move(callback).Run(fallback_image_data_);
-    }
-  } else {
-    NOTIMPLEMENTED();
+    it->second->GetData(data.as_string(), std::move(callback));
+    return;
   }
+  std::move(callback).Run(nullptr);
 }
 
 // In a url such as chrome://vivaldi-data/desktop-image/0 type is
 // "desktop-image" and data is "0".
-void VivaldiDataSource::ExtractRequestTypeAndData(const std::string& path,
-                                                  std::string& type,
-                                                  std::string& data) const {
-  std::string new_path = path;
-  if (new_path[0] == '/') {
-    new_path = new_path.erase(0, 1);
+void VivaldiDataSource::ExtractRequestTypeAndData(
+    base::StringPiece path,
+    base::StringPiece& type,
+    base::StringPiece& data) const {
+  if (!path.empty() && path[0] == '/') {
+    path = path.substr(1);
   }
-  size_t pos = new_path.find("bookmark_thumbnail");
+  size_t pos = path.find("bookmark_thumbnail");
   if (pos != std::string::npos) {
     // This is a shortcut path to handle old-style
     // bookmark thumbnail links.
-    pos = new_path.find('/', pos);
-    data = new_path.substr(pos + 1);
-    type = VIVALDI_DATA_URL_THUMBNAIL_DIR;
-
-    // Strip all after ? for links such as
-    // chrome://thumb/http://bookmark_thumbnail/610?1535393294240
-    pos = data.find('?');
+    pos = path.find('/', pos);
     if (pos != std::string::npos) {
-      data = data.substr(0, pos);
+      data = path.substr(pos + 1);
+      type = vivaldi::kVivaldiDataUrlThumbnailDir;
+
+      // Strip all after ? for links such as
+      // chrome://thumb/http://bookmark_thumbnail/610?1535393294240
+      pos = data.find('?');
+      if (pos != std::string::npos) {
+        data = data.substr(0, pos);
+      }
+      return;
     }
-    return;
   }
   // Default path for new links.
-  pos = new_path.find('/');
+  pos = path.find('/');
   if (pos != std::string::npos) {
-    type = new_path.substr(0, pos);
-    data = new_path.substr(pos+1);
+    type = path.substr(0, pos);
+    data = path.substr(pos+1);
   } else {
-    type = new_path;
+    type = path;
+    data = base::StringPiece();
   }
   // Strip all after ?
   pos = data.find('?');
@@ -186,13 +158,6 @@ bool VivaldiDataSource::AllowCaching() {
   return false;
 }
 
-bool VivaldiDataSource::ShouldServiceRequest(
-    const GURL& url,
-    content::ResourceContext* resource_context,
-    int render_process_id) {
-  return URLDataSource::ShouldServiceRequest(url, resource_context,
-                                             render_process_id);
-}
 /*
  * Code to handle the chrome://thumb/ protocol.
  */

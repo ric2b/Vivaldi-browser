@@ -270,9 +270,6 @@ void AppServiceAppWindowLauncherController::OnWindowDestroying(
 
   RemoveAppWindowFromShelf(app_window_it->second.get());
 
-  if (!app_id.empty() && crostini_tracker_)
-    crostini_tracker_->OnWindowDestroying(GetAppId(app_id), window);
-
   aura_window_to_app_window_.erase(app_window_it);
 }
 

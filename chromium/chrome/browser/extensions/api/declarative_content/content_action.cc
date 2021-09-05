@@ -13,7 +13,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
-#include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_ui_util.h"
@@ -23,6 +22,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/declarative_user_script_manager.h"
+#include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/api/declarative/declarative_constants.h"
 #include "extensions/common/extension.h"
@@ -69,7 +69,7 @@ class ShowExtensionAction : public ContentAction {
     // TODO(devlin): We should probably throw an error if the extension has no
     // action specified in the manifest. Currently, this is allowed since
     // extensions will have a synthesized page action.
-    if (!ActionInfo::GetAnyActionInfo(extension)) {
+    if (!ActionInfo::GetExtensionActionInfo(extension)) {
       *error = kNoAction;
       return nullptr;
     }
@@ -388,7 +388,7 @@ std::unique_ptr<ContentAction> SetIcon::Create(
     const base::DictionaryValue* dict,
     std::string* error) {
   // We can't set a page or action's icon if the extension doesn't have one.
-  if (!ActionInfo::GetAnyActionInfo(extension)) {
+  if (!ActionInfo::GetExtensionActionInfo(extension)) {
     *error = kNoPageOrBrowserAction;
     return nullptr;
   }

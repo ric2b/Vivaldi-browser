@@ -30,7 +30,6 @@
 #import "ios/chrome/app/spotlight/spotlight_manager.h"
 #include "ios/chrome/app/startup/chrome_main_starter.h"
 #include "ios/chrome/app/startup/client_registration.h"
-#import "ios/chrome/app/startup/content_suggestions_scheduler_notifications.h"
 #include "ios/chrome/app/startup/ios_chrome_main.h"
 #include "ios/chrome/app/startup/provider_registration.h"
 #include "ios/chrome/app/startup/register_experimental_settings.h"
@@ -48,6 +47,7 @@
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_keyed_service_factory.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/features.h"
 #include "ios/chrome/browser/crash_report/breakpad_helper.h"
+#include "ios/chrome/browser/crash_report/crash_keys_helper.h"
 #include "ios/chrome/browser/crash_report/crash_loop_detection_util.h"
 #include "ios/chrome/browser/crash_report/crash_report_helper.h"
 #include "ios/chrome/browser/download/download_directory_util.h"
@@ -61,6 +61,7 @@
 #include "ios/chrome/browser/metrics/first_user_action_recorder.h"
 #import "ios/chrome/browser/metrics/previous_session_info.h"
 #import "ios/chrome/browser/net/cookie_util.h"
+#import "ios/chrome/browser/ntp_snippets/content_suggestions_scheduler_notifications.h"
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
 #import "ios/chrome/browser/omaha/omaha_service.h"
 #include "ios/chrome/browser/pref_names.h"
@@ -74,7 +75,6 @@
 #import "ios/chrome/browser/snapshots/snapshot_cache.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache_factory.h"
 #include "ios/chrome/browser/system_flags.h"
-#import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/appearance/appearance_customization.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
@@ -264,8 +264,8 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 // Returns whether the restore infobar should be displayed.
 - (bool)mustShowRestoreInfobar;
-// Returns the set of the sessions ids of the tabs in the given |tabModel|.
-- (NSMutableSet*)liveSessionsForTabModel:(TabModel*)tabModel;
+// Returns the set of the sessions ids of the tabs in the given |webStateList|.
+- (NSMutableSet*)liveSessionsForWebStateList:(WebStateList*)webStateList;
 // Purge the unused snapshots.
 - (void)purgeSnapshots;
 // Sets a LocalState pref marking the TOS EULA as accepted.
@@ -386,7 +386,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   [ProviderRegistration registerProviders];
 
   if (@available(iOS 13, *)) {
-    if (IsMultiwindowSupported()) {
+    if (IsSceneStartupSupported()) {
       // Subscribe for scene connection and disconnection notifications.
       [[NSNotificationCenter defaultCenter]
           addObserver:self
@@ -468,9 +468,9 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   ChromeBrowserState* chromeBrowserState =
       _browserStateManager->GetLastUsedBrowserState();
 
-  // The CrashRestoreHelper must clean up the old browser state information
-  // before the tabModels can be created.  |self.restoreHelper| must be kept
-  // alive until the BVC receives the browser state and tab model.
+  // The CrashRestoreHelper must clean up the old browser state information.
+  // |self.restoreHelper| must be kept alive until the BVC receives the
+  // browser state.
   BOOL needRestoration = NO;
   if (isPostCrashLaunch) {
     needRestoration = [CrashRestoreHelper
@@ -557,7 +557,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
                 postCrashLaunch];
 
   if (@available(iOS 13, *)) {
-    if (IsMultiwindowSupported()) {
+    if (IsSceneStartupSupported()) {
       // The rest of the startup sequence is handled by the Scenes and in
       // response to notifications.
       return;
@@ -615,6 +615,13 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 // Called when the first scene becomes active.
 - (void)appState:(AppState*)appState
     firstSceneActivated:(SceneState*)sceneState {
+  if (appState.isInSafeMode) {
+    return;
+  }
+  [self startUpAfterFirstWindowCreated];
+}
+
+- (void)appStateDidExitSafeMode:(AppState*)appState {
   [self startUpAfterFirstWindowCreated];
 }
 
@@ -622,7 +629,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 // Handler for UISceneWillConnectNotification.
 - (void)sceneWillConnect:(NSNotification*)notification {
-  DCHECK(IsMultiwindowSupported());
+  DCHECK(IsSceneStartupSupported());
   if (@available(iOS 13, *)) {
     UIWindowScene* scene =
         base::mac::ObjCCastStrict<UIWindowScene>(notification.object);
@@ -723,7 +730,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 }
 
 - (void)orientationDidChange:(NSNotification*)notification {
-  breakpad_helper::SetCurrentOrientation(
+  crash_keys::SetCurrentOrientation(
       [[UIApplication sharedApplication] statusBarOrientation],
       [[UIDevice currentDevice] orientation]);
 }
@@ -862,7 +869,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   if (cookie_util::ShouldClearSessionCookies()) {
     cookie_util::ClearSessionCookies(
         self.mainBrowserState->GetOriginalChromeBrowserState());
-    if (![self.otrTabModel isEmpty]) {
+    if (!(self.otrBrowser->GetWebStateList()->empty())) {
       cookie_util::ClearSessionCookies(
           self.mainBrowserState->GetOffTheRecordChromeBrowserState());
     }
@@ -1048,7 +1055,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   // If there are no incognito tabs, then ensure the app starts in normal mode,
   // since the UI isn't supposed to ever put the user in incognito mode without
   // any incognito tabs.
-  return ![self.otrTabModel isEmpty];
+  return !(self.otrBrowser->GetWebStateList()->empty());
 }
 
 - (void)prepareForFirstRunUI {
@@ -1094,16 +1101,6 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   return self.interfaceProvider.mainInterface.browser;
 }
 
-- (TabModel*)mainTabModel {
-  DCHECK(self.interfaceProvider);
-  return self.interfaceProvider.mainInterface.tabModel;
-}
-
-- (TabModel*)otrTabModel {
-  DCHECK(self.interfaceProvider);
-  return self.interfaceProvider.incognitoInterface.tabModel;
-}
-
 - (Browser*)otrBrowser {
   DCHECK(self.interfaceProvider);
   return self.interfaceProvider.incognitoInterface.browser;
@@ -1126,8 +1123,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   return !GetApplicationContext()->WasLastShutdownClean();
 }
 
-- (NSMutableSet*)liveSessionsForTabModel:(TabModel*)tabModel {
-  WebStateList* webStateList = tabModel.webStateList;
+- (NSMutableSet*)liveSessionsForWebStateList:(WebStateList*)webStateList {
   NSMutableSet* result = [NSMutableSet setWithCapacity:webStateList->count()];
   for (int index = 0; index < webStateList->count(); ++index) {
     web::WebState* webState = webStateList->GetWebStateAt(index);
@@ -1136,10 +1132,12 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   return result;
 }
 
-
 - (void)purgeSnapshots {
-  NSMutableSet* liveSessions = [self liveSessionsForTabModel:self.mainTabModel];
-  [liveSessions unionSet:[self liveSessionsForTabModel:self.otrTabModel]];
+  NSMutableSet* liveSessions =
+      [self liveSessionsForWebStateList:self.mainBrowser->GetWebStateList()];
+  [liveSessions
+      unionSet:[self liveSessionsForWebStateList:self.otrBrowser
+                                                     ->GetWebStateList()]];
 
   // Keep snapshots that are less than one minute old, to prevent a concurrency
   // issue if they are created while the purge is running.
@@ -1244,34 +1242,11 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 @implementation MainController (TestingOnly)
 
-- (BOOL)tabSwitcherActive {
-  return self.sceneController.isTabSwitcherActive;
-}
-
-- (void)dismissModalDialogsWithCompletion:(ProceduralBlock)completion
-                           dismissOmnibox:(BOOL)dismissOmnibox {
-  [self.sceneController dismissModalDialogsWithCompletion:completion
-                                           dismissOmnibox:dismissOmnibox];
-}
-
-- (void)setTabSwitcher:(id<TabSwitcher>)switcher {
-  [self.sceneController setTabSwitcher:switcher];
-}
-
-- (id<TabSwitcher>)tabSwitcher {
-  return self.sceneController.tabSwitcher;
-}
-
 - (void)setStartupParametersWithURL:(const GURL&)launchURL {
   NSString* sourceApplication = @"Fake App";
   self.startupParameters = [ChromeAppStartupParameters
       newChromeAppStartupParametersWithURL:net::NSURLWithGURL(launchURL)
                      fromSourceApplication:sourceApplication];
-}
-
-// Defined in FirstRunAppInterface for EGTests.
-- (void)showFirstRunUI {
-  [self.sceneController showFirstRunUI];
 }
 
 @end

@@ -29,14 +29,11 @@ class SESSIONS_EXPORT RestoreIOSLiveTab : public IOSLiveTab {
   sessions::SerializedNavigationEntry GetEntryAtIndex(int index) override;
   sessions::SerializedNavigationEntry GetPendingEntry() override;
   int GetEntryCount() override;
-  const std::string& GetUserAgentOverride() override;
+  sessions::SerializedUserAgentOverride GetUserAgentOverride() override;
   const web::WebState* GetWebState() const override;
 
  private:
   CRWSessionStorage* session_;
-
-  // Needed to return an empty string in GetUserAgentOverride().
-  const std::string user_agent_override_;
 };
 
 }  // namespace sessions

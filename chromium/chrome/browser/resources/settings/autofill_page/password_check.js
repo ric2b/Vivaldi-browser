@@ -2,17 +2,55 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-(function() {
+import 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import '../settings_shared_css.m.js';
+import 'chrome://resources/cr_elements/icons.m.js';
+import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
+import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
+import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
+import 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
+import '../route.js';
+import '../prefs/prefs.m.js';
+import './password_check_edit_dialog.js';
+import './password_check_edit_disclaimer_dialog.js';
+import './password_check_list_item.js';
+import './password_remove_confirmation_dialog.js';
+
+import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
+import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
+import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {loadTimeData} from '../i18n_setup.js';
+import {SyncBrowserProxyImpl, SyncPrefs, SyncStatus} from '../people_page/sync_browser_proxy.m.js';
+import {PluralStringProxyImpl} from '../plural_string_proxy.js';
+import {PrefsBehavior} from '../prefs/prefs_behavior.m.js';
+import {Route, Router, RouteObserverBehavior} from '../router.m.js';
+import {routes} from '../route.js';
+
+import {PasswordCheckBehavior} from './password_check_behavior.js';
+import {PasswordManagerImpl, PasswordManagerProxy} from './password_manager_proxy.js';
+// <if expr="chromeos">
+import '../controls/password_prompt_dialog.m.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
+import {BlockingRequestManager} from './blocking_request_manager.js';
+// </if>
 
 const CheckState = chrome.passwordsPrivate.PasswordCheckState;
 
 Polymer({
   is: 'settings-password-check',
 
+  _template: html`{__html_template__}`,
+
   behaviors: [
     I18nBehavior,
     PasswordCheckBehavior,
     PrefsBehavior,
+    RouteObserverBehavior,
     WebUIListenerBehavior,
   ],
 
@@ -45,10 +83,10 @@ Polymer({
       computed: 'computeIsButtonHidden_(status, isSignedOut_)',
     },
 
-    /** @private {settings.SyncPrefs} */
+    /** @private {SyncPrefs} */
     syncPrefs_: Object,
 
-    /** @private {settings.SyncStatus} */
+    /** @private {SyncStatus} */
     syncStatus_: Object,
 
     /** @private */
@@ -56,6 +94,9 @@ Polymer({
 
     /** @private */
     showPasswordRemoveDialog_: Boolean,
+
+    /** @private */
+    showPasswordEditDisclaimer_: Boolean,
 
     /**
      * The password that the user is interacting with now.
@@ -76,11 +117,21 @@ Polymer({
       computed: 'computeShowHideMenuTitle(activePassword_)',
     },
 
+    /**
+     * The ids of compromised credentials for which user clicked "Change
+     * Password" button
+     * @private
+     */
+    clickedChangePasswordIds_: {
+      type: Object,
+      value: new Set(),
+    },
+
     // <if expr="chromeos">
     /** @private */
     showPasswordPromptDialog_: Boolean,
 
-    /** @private {settings.BlockingRequestManager} */
+    /** @private {BlockingRequestManager} */
     tokenRequestManager_: Object,
     // </if>
   },
@@ -101,6 +152,17 @@ Polymer({
    */
   activeListItem_: null,
 
+  /** @private {boolean} */
+  startCheckAutomaticallySucceeded: false,
+
+  /**
+   * Observer for saved passwords to update startCheckAutomaticallySucceeded
+   * once they are changed. It's needed to run password check on navigation
+   * again once passwords changed.
+   * @private {?function(!Array<PasswordManagerProxy.PasswordUiEntry>):void}
+   */
+  setSavedPasswordsListener_: null,
+
   /** @override */
   attached() {
     // <if expr="chromeos">
@@ -110,14 +172,21 @@ Polymer({
     // resolve requests.
     this.tokenRequestManager_ =
         loadTimeData.getBoolean('userCannotManuallyEnterPassword') ?
-        new settings.BlockingRequestManager() :
-        new settings.BlockingRequestManager(
-            this.openPasswordPromptDialog_.bind(this));
+        new BlockingRequestManager() :
+        new BlockingRequestManager(this.openPasswordPromptDialog_.bind(this));
 
     // </if>
     this.activeDialogAnchorStack_ = [];
+
+    const setSavedPasswordsListener = list => {
+      this.startCheckAutomaticallySucceeded = false;
+    };
+    this.setSavedPasswordsListener_ = setSavedPasswordsListener;
+    this.passwordManager.addSavedPasswordListChangedListener(
+        setSavedPasswordsListener);
+
     // Set the manager. These can be overridden by tests.
-    const syncBrowserProxy = settings.SyncBrowserProxyImpl.getInstance();
+    const syncBrowserProxy = SyncBrowserProxyImpl.getInstance();
 
     const syncStatusChanged = syncStatus => this.syncStatus_ = syncStatus;
     const syncPrefsChanged = syncPrefs => this.syncPrefs_ = syncPrefs;
@@ -135,15 +204,39 @@ Polymer({
     syncBrowserProxy.getStoredAccounts().then(storedAccountsChanged);
     this.addWebUIListener('stored-accounts-updated', storedAccountsChanged);
     // </if>
+  },
 
-    // Start the check if instructed to do so.
-    const router = settings.Router.getInstance();
-    if (router.getQueryParameters().get('start') == 'true') {
+  /** @override */
+  detached() {
+    this.passwordManager.removeSavedPasswordListChangedListener(
+        assert(this.setSavedPasswordsListener_));
+  },
+
+  /**
+   * Tries to start bulk password check on page open if instructed to do so and
+   * didn't start successfully before
+   * @private
+   */
+  currentRouteChanged(currentRoute) {
+    const router = Router.getInstance();
+
+    if (currentRoute.path == routes.CHECK_PASSWORDS.path &&
+        !this.startCheckAutomaticallySucceeded &&
+        router.getQueryParameters().get('start') == 'true') {
       this.passwordManager.recordPasswordCheckInteraction(
           PasswordManagerProxy.PasswordCheckInteraction
               .START_CHECK_AUTOMATICALLY);
-      this.passwordManager.startBulkPasswordCheck();
+      this.passwordManager.startBulkPasswordCheck().then(
+          () => {
+            this.startCheckAutomaticallySucceeded = true;
+          },
+          error => {
+            // Catching error
+          });
     }
+    // Requesting status on navigation to update elapsedTimeSinceLastCheck
+    this.passwordManager.getPasswordCheckStatus().then(
+        status => this.status = status);
   },
 
   /**
@@ -204,7 +297,7 @@ Polymer({
   },
 
   /** @private */
-  onMenuEditPasswordClick_() {
+  onEditPasswordClick_() {
     this.passwordManager
         .getPlaintextCompromisedPassword(
             assert(this.activePassword_),
@@ -218,7 +311,7 @@ Polymer({
               // <if expr="chromeos">
               // If no password was found, refresh auth token and retry.
               this.tokenRequestManager_.request(
-                  this.onMenuEditPasswordClick_.bind(this));
+                  this.onEditPasswordClick_.bind(this));
               // </if>
               // <if expr="not chromeos">
               this.activePassword_ = null;
@@ -237,13 +330,33 @@ Polymer({
   /** @private */
   onPasswordRemoveDialogClosed_() {
     this.showPasswordRemoveDialog_ = false;
-    cr.ui.focusWithoutInk(assert(this.activeDialogAnchorStack_.pop()));
+    focusWithoutInk(assert(this.activeDialogAnchorStack_.pop()));
   },
 
   /** @private */
   onPasswordEditDialogClosed_() {
     this.showPasswordEditDialog_ = false;
-    cr.ui.focusWithoutInk(assert(this.activeDialogAnchorStack_.pop()));
+    focusWithoutInk(assert(this.activeDialogAnchorStack_.pop()));
+  },
+
+  /**
+   * @param {!CustomEvent<!HTMLElement>} event
+   * @private
+   */
+  onAlreadyChangedClick_(event) {
+    const target = event.detail;
+    // Setting required properties for Password Check Edit dialog
+    this.activeDialogAnchorStack_.push(target);
+    this.activeListItem_ = event.target;
+    this.activePassword_ = event.target.item;
+
+    this.showPasswordEditDisclaimer_ = true;
+  },
+
+  /** @private */
+  onEditDisclaimerClosed_() {
+    this.showPasswordEditDisclaimer_ = false;
+    focusWithoutInk(assert(this.activeDialogAnchorStack_.pop()));
   },
 
   /**
@@ -536,6 +649,24 @@ Polymer({
     return !this.hasLeakedCredentials_() && this.showsTimestamp_();
   },
 
+  /**
+   * @param {!CustomEvent<{id: number}>} event
+   * @private
+   */
+  onChangePasswordClick_(event) {
+    this.clickedChangePasswordIds_.add(event.detail.id);
+    this.notifyPath('clickedChangePasswordIds_.size');
+  },
+
+  /**
+   * @param {!PasswordManagerProxy.CompromisedCredential} item
+   * @return {boolean}
+   * @private
+   */
+  clickedChangePassword_(item) {
+    return this.clickedChangePasswordIds_.has(item.id);
+  },
+
   // <if expr="chromeos">
   /**
    * Copied from passwords_section.js.
@@ -554,15 +685,13 @@ Polymer({
   /** @private */
   onPasswordPromptClosed_() {
     this.showPasswordPromptDialog_ = false;
-    cr.ui.focusWithoutInk(assert(this.activeDialogAnchorStack_.pop()));
+    focusWithoutInk(assert(this.activeDialogAnchorStack_.pop()));
   },
 
   /** @private */
   openPasswordPromptDialog_() {
-    this.activeDialogAnchorStack_.push(
-        /** @type {!HTMLElement} */ (getDeepActiveElement()));
+    this.activeDialogAnchorStack_.push(/** @type {!HTMLElement} */ (getDeepActiveElement()));
     this.showPasswordPromptDialog_ = true;
   },
   // </if>
 });
-})();

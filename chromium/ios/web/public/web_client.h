@@ -197,7 +197,11 @@ class WebClient {
 
   // Returns the UserAgentType that should be used by default for the web
   // content, based on the size class of |web_view| and the |url|.
-  virtual UserAgentType GetDefaultUserAgent(UIView* web_view, const GURL& url);
+  virtual UserAgentType GetDefaultUserAgent(id<UITraitEnvironment> web_view,
+                                            const GURL& url);
+
+  // Returns whether the embedders could block restore urls.
+  virtual bool IsEmbedderBlockRestoreUrlEnabled();
 };
 
 }  // namespace web

@@ -26,7 +26,7 @@
 #include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/service.pb.h"
 #include "components/autofill_assistant/browser/user_data_util.h"
-#include "components/autofill_assistant/browser/website_login_fetcher_impl.h"
+#include "components/autofill_assistant/browser/website_login_manager_impl.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/mojom/payments/payment_request.mojom.h"
@@ -46,9 +46,57 @@ static constexpr std::array<autofill_assistant::AutofillContactField, 2>
                                  autofill_assistant::EMAIL_ADDRESS};
 
 using autofill_assistant::CollectUserDataOptions;
+using autofill_assistant::CollectUserDataProto;
 using autofill_assistant::DateTimeProto;
 using autofill_assistant::TermsAndConditionsState;
 using autofill_assistant::UserData;
+using autofill_assistant::UserModel;
+
+bool IsReadOnlyAdditionalSection(
+    const autofill_assistant::UserFormSectionProto& section) {
+  switch (section.section_case()) {
+    case autofill_assistant::UserFormSectionProto::kStaticTextSection:
+      return true;
+    case autofill_assistant::UserFormSectionProto::kTextInputSection:
+    case autofill_assistant::UserFormSectionProto::kPopupListSection:
+    case autofill_assistant::UserFormSectionProto::SECTION_NOT_SET:
+      return false;
+  }
+}
+
+bool OnlyLoginRequested(
+    const CollectUserDataOptions& collect_user_data_options) {
+  if (!collect_user_data_options.request_login_choice) {
+    return false;
+  }
+
+  auto find_additional_input_sections =
+      [&](const autofill_assistant::UserFormSectionProto& section) {
+        return !IsReadOnlyAdditionalSection(section);
+      };
+  bool has_input_sections =
+      std::find_if(
+          collect_user_data_options.additional_prepended_sections.begin(),
+          collect_user_data_options.additional_prepended_sections.end(),
+          find_additional_input_sections) !=
+          collect_user_data_options.additional_prepended_sections.end() ||
+      std::find_if(
+          collect_user_data_options.additional_appended_sections.begin(),
+          collect_user_data_options.additional_appended_sections.end(),
+          find_additional_input_sections) !=
+          collect_user_data_options.additional_appended_sections.end();
+  LOG(ERROR) << "HAS_INPUT_SECTIONS: " << has_input_sections;
+
+  return !has_input_sections && !collect_user_data_options.request_payer_name &&
+         !collect_user_data_options.request_payer_email &&
+         !collect_user_data_options.request_payer_phone &&
+         !collect_user_data_options.request_shipping &&
+         !collect_user_data_options.request_payment_method &&
+         !collect_user_data_options.request_date_time_range &&
+         collect_user_data_options.accept_terms_and_conditions_text.empty() &&
+         !collect_user_data_options.additional_model_identifier_to_check
+              .has_value();
+}
 
 bool IsCompleteContact(
     const autofill::AutofillProfile* profile,
@@ -64,17 +112,17 @@ bool IsCompleteContact(
   }
 
   if (collect_user_data_options.request_payer_name &&
-      profile->GetRawInfo(autofill::NAME_FULL).empty()) {
+      !profile->HasInfo(autofill::NAME_FULL)) {
     return false;
   }
 
   if (collect_user_data_options.request_payer_email &&
-      profile->GetRawInfo(autofill::EMAIL_ADDRESS).empty()) {
+      !profile->HasInfo(autofill::EMAIL_ADDRESS)) {
     return false;
   }
 
   if (collect_user_data_options.request_payer_phone &&
-      profile->GetRawInfo(autofill::PHONE_HOME_WHOLE_NUMBER).empty()) {
+      !profile->HasInfo(autofill::PHONE_HOME_WHOLE_NUMBER)) {
     return false;
   }
   return true;
@@ -445,19 +493,19 @@ void SetInitialUserDataForAdditionalSection(
 namespace autofill_assistant {
 
 CollectUserDataAction::LoginDetails::LoginDetails(
-    bool _choose_automatically_if_no_other_options,
+    bool _choose_automatically_if_no_stored_login,
     const std::string& _payload,
-    const WebsiteLoginFetcher::Login& _login)
-    : choose_automatically_if_no_other_options(
-          _choose_automatically_if_no_other_options),
+    const WebsiteLoginManager::Login& _login)
+    : choose_automatically_if_no_stored_login(
+          _choose_automatically_if_no_stored_login),
       payload(_payload),
       login(_login) {}
 
 CollectUserDataAction::LoginDetails::LoginDetails(
-    bool _choose_automatically_if_no_other_options,
+    bool _choose_automatically_if_no_stored_login,
     const std::string& _payload)
-    : choose_automatically_if_no_other_options(
-          _choose_automatically_if_no_other_options),
+    : choose_automatically_if_no_stored_login(
+          _choose_automatically_if_no_stored_login),
       payload(_payload) {}
 
 CollectUserDataAction::LoginDetails::~LoginDetails() = default;
@@ -487,6 +535,7 @@ void CollectUserDataAction::InternalProcessAction(
     ProcessActionCallback callback) {
   callback_ = std::move(callback);
   if (!CreateOptionsFromProto()) {
+    LOG(ERROR) << "INVALID";
     EndAction(ClientStatus(INVALID_ACTION));
     return;
   }
@@ -515,7 +564,7 @@ void CollectUserDataAction::InternalProcessAction(
       base::BindOnce(&CollectUserDataAction::OnTermsAndConditionsLinkClicked,
                      weak_ptr_factory_.GetWeakPtr());
   if (requests_pwm_logins) {
-    delegate_->GetWebsiteLoginFetcher()->GetLoginsForUrl(
+    delegate_->GetWebsiteLoginManager()->GetLoginsForUrl(
         delegate_->GetWebContents()->GetLastCommittedURL(),
         base::BindOnce(&CollectUserDataAction::OnGetLogins,
                        weak_ptr_factory_.GetWeakPtr(),
@@ -534,7 +583,7 @@ void CollectUserDataAction::EndAction(const ClientStatus& status) {
 
 void CollectUserDataAction::OnGetLogins(
     const LoginDetailsProto::LoginOptionProto& login_option,
-    std::vector<WebsiteLoginFetcher::Login> logins) {
+    std::vector<WebsiteLoginManager::Login> logins) {
   for (const auto& login : logins) {
     auto identifier =
         base::NumberToString(collect_user_data_options_->login_choices.size());
@@ -547,7 +596,7 @@ void CollectUserDataAction::OnGetLogins(
             : base::nullopt);
     login_details_map_.emplace(
         identifier, std::make_unique<LoginDetails>(
-                        login_option.choose_automatically_if_no_other_options(),
+                        login_option.choose_automatically_if_no_stored_login(),
                         login_option.payload(), login));
   }
   ShowToUser();
@@ -594,35 +643,37 @@ void CollectUserDataAction::OnShowToUser(UserData* user_data,
     return;
   }
 
-  // Special case: if the only available login option has
-  // |choose_automatically_if_no_other_options=true|, the section will not be
-  // shown.
-  bool only_login_requested =
-      collect_user_data_options_->request_login_choice &&
-      !collect_user_data_options_->request_payer_name &&
-      !collect_user_data_options_->request_payer_email &&
-      !collect_user_data_options_->request_payer_phone &&
-      !collect_user_data_options_->request_shipping &&
-      !collect_user_data_options_->request_payment_method &&
-      !collect_user_data.request_terms_and_conditions();
+  bool has_password_manager_logins =
+      std::find_if(login_details_map_.begin(), login_details_map_.end(),
+                   [&](const auto& pair) {
+                     return pair.second->login.has_value();
+                   }) != login_details_map_.end();
+  auto automatic_choice_it = std::find_if(
+      login_details_map_.begin(), login_details_map_.end(),
+      [&](const auto& pair) {
+        return pair.second->choose_automatically_if_no_stored_login;
+      });
 
-  if (collect_user_data_options_->login_choices.size() == 1 &&
-      login_details_map_
-          .at(collect_user_data_options_->login_choices.at(0).identifier)
-          ->choose_automatically_if_no_other_options) {
-    collect_user_data_options_->request_login_choice = false;
-
-    user_data->login_choice_identifier_.assign(
-        collect_user_data_options_->login_choices[0].identifier);
+  // Special case: if the login choice can be made implicitly (there are no PWM
+  // logins and there is a |choose_automatically_if_no_stored_login| choice),
+  // the section will not be shown.
+  if (automatic_choice_it != login_details_map_.end() &&
+      !has_password_manager_logins) {
+    user_data->login_choice_identifier_.assign(automatic_choice_it->first);
 
     // If only the login section is requested and the choice has already been
     // made implicitly, the entire UI will not be shown and the action will
     // complete immediately.
-    if (only_login_requested) {
+    if (OnlyLoginRequested(*collect_user_data_options_)) {
       user_data->succeed_ = true;
       std::move(collect_user_data_options_->confirm_callback)
           .Run(user_data, nullptr);
       return;
+    }
+    if (collect_user_data_options_->login_choices.size() == 1) {
+      // The login section does not offer a meaningful choice, but there is at
+      // least one other section being shown. Hide the logins, show the rest.
+      collect_user_data_options_->request_login_choice = false;
     }
   }
 
@@ -669,117 +720,38 @@ void CollectUserDataAction::OnGetUserData(
 
   bool succeed = user_data->succeed_;
   if (succeed) {
-    if (collect_user_data.request_payment_method()) {
-      DCHECK(user_data->selected_card_);
-      std::string card_issuer_network =
-          autofill::data_util::GetPaymentRequestData(
-              user_data->selected_card_->network())
-              .basic_card_issuer_network;
-      processed_action_proto_->mutable_collect_user_data_result()
-          ->set_card_issuer_network(card_issuer_network);
-    }
-
-    if (collect_user_data.has_contact_details()) {
-      auto contact_details_proto = collect_user_data.contact_details();
-      auto* selected_profile = user_data->selected_address(
-          contact_details_proto.contact_details_name());
-      DCHECK(selected_profile);
-
-      if (contact_details_proto.request_payer_name()) {
-        Metrics::RecordPaymentRequestFirstNameOnly(
-            selected_profile->GetRawInfo(autofill::NAME_LAST).empty());
-      }
-
-      if (contact_details_proto.request_payer_email()) {
-        processed_action_proto_->mutable_collect_user_data_result()
-            ->set_payer_email(base::UTF16ToUTF8(
-                selected_profile->GetRawInfo(autofill::EMAIL_ADDRESS)));
-      }
-    }
-
-    if (collect_user_data.has_login_details()) {
-      auto login_details =
-          login_details_map_.find(user_data->login_choice_identifier_);
-      DCHECK(login_details != login_details_map_.end());
-      if (login_details->second->login.has_value()) {
-        user_data->selected_login_ = *login_details->second->login;
-      }
-
-      processed_action_proto_->mutable_collect_user_data_result()
-          ->set_login_payload(login_details->second->payload);
-    }
-
-    if (collect_user_data.has_date_time_range()) {
-      DCHECK(user_data->date_time_range_start_date_.has_value());
-      DCHECK(user_data->date_time_range_start_timeslot_.has_value());
-      DCHECK(user_data->date_time_range_end_date_.has_value());
-      DCHECK(user_data->date_time_range_end_timeslot_.has_value());
-      *processed_action_proto_->mutable_collect_user_data_result()
-           ->mutable_date_range_start_date() =
-          *user_data->date_time_range_start_date_;
-      *user_data->date_time_range_start_date_;
-      processed_action_proto_->mutable_collect_user_data_result()
-          ->set_date_range_start_timeslot(
-              *user_data->date_time_range_start_timeslot_);
-      *processed_action_proto_->mutable_collect_user_data_result()
-           ->mutable_date_range_end_date() =
-          *user_data->date_time_range_end_date_;
-      *user_data->date_time_range_end_date_;
-      processed_action_proto_->mutable_collect_user_data_result()
-          ->set_date_range_end_timeslot(
-              *user_data->date_time_range_end_timeslot_);
-    }
-    for (const auto& section :
-         collect_user_data.additional_prepended_sections()) {
-      FillProtoForAdditionalSection(section, *user_data,
-                                    processed_action_proto_.get());
-    }
-    for (const auto& section :
-         collect_user_data.additional_appended_sections()) {
-      FillProtoForAdditionalSection(section, *user_data,
-                                    processed_action_proto_.get());
-    }
-
-    processed_action_proto_->mutable_collect_user_data_result()
-        ->set_is_terms_and_conditions_accepted(
-            user_data->terms_and_conditions_ ==
-            TermsAndConditionsState::ACCEPTED);
-    if (user_model != nullptr &&
-        (collect_user_data.has_generic_user_interface_prepended() ||
-         collect_user_data.has_generic_user_interface_appended())) {
-      // Build the union of both models (this assumes that there are no
-      // overlapping model keys).
-      *processed_action_proto_->mutable_collect_user_data_result()
-           ->mutable_model() = MergeModelProtos(
-          collect_user_data.generic_user_interface_prepended().model(),
-          collect_user_data.generic_user_interface_appended().model());
-      user_model->UpdateProto(
-          processed_action_proto_->mutable_collect_user_data_result()
-              ->mutable_model());
-    }
-    processed_action_proto_->mutable_collect_user_data_result()
-        ->set_shown_to_user(shown_to_user_);
+    succeed = IsUserDataComplete(*user_data, *user_model,
+                                 *collect_user_data_options_);
+    WriteProcessedAction(user_data, user_model);
   }
 
   EndAction(succeed ? ClientStatus(ACTION_APPLIED)
                     : ClientStatus(COLLECT_USER_DATA_ERROR));
 }
 
-void CollectUserDataAction::OnAdditionalActionTriggered(int index) {
+void CollectUserDataAction::OnAdditionalActionTriggered(
+    int index,
+    UserData* user_data,
+    const UserModel* user_model) {
   if (!callback_)
     return;
 
   processed_action_proto_->mutable_collect_user_data_result()
       ->set_additional_action_index(index);
+  WriteProcessedAction(user_data, user_model);
   EndAction(ClientStatus(ACTION_APPLIED));
 }
 
-void CollectUserDataAction::OnTermsAndConditionsLinkClicked(int link) {
+void CollectUserDataAction::OnTermsAndConditionsLinkClicked(
+    int link,
+    UserData* user_data,
+    const UserModel* user_model) {
   if (!callback_)
     return;
 
   processed_action_proto_->mutable_collect_user_data_result()->set_terms_link(
       link);
+  WriteProcessedAction(user_data, user_model);
   EndAction(ClientStatus(ACTION_APPLIED));
 }
 
@@ -844,6 +816,11 @@ bool CollectUserDataAction::CreateOptionsFromProto() {
 
     collect_user_data_options_->contact_details_name =
         contact_details.contact_details_name();
+
+    collect_user_data_options_->contact_details_section_title.assign(
+        contact_details.contact_details_section_title().empty()
+            ? l10n_util::GetStringUTF8(IDS_PAYMENTS_CONTACT_DETAILS_LABEL)
+            : contact_details.contact_details_section_title());
   }
 
   for (const auto& network :
@@ -893,6 +870,10 @@ bool CollectUserDataAction::CreateOptionsFromProto() {
       collect_user_data.has_login_details();
   collect_user_data_options_->login_section_title.assign(
       collect_user_data.login_details().section_title());
+  collect_user_data_options_->shipping_address_section_title.assign(
+      collect_user_data.shipping_address_section_title().empty()
+          ? l10n_util::GetStringUTF8(IDS_PAYMENTS_SHIPPING_ADDRESS_LABEL)
+          : collect_user_data.shipping_address_section_title());
 
   // Transform login options to concrete login choices.
   for (const auto& login_option :
@@ -919,7 +900,7 @@ bool CollectUserDataAction::CreateOptionsFromProto() {
         login_details_map_.emplace(
             choice.identifier,
             std::make_unique<LoginDetails>(
-                login_option.choose_automatically_if_no_other_options(),
+                login_option.choose_automatically_if_no_stored_login(),
                 login_option.payload()));
         break;
       }
@@ -1043,7 +1024,7 @@ bool CollectUserDataAction::CreateOptionsFromProto() {
       collect_user_data.privacy_notice_text();
 
   collect_user_data_options_->default_email =
-      delegate_->GetAccountEmailAddress();
+      delegate_->GetEmailAddressForAccessTokenAccount();
 
   return true;
 }
@@ -1212,6 +1193,103 @@ bool CollectUserDataAction::SanitizeDateTimeRange(
 
   NOTREACHED();
   return false;
+}
+
+void CollectUserDataAction::WriteProcessedAction(UserData* user_data,
+                                                 const UserModel* user_model) {
+  if (proto().collect_user_data().request_payment_method() &&
+      user_data->selected_card_) {
+    std::string card_issuer_network =
+        autofill::data_util::GetPaymentRequestData(
+            user_data->selected_card_->network())
+            .basic_card_issuer_network;
+    processed_action_proto_->mutable_collect_user_data_result()
+        ->set_card_issuer_network(card_issuer_network);
+  }
+
+  if (proto().collect_user_data().has_contact_details()) {
+    auto contact_details_proto = proto().collect_user_data().contact_details();
+    auto* selected_profile = user_data->selected_address(
+        contact_details_proto.contact_details_name());
+
+    if (contact_details_proto.request_payer_name() &&
+        selected_profile != nullptr) {
+      Metrics::RecordPaymentRequestFirstNameOnly(
+          selected_profile->GetRawInfo(autofill::NAME_LAST).empty());
+    }
+
+    if (contact_details_proto.request_payer_email() &&
+        selected_profile != nullptr) {
+      processed_action_proto_->mutable_collect_user_data_result()
+          ->set_payer_email(base::UTF16ToUTF8(
+              selected_profile->GetRawInfo(autofill::EMAIL_ADDRESS)));
+    }
+  }
+
+  if (proto().collect_user_data().has_login_details()) {
+    auto login_details =
+        login_details_map_.find(user_data->login_choice_identifier_);
+    if (login_details != login_details_map_.end()) {
+      if (login_details->second->login.has_value()) {
+        user_data->selected_login_ = *login_details->second->login;
+      }
+
+      processed_action_proto_->mutable_collect_user_data_result()
+          ->set_login_payload(login_details->second->payload);
+    }
+  }
+
+  if (proto().collect_user_data().has_date_time_range()) {
+    if (user_data->date_time_range_start_date_.has_value()) {
+      *processed_action_proto_->mutable_collect_user_data_result()
+           ->mutable_date_range_start_date() =
+          *user_data->date_time_range_start_date_;
+    }
+    if (user_data->date_time_range_start_timeslot_.has_value()) {
+      processed_action_proto_->mutable_collect_user_data_result()
+          ->set_date_range_start_timeslot(
+              *user_data->date_time_range_start_timeslot_);
+    }
+    if (user_data->date_time_range_end_date_.has_value()) {
+      *processed_action_proto_->mutable_collect_user_data_result()
+           ->mutable_date_range_end_date() =
+          *user_data->date_time_range_end_date_;
+    }
+    if (user_data->date_time_range_end_timeslot_.has_value()) {
+      processed_action_proto_->mutable_collect_user_data_result()
+          ->set_date_range_end_timeslot(
+              *user_data->date_time_range_end_timeslot_);
+    }
+  }
+  for (const auto& section :
+       proto().collect_user_data().additional_prepended_sections()) {
+    FillProtoForAdditionalSection(section, *user_data,
+                                  processed_action_proto_.get());
+  }
+  for (const auto& section :
+       proto().collect_user_data().additional_appended_sections()) {
+    FillProtoForAdditionalSection(section, *user_data,
+                                  processed_action_proto_.get());
+  }
+
+  processed_action_proto_->mutable_collect_user_data_result()
+      ->set_is_terms_and_conditions_accepted(user_data->terms_and_conditions_ ==
+                                             TermsAndConditionsState::ACCEPTED);
+  if (user_model != nullptr &&
+      (proto().collect_user_data().has_generic_user_interface_prepended() ||
+       proto().collect_user_data().has_generic_user_interface_appended())) {
+    // Build the union of both models (this assumes that there are no
+    // overlapping model keys).
+    *processed_action_proto_->mutable_collect_user_data_result()
+         ->mutable_model() = MergeModelProtos(
+        proto().collect_user_data().generic_user_interface_prepended().model(),
+        proto().collect_user_data().generic_user_interface_appended().model());
+    user_model->UpdateProto(
+        processed_action_proto_->mutable_collect_user_data_result()
+            ->mutable_model());
+  }
+  processed_action_proto_->mutable_collect_user_data_result()
+      ->set_shown_to_user(shown_to_user_);
 }
 
 void CollectUserDataAction::UpdatePersonalDataManagerProfiles(

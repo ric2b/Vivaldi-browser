@@ -61,6 +61,8 @@ _TEST_CODE_EXCLUDED_PATHS = (
     r'testing[\\/]iossim[\\/]iossim\.mm$',
     # EarlGrey app side code for tests.
     r'ios[\\/].*_app_interface\.mm$',
+    # Views Examples code
+    r'ui[\\/]views[\\/]examples[\\/].*',
 )
 
 _THIRD_PARTY_EXCEPT_BLINK = 'third_party/(?!blink/)'
@@ -310,7 +312,7 @@ _NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK = '|'.join((
   '^components/data_reduction_proxy/',
   '^components/domain_reliability/',
   '^components/dom_distiller/',
-  '^components/download/',
+  '^components/download/internal/common/',
   '^components/drive/',
   '^components/exo/',
   '^components/feature_engagement/',
@@ -931,25 +933,6 @@ _BANNED_CPP_FUNCTIONS = (
       ),
     ),
     (
-      'net::URLFetcher',
-      (
-        'net::URLFetcher should no longer be used in content embedders. ',
-        'Instead, use network::SimpleURLLoader instead, which supports ',
-        'an out-of-process network stack. ',
-        'net::URLFetcher may still be used in binaries that do not embed',
-        'content.',
-      ),
-      False,
-      (
-        r'^ios[\\/].*\.(cc|h)$',
-        r'.*[\\/]ios[\\/].*\.(cc|h)$',
-        r'.*_ios\.(cc|h)$',
-        r'^net[\\/].*\.(cc|h)$',
-        r'.*[\\/]tools[\\/].*\.(cc|h)$',
-        r'^fuchsia/base/test_devtools_list_fetcher\.cc$',
-      ),
-    ),
-    (
       'std::random_shuffle',
       (
         'std::random_shuffle is deprecated in C++14, and removed in C++17. Use',
@@ -1119,6 +1102,18 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
+    (
+      r'/\bTRACE_EVENT_ASYNC_',
+      (
+          'Please use TRACE_EVENT_NESTABLE_ASYNC_.. macros instead',
+          'of TRACE_EVENT_ASYNC_.. (crbug.com/1038710).',
+      ),
+      False,
+      (
+        r'^base/trace_event/.*',
+        r'^base/tracing/.*',
+      ),
+    ),
 )
 
 # Format: Sequence of tuples containing:
@@ -1264,8 +1259,9 @@ _JAVA_MULTIPLE_DEFINITION_EXCLUDED_PATHS = [
 _IMAGE_EXTENSIONS = ['.svg', '.png', '.webp']
 
 # These paths contain test data and other known invalid JSON files.
-_KNOWN_INVALID_JSON_FILE_PATTERNS = [
+_KNOWN_TEST_DATA_AND_INVALID_JSON_FILE_PATTERNS = [
     r'test[\\/]data[\\/]',
+    r'testing[\\/]buildbot[\\/]',
     r'^components[\\/]policy[\\/]resources[\\/]policy_templates\.json$',
     r'^third_party[\\/]protobuf[\\/]',
     r'^third_party[\\/]blink[\\/]renderer[\\/]devtools[\\/]protocol\.json$',
@@ -1322,6 +1318,7 @@ _ANDROID_SPECIFIC_PYDEPS_FILES = [
     'build/android/gyp/desugar.pydeps',
     'build/android/gyp/dexsplitter.pydeps',
     'build/android/gyp/dex.pydeps',
+    'build/android/gyp/dex_jdk_libs.pydeps',
     'build/android/gyp/dist_aar.pydeps',
     'build/android/gyp/filter_zip.pydeps',
     'build/android/gyp/gcc_preprocess.pydeps',
@@ -2483,8 +2480,8 @@ def _CheckSpamLogging(input_api, output_api):
                  r"^cloud_print[\\/]",
                  r"^components[\\/]browser_watcher[\\/]"
                      r"dump_stability_report_main_win.cc$",
-                 r"^components[\\/]html_viewer[\\/]"
-                     r"web_test_delegate_impl\.cc$",
+                 r"^components[\\/]media_control[\\/]renderer[\\/]"
+                     r"media_playback_options\.cc$",
                  r"^components[\\/]zucchini[\\/].*",
                  # TODO(peter): Remove this exception. https://crbug.com/534537
                  r"^content[\\/]browser[\\/]notifications[\\/]"
@@ -2789,7 +2786,9 @@ def _CheckParseErrors(input_api, output_api):
       return False
     path = affected_file.LocalPath()
 
-    if _MatchesFile(input_api, _KNOWN_INVALID_JSON_FILE_PATTERNS, path):
+    if _MatchesFile(input_api,
+                    _KNOWN_TEST_DATA_AND_INVALID_JSON_FILE_PATTERNS,
+                    path):
       return False
 
     if (action == _GetIDLParseError and
@@ -2964,33 +2963,17 @@ def _GetOwnersFilesToCheckForIpcOwners(input_api):
   # files and no *_messages*.h files, we should only nag about rules for
   # *.mojom files.
   for f in input_api.AffectedFiles(include_deletes=False):
-    # Manifest files don't have a strong naming convention. Instead, scan
-    # affected files for .json, .cc, and .h files which look like they contain
-    # a manifest definition.
-    if (f.LocalPath().endswith('.json') and
-        not _MatchesFile(input_api, _KNOWN_INVALID_JSON_FILE_PATTERNS,
-                         f.LocalPath())):
-      json_comment_eater = _ImportJSONCommentEater(input_api)
-      mostly_json_lines = '\n'.join(f.NewContents())
-      # Comments aren't allowed in strict JSON, so filter them out.
-      json_lines = json_comment_eater.Nom(mostly_json_lines)
-      try:
-        json_content = input_api.json.loads(json_lines)
-      except:
-        # There's another PRESUBMIT check that already verifies that JSON files
-        # are not invalid, so no need to emit another warning here.
-        continue
-      if 'interface_provider_specs' in json_content:
+    # Manifest files don't have a strong naming convention. Instead, try to find
+    # affected .cc and .h files which look like they contain a manifest
+    # definition.
+    manifest_pattern = input_api.re.compile('manifests?\.(cc|h)$')
+    test_manifest_pattern = input_api.re.compile('test_manifests?\.(cc|h)')
+    if (manifest_pattern.search(f.LocalPath()) and not
+        test_manifest_pattern.search(f.LocalPath())):
+      # We expect all actual service manifest files to contain at least one
+      # qualified reference to service_manager::Manifest.
+      if 'service_manager::Manifest' in '\n'.join(f.NewContents()):
         AddPatternToCheck(f, input_api.os_path.basename(f.LocalPath()))
-    else:
-      manifest_pattern = input_api.re.compile('manifests?\.(cc|h)$')
-      test_manifest_pattern = input_api.re.compile('test_manifests?\.(cc|h)')
-      if (manifest_pattern.search(f.LocalPath()) and not
-          test_manifest_pattern.search(f.LocalPath())):
-        # We expect all actual service manifest files to contain at least one
-        # qualified reference to service_manager::Manifest.
-        if 'service_manager::Manifest' in '\n'.join(f.NewContents()):
-          AddPatternToCheck(f, input_api.os_path.basename(f.LocalPath()))
     for pattern in file_patterns:
       if input_api.fnmatch.fnmatch(
           input_api.os_path.basename(f.LocalPath()), pattern):
@@ -3007,9 +2990,50 @@ def _GetOwnersFilesToCheckForIpcOwners(input_api):
   return to_check
 
 
-def _CheckIpcOwners(input_api, output_api):
+def _AddOwnersFilesToCheckForFuchsiaSecurityOwners(input_api, to_check):
+  """Adds OWNERS files to check for correct Fuchsia security owners."""
+
+  file_patterns = [
+      # Component specifications.
+      '*.cml', # Component Framework v2.
+      '*.cmx', # Component Framework v1.
+
+      # Fuchsia IDL protocol specifications.
+      '*.fidl',
+  ]
+
+  def AddPatternToCheck(input_file, pattern):
+    owners_file = input_api.os_path.join(
+        input_api.os_path.dirname(input_file.LocalPath()), 'OWNERS')
+    if owners_file not in to_check:
+      to_check[owners_file] = {}
+    if pattern not in to_check[owners_file]:
+      to_check[owners_file][pattern] = {
+          'files': [],
+          'rules': [
+              'per-file %s=set noparent' % pattern,
+              'per-file %s=file://fuchsia/SECURITY_OWNERS' % pattern,
+          ]
+      }
+    to_check[owners_file][pattern]['files'].append(input_file)
+
+  # Iterate through the affected files to see what we actually need to check
+  # for. We should only nag patch authors about per-file rules if a file in that
+  # directory would match that pattern.
+  for f in input_api.AffectedFiles(include_deletes=False):
+    for pattern in file_patterns:
+      if input_api.fnmatch.fnmatch(
+          input_api.os_path.basename(f.LocalPath()), pattern):
+        AddPatternToCheck(f, pattern)
+        break
+
+  return to_check
+
+
+def _CheckSecurityOwners(input_api, output_api):
   """Checks that affected files involving IPC have an IPC OWNERS rule."""
   to_check = _GetOwnersFilesToCheckForIpcOwners(input_api)
+  _AddOwnersFilesToCheckForFuchsiaSecurityOwners(input_api, to_check)
 
   if to_check:
     # If there are any OWNERS files to check, there are IPC-related changes in
@@ -3056,6 +3080,80 @@ def _CheckIpcOwners(input_api, output_api):
         long_text='\n\n'.join(errors)))
 
   return results
+
+
+def _GetFilesUsingSecurityCriticalFunctions(input_api):
+  """Checks affected files for changes to security-critical calls. This
+  function checks the full change diff, to catch both additions/changes
+  and removals.
+
+  Returns a dict keyed by file name, and the value is a set of detected
+  functions.
+  """
+  # Map of function pretty name (displayed in an error) to the pattern to
+  # match it with.
+  _PATTERNS_TO_CHECK = {
+      'content::ServiceProcessHost::LaunchOptions::WithSandboxType':
+          'WithSandboxType\\('
+  }
+  _PATTERNS_TO_CHECK = {
+      k: input_api.re.compile(v)
+      for k, v in _PATTERNS_TO_CHECK.items()
+  }
+
+  # Scan all affected files for changes touching _FUNCTIONS_TO_CHECK.
+  files_to_functions = {}
+  for f in input_api.AffectedFiles():
+    diff = f.GenerateScmDiff()
+    for line in diff.split('\n'):
+      # Not using just RightHandSideLines() because removing a
+      # call to a security-critical function can be just as important
+      # as adding or changing the arguments.
+      if line.startswith('-') or (line.startswith('+') and
+          not line.startswith('++')):
+        for name, pattern in _PATTERNS_TO_CHECK.items():
+          if pattern.search(line):
+            path = f.LocalPath()
+            if not path in files_to_functions:
+              files_to_functions[path] = set()
+            files_to_functions[path].add(name)
+  return files_to_functions
+
+
+def _CheckSecurityChanges(input_api, output_api):
+  """Checks that changes involving security-critical functions are reviewed
+  by the security team.
+  """
+  files_to_functions = _GetFilesUsingSecurityCriticalFunctions(input_api)
+  if len(files_to_functions):
+    owners_db = input_api.owners_db
+    owner_email, reviewers = (
+        input_api.canned_checks.GetCodereviewOwnerAndReviewers(
+            input_api,
+            owners_db.email_regexp,
+            approval_needed=input_api.is_committing))
+
+    # Load the OWNERS file for security changes.
+    owners_file = 'ipc/SECURITY_OWNERS'
+    security_owners = owners_db.owners_rooted_at_file(owners_file)
+
+    has_security_owner = any([owner in reviewers for owner in security_owners])
+    if not has_security_owner:
+      msg = 'The following files change calls to security-sensive functions\n' \
+          'that need to be reviewed by {}.\n'.format(owners_file)
+      for path, names in files_to_functions.items():
+        msg += '  {}\n'.format(path)
+        for name in names:
+          msg += '    {}\n'.format(name)
+        msg += '\n'
+
+      if input_api.is_committing:
+        output = output_api.PresubmitError
+      else:
+        output = output_api.PresubmitNotifyResult
+      return [output(msg)]
+
+  return []
 
 
 def _CheckSetNoParent(input_api, output_api):
@@ -4186,6 +4284,46 @@ def _AndroidSpecificOnCommitChecks(input_api, output_api):
   results.extend(_CheckAndroidXmlStyle(input_api, output_api, False))
   return results
 
+# TODO(chrishall): could we additionally match on any path owned by
+#                  ui/accessibility/OWNERS ?
+_ACCESSIBILITY_PATHS = (
+    r"^chrome[\\/]browser.*[\\/]accessibility[\\/]",
+    r"^chrome[\\/]browser[\\/]extensions[\\/]api[\\/]automation.*[\\/]",
+    r"^chrome[\\/]renderer[\\/]extensions[\\/]accessibility_.*",
+    r"^chrome[\\/]tests[\\/]data[\\/]accessibility[\\/]",
+    r"^content[\\/]browser[\\/]accessibility[\\/]",
+    r"^content[\\/]renderer[\\/]accessibility[\\/]",
+    r"^content[\\/]tests[\\/]data[\\/]accessibility[\\/]",
+    r"^extensions[\\/]renderer[\\/]api[\\/]automation[\\/]",
+    r"^ui[\\/]accessibility[\\/]",
+    r"^ui[\\/]views[\\/]accessibility[\\/]",
+)
+
+def _CheckAccessibilityRelnotesField(input_api, output_api):
+  """Checks that commits to accessibility code contain an AX-Relnotes field in
+  their commit message."""
+  def FileFilter(affected_file):
+    paths = _ACCESSIBILITY_PATHS
+    return input_api.FilterSourceFile(affected_file, white_list=paths)
+
+  # Only consider changes affecting accessibility paths.
+  if not any(input_api.AffectedFiles(file_filter=FileFilter)):
+    return []
+
+  relnotes = input_api.change.GitFootersFromDescription().get('AX-Relnotes', [])
+  if relnotes:
+    return []
+
+  # TODO(chrishall): link to Relnotes documentation in message.
+  message = ("Missing 'AX-Relnotes:' field required for accessibility changes"
+             "\n  please add 'AX-Relnotes: [release notes].' to describe any "
+             "user-facing changes"
+             "\n  otherwise add 'AX-Relnotes: n/a.' if this change has no "
+             "user-facing effects"
+             "\n  if this is confusing or annoying then please contact members "
+             "of ui/accessibility/OWNERS.")
+
+  return [output_api.PresubmitNotifyResult(message)]
 
 def _CommonChecks(input_api, output_api):
   """Checks common to both upload and commit."""
@@ -4199,6 +4337,7 @@ def _CommonChecks(input_api, output_api):
     results.extend(
         input_api.canned_checks.CheckAuthorizedAuthor(input_api, output_api))
 
+  results.extend(_CheckAccessibilityRelnotesField(input_api, output_api))
   results.extend(
       _CheckNoProductionCodeUsingTestOnlyFunctions(input_api, output_api))
   results.extend(
@@ -4244,7 +4383,8 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckSingletonInHeaders(input_api, output_api))
   results.extend(_CheckPydepsNeedsUpdating(input_api, output_api))
   results.extend(_CheckJavaStyle(input_api, output_api))
-  results.extend(_CheckIpcOwners(input_api, output_api))
+  results.extend(_CheckSecurityOwners(input_api, output_api))
+  results.extend(_CheckSecurityChanges(input_api, output_api))
   results.extend(_CheckSetNoParent(input_api, output_api))
   results.extend(_CheckUselessForwardDeclarations(input_api, output_api))
   results.extend(_CheckForRelativeIncludes(input_api, output_api))

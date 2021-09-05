@@ -43,13 +43,14 @@ namespace blink {
 
 class Editor;
 class EditContext;
+class LocalDOMWindow;
 class LocalFrame;
 class Range;
 enum class TypingContinuation;
 
 class CORE_EXPORT InputMethodController final
     : public GarbageCollected<InputMethodController>,
-      ExecutionContextLifecycleObserver {
+      public ExecutionContextLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(InputMethodController);
 
  public:
@@ -58,7 +59,7 @@ class CORE_EXPORT InputMethodController final
     kKeepSelection,
   };
 
-  explicit InputMethodController(LocalFrame&);
+  explicit InputMethodController(LocalDOMWindow&, LocalFrame&);
   virtual ~InputMethodController();
   void Trace(Visitor*) override;
 
@@ -93,7 +94,6 @@ class CORE_EXPORT InputMethodController final
   EphemeralRange CompositionEphemeralRange() const;
 
   void Clear();
-  void DidAttachDocument(Document*);
 
   PlainTextRange GetSelectionOffsets() const;
   // Returns true if setting selection to specified offsets, otherwise false.
@@ -136,10 +136,7 @@ class CORE_EXPORT InputMethodController final
   bool has_composition_;
 
   Editor& GetEditor() const;
-  LocalFrame& GetFrame() const {
-    DCHECK(frame_);
-    return *frame_;
-  }
+  LocalFrame& GetFrame() const;
 
   String ComposingText() const;
   void SelectComposition() const;

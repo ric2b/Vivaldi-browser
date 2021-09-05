@@ -58,12 +58,14 @@
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/device_local_account_policy_service.h"
+#include "chrome/browser/chromeos/policy/minimum_version_policy_handler.h"
 #include "chrome/browser/chromeos/policy/powerwash_requirements_checker.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/system/device_disabling_manager.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/notifications/system_notification_helper.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/chrome_device_id_helper.h"
@@ -240,6 +242,14 @@ bool CanShowDebuggingFeatures() {
          !session_manager::SessionManager::Get()->IsSessionStarted();
 }
 
+bool IsUpdateRequiredDeadlineReached() {
+  policy::MinimumVersionPolicyHandler* policy_handler =
+      g_browser_process->platform_part()
+          ->browser_policy_connector_chromeos()
+          ->GetMinimumVersionPolicyHandler();
+  return policy_handler && policy_handler->DeadlineReached();
+}
+
 void RecordPasswordChangeFlow(LoginPasswordChangeFlow flow) {
   UMA_HISTOGRAM_ENUMERATION("Login.PasswordChangeFlow", flow,
                             LOGIN_PASSWORD_CHANGE_FLOW_COUNT);
@@ -386,7 +396,7 @@ class AutoLaunchNotificationDelegate
       auto_launch_notification_timer_->Start(
           FROM_HERE,
           base::TimeDelta::FromMilliseconds(kAutoLaunchNotificationDelay),
-          base::Bind(
+          base::BindOnce(
               &AutoLaunchNotificationDelegate::CloseAutoLaunchNotification,
               weak_factory_.GetWeakPtr()));
     } else if (auto_launch_notification_timer_ &&
@@ -847,7 +857,7 @@ void ExistingUserController::OnStartEnableDebuggingScreen() {
 }
 
 void ExistingUserController::OnStartKioskEnableScreen() {
-  KioskAppManager::Get()->GetConsumerKioskAutoLaunchStatus(base::Bind(
+  KioskAppManager::Get()->GetConsumerKioskAutoLaunchStatus(base::BindOnce(
       &ExistingUserController::OnConsumerKioskAutoLaunchCheckCompleted,
       weak_factory_.GetWeakPtr()));
 }
@@ -908,7 +918,7 @@ void ExistingUserController::OnEnrollmentOwnershipCheckCompleted(
     // On a device that is already owned we might want to allow users to
     // re-enroll if the policy information is invalid.
     CrosSettingsProvider::TrustedStatus trusted_status =
-        CrosSettings::Get()->PrepareTrustedValues(base::Bind(
+        CrosSettings::Get()->PrepareTrustedValues(base::BindOnce(
             &ExistingUserController::OnEnrollmentOwnershipCheckCompleted,
             weak_factory_.GetWeakPtr(), status));
     if (trusted_status == CrosSettingsProvider::PERMANENTLY_UNTRUSTED) {
@@ -1186,12 +1196,19 @@ void ExistingUserController::OnProfilePrepared(Profile* profile,
 
   profile_prepared_ = true;
 
+  chromeos::UserContext user_context =
+      UserContext(*chromeos::ProfileHelper::Get()->GetUserByProfile(profile));
+  auto* profile_connector = profile->GetProfilePolicyConnector();
+  bool is_enterprise_managed =
+      profile_connector->IsManaged() &&
+      user_context.GetUserType() != user_manager::USER_TYPE_CHILD;
+  user_manager::known_user::SetIsEnterpriseManaged(user_context.GetAccountId(),
+                                                   is_enterprise_managed);
+
   // Inform |auth_status_consumer_| about successful login.
   // TODO(nkostylev): Pass UserContext back crbug.com/424550
   if (auth_status_consumer_) {
-    const user_manager::User* const user =
-        chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
-    auth_status_consumer_->OnAuthSuccess(UserContext(*user));
+    auth_status_consumer_->OnAuthSuccess(user_context);
   }
 }
 
@@ -1214,8 +1231,8 @@ void ExistingUserController::OnPasswordChangeDetected() {
   // Must not proceed without signature verification.
   if (CrosSettingsProvider::TRUSTED !=
       cros_settings_->PrepareTrustedValues(
-          base::Bind(&ExistingUserController::OnPasswordChangeDetected,
-                     weak_factory_.GetWeakPtr()))) {
+          base::BindOnce(&ExistingUserController::OnPasswordChangeDetected,
+                         weak_factory_.GetWeakPtr()))) {
     // Value of owner email is still not verified.
     // Another attempt will be invoked after verification completion.
     return;
@@ -1264,11 +1281,7 @@ void ExistingUserController::OnOldEncryptionDetected(
               ->GetURLLoaderFactoryForBrowserProcess();
 
   auto cloud_policy_client = std::make_unique<policy::CloudPolicyClient>(
-      std::string() /* machine_id */, std::string() /* machine_model */,
-      std::string() /* brand_code */, std::string() /* ethernet_mac_address */,
-      std::string() /* dock_mac_address */,
-      std::string() /* manufacture_date */, device_management_service,
-      sigin_profile_url_loader_factory, nullptr /* signing_service */,
+      device_management_service, sigin_profile_url_loader_factory,
       chromeos::GetDeviceDMTokenForUserPolicyGetter(
           user_context.GetAccountId()));
   pre_signin_policy_fetcher_ = std::make_unique<policy::PreSigninPolicyFetcher>(
@@ -1576,6 +1589,7 @@ void ExistingUserController::ConfigureAutoLogin() {
   VLOG(2) << "Autologin account in prefs: " << auto_login_account_id;
   const std::vector<policy::DeviceLocalAccount> device_local_accounts =
       policy::GetDeviceLocalAccounts(cros_settings_);
+  const bool show_update_required_screen = IsUpdateRequiredDeadlineReached();
 
   public_session_auto_login_account_id_ = EmptyAccountId();
   for (std::vector<policy::DeviceLocalAccount>::const_iterator it =
@@ -1615,8 +1629,14 @@ void ExistingUserController::ConfigureAutoLogin() {
     auto_login_delay_ = 0;
   }
 
-  if (public_session_auto_login_account_id_.is_valid() ||
-      arc_kiosk_auto_login_account_id_.is_valid()) {
+  if (arc_kiosk_auto_login_account_id_.is_valid()) {
+    // Kiosks are not interrupted by update required screen.
+    StartAutoLoginTimer();
+  } else if (show_update_required_screen) {
+    // Update required screen overrides public session auto login.
+    StopAutoLoginTimer();
+    ShowUpdateRequiredScreen();
+  } else if (public_session_auto_login_account_id_.is_valid()) {
     StartAutoLoginTimer();
   } else {
     StopAutoLoginTimer();
@@ -1706,15 +1726,16 @@ void ExistingUserController::StartAutoLoginTimer() {
             << "ms";
     auto_login_timer_->Start(
         FROM_HERE, base::TimeDelta::FromMilliseconds(auto_login_delay_),
-        base::Bind(&ExistingUserController::OnPublicSessionAutoLoginTimerFire,
-                   weak_factory_.GetWeakPtr()));
+        base::BindOnce(
+            &ExistingUserController::OnPublicSessionAutoLoginTimerFire,
+            weak_factory_.GetWeakPtr()));
   } else {
     VLOG(2) << "ARC kiosk autologin will be fired in " << auto_login_delay_
             << "ms";
     auto_login_timer_->Start(
         FROM_HERE, base::TimeDelta::FromMilliseconds(auto_login_delay_),
-        base::Bind(&ExistingUserController::OnArcKioskAutoLoginTimerFire,
-                   weak_factory_.GetWeakPtr()));
+        base::BindOnce(&ExistingUserController::OnArcKioskAutoLoginTimerFire,
+                       weak_factory_.GetWeakPtr()));
   }
 }
 
@@ -1826,9 +1847,9 @@ void ExistingUserController::ContinueLoginIfDeviceNotDisabled(
   // Wait for the |cros_settings_| to become either trusted or permanently
   // untrusted.
   const CrosSettingsProvider::TrustedStatus status =
-      cros_settings_->PrepareTrustedValues(
-          base::Bind(&ExistingUserController::ContinueLoginIfDeviceNotDisabled,
-                     weak_factory_.GetWeakPtr(), continuation));
+      cros_settings_->PrepareTrustedValues(base::BindOnce(
+          &ExistingUserController::ContinueLoginIfDeviceNotDisabled,
+          weak_factory_.GetWeakPtr(), continuation));
   if (status == CrosSettingsProvider::TEMPORARILY_UNTRUSTED)
     return;
 
@@ -1855,9 +1876,9 @@ void ExistingUserController::ContinueLoginIfDeviceNotDisabled(
     return;
   }
 
-  CryptohomeClient::Get()->WaitForServiceToBeAvailable(
-      base::Bind(&ExistingUserController::ContinueLoginWhenCryptohomeAvailable,
-                 weak_factory_.GetWeakPtr(), continuation));
+  CryptohomeClient::Get()->WaitForServiceToBeAvailable(base::BindOnce(
+      &ExistingUserController::ContinueLoginWhenCryptohomeAvailable,
+      weak_factory_.GetWeakPtr(), continuation));
 }
 
 void ExistingUserController::DoCompleteLogin(

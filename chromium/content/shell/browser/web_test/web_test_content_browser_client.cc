@@ -16,9 +16,11 @@
 #include "base/strings/pattern.h"
 #include "base/task/post_task.h"
 #include "cc/base/switches.h"
+#include "content/public/browser/browser_child_process_observer.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/child_process_data.h"
 #include "content/public/browser/client_hints_controller_delegate.h"
 #include "content/public/browser/login_delegate.h"
 #include "content/public/browser/overlay_window.h"
@@ -28,7 +30,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/shell/browser/shell_browser_context.h"
-#include "content/shell/browser/web_test/blink_test_controller.h"
+#include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/browser/web_test/fake_bluetooth_chooser.h"
 #include "content/shell/browser/web_test/fake_bluetooth_chooser_factory.h"
 #include "content/shell/browser/web_test/fake_bluetooth_delegate.h"
@@ -37,22 +39,23 @@
 #include "content/shell/browser/web_test/web_test_browser_context.h"
 #include "content/shell/browser/web_test/web_test_browser_main_parts.h"
 #include "content/shell/browser/web_test/web_test_client_impl.h"
+#include "content/shell/browser/web_test/web_test_control_host.h"
 #include "content/shell/browser/web_test/web_test_permission_manager.h"
 #include "content/shell/browser/web_test/web_test_tts_controller_delegate.h"
 #include "content/shell/browser/web_test/web_test_tts_platform.h"
-#include "content/shell/common/blink_test.mojom.h"
 #include "content/shell/common/web_test/web_test_bluetooth_fake_adapter_setter.mojom.h"
 #include "content/shell/common/web_test/web_test_switches.h"
 #include "content/test/data/mojo_web_test_helper_test.mojom.h"
 #include "content/test/mock_badge_service.h"
 #include "content/test/mock_clipboard_host.h"
 #include "content/test/mock_platform_notification_service.h"
+#include "content/test/mock_raw_clipboard_host.h"
 #include "device/bluetooth/public/mojom/test/fake_bluetooth.mojom.h"
 #include "device/bluetooth/test/fake_bluetooth.h"
 #include "gpu/config/gpu_switches.h"
+#include "mojo/public/cpp/bindings/binder_map.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/network/public/mojom/network_service.mojom.h"
-#include "services/service_manager/public/cpp/binder_map.h"
 #include "services/service_manager/public/cpp/manifest.h"
 #include "services/service_manager/public/cpp/manifest_builder.h"
 #include "storage/browser/quota/quota_settings.h"
@@ -125,6 +128,33 @@ class BoundsMatchVideoSizeOverlayWindow : public OverlayWindow {
   gfx::Size size_;
 };
 
+void CreateChildProcessCrashWatcher() {
+  class ChildProcessCrashWatcher : public BrowserChildProcessObserver {
+   public:
+    ChildProcessCrashWatcher() { BrowserChildProcessObserver::Add(this); }
+    ~ChildProcessCrashWatcher() override {
+      BrowserChildProcessObserver::Remove(this);
+    }
+
+   private:
+    // BrowserChildProcessObserver implementation.
+    void BrowserChildProcessCrashed(
+        const ChildProcessData& data,
+        const ChildProcessTerminationInfo& info) override {
+      // Child processes should not crash in web tests.
+      LOG(ERROR) << "Child process crashed with\n"
+                    "   process_type: "
+                 << data.process_type << "\n"
+                 << "   name: " << data.name;
+      CHECK(false);
+    }
+  };
+
+  // This creates the singleton object which will now watch for crashes from
+  // any BrowserChildProcessHost.
+  static base::NoDestructor<ChildProcessCrashWatcher> watcher;
+}
+
 }  // namespace
 
 WebTestContentBrowserClient::WebTestContentBrowserClient() {
@@ -155,9 +185,11 @@ void WebTestContentBrowserClient::SetPopupBlockingEnabled(bool block_popups) {
   block_popups_ = block_popups;
 }
 
-void WebTestContentBrowserClient::ResetMockClipboardHost() {
+void WebTestContentBrowserClient::ResetMockClipboardHosts() {
   if (mock_clipboard_host_)
     mock_clipboard_host_->Reset();
+  if (mock_raw_clipboard_host_)
+    mock_raw_clipboard_host_->Reset();
 }
 
 void WebTestContentBrowserClient::SetScreenOrientationChanged(
@@ -172,9 +204,12 @@ WebTestContentBrowserClient::GetNextFakeBluetoothChooser() {
   return fake_bluetooth_chooser_factory_->GetNextFakeBluetoothChooser();
 }
 
-void WebTestContentBrowserClient::RenderProcessWillLaunch(
-    RenderProcessHost* host) {
-  ShellContentBrowserClient::RenderProcessWillLaunch(host);
+void WebTestContentBrowserClient::BrowserChildProcessHostCreated(
+    BrowserChildProcessHost* host) {
+  scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner =
+      base::CreateSingleThreadTaskRunner({content::BrowserThread::UI});
+  ui_task_runner->PostTask(FROM_HERE,
+                           base::BindOnce(&CreateChildProcessCrashWatcher));
 }
 
 void WebTestContentBrowserClient::ExposeInterfacesToRenderer(
@@ -211,15 +246,12 @@ void WebTestContentBrowserClient::ExposeInterfacesToRenderer(
       ui_task_runner);
 
   associated_registry->AddInterface(
-      base::BindRepeating(&WebTestContentBrowserClient::BindBlinkTestController,
+      base::BindRepeating(&WebTestContentBrowserClient::BindWebTestControlHost,
                           base::Unretained(this)));
-  StoragePartition* partition =
-      BrowserContext::GetDefaultStoragePartition(browser_context());
   associated_registry->AddInterface(base::BindRepeating(
-      &WebTestContentBrowserClient::BindWebTestController,
-      base::Unretained(this), render_process_host->GetID(),
-      partition->GetQuotaManager(), partition->GetDatabaseTracker(),
-      partition->GetNetworkContext()));
+      &WebTestContentBrowserClient::BindWebTestClient,
+      render_process_host->GetID(),
+      BrowserContext::GetDefaultStoragePartition(browser_context())));
 }
 
 base::Optional<service_manager::Manifest>
@@ -247,8 +279,8 @@ void WebTestContentBrowserClient::BindPermissionAutomation(
 void WebTestContentBrowserClient::OverrideWebkitPrefs(
     RenderViewHost* render_view_host,
     WebPreferences* prefs) {
-  if (BlinkTestController::Get())
-    BlinkTestController::Get()->OverrideWebkitPrefs(prefs);
+  if (WebTestControlHost::Get())
+    WebTestControlHost::Get()->OverrideWebkitPrefs(prefs);
 }
 
 void WebTestContentBrowserClient::AppendExtraCommandLineSwitches(
@@ -300,14 +332,17 @@ WebTestContentBrowserClient::GetOriginsRequiringDedicatedProcess() {
       "https://devtools.oopif.test/",
   };
 
-  // On platforms with strict Site Isolation, the also isolate WPT origins for
-  // additional OOPIF coverage.
+  // When appropriate, we isolate WPT origins for additional OOPIF coverage.
   //
-  // Don't isolate WPT origins on
-  // 1) platforms where strict Site Isolation is not the default.
-  // 2) in web tests under virtual/not-site-per-process where
+  // We don't isolate WPT origins:
+  // 1) on platforms where strict Site Isolation is not the default.
+  // 2) in web tests under virtual/not-site-per-process where the
   //    --disable-site-isolation-trials switch is used.
-  if (SiteIsolationPolicy::UseDedicatedProcessesForAllSites()) {
+  // 3) in web tests under virtual/no-auto-wpt-origin-isolation where the
+  //    --disable-auto-wpt-origin-isolation switch is used.
+  if (SiteIsolationPolicy::UseDedicatedProcessesForAllSites() &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableAutoWPTOriginIsolation)) {
     // The list of hostnames below is based on
     // https://web-platform-tests.org/writing-tests/server-features.html
     const char* kWptHostnames[] = {
@@ -375,10 +410,13 @@ bool WebTestContentBrowserClient::CanCreateWindow(
 
 void WebTestContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
     RenderFrameHost* render_frame_host,
-    service_manager::BinderMapWithContext<content::RenderFrameHost*>* map) {
+    mojo::BinderMapWithContext<content::RenderFrameHost*>* map) {
   map->Add<mojom::MojoWebTestHelper>(base::BindRepeating(&BindWebTestHelper));
   map->Add<blink::mojom::ClipboardHost>(base::BindRepeating(
       &WebTestContentBrowserClient::BindClipboardHost, base::Unretained(this)));
+  map->Add<blink::mojom::RawClipboardHost>(
+      base::BindRepeating(&WebTestContentBrowserClient::BindRawClipboardHost,
+                          base::Unretained(this)));
   map->Add<blink::mojom::BadgeService>(base::BindRepeating(
       &WebTestContentBrowserClient::BindBadgeService, base::Unretained(this)));
 }
@@ -418,6 +456,18 @@ void WebTestContentBrowserClient::BindClipboardHost(
   mock_clipboard_host_->Bind(std::move(receiver));
 }
 
+void WebTestContentBrowserClient::BindRawClipboardHost(
+    RenderFrameHost* render_frame_host,
+    mojo::PendingReceiver<blink::mojom::RawClipboardHost> receiver) {
+  if (!mock_clipboard_host_)
+    mock_clipboard_host_ = std::make_unique<MockClipboardHost>();
+  if (!mock_raw_clipboard_host_) {
+    mock_raw_clipboard_host_ =
+        std::make_unique<MockRawClipboardHost>(mock_clipboard_host_.get());
+  }
+  mock_raw_clipboard_host_->Bind(std::move(receiver));
+}
+
 void WebTestContentBrowserClient::BindBadgeService(
     RenderFrameHost* render_frame_host,
     mojo::PendingReceiver<blink::mojom::BadgeService> receiver) {
@@ -438,11 +488,12 @@ std::unique_ptr<LoginDelegate> WebTestContentBrowserClient::CreateLoginDelegate(
   return nullptr;
 }
 
-network::mojom::NetworkContextParamsPtr
-WebTestContentBrowserClient::CreateNetworkContextParams(
-    BrowserContext* context) {
-  network::mojom::NetworkContextParamsPtr context_params =
-      ShellContentBrowserClient::CreateNetworkContextParams(context);
+void WebTestContentBrowserClient::ConfigureNetworkContextParamsForShell(
+    BrowserContext* context,
+    network::mojom::NetworkContextParams* context_params,
+    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
+  ShellContentBrowserClient::ConfigureNetworkContextParamsForShell(
+      context, context_params, cert_verifier_creation_params);
 
 #if BUILDFLAG(ENABLE_REPORTING)
   // Configure the Reporting service in a manner expected by certain Web
@@ -454,8 +505,6 @@ WebTestContentBrowserClient::CreateNetworkContextParams(
       kReportingDeliveryIntervalTimeForWebTests;
   context_params->skip_reporting_send_permission_check = true;
 #endif
-
-  return context_params;
 }
 
 void WebTestContentBrowserClient::CreateFakeBluetoothChooserFactory(
@@ -465,20 +514,22 @@ void WebTestContentBrowserClient::CreateFakeBluetoothChooserFactory(
       FakeBluetoothChooserFactory::Create(std::move(receiver));
 }
 
-void WebTestContentBrowserClient::BindBlinkTestController(
-    mojo::PendingAssociatedReceiver<mojom::BlinkTestClient> receiver) {
-  if (BlinkTestController::Get())
-    BlinkTestController::Get()->AddBlinkTestClientReceiver(std::move(receiver));
+void WebTestContentBrowserClient::BindWebTestControlHost(
+    mojo::PendingAssociatedReceiver<mojom::WebTestControlHost> receiver) {
+  if (WebTestControlHost::Get())
+    WebTestControlHost::Get()->AddWebTestControlHostReceiver(
+        std::move(receiver));
 }
 
-void WebTestContentBrowserClient::BindWebTestController(
+// static
+void WebTestContentBrowserClient::BindWebTestClient(
     int render_process_id,
-    storage::QuotaManager* quota_manager,
-    storage::DatabaseTracker* database_tracker,
-    network::mojom::NetworkContext* network_context,
+    StoragePartition* partition,
     mojo::PendingAssociatedReceiver<mojom::WebTestClient> receiver) {
-  WebTestClientImpl::Create(render_process_id, quota_manager, database_tracker,
-                            network_context, std::move(receiver));
+  WebTestClientImpl::Create(render_process_id, partition->GetQuotaManager(),
+                            partition->GetDatabaseTracker(),
+                            partition->GetNetworkContext(),
+                            std::move(receiver));
 }
 
 #if defined(OS_WIN)
@@ -497,5 +548,10 @@ bool WebTestContentBrowserClient::PreSpawnRenderer(
   return true;
 }
 #endif  // OS_WIN
+
+std::string WebTestContentBrowserClient::GetAcceptLangs(
+    BrowserContext* context) {
+  return content::GetShellLanguage();
+}
 
 }  // namespace content

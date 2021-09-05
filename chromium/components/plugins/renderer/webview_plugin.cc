@@ -21,10 +21,10 @@
 #include "gin/converter.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "skia/ext/platform_canvas.h"
+#include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
-#include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_response.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -213,15 +213,15 @@ blink::WebInputEventResult WebViewPlugin::HandleInputEvent(
   const blink::WebInputEvent& event = coalesced_event.Event();
   // For tap events, don't handle them. They will be converted to
   // mouse events later and passed to here.
-  if (event.GetType() == blink::WebInputEvent::kGestureTap)
+  if (event.GetType() == blink::WebInputEvent::Type::kGestureTap)
     return blink::WebInputEventResult::kNotHandled;
 
   // For LongPress events we return false, since otherwise the context menu will
   // be suppressed. https://crbug.com/482842
-  if (event.GetType() == blink::WebInputEvent::kGestureLongPress)
+  if (event.GetType() == blink::WebInputEvent::Type::kGestureLongPress)
     return blink::WebInputEventResult::kNotHandled;
 
-  if (event.GetType() == blink::WebInputEvent::kContextMenu) {
+  if (event.GetType() == blink::WebInputEvent::Type::kContextMenu) {
     if (delegate_) {
       const WebMouseEvent& mouse_event =
           reinterpret_cast<const WebMouseEvent&>(event);
@@ -232,8 +232,7 @@ blink::WebInputEventResult WebViewPlugin::HandleInputEvent(
   current_cursor_ = *cursor;
   DCHECK(web_view()->MainFrameWidget());
   blink::WebInputEventResult handled =
-      web_view()->MainFrameWidget()->HandleInputEvent(
-          blink::WebCoalescedInputEvent(event));
+      web_view()->MainFrameWidget()->HandleInputEvent(coalesced_event);
   *cursor = current_cursor_;
 
   return handled;
@@ -261,16 +260,16 @@ void WebViewPlugin::DidFailLoading(const WebURLError& error) {
 WebViewPlugin::WebViewHelper::WebViewHelper(WebViewPlugin* plugin,
                                             const WebPreferences& preferences)
     : plugin_(plugin) {
-  web_view_ = WebView::Create(/*client=*/this,
-                              /*is_hidden=*/false,
-                              /*compositing_enabled=*/false,
-                              /*opener=*/nullptr,
-                              mojo::ScopedInterfaceEndpointHandle());
+  web_view_ =
+      WebView::Create(/*client=*/this,
+                      /*is_hidden=*/false,
+                      /*compositing_enabled=*/false,
+                      /*opener=*/nullptr, mojo::NullAssociatedReceiver());
   // ApplyWebPreferences before making a WebLocalFrame so that the frame sees a
   // consistent view of our preferences.
   content::RenderView::ApplyWebPreferences(preferences, web_view_);
-  WebLocalFrame* web_frame =
-      WebLocalFrame::CreateMainFrame(web_view_, this, nullptr, nullptr);
+  WebLocalFrame* web_frame = WebLocalFrame::CreateMainFrame(
+      web_view_, this, nullptr, base::UnguessableToken::Create(), nullptr);
   // The created WebFrameWidget is owned by the |web_frame|.
   WebFrameWidget::CreateForMainFrame(
       this, web_frame,

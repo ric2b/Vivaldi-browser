@@ -12,11 +12,9 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/password_manager/account_storage/account_password_store_factory.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
-#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_handler.h"
 #include "chrome/browser/ui/browser_command_controller.h"
@@ -36,6 +34,7 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browsing_data/content/browsing_data_helper.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
@@ -45,10 +44,8 @@
 #include "components/password_manager/core/browser/ui/password_check_referrer.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "components/password_manager/core/common/password_manager_features.h"
-#include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
-#include "google_apis/gaia/core_account_id.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_WIN)
@@ -282,6 +279,14 @@ void ManagePasswordsUIController::OnCredentialLeak(
       CreateCredentialLeakPrompt(raw_controller));
 }
 
+void ManagePasswordsUIController::OnShowMoveToAccountBubble(
+    std::unique_ptr<password_manager::PasswordFormManagerForUI> form_to_move) {
+  passwords_data_.OnPasswordMovable(std::move(form_to_move));
+  // TODO(crbug.com/1060128): Add smartness like OnPasswordSubmitted?
+  bubble_status_ = BubbleStatus::SHOULD_POP_UP;
+  UpdateBubbleAndIconVisibility();
+}
+
 void ManagePasswordsUIController::NotifyUnsyncedCredentialsWillBeDeleted(
     const std::vector<autofill::PasswordForm>& unsynced_credentials) {
   passwords_data_.ProcessUnsyncedCredentialsWillBeDeleted(unsynced_credentials);
@@ -480,6 +485,16 @@ void ManagePasswordsUIController::SavePassword(const base::string16& username,
     browser->window()->GetAutofillBubbleHandler()->OnPasswordSaved();
 }
 
+void ManagePasswordsUIController::MovePasswordToAccountStore() {
+  DCHECK_EQ(GetState(),
+            password_manager::ui::CAN_MOVE_PASSWORD_TO_ACCOUNT_STATE)
+      << GetState();
+  passwords_data_.form_manager()->MoveCredentialsToAccountStore();
+  ClearPopUpFlagForBubble();
+  passwords_data_.TransitionToState(password_manager::ui::MANAGE_STATE);
+  UpdateBubbleAndIconVisibility();
+}
+
 void ManagePasswordsUIController::ChooseCredential(
     const autofill::PasswordForm& form,
     password_manager::CredentialType credential_type) {
@@ -563,12 +578,10 @@ bool ManagePasswordsUIController::AuthenticateUser() {
 
 void ManagePasswordsUIController::
     AuthenticateUserForAccountStoreOptInAndSavePassword(
-        CoreAccountId account_id,
         const base::string16& username,
         const base::string16& password) {
   password_manager::PasswordManagerClient* client = passwords_data_.client();
-  client->TriggerReauthForAccount(
-      account_id,
+  client->TriggerReauthForPrimaryAccount(
       base::BindOnce(&ManagePasswordsUIController::
                          AuthenticateUserForAccountStoreOptInCallback,
                      weak_ptr_factory_.GetWeakPtr(), passwords_data_.origin(),
@@ -729,7 +742,6 @@ void ManagePasswordsUIController::AuthenticateUserForAccountStoreOptInCallback(
     const base::string16& password,
     password_manager::PasswordManagerClient::ReauthSucceeded reauth_succeeded) {
   if (reauth_succeeded) {
-    GetPasswordFeatureManager()->SetAccountStorageOptIn(true);
     // Save the password only if it is the same origin and same form manager.
     // Otherwise it can be dangerous (e.g. saving the credentials against
     // another origin).

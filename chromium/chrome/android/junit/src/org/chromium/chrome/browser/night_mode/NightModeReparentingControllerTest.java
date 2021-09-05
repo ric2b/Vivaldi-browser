@@ -72,11 +72,7 @@ public class NightModeReparentingControllerTest {
 
         @Override
         public boolean isNTPUrl(String url) {
-            return mIsNTPUrl;
-        }
-
-        public void setIsNTPUrl(boolean isNTPUrl) {
-            mIsNTPUrl = isNTPUrl;
+            return url.equals(UrlConstants.NTP_URL);
         }
     }
 
@@ -99,7 +95,6 @@ public class NightModeReparentingControllerTest {
         mIncognitoTabModel = new MockTabModel(true, null);
 
         mDelegate = new FakeNightModeReparentingDelegate();
-        mDelegate.setIsNTPUrl(false);
         mController = new NightModeReparentingController(mDelegate);
     }
 
@@ -127,11 +122,28 @@ public class NightModeReparentingControllerTest {
 
     @Test
     public void testReparenting_singleTab_NTP() {
-        mDelegate.setIsNTPUrl(true);
+        // New tab pages aren't reparented intentionally.
         mForegroundTab = createAndAddMockTab(1, false, UrlConstants.NTP_URL);
         mController.onNightModeStateChanged();
 
         Assert.assertFalse(AsyncTabParamsManager.hasParamsWithTabToReparent());
+    }
+
+    @Test
+    public void testReparenting_singleTab_reparentingAttemptedTwice() {
+        mForegroundTab = createAndAddMockTab(1, false);
+        mController.onNightModeStateChanged();
+        // Simulate the theme being changed twice before the application is recreated.
+        mController.onNightModeStateChanged();
+
+        AsyncTabParams params = AsyncTabParamsManager.getAsyncTabParams().get(1);
+        Assert.assertNotNull(params);
+        Assert.assertTrue(params instanceof TabReparentingParams);
+
+        TabReparentingParams trp = (TabReparentingParams) params;
+        Tab tab = trp.getTabToReparent();
+        Assert.assertNotNull(tab);
+        verify(mTask, times(1)).detach();
     }
 
     @Test

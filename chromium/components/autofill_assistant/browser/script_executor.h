@@ -17,7 +17,6 @@
 #include "base/memory/weak_ptr.h"
 #include "components/autofill_assistant/browser/actions/action.h"
 #include "components/autofill_assistant/browser/actions/action_delegate.h"
-#include "components/autofill_assistant/browser/actions/click_action.h"
 #include "components/autofill_assistant/browser/client_settings.h"
 #include "components/autofill_assistant/browser/details.h"
 #include "components/autofill_assistant/browser/info_box.h"
@@ -32,7 +31,7 @@ class UserModel;
 
 // Class to execute an assistant script.
 class ScriptExecutor : public ActionDelegate,
-                       public ScriptExecutorDelegate::Listener {
+                       public ScriptExecutorDelegate::NavigationListener {
  public:
   // Listens to events on ScriptExecutor.
   // TODO(b/806868): Make global_payload a part of callback instead of the
@@ -118,15 +117,18 @@ class ScriptExecutor : public ActionDelegate,
   std::string GetBubbleMessage() override;
   void ClickOrTapElement(
       const Selector& selector,
-      ClickAction::ClickType click_type,
+      ClickType click_type,
       base::OnceCallback<void(const ClientStatus&)> callback) override;
   void CollectUserData(
       CollectUserDataOptions* collect_user_data_options) override;
   void WriteUserData(
       base::OnceCallback<void(UserData*, UserData::FieldChange*)>) override;
+  void WriteUserModel(
+      base::OnceCallback<void(UserModel*)> write_callback) override;
   void GetFullCard(GetFullCardCallback callback) override;
   void Prompt(std::unique_ptr<std::vector<UserAction>> user_actions,
               bool disable_force_expand_sheet,
+              base::OnceCallback<void()> end_on_navigation_callback,
               bool browse_mode) override;
   void CleanUpAfterPrompt() override;
   void SetBrowseDomainsWhitelist(std::vector<std::string> domains) override;
@@ -204,9 +206,9 @@ class ScriptExecutor : public ActionDelegate,
   void Shutdown() override;
   void Close() override;
   autofill::PersonalDataManager* GetPersonalDataManager() override;
-  WebsiteLoginFetcher* GetWebsiteLoginFetcher() override;
+  WebsiteLoginManager* GetWebsiteLoginManager() override;
   content::WebContents* GetWebContents() override;
-  std::string GetAccountEmailAddress() override;
+  std::string GetEmailAddressForAccessTokenAccount() override;
   std::string GetLocale() override;
   void SetDetails(std::unique_ptr<Details> details) override;
   void ClearInfoBox() override;
@@ -238,7 +240,7 @@ class ScriptExecutor : public ActionDelegate,
   // Helper for WaitForElementVisible that keeps track of the state required to
   // run interrupts while waiting for a specific element.
   class WaitForDomOperation : public ScriptExecutor::Listener,
-                              ScriptExecutorDelegate::Listener {
+                              ScriptExecutorDelegate::NavigationListener {
    public:
     // Let the caller know about either the result of looking for the element or
     // of an abnormal result from an interrupt.
@@ -268,7 +270,7 @@ class ScriptExecutor : public ActionDelegate,
     void Pause();
     void Continue();
 
-    // Implements ScriptExecutorDelegate::Listener
+    // Implements ScriptExecutorDelegate::NavigationListener
     void OnNavigationStateChanged() override;
 
     // Implements ScriptExecutor::Listener
@@ -369,10 +371,16 @@ class ScriptExecutor : public ActionDelegate,
       base::OnceCallback<void(UserData*, const UserModel*)> callback,
       UserData* user_data,
       const UserModel* user_model);
-  void OnAdditionalActionTriggered(base::OnceCallback<void(int)> callback,
-                                   int index);
-  void OnTermsAndConditionsLinkClicked(base::OnceCallback<void(int)> callback,
-                                       int link);
+  void OnAdditionalActionTriggered(
+      base::OnceCallback<void(int, UserData*, const UserModel*)> callback,
+      int index,
+      UserData* user_data,
+      const UserModel* user_model);
+  void OnTermsAndConditionsLinkClicked(
+      base::OnceCallback<void(int, UserData*, const UserModel*)> callback,
+      int link,
+      UserData* user_data,
+      const UserModel* user_model);
   void OnGetFullCard(GetFullCardCallback callback,
                      std::unique_ptr<autofill::CreditCard> card,
                      const base::string16& cvc);
@@ -438,6 +446,10 @@ class ScriptExecutor : public ActionDelegate,
     // Set to true when a direct action was used to trigger a UserAction within
     // a prompt. This is reported to the backend.
     bool direct_action = false;
+
+    // This callback is set when a navigation event should terminate an ongoing
+    // prompt action. Only a prompt action will set a valid callback here.
+    base::OnceCallback<void()> end_prompt_on_navigation_callback;
   };
   CurrentActionData current_action_data_;
 

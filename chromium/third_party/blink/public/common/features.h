@@ -28,8 +28,7 @@ BLINK_COMMON_EXPORT extern const base::Feature kFreezeUserAgent;
 BLINK_COMMON_EXPORT extern const base::Feature kImplicitRootScroller;
 BLINK_COMMON_EXPORT extern const base::Feature kCSSOMViewScrollCoordinates;
 BLINK_COMMON_EXPORT extern const base::Feature kDisplayLocking;
-BLINK_COMMON_EXPORT extern const base::Feature
-    kAssumeOverlapAfterFixedOrStickyPosition;
+BLINK_COMMON_EXPORT extern const base::Feature kMaxOverlapBoundsForFixed;
 BLINK_COMMON_EXPORT extern const base::Feature kJSONModules;
 BLINK_COMMON_EXPORT extern const base::Feature kTopLevelAwait;
 BLINK_COMMON_EXPORT extern const base::Feature kLayoutNG;
@@ -144,6 +143,8 @@ BLINK_COMMON_EXPORT extern const base::Feature kLowLatencyCanvas2dImageChromium;
 BLINK_COMMON_EXPORT extern const base::Feature kLowLatencyCanvas2dSwapChain;
 BLINK_COMMON_EXPORT extern const base::Feature kLowLatencyWebGLSwapChain;
 
+BLINK_COMMON_EXPORT extern const base::Feature kDawn2dCanvas;
+
 BLINK_COMMON_EXPORT extern const base::Feature
     kForceExtraRenderingToTrackStickyFrame;
 
@@ -161,11 +162,88 @@ BLINK_COMMON_EXPORT extern const base::Feature kFontPreloadingDelaysRendering;
 BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
     kFontPreloadingDelaysRenderingParam;
 
+BLINK_COMMON_EXPORT extern const base::Feature kFlexGaps;
 BLINK_COMMON_EXPORT extern const base::Feature kFlexNG;
 
 BLINK_COMMON_EXPORT extern const base::Feature kKeepScriptResourceAlive;
 
 BLINK_COMMON_EXPORT extern const base::Feature kAppCache;
+BLINK_COMMON_EXPORT extern const base::Feature kAppCacheRequireOriginTrial;
+
+BLINK_COMMON_EXPORT extern const base::Feature kAVIF;
+
+BLINK_COMMON_EXPORT extern const base::Feature
+    kAlignFontDisplayAutoTimeoutWithLCPGoal;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
+    kAlignFontDisplayAutoTimeoutWithLCPGoalTimeoutParam;
+enum class AlignFontDisplayAutoTimeoutWithLCPGoalMode {
+  kToFailurePeriod,
+  kToSwapPeriod
+};
+BLINK_COMMON_EXPORT extern const base::FeatureParam<
+    AlignFontDisplayAutoTimeoutWithLCPGoalMode>
+    kAlignFontDisplayAutoTimeoutWithLCPGoalModeParam;
+
+BLINK_COMMON_EXPORT extern const base::Feature kThrottleInstallingServiceWorker;
+BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
+    kInstallingServiceWorkerOutstandingThrottledLimit;
+
+// Enables resampling GestureScroll events on compositor thread.
+BLINK_COMMON_EXPORT extern const base::Feature kResamplingScrollEvents;
+
+// Enables the device-memory, resource-width, viewport-width and DPR client
+// hints to be sent to third-party origins if the first-party has opted in to
+// receiving client hints, regardless of Feature Policy.
+BLINK_COMMON_EXPORT extern const base::Feature kAllowClientHintsToThirdParty;
+
+// The type of scroll predictor to use for the resampling scroll events. These
+// values are used as the 'predictor' feature param for
+// |kResamplingScrollEvents|.
+BLINK_COMMON_EXPORT extern const char kScrollPredictorNameLsq[];
+BLINK_COMMON_EXPORT extern const char kScrollPredictorNameKalman[];
+BLINK_COMMON_EXPORT extern const char kScrollPredictorNameLinearFirst[];
+BLINK_COMMON_EXPORT extern const char kScrollPredictorNameLinearSecond[];
+BLINK_COMMON_EXPORT extern const char kScrollPredictorNameLinearResampling[];
+BLINK_COMMON_EXPORT extern const char kScrollPredictorNameEmpty[];
+
+// Enables filtering of predicted scroll events on compositor thread.
+BLINK_COMMON_EXPORT extern const base::Feature kFilteringScrollPrediction;
+
+// The type of filter to use for the filtering scroll events. These
+// values are used as the 'filter' feature param for
+// |kFilteringScrollPrediction|.
+BLINK_COMMON_EXPORT extern const char kFilterNameEmpty[];
+BLINK_COMMON_EXPORT extern const char kFilterNameOneEuro[];
+
+// Enables changing the influence of acceleration based on change of direction.
+BLINK_COMMON_EXPORT extern const base::Feature kKalmanHeuristics;
+
+// Enables discarding the prediction if the predicted direction is opposite from
+// the current direction.
+BLINK_COMMON_EXPORT extern const base::Feature kKalmanDirectionCutOff;
+
+// Skips the browser touch event filter, ensuring that events that reach the
+// queue and would otherwise be filtered out will instead be passed onto the
+// renderer compositor process as long as the page hasn't timed out. If
+// skip_filtering_process is browser_and_renderer, also skip the renderer cc
+// touch event filter, ensuring that events will be passed onto the renderer
+// main thread. Which event types will be always forwarded is controlled by the
+// "type" FeatureParam, which can be either "discrete" (default) or "all".
+BLINK_COMMON_EXPORT
+extern const base::Feature kSkipTouchEventFilter;
+BLINK_COMMON_EXPORT
+extern const char kSkipTouchEventFilterTypeParamName[];
+BLINK_COMMON_EXPORT
+extern const char kSkipTouchEventFilterTypeParamValueDiscrete[];
+BLINK_COMMON_EXPORT
+extern const char kSkipTouchEventFilterTypeParamValueAll[];
+BLINK_COMMON_EXPORT
+extern const char kSkipTouchEventFilterFilteringProcessParamName[];
+BLINK_COMMON_EXPORT
+extern const char kSkipTouchEventFilterFilteringProcessParamValueBrowser[];
+BLINK_COMMON_EXPORT
+extern const char
+    kSkipTouchEventFilterFilteringProcessParamValueBrowserAndRenderer[];
 
 }  // namespace features
 }  // namespace blink

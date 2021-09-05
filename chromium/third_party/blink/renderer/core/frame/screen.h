@@ -43,7 +43,7 @@ namespace blink {
 class LocalFrame;
 
 class CORE_EXPORT Screen final : public ScriptWrappable,
-                                 public DOMWindowClient,
+                                 public ExecutionContextClient,
                                  public Supplementable<Screen> {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(Screen);
@@ -67,13 +67,15 @@ class CORE_EXPORT Screen final : public ScriptWrappable,
   // TODO(msw): Resolve different info sources, caching, and lifetimes.
   Screen(display::mojom::blink::DisplayPtr display,
          bool internal,
-         bool primary);
+         bool primary,
+         const String& id);
   int left() const;
   int top() const;
   bool internal() const;
   bool primary() const;
   float scaleFactor() const;
-  const String name() const;
+  const String id() const;
+  bool touchSupport() const;
 
   // Not web-exposed; for internal usage only.
   static constexpr int64_t kInvalidDisplayId = -1;
@@ -92,6 +94,10 @@ class CORE_EXPORT Screen final : public ScriptWrappable,
   // value provided upon construction. This member is only valid for Screen
   // objects obtained via the experimental Screen Enumeration API.
   const base::Optional<bool> primary_;
+  // A web-exposed device id; it is a static value provided upon construction.
+  // This member is only valid for Screen objects obtained via the experimental
+  // Screen Enumeration API.
+  const String id_;
 };
 
 }  // namespace blink

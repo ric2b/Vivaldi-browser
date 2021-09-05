@@ -5,7 +5,6 @@
 #include "chrome/browser/ui/views/media_router/presentation_receiver_window_view.h"
 
 #include "base/callback.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
@@ -18,6 +17,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/point.h"

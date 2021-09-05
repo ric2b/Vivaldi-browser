@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -20,12 +22,14 @@
 #include "chrome/browser/extensions/shared_module_service.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
+#include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/policy/policy_test_utils.h"
 #include "chrome/browser/policy/profile_policy_connector_builder.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/app_shortcut_manager.h"
+#include "chrome/browser/web_applications/components/install_manager.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/test/web_app_install_observer.h"
 #include "chrome/common/extensions/extension_test_util.h"
@@ -36,6 +40,7 @@
 #include "components/version_info/channel.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/result_codes.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/url_loader_interceptor.h"
 #include "extensions/browser/content_verifier/test_utils.h"
@@ -62,7 +67,7 @@
 #endif
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/extensions/default_web_app_ids.h"
+#include "chrome/browser/chromeos/web_applications/default_web_app_ids.h"
 #include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
 #include "chromeos/constants/chromeos_switches.h"
 #endif
@@ -167,6 +172,10 @@ class ExtensionPolicyTest : public PolicyTest {
     return extensions::ExtensionRegistry::Get(browser()->profile());
   }
 
+  web_app::WebAppProviderBase* web_app_provider_base() {
+    return web_app::WebAppProviderBase::GetProviderBase(browser()->profile());
+  }
+
   const extensions::Extension* InstallExtension(
       const base::FilePath::StringType& name) {
     base::FilePath extension_path(ui_test_utils::GetTestFilePath(
@@ -204,6 +213,26 @@ class ExtensionPolicyTest : public PolicyTest {
     observer.Wait();
     content::Details<const extensions::Extension> details = observer.details();
     return details.ptr();
+  }
+
+  const web_app::AppId InstallWebApp() {
+    std::unique_ptr<WebApplicationInfo> web_application =
+        std::make_unique<WebApplicationInfo>();
+    web_application->title = base::ASCIIToUTF16("Web App");
+    web_application->app_url = GURL("http://www.google.com");
+    base::RunLoop loop;
+    web_app::AppId return_app_id;
+    web_app_provider_base()->install_manager().InstallWebAppFromInfo(
+        std::move(web_application), web_app::ForInstallableSite::kYes,
+        WebappInstallSource::SYNC,
+        base::BindLambdaForTesting(
+            [&](const web_app::AppId& app_id, web_app::InstallResultCode code) {
+              EXPECT_EQ(code, web_app::InstallResultCode::kSuccessNewInstall);
+              return_app_id = app_id;
+              loop.Quit();
+            }));
+    loop.Run();
+    return return_app_id;
   }
 
 #if defined(OS_CHROMEOS)
@@ -346,35 +375,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   EXPECT_EQ(enabled_count - 1, registry->enabled_extensions().size());
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
-                       SystemFeaturesDisableListOsSettings) {
-  extensions::ExtensionPrefs* extension_prefs =
-      extensions::ExtensionPrefs::Get(browser()->profile());
-
-  extensions::ExtensionRegistry* registry = extension_registry();
-  const extensions::Extension* bookmark_app = InstallOSSettings();
-  ASSERT_TRUE(bookmark_app);
-  ASSERT_TRUE(registry->enabled_extensions().GetByID(
-      chromeos::default_web_apps::kOsSettingsAppId));
-
-  base::ListValue feature_list;
-  feature_list.AppendString("settings");
-  PolicyMap policies;
-  policies.Set(key::kSystemFeaturesDisableList, POLICY_LEVEL_MANDATORY,
-               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               feature_list.CreateDeepCopy(), nullptr);
-  UpdateProviderPolicy(policies);
-
-  EXPECT_EQ(1u, registry->disabled_extensions().size());
-  extensions::ExtensionService* service = extension_service();
-  EXPECT_FALSE(service->IsExtensionEnabled(
-      chromeos::default_web_apps::kOsSettingsAppId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_BLOCKED_BY_POLICY,
-            extension_prefs->GetDisableReasons(
-                chromeos::default_web_apps::kOsSettingsAppId));
-}
-
-// Ensure that OS Settings is only blocked by the SystemFeaturesDisableList
+// Ensures that OS Settings can't be disabled by ExtensionInstallBlacklist
 // policy.
 IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
                        ExtensionInstallBlacklistOsSettings) {
@@ -430,6 +431,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
 
 // Ensure that bookmark apps are not blocked by the ExtensionInstallBlacklist
 // policy.
+// Also see ExtensionInstallBlacklist_WebApp counterpart.
+// TODO(https://crbug.com/1079435): Delete this test for bookmark apps removal.
 IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
                        ExtensionInstallBlacklist_BookmarkApp) {
   const extensions::Extension* bookmark_app = InstallBookmarkApp();
@@ -450,6 +453,28 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   // The bookmark app should still be enabled, with |kGoodCrxId| being disabled.
   EXPECT_FALSE(service->IsExtensionEnabled(kGoodCrxId));
   EXPECT_TRUE(service->IsExtensionEnabled(bookmark_app->id()));
+}
+
+// Ensure that web apps are not blocked by the ExtensionInstallBlacklist policy.
+IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionInstallBlacklist_WebApp) {
+  web_app::AppId web_app_id = InstallWebApp();
+  EXPECT_TRUE(InstallExtension(kGoodCrxName));
+
+  web_app::WebAppProviderBase* provider = web_app_provider_base();
+  EXPECT_TRUE(provider->registrar().IsInstalled(web_app_id));
+  extensions::ExtensionService* service = extension_service();
+  EXPECT_TRUE(service->IsExtensionEnabled(kGoodCrxId));
+
+  // Now set ExtensionInstallBlacklist policy to block all extensions.
+  PolicyMap policies;
+  policies.Set(key::kExtensionInstallBlacklist, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+               extensions::ListBuilder().Append("*").Build(), nullptr);
+  UpdateProviderPolicy(policies);
+
+  EXPECT_FALSE(service->IsExtensionEnabled(kGoodCrxId));
+  EXPECT_TRUE(provider->registrar().IsInstalled(web_app_id));
+  EXPECT_TRUE(provider->registrar().IsLocallyInstalled(web_app_id));
 }
 
 // Ensure that when INSTALLATION_REMOVED is set
@@ -502,6 +527,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionWildcardRemovedPolicy) {
 
 // Ensure that bookmark apps are not blocked by the ExtensionAllowedTypes
 // policy.
+// Also see ExtensionAllowedTypes_WebApp counterpart.
+// TODO(https://crbug.com/1079435): Delete this test for bookmark apps removal.
 IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionAllowedTypes_BookmarkApp) {
   const extensions::Extension* bookmark_app = InstallBookmarkApp();
   ASSERT_TRUE(bookmark_app);
@@ -524,8 +551,32 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionAllowedTypes_BookmarkApp) {
   EXPECT_TRUE(service->IsExtensionEnabled(bookmark_app->id()));
 }
 
+// Ensure that web apps are not blocked by the ExtensionInstallBlacklist policy.
+IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionAllowedTypes_WebApp) {
+  web_app::AppId web_app_id = InstallWebApp();
+  EXPECT_TRUE(InstallExtension(kGoodCrxName));
+
+  web_app::WebAppProviderBase* provider = web_app_provider_base();
+  EXPECT_TRUE(provider->registrar().IsInstalled(web_app_id));
+  extensions::ExtensionService* service = extension_service();
+  EXPECT_TRUE(service->IsExtensionEnabled(kGoodCrxId));
+
+  // Now set policy to only allow themes.
+  PolicyMap policies;
+  policies.Set(key::kExtensionAllowedTypes, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+               extensions::ListBuilder().Append("theme").Build(), nullptr);
+  UpdateProviderPolicy(policies);
+
+  EXPECT_FALSE(service->IsExtensionEnabled(kGoodCrxId));
+  EXPECT_TRUE(provider->registrar().IsInstalled(web_app_id));
+  EXPECT_TRUE(provider->registrar().IsLocallyInstalled(web_app_id));
+}
+
 // Ensure that bookmark apps are not blocked by the ExtensionSettings
 // policy.
+// Also see ExtensionSettings_WebApp counterpart.
+// TODO(https://crbug.com/1079435): Delete this test for bookmark apps removal.
 IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionSettings_BookmarkApp) {
   const extensions::Extension* bookmark_app = InstallBookmarkApp();
   ASSERT_TRUE(bookmark_app);
@@ -575,6 +626,33 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionSettings_BookmarkApp) {
   // The bookmark app should still be enabled, with |kGoodCrxId| being disabled.
   EXPECT_FALSE(service->IsExtensionEnabled(kGoodCrxId));
   EXPECT_TRUE(service->IsExtensionEnabled(bookmark_app->id()));
+}
+
+// Ensure that web apps are not blocked by the ExtensionInstallBlacklist policy.
+IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionSettings_WebApp) {
+  web_app::AppId web_app_id = InstallWebApp();
+  EXPECT_TRUE(InstallExtension(kGoodCrxName));
+
+  web_app::WebAppProviderBase* provider = web_app_provider_base();
+  EXPECT_TRUE(provider->registrar().IsInstalled(web_app_id));
+  extensions::ExtensionService* service = extension_service();
+  EXPECT_TRUE(service->IsExtensionEnabled(kGoodCrxId));
+
+  // Now set policy to block all extensions.
+  PolicyMap policies;
+  policies.Set(key::kExtensionSettings, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+               extensions::DictionaryBuilder()
+                   .Set("*", extensions::DictionaryBuilder()
+                                 .Set("installation_mode", "blocked")
+                                 .Build())
+                   .Build(),
+               nullptr);
+  UpdateProviderPolicy(policies);
+
+  EXPECT_FALSE(service->IsExtensionEnabled(kGoodCrxId));
+  EXPECT_TRUE(provider->registrar().IsInstalled(web_app_id));
+  EXPECT_TRUE(provider->registrar().IsLocallyInstalled(web_app_id));
 }
 
 // Flaky on windows; http://crbug.com/307994.
@@ -1060,10 +1138,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
                               extensions::disable_reason::DISABLE_RELOAD);
 
     const std::string kCorruptedContent("// corrupted\n");
-    ASSERT_EQ(kCorruptedContent.size(),
-              static_cast<unsigned>(base::WriteFile(resource_path,
-                                                    kCorruptedContent.data(),
-                                                    kCorruptedContent.size())));
+    ASSERT_TRUE(base::WriteFile(resource_path, kCorruptedContent));
 
     service->EnableExtension(kGoodCrxId);
   }
@@ -1132,17 +1207,12 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
                               extensions::disable_reason::DISABLE_RELOAD);
 
     const std::string kCorruptedContent("// corrupted\n");
-    ASSERT_EQ(kCorruptedContent.size(),
-              static_cast<unsigned>(base::WriteFile(resource_path,
-                                                    kCorruptedContent.data(),
-                                                    kCorruptedContent.size())));
+    ASSERT_TRUE(base::WriteFile(resource_path, kCorruptedContent));
 
     const std::string kInvalidJson("not a json");
-    ASSERT_EQ(
-        kInvalidJson.size(),
-        static_cast<unsigned>(base::WriteFile(
-            extensions::file_util::GetComputedHashesPath(extension->path()),
-            kInvalidJson.data(), kInvalidJson.size())));
+    ASSERT_TRUE(base::WriteFile(
+        extensions::file_util::GetComputedHashesPath(extension->path()),
+        kInvalidJson));
 
     service->EnableExtension(kGoodCrxId);
   }
@@ -1216,10 +1286,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
                               extensions::disable_reason::DISABLE_RELOAD);
 
     const std::string kCorruptedContent("// corrupted\n");
-    ASSERT_EQ(kCorruptedContent.size(),
-              static_cast<unsigned>(base::WriteFile(resource_path,
-                                                    kCorruptedContent.data(),
-                                                    kCorruptedContent.size())));
+    ASSERT_TRUE(base::WriteFile(resource_path, kCorruptedContent));
     ASSERT_TRUE(base::DeleteFile(
         extensions::file_util::GetComputedHashesPath(extension->path()),
         /*recursive=*/false));

@@ -83,10 +83,9 @@ InvertBubbleView::InvertBubbleView(Browser* browser, views::View* anchor_view)
     : views::BubbleDialogDelegateView(anchor_view,
                                       views::BubbleBorder::TOP_RIGHT),
       browser_(browser) {
-  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_OK);
-  DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_OK,
-                                   l10n_util::GetStringUTF16(IDS_DONE));
-  DialogDelegate::SetExtraView(::CreateExtraView(this));
+  SetButtons(ui::DIALOG_BUTTON_OK);
+  SetButtonLabel(ui::DIALOG_BUTTON_OK, l10n_util::GetStringUTF16(IDS_DONE));
+  SetExtraView(::CreateExtraView(this));
   set_margins(gfx::Insets());
   chrome::RecordDialogCreation(chrome::DialogIdentifier::INVERT);
 }
@@ -158,6 +157,8 @@ void InvertBubbleView::OpenLink(const std::string& url,
 
 void MaybeShowInvertBubbleView(BrowserView* browser_view) {
   Browser* browser = browser_view->browser();
+  if (browser->profile()->IsIncognitoProfile())
+    return;
   PrefService* pref_service = browser->profile()->GetPrefs();
   views::View* anchor =
       browser_view->toolbar_button_provider()->GetAppMenuButton();

@@ -21,6 +21,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/blink/public/common/context_menu_data/media_type.h"
@@ -150,6 +151,9 @@ using RegisterProtocolHandlerExtensionBrowserTest =
     extensions::ExtensionBrowserTest;
 
 IN_PROC_BROWSER_TEST_F(RegisterProtocolHandlerExtensionBrowserTest, Basic) {
+#if defined(OS_MACOSX)
+  ASSERT_TRUE(test::RegisterAppWithLaunchServices());
+#endif
   permissions::PermissionRequestManager* manager =
       permissions::PermissionRequestManager::FromWebContents(
           browser()->tab_strip_model()->GetActiveWebContents());

@@ -7,6 +7,8 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
+#import "base/ios/ios_util.h"
+#import "base/ios/ns_error_util.h"
 #include "base/mac/bundle_locations.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/dom_distiller/core/url_constants.h"
@@ -21,10 +23,15 @@
 #include "ios/chrome/browser/ios_chrome_main_parts.h"
 #include "ios/chrome/browser/passwords/password_manager_features.h"
 #import "ios/chrome/browser/reading_list/offline_page_tab_helper.h"
+#import "ios/chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
+#import "ios/chrome/browser/safe_browsing/safe_browsing_error.h"
+#import "ios/chrome/browser/safe_browsing/safe_browsing_unsafe_resource_container.h"
 #include "ios/chrome/browser/ssl/ios_ssl_error_handler.h"
 #import "ios/chrome/browser/ui/elements/windowed_container_view.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/web/error_page_util.h"
 #include "ios/chrome/browser/web/features.h"
+#import "ios/components/security_interstitials/ios_blocking_page_tab_helper.h"
 #include "ios/components/webui/web_ui_url_constants.h"
 #include "ios/public/provider/chrome/browser/browser_url_rewriter_provider.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
@@ -34,6 +41,7 @@
 #include "ios/web/common/features.h"
 #include "ios/web/common/user_agent.h"
 #include "ios/web/public/navigation/browser_url_rewriter.h"
+#include "ios/web/public/navigation/navigation_manager.h"
 #include "net/http/http_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -62,6 +70,27 @@ NSString* GetPageScript(NSString* script_file_name) {
   DCHECK(content);
   return content;
 }
+// Returns the safe browsing error page HTML.
+NSString* GetSafeBrowsingErrorPageHTML(web::WebState* web_state,
+                                       int64_t navigation_id) {
+  // Fetch the unsafe resource causing this error page from the WebState's
+  // container.
+  SafeBrowsingUnsafeResourceContainer* container =
+      SafeBrowsingUnsafeResourceContainer::FromWebState(web_state);
+  std::unique_ptr<security_interstitials::UnsafeResource> resource =
+      container->ReleaseMainFrameUnsafeResource()
+          ?: container->ReleaseSubFrameUnsafeResource(
+                 web_state->GetNavigationManager()->GetLastCommittedItem());
+
+  // Construct the blocking page and associate it with the WebState.
+  std::unique_ptr<security_interstitials::IOSSecurityInterstitialPage> page =
+      SafeBrowsingBlockingPage::Create(*resource);
+  std::string error_page_content = page->GetHtmlContents();
+  security_interstitials::IOSBlockingPageTabHelper::FromWebState(web_state)
+      ->AssociateBlockingPage(navigation_id, std::move(page));
+
+  return base::SysUTF8ToNSString(error_page_content);
+}
 }  // namespace
 
 ChromeWebClient::ChromeWebClient() {}
@@ -74,15 +103,20 @@ std::unique_ptr<web::WebMainParts> ChromeWebClient::CreateWebMainParts() {
 }
 
 void ChromeWebClient::PreWebViewCreation() const {
-  // Initialize the audio session to allow a web page's audio to continue
-  // playing after the app is backgrounded.
-  VoiceSearchProvider* voice_provider =
-      ios::GetChromeBrowserProvider()->GetVoiceSearchProvider();
-  if (voice_provider) {
-    AudioSessionController* audio_controller =
-        voice_provider->GetAudioSessionController();
-    if (audio_controller) {
-      audio_controller->InitializeSessionIfNecessary();
+  // TODO(crbug.com/1082371): Confirm that this code is no longer needed and
+  // remove it entirely. Until then, prevent this from running on iOS 13.4+, as
+  // it occasionally triggers a permissions prompt.
+  if (!base::ios::IsRunningOnOrLater(13, 4, 0)) {
+    // Initialize the audio session to allow a web page's audio to continue
+    // playing after the app is backgrounded.
+    VoiceSearchProvider* voice_provider =
+        ios::GetChromeBrowserProvider()->GetVoiceSearchProvider();
+    if (voice_provider) {
+      AudioSessionController* audio_controller =
+          voice_provider->GetAudioSessionController();
+      if (audio_controller) {
+        audio_controller->InitializeSessionIfNecessary();
+      }
     }
   }
 }
@@ -234,7 +268,14 @@ void ChromeWebClient::PrepareErrorPage(
   __block NSString* error_html = nil;
   __block base::OnceCallback<void(NSString*)> error_html_callback =
       std::move(callback);
-  if (info.has_value()) {
+  NSError* final_underlying_error =
+      base::ios::GetFinalUnderlyingErrorFromError(error);
+  if ([final_underlying_error.domain isEqual:kSafeBrowsingErrorDomain]) {
+    // Only kUnsafeResourceErrorCode is supported.
+    DCHECK_EQ(kUnsafeResourceErrorCode, final_underlying_error.code);
+    std::move(error_html_callback)
+        .Run(GetSafeBrowsingErrorPageHTML(web_state, navigation_id));
+  } else if (info.has_value()) {
     base::OnceCallback<void(bool)> proceed_callback;
     base::OnceCallback<void(NSString*)> blocking_page_callback =
         base::BindOnce(^(NSString* blocking_page_html) {
@@ -265,18 +306,17 @@ std::string ChromeWebClient::GetProduct() const {
 }
 
 bool ChromeWebClient::ForceMobileVersionByDefault(const GURL& url) {
-  DCHECK(base::FeatureList::IsEnabled(
-      web::features::kUseDefaultUserAgentInWebClient));
+  DCHECK(web::features::UseWebClientDefaultUserAgent());
   if (base::FeatureList::IsEnabled(web::kMobileGoogleSRP)) {
     return google_util::IsGoogleSearchUrl(url);
   }
   return false;
 }
 
-web::UserAgentType ChromeWebClient::GetDefaultUserAgent(UIView* web_view,
-                                                        const GURL& url) {
-  DCHECK(base::FeatureList::IsEnabled(
-      web::features::kUseDefaultUserAgentInWebClient));
+web::UserAgentType ChromeWebClient::GetDefaultUserAgent(
+    id<UITraitEnvironment> web_view,
+    const GURL& url) {
+  DCHECK(web::features::UseWebClientDefaultUserAgent());
   if (ForceMobileVersionByDefault(url))
     return web::UserAgentType::MOBILE;
   BOOL isRegularRegular = web_view.traitCollection.horizontalSizeClass ==
@@ -285,4 +325,8 @@ web::UserAgentType ChromeWebClient::GetDefaultUserAgent(UIView* web_view,
                               UIUserInterfaceSizeClassRegular;
   return isRegularRegular ? web::UserAgentType::DESKTOP
                           : web::UserAgentType::MOBILE;
+}
+
+bool ChromeWebClient::IsEmbedderBlockRestoreUrlEnabled() {
+  return ios::GetChromeBrowserProvider()->MightBlockUrlDuringRestore();
 }

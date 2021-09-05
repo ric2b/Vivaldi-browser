@@ -3,12 +3,15 @@
 // found in the LICENSE file.
 
 #include "components/autofill_assistant/browser/basic_interactions.h"
+#include "base/guid.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/mock_callback.h"
+#include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill_assistant/browser/fake_script_executor_delegate.h"
-#include "components/autofill_assistant/browser/interactions.pb.h"
+#include "components/autofill_assistant/browser/generic_ui.pb.h"
 #include "components/autofill_assistant/browser/user_model.h"
+#include "components/autofill_assistant/browser/value_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace autofill_assistant {
@@ -71,6 +74,12 @@ TEST_F(BasicInteractionsTest, ComputeValueBooleanAnd) {
   EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
   EXPECT_EQ(user_model_.GetValue("output"), SimpleValue(true));
 
+  // is_client_side_only flag is sticky.
+  user_model_.SetValue("value_3",
+                       SimpleValue(true, /* is_client_side_only = */ true));
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  EXPECT_TRUE(user_model_.GetValue("output")->is_client_side_only());
+
   // Mixing types is not allowed.
   user_model_.SetValue("value_1", ValueProto());
   EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
@@ -104,6 +113,12 @@ TEST_F(BasicInteractionsTest, ComputeValueBooleanOr) {
   EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
   EXPECT_EQ(user_model_.GetValue("output"), SimpleValue(true));
 
+  // is_client_side_only flag is sticky.
+  user_model_.SetValue("value_2",
+                       SimpleValue(true, /* is_client_side_only = */ true));
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  EXPECT_TRUE(user_model_.GetValue("output")->is_client_side_only());
+
   // Mixing types is not allowed.
   user_model_.SetValue("value_1", ValueProto());
   EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
@@ -131,6 +146,12 @@ TEST_F(BasicInteractionsTest, ComputeValueBooleanNot) {
   EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
   EXPECT_EQ(user_model_.GetValue("value"), SimpleValue(false));
 
+  // is_client_side_only flag is sticky.
+  user_model_.SetValue("value",
+                       SimpleValue(false, /* is_client_side_only = */ true));
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  EXPECT_TRUE(user_model_.GetValue("value")->is_client_side_only());
+
   // Not a boolean.
   user_model_.SetValue("value", ValueProto());
   EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
@@ -146,7 +167,8 @@ TEST_F(BasicInteractionsTest, ComputeValueBooleanNot) {
 TEST_F(BasicInteractionsTest, ComputeValueToString) {
   ComputeValueProto proto;
   proto.mutable_to_string()->mutable_value()->set_model_identifier("value");
-  user_model_.SetValue("value", SimpleValue(1));
+  user_model_.SetValue("value", SimpleValue(1,
+                                            /* is_client_side_only = */ true));
 
   // Result model identifier not set.
   EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
@@ -154,21 +176,27 @@ TEST_F(BasicInteractionsTest, ComputeValueToString) {
   // Integer
   proto.set_result_model_identifier("output");
   EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
-  EXPECT_EQ(*user_model_.GetValue("output"), SimpleValue(std::string("1")));
+  EXPECT_EQ(*user_model_.GetValue("output"),
+            SimpleValue(std::string("1"), /* is_client_side_only = */ true));
 
   // Boolean
-  user_model_.SetValue("value", SimpleValue(true));
-  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
-  EXPECT_EQ(*user_model_.GetValue("output"), SimpleValue(std::string("true")));
-
-  // String
-  user_model_.SetValue("value", SimpleValue(std::string("test asd")));
+  user_model_.SetValue("value",
+                       SimpleValue(true, /* is_client_side_only = */ true));
   EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
   EXPECT_EQ(*user_model_.GetValue("output"),
-            SimpleValue(std::string("test asd")));
+            SimpleValue(std::string("true"), /* is_client_side_only = */ true));
+
+  // String
+  user_model_.SetValue("value", SimpleValue(std::string("test asd"),
+                                            /* is_client_side_only = */ true));
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  EXPECT_EQ(
+      *user_model_.GetValue("output"),
+      SimpleValue(std::string("test asd"), /* is_client_side_only = */ true));
 
   // Date without format fails.
-  user_model_.SetValue("value", SimpleValue(CreateDateProto(2020, 10, 23)));
+  user_model_.SetValue("value", SimpleValue(CreateDateProto(2020, 10, 23),
+                                            /* is_client_side_only = */ true));
   EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
 
   // Date with format succeeds.
@@ -178,7 +206,8 @@ TEST_F(BasicInteractionsTest, ComputeValueToString) {
         "EEE, MMM d y");
     EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
     EXPECT_EQ(*user_model_.GetValue("output"),
-              SimpleValue(std::string("Fri, Oct 23, 2020")));
+              SimpleValue(std::string("Fri, Oct 23, 2020"),
+                          /* is_client_side_only = */ true));
   }
 
   // Date in german locale.
@@ -186,19 +215,40 @@ TEST_F(BasicInteractionsTest, ComputeValueToString) {
     base::test::ScopedRestoreICUDefaultLocale locale(std::string("de_DE"));
     EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
     EXPECT_EQ(*user_model_.GetValue("output"),
-              SimpleValue(std::string("Fr., 23. Okt. 2020")));
+              SimpleValue(std::string("Fr., 23. Okt. 2020"),
+                          /* is_client_side_only = */ true));
   }
 
   // Empty value fails.
   user_model_.SetValue("value", ValueProto());
   EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
 
-  // Multi value fails.
+  // Multi value succeeds.
   ValueProto multi_value;
   multi_value.mutable_booleans()->add_values(true);
   multi_value.mutable_booleans()->add_values(false);
   user_model_.SetValue("value", multi_value);
-  EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  ValueProto expected_result;
+  expected_result.mutable_strings()->add_values("true");
+  expected_result.mutable_strings()->add_values("false");
+  EXPECT_EQ(*user_model_.GetValue("output"), expected_result);
+
+  multi_value.Clear();
+  multi_value.mutable_ints()->add_values(5);
+  multi_value.mutable_ints()->add_values(13);
+  user_model_.SetValue("value", multi_value);
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  expected_result.Clear();
+  expected_result.mutable_strings()->add_values("5");
+  expected_result.mutable_strings()->add_values("13");
+  EXPECT_EQ(*user_model_.GetValue("output"), expected_result);
+
+  // is_client_side_only flag is sticky.
+  multi_value.set_is_client_side_only(true);
+  user_model_.SetValue("value", multi_value);
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  EXPECT_TRUE(user_model_.GetValue("output")->is_client_side_only());
 }
 
 TEST_F(BasicInteractionsTest, ComputeValueIntegerSum) {
@@ -234,6 +284,12 @@ TEST_F(BasicInteractionsTest, ComputeValueIntegerSum) {
   *proto.mutable_integer_sum()->add_values()->mutable_value() = SimpleValue(3);
   EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
   EXPECT_EQ(user_model_.GetValue("result"), SimpleValue(7));
+
+  // is_client_side_only flag is sticky.
+  user_model_.SetValue("value_b",
+                       SimpleValue(5, /* is_client_side_only = */ true));
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  EXPECT_TRUE(user_model_.GetValue("result")->is_client_side_only());
 }
 
 TEST_F(BasicInteractionsTest, EndActionWithoutCallbackFails) {
@@ -352,6 +408,95 @@ TEST_F(BasicInteractionsTest, ComputeValueCompare) {
   user_model_.SetValue("value_a", SimpleValue(2));
   EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
   EXPECT_EQ(user_model_.GetValue("result"), SimpleValue(true));
+
+  proto.mutable_comparison()->set_mode(ValueComparisonProto::GREATER_OR_EQUAL);
+  user_model_.SetValue("value_a",
+                       SimpleValue(1, /* is_client_side_only = */ false));
+  user_model_.SetValue("value_b",
+                       SimpleValue(1, /* is_client_side_only = */ true));
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  EXPECT_EQ(*user_model_.GetValue("result"), SimpleValue(true, true));
+}
+
+TEST_F(BasicInteractionsTest, ComputeValueCreateCreditCardResponse) {
+  ComputeValueProto proto;
+  proto.mutable_create_credit_card_response();
+
+  // Missing fields.
+  EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
+  proto.mutable_create_credit_card_response()
+      ->mutable_value()
+      ->set_model_identifier("value");
+  EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
+  proto.set_result_model_identifier("result");
+  EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
+
+  autofill::CreditCard credit_card(base::GenerateGUID(),
+                                   "https://www.example.com");
+  autofill::test::SetCreditCardInfo(&credit_card, "Marion Mitchell",
+                                    "4111 1111 1111 1111", "01", "2050", "");
+  auto credit_cards =
+      std::make_unique<std::vector<std::unique_ptr<autofill::CreditCard>>>();
+  credit_cards->emplace_back(
+      std::make_unique<autofill::CreditCard>(credit_card));
+  user_model_.SetAutofillCreditCards(std::move(credit_cards));
+
+  ValueProto value_wrong_guid;
+  value_wrong_guid.mutable_credit_cards()->add_values()->set_guid("wrong");
+  user_model_.SetValue("value", value_wrong_guid);
+  EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
+
+  ValueProto value_correct_guid;
+  value_correct_guid.mutable_credit_cards()->add_values()->set_guid(
+      credit_card.guid());
+  user_model_.SetValue("value", value_correct_guid);
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  ValueProto expected_response_value;
+  expected_response_value.mutable_credit_card_response()->set_network("visa");
+  expected_response_value.set_is_client_side_only(false);
+  EXPECT_EQ(user_model_.GetValue("result"), expected_response_value);
+
+  // CreateCreditCardResponse is allowed to extract the card network from
+  // client-only values.
+  value_correct_guid.set_is_client_side_only(true);
+  user_model_.SetValue("value", value_correct_guid);
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+  EXPECT_EQ(user_model_.GetValue("result"), expected_response_value);
+
+  // Size != 1.
+  ValueProto value;
+  value.mutable_credit_cards()->add_values()->set_guid(credit_card.guid());
+  value.mutable_credit_cards()->add_values()->set_guid(credit_card.guid());
+  user_model_.SetValue("value", value);
+  EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
+}
+
+TEST_F(BasicInteractionsTest, ComputeValueCreateLoginOptionResponse) {
+  ComputeValueProto proto;
+  proto.mutable_create_login_option_response();
+
+  // Missing fields.
+  EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
+  proto.mutable_create_login_option_response()
+      ->mutable_value()
+      ->set_model_identifier("value");
+  EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
+  proto.set_result_model_identifier("result");
+  EXPECT_FALSE(basic_interactions_.ComputeValue(proto));
+
+  ValueProto value;
+  value.mutable_login_options()->add_values()->set_payload("payload");
+  value.set_is_client_side_only(true);
+  user_model_.SetValue("value", value);
+  EXPECT_TRUE(basic_interactions_.ComputeValue(proto));
+
+  // LoginOptionResponseProto is allowed to extract the payload from
+  // client-only values.
+  ValueProto expected_response_value;
+  expected_response_value.mutable_login_option_response()->set_payload(
+      "payload");
+  expected_response_value.set_is_client_side_only(false);
+  EXPECT_EQ(user_model_.GetValue("result"), expected_response_value);
 }
 
 TEST_F(BasicInteractionsTest, ToggleUserAction) {

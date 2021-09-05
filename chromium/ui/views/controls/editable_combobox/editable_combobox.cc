@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/i18n/rtl.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
@@ -226,7 +226,9 @@ class EditableCombobox::EditableComboboxMenuModel
 
   int GetGroupIdAt(int index) const override { return -1; }
 
-  bool GetIconAt(int index, gfx::Image* icon) const override { return false; }
+  ui::ImageModel GetIconAt(int index) const override {
+    return ui::ImageModel();
+  }
 
   ui::ButtonMenuItemModel* GetButtonMenuItemAt(int index) const override {
     return nullptr;
@@ -423,6 +425,14 @@ void EditableCombobox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
 void EditableCombobox::RequestFocus() {
   textfield_->RequestFocus();
+}
+
+bool EditableCombobox::GetNeedsNotificationWhenVisibleBoundsChange() const {
+  return true;
+}
+
+void EditableCombobox::OnVisibleBoundsChanged() {
+  CloseMenu();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

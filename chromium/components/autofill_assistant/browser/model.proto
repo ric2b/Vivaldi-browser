@@ -15,6 +15,7 @@ message ModelProto {
     optional string identifier = 1;
     optional ValueProto value = 2;
   }
+
   // Maps model identifiers to their values.
   repeated ModelValue values = 1;
 }
@@ -28,7 +29,17 @@ message ValueProto {
     IntList ints = 3;
     UserActionList user_actions = 4;
     DateList dates = 5;
+    CreditCardList credit_cards = 7;
+    ProfileList profiles = 8;
+    LoginOptionList login_options = 9;
+    CreditCardResponseProto credit_card_response = 10;
+    LoginOptionResponseProto login_option_response = 11;
   }
+  // If set to true, this value will not be sent to the backend. This flag is
+  // mostly used internally, to prevent certain values from leaving the device.
+  // Note that values derived from client_side_only values will inherit this
+  // property.
+  optional bool is_client_side_only = 6;
 }
 
 message ValueReferenceProto {
@@ -58,7 +69,19 @@ message DateList {
   repeated DateProto values = 1;
 }
 
-// Next: 22
+message CreditCardList {
+  repeated AutofillCreditCardProto values = 1;
+}
+
+message ProfileList {
+  repeated AutofillProfileProto values = 1;
+}
+
+message LoginOptionList {
+  repeated LoginOptionProto values = 1;
+}
+
+// Next: 25
 enum ProcessedActionStatusProto {
   UNKNOWN_ACTION_STATUS = 0;
 
@@ -115,7 +138,6 @@ enum ProcessedActionStatusProto {
   // This is currently returned by the autofill action, when it could not find
   // the credit card or the address it needs in the client memory. This is
   // usually the sign that the CollectUserDataAction was not run or failed.
-  //
   PRECONDITION_FAILED = 10;
 
   // The action definition returned by the server was rejected.
@@ -129,8 +151,6 @@ enum ProcessedActionStatusProto {
 
   // Failed to get a stable position for the element, usually to click on it.
   ELEMENT_UNSTABLE = 14;
-
-  reserved 15;
 
   // The value passed to the select option action does not exist in the element.
   // This is usually a scripting error.
@@ -161,6 +181,18 @@ enum ProcessedActionStatusProto {
 
   // An unexpected error occurred during element resolution.
   FRAME_HOST_NOT_FOUND = 22;
+
+  // Autofill could not fully fill the form as expected.
+  //
+  // Possible causes:
+  // - The fallback data was not available.
+  // - A field defined as required was empty after the action completed.
+  // - Filling a field resulted in error, e.g. the field was not found.
+  //
+  // ProcessedActionStatusProto.AutofillErrorInfoProto contains more details.
+  AUTOFILL_INCOMPLETE = 24;
+
+  reserved 15, 23;
 }
 
 // A message to describe a chip.
@@ -284,4 +316,28 @@ message TimeProto {
 message DateTimeProto {
   optional DateProto date = 1;
   optional TimeProto time = 2;
+}
+
+message AutofillCreditCardProto {
+  // The GUID of the card.
+  optional string guid = 1;
+}
+
+message CreditCardResponseProto {
+  optional string network = 1;
+}
+
+message AutofillProfileProto {
+  // The GUID of the profile.
+  optional string guid = 1;
+}
+
+message LoginOptionProto {
+  optional string label = 1;
+  optional string sublabel = 2;
+  optional bytes payload = 3;
+}
+
+message LoginOptionResponseProto {
+  optional bytes payload = 1;
 }

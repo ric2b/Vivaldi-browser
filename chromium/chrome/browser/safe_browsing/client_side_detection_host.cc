@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
@@ -24,6 +24,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/browser_feature_extractor.h"
 #include "chrome/browser/safe_browsing/client_side_detection_service.h"
+#include "chrome/browser/safe_browsing/client_side_detection_service_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -296,7 +297,8 @@ ClientSideDetectionHost::ClientSideDetectionHost(WebContents* tab)
       tick_clock_(base::DefaultTickClock::GetInstance()) {
   DCHECK(tab);
   // Note: csd_service_ and sb_service will be NULL here in testing.
-  csd_service_ = g_browser_process->safe_browsing_detection_service();
+  csd_service_ = ClientSideDetectionServiceFactory::GetForProfile(
+      Profile::FromBrowserContext(tab->GetBrowserContext()));
   feature_extractor_.reset(new BrowserFeatureExtractor(tab));
 
   scoped_refptr<SafeBrowsingService> sb_service =
@@ -420,8 +422,8 @@ void ClientSideDetectionHost::OnPhishingPreClassificationDone(
     phishing_detection_start_time_ = tick_clock_->NowTicks();
     phishing_detector_->StartPhishingDetection(
         browse_info_->url,
-        base::BindRepeating(&ClientSideDetectionHost::PhishingDetectionDone,
-                            weak_factory_.GetWeakPtr()));
+        base::BindOnce(&ClientSideDetectionHost::PhishingDetectionDone,
+                       weak_factory_.GetWeakPtr()));
   }
 }
 
@@ -469,8 +471,8 @@ void ClientSideDetectionHost::PhishingDetectionDone(
       // the client verdict request.
       feature_extractor_->ExtractFeatures(
           browse_info_.get(), std::move(verdict),
-          base::Bind(&ClientSideDetectionHost::FeatureExtractionDone,
-                     weak_factory_.GetWeakPtr()));
+          base::BindOnce(&ClientSideDetectionHost::FeatureExtractionDone,
+                         weak_factory_.GetWeakPtr()));
     }
   }
 }

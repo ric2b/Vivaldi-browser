@@ -41,16 +41,10 @@ TestStoragePartition::GetCookieManagerForBrowserProcess() {
   return cookie_manager_for_browser_process_;
 }
 
-void TestStoragePartition::CreateRestrictedCookieManager(
-    network::mojom::RestrictedCookieManagerRole role,
-    const url::Origin& origin,
-    const net::SiteForCookies& site_for_cookies,
-    const url::Origin& top_frame_origin,
-    bool is_service_worker,
-    int process_id,
-    int routing_id,
-    mojo::PendingReceiver<network::mojom::RestrictedCookieManager> receiver) {
-  NOTREACHED();
+void TestStoragePartition::CreateHasTrustTokensAnswerer(
+    mojo::PendingReceiver<network::mojom::HasTrustTokensAnswerer> receiver,
+    const url::Origin& top_frame_origin) {
+  NOTREACHED() << "Not implemented.";
 }
 
 storage::QuotaManager* TestStoragePartition::GetQuotaManager() {
@@ -75,6 +69,10 @@ storage::DatabaseTracker* TestStoragePartition::GetDatabaseTracker() {
 
 DOMStorageContext* TestStoragePartition::GetDOMStorageContext() {
   return dom_storage_context_;
+}
+
+IdleManager* TestStoragePartition::GetIdleManager() {
+  return nullptr;
 }
 
 storage::mojom::IndexedDBControl& TestStoragePartition::GetIndexedDBControl() {
@@ -187,5 +185,9 @@ void TestStoragePartition::FlushNetworkInterfaceForTesting() {}
 void TestStoragePartition::WaitForDeletionTasksForTesting() {}
 
 void TestStoragePartition::WaitForCodeCacheShutdownForTesting() {}
+
+void TestStoragePartition::SetNetworkContextForTesting(
+    mojo::PendingRemote<network::mojom::NetworkContext>
+        network_context_remote) {}
 
 }  // namespace content

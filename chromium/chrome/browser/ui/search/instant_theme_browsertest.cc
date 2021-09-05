@@ -26,6 +26,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
@@ -187,7 +188,7 @@ IN_PROC_BROWSER_TEST_F(InstantThemeTest, ThemeAppliedToExistingTab) {
   observer.WaitForThemeApplied(false);
 
   // Get the default (no theme) css setting
-  std::string original_css_text = "";
+  std::string original_css_text;
   EXPECT_TRUE(instant_test_utils::GetStringFromJS(active_tab, helper_js,
                                                   &original_css_text));
 
@@ -200,7 +201,7 @@ IN_PROC_BROWSER_TEST_F(InstantThemeTest, ThemeAppliedToExistingTab) {
   observer.WaitForThemeApplied(true);
 
   // Get the current tab's theme CSS setting.
-  std::string css_text = "";
+  std::string css_text;
   EXPECT_TRUE(
       instant_test_utils::GetStringFromJS(active_tab, helper_js, &css_text));
 
@@ -210,7 +211,7 @@ IN_PROC_BROWSER_TEST_F(InstantThemeTest, ThemeAppliedToExistingTab) {
   observer.WaitForThemeApplied(true);
 
   // Get the previous tab's theme CSS setting.
-  std::string previous_tab_css_text = "";
+  std::string previous_tab_css_text;
   EXPECT_TRUE(instant_test_utils::GetStringFromJS(active_tab, helper_js,
                                                   &previous_tab_css_text));
 
@@ -240,7 +241,7 @@ IN_PROC_BROWSER_TEST_F(InstantThemeTest, ThemeAppliedToNewTab) {
   ASSERT_EQ(1, browser()->tab_strip_model()->active_index());
 
   // Get the default (no theme) css setting
-  std::string original_css_text = "";
+  std::string original_css_text;
   EXPECT_TRUE(instant_test_utils::GetStringFromJS(active_tab, helper_js,
                                                   &original_css_text));
 
@@ -249,7 +250,7 @@ IN_PROC_BROWSER_TEST_F(InstantThemeTest, ThemeAppliedToNewTab) {
   observer.WaitForThemeApplied(true);
 
   // Get the current tab's theme CSS setting.
-  std::string css_text = "";
+  std::string css_text;
   EXPECT_TRUE(
       instant_test_utils::GetStringFromJS(active_tab, helper_js, &css_text));
 
@@ -261,7 +262,7 @@ IN_PROC_BROWSER_TEST_F(InstantThemeTest, ThemeAppliedToNewTab) {
   ASSERT_EQ(2, browser()->tab_strip_model()->active_index());
 
   // Get the new tab's theme CSS setting.
-  std::string new_tab_css_text = "";
+  std::string new_tab_css_text;
   EXPECT_TRUE(instant_test_utils::GetStringFromJS(active_tab, helper_js,
                                                   &new_tab_css_text));
 
@@ -296,7 +297,7 @@ IN_PROC_BROWSER_TEST_F(InstantThemeTest,
   ASSERT_EQ(1, browser()->tab_strip_model()->active_index());
 
   // Get the default (no theme) css setting
-  std::string original_css_text = "";
+  std::string original_css_text;
   EXPECT_TRUE(instant_test_utils::GetStringFromJS(active_tab, helper_js,
                                                   &original_css_text));
 
@@ -305,7 +306,7 @@ IN_PROC_BROWSER_TEST_F(InstantThemeTest,
   observer.WaitForThemeApplied(true);
 
   // Get the current tab's theme CSS setting.
-  std::string css_text = "";
+  std::string css_text;
   EXPECT_TRUE(
       instant_test_utils::GetStringFromJS(active_tab, helper_js, &css_text));
 
@@ -314,7 +315,7 @@ IN_PROC_BROWSER_TEST_F(InstantThemeTest,
   observer.WaitForThemeApplied(true);
 
   // Get the current tab's theme CSS setting.
-  std::string new_css_text = "";
+  std::string new_css_text;
   EXPECT_TRUE(instant_test_utils::GetStringFromJS(active_tab, helper_js,
                                                   &new_css_text));
 

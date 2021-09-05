@@ -20,7 +20,7 @@ import org.chromium.ui.modelutil.PropertyModel;
             PropertyModel model, PaymentHandlerToolbarView view, PropertyKey propertyKey) {
         if (PaymentHandlerToolbarProperties.URL == propertyKey) {
             String origin = UrlFormatter.formatUrlForSecurityDisplay(
-                    model.get(PaymentHandlerToolbarProperties.URL).toString(),
+                    model.get(PaymentHandlerToolbarProperties.URL),
                     SchemeDisplay.OMIT_HTTP_AND_HTTPS);
             view.mOriginView.setText(origin);
         } else if (PaymentHandlerToolbarProperties.TITLE == propertyKey) {
@@ -32,8 +32,13 @@ import org.chromium.ui.modelutil.PropertyModel;
             boolean visible = model.get(PaymentHandlerToolbarProperties.PROGRESS_VISIBLE);
             view.mProgressBar.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
         } else if (PaymentHandlerToolbarProperties.SECURITY_ICON == propertyKey) {
-            int securityIconResource = model.get(PaymentHandlerToolbarProperties.SECURITY_ICON);
-            view.mSecurityIconView.setImageResource(securityIconResource);
+            int iconRes = model.get(PaymentHandlerToolbarProperties.SECURITY_ICON);
+            view.mSecurityIconView.setImageResource(iconRes);
+        } else if (PaymentHandlerToolbarProperties.SECURITY_ICON_CONTENT_DESCRIPTION
+                == propertyKey) {
+            String description =
+                    model.get(PaymentHandlerToolbarProperties.SECURITY_ICON_CONTENT_DESCRIPTION);
+            view.mSecurityIconView.setContentDescription(description);
         }
     }
 }

@@ -5,6 +5,7 @@
 <translation id="1011903154582639569">Açar tapın, daha sonra yazmaq üçün qaldırın</translation>
 <translation id="1012173283529841972">Siyahı elementi</translation>
 <translation id="1013742170491673792">srched</translation>
+<translation id="1014370462248694370">İki barmağınızla sağa çəkin</translation>
 <translation id="1022586497894531524">ChromeVox şifahi rəy xidmətindən ilk dəfədir istifadə edirisiniz? Bu kiçik təlimat vasitəsilə ChromeVox ilə necə başlamağın qaydalarını öyrənin.</translation>
 <translation id="1025074108959230262">Yapışqan rejim deaktivdir</translation>
 <translation id="1031961866430398710">sonra</translation>
@@ -18,6 +19,7 @@
 <translation id="1088402100970133699">Öncəki siyahı elementi yoxdur</translation>
 <translation id="1114836634143403764">Təklif</translation>
 <translation id="1120743664840974483">{"a": "alma", "b": "bravo", "c": "charlie", "d": "delta", "e": "exo", "f": "fil", "g": "gilas", "h": "hotel", "i": "isti", "j": "juliet","k": "kilo", "l": "lima", "m": "mil", "n": "noyabr", "o": "oskar","p": "papa", "q": "qutu", "r": "romeo", "s": "sierra", "t": "tango", "u": "usta", "v": "viktor", "w": "whiskey","x": "xray", "y": "yaşıl", "z": "zulu"}</translation>
+<translation id="1120938014254001895">İki barmağınızla yuxarı çəkin</translation>
 <translation id="1126928665165112660">Kursiv deyil</translation>
 <translation id="113582498867142724"><ph name="NUM" />  element ilə <ph name="TAG" /> kolleksiyası</translation>
 <translation id="1161762950103988776">Keçid</translation>
@@ -49,6 +51,7 @@
 <translation id="1291286136605998134">Keçid Düyməsi</translation>
 <translation id="1299774449519412690">Açıq Səma Mavisi</translation>
 <translation id="1303806948938513162">ChromeVox menyularına daxil olmaq üçün 4 barmaqla klikləyin</translation>
+<translation id="1325363694295259631"><ph name="NAME" />, menyu elementi dəyirmi düyməsi seçilməyib</translation>
 <translation id="1325946044405407859">Açıq-qəhvəyi</translation>
 <translation id="1331702245475014624"><ph name="TOTAL" /> ədəddən <ph name="INDEX" /></translation>
 <translation id="1334095593597963605">xarakter və söz exosu</translation>
@@ -69,6 +72,7 @@
 <translation id="146450394670219700">Qrafik obyekt</translation>
 <translation id="1480046233931937785">Kreditlər</translation>
 <translation id="1487494366197411587">Chromebook'da Axtarış düyməsi sol Shift düyməsinin tam üstündədir.</translation>
+<translation id="1498498210836053409">Mətni redaktə edərkən yapışqan rejimi deaktiv edin (Ağıllı Yapışqan Rejim)</translation>
 <translation id="1499041187027566160">həcmi artırın</translation>
 <translation id="1502086903961450562">Əvvəlki qrafik</translation>
 <translation id="1506187449813838456">Tonu artırın</translation>
@@ -104,6 +108,7 @@
 <translation id="1727806147743597030">ftr</translation>
 <translation id="174268867904053074">Növbəti qrafik</translation>
 <translation id="1756785467854861272">Bənövşəyimtil Qırmızı</translation>
+<translation id="1765245556747822181">Bir barmağınızla yuxarı çəkin</translation>
 <translation id="1771761307086386028">Sağa sürüşdürün</translation>
 <translation id="1781173782405573156">Açar ilə keçin</translation>
 <translation id="1787176709638001873">Şifrə redaktə mətni</translation>
@@ -132,6 +137,7 @@
 <translation id="2010555995361223825">ChromeVox Menyuları</translation>
 <translation id="203030071582665758">Öncəki 4-cü səviyyə başlığı yoxdur</translation>
 <translation id="2045055672832940894">Öncəki nəzarət yoxdur</translation>
+<translation id="2045606329038304310">Forma sahəsinə nəzarət</translation>
 <translation id="2063539687800151747">Epiqraf</translation>
 <translation id="2086961585857038472">Növbəti Söz</translation>
 <translation id="2087981446621639008">təsvir siyahısı təfsilatı</translation>
@@ -158,6 +164,7 @@
 <translation id="225732394367814946">Nitq tempini artırın</translation>
 <translation id="2267538686624070261">Yazı səhvlərindən çıxılır</translation>
 <translation id="2267945578749931355">Növbəti Simvol</translation>
+<translation id="2278490101488436824">Üç barmağınızla sola çəkin</translation>
 <translation id="2305942658236913680">Sonrakı başlıq yoxdur</translation>
 <translation id="2311237334957139798">Məlumat səviyyəsində sonrakı mərhələyə keçin</translation>
 <translation id="2314393392395134769">Aşağı indeks deyil</translation>
@@ -166,6 +173,7 @@
 <translation id="2347456970887948350">Link</translation>
 <translation id="2381733276052567791">Nitqi aktiv və ya deaktiv edin</translation>
 <translation id="2390264819538553347">Davam etmək üçün daxil etmək, geri qayıtmaq üçün geri düyməsinə basın.</translation>
+<translation id="2398579267367951220">Səhifədə axtarın. Nəticəyə keçmək üçün enter düyməsinə basın, nəticələrə baxmaq üçün yuxarı və ya aşağı oxa basın, axtarışı dəyişmək üçün yazmağa davam edin və ya ləğv etmək üçün escape düyməsinə basın.</translation>
 <translation id="240709722712693803">Göyümtül Bənövşəyi</translation>
 <translation id="2416512023405990736">İşarələnməmiş xana</translation>
 <translation id="2417569100218200841">Məzmun haqqında məlumat</translation>
@@ -230,12 +238,14 @@
 <translation id="2867808975387772810">Biblioqrafiya</translation>
 <translation id="2873259058405069099">Cədvəlin başlanğıcına gedin</translation>
 <translation id="287383510823843610">Tünd-narıncı</translation>
+<translation id="2879867157561757640">Üç barmağınızla aşağı çəkin</translation>
 <translation id="288178314850623291">Elementlərin xüsusi növlərini ötürmək üçün keçid əmrlərini istifadə edin. Başlıqlar arasında irəli keçid etmək üçün, Search + H düymələrini və ya geriyə keçid üçün, Search + Shift + H düymələrini basın.</translation>
 <translation id="2885764457467528513">{COUNT,plural, =1{dəqiqə}other{dəqiqə}}</translation>
 <translation id="2894654529758326923">Məlumat</translation>
 <translation id="2899328121302785497">{COUNT,plural, =1{sol mötərizə}other{# sol mötərizə}}</translation>
 <translation id="2909584066358367921">Sonrakı düymə yoxdur</translation>
 <translation id="2911433807131383493">ChromeVox dərsliyini açın</translation>
+<translation id="2912405967290226587">Üç barmağınızla sağa çəkin</translation>
 <translation id="2937799153569150791">Sonrakı 3-cü səviyyə başlığı yoxdur</translation>
 <translation id="2942710183375260152">Tünd-barıt Mavisi</translation>
 <translation id="2943596527105977722">Tünd Qızıl Sarısı</translation>
@@ -243,6 +253,7 @@
 <translation id="2968634799764242930">Dəniz Yaşılı</translation>
 <translation id="296951647852255825">{COUNT,plural, =1{panel}other{# panel}}</translation>
 <translation id="2972205263822847197">İpucu</translation>
+<translation id="297825089465017871">İki barmağınızla sola çəkin</translation>
 <translation id="2998131015536248178">Öncəki Simvol</translation>
 <translation id="2999559350546931576">Səs tonunu azaldın</translation>
 <translation id="3014130421870723208">@8 nöqtəli sahəyə düzəliş edin</translation>
@@ -252,6 +263,7 @@
 <translation id="3046838483509668188">ChromeVox Seçimləri</translation>
 <translation id="3060756054951570867"><ph name="TITLE" /> menyu açıldı</translation>
 <translation id="3060880924447482063">Element üzrə hərəkət etmək üçün sağa və ya sola sürüşdürün</translation>
+<translation id="3070245424257836917">Üç barmağınızla yuxarı çəkin</translation>
 <translation id="3078345202707391975">Növbəti səviyyə 2 başlıq</translation>
 <translation id="3078740164268491126">cədvəl</translation>
 <translation id="3082249673510793544">Geri sürüşdürün</translation>
@@ -433,6 +445,7 @@
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="4402014469255336455">Tünd səma mavisi</translation>
 <translation id="4432457053224379116">Hindu Qırmızısı</translation>
+<translation id="4437615272777527928">Menyularda axtarış etmək üçün yazın. Nəticələri gözdən keçirmək üçün yuxarı və aşağı ox düymələrini basın. Mətn kursorunu tənzimləmək və menyular arasında keçid etmək üçün sol və sağ ox düymələrini basın.</translation>
 <translation id="4457472090507035117">Cari səs seçin:</translation>
 <translation id="4476183483923481720">yeni xətt</translation>
 <translation id="4479068155583208887">Tünd-qırmızı</translation>
@@ -457,6 +470,7 @@
 <translation id="4677535310137735442">Növbəti sütuna keçin</translation>
 <translation id="4688873778442829762">grd</translation>
 <translation id="4693675773662933727">Öncəki orientir</translation>
+<translation id="4710166929009737753">Bir barmağınızla sağa çəkin</translation>
 <translation id="4712898966495541134">Seçim sonu</translation>
 <translation id="4740661827607246557">Kömək Əmrləri</translation>
 <translation id="4755857887974653209">ChromeVox deaktiv edin</translation>
@@ -501,6 +515,7 @@
 <translation id="4994420463726586413">Cari batareya statusunu elan edin</translation>
 <translation id="4997282455736854877"><ph name="NAME" />, radio düyməsi seçildi</translation>
 <translation id="5011664330025416377">Aktiv etmək üçün Search+Space düymələrinə basın</translation>
+<translation id="5012724933919010465"><ph name="NAME" />, menyu elementi dəyirmi düyməsi seçilib</translation>
 <translation id="5020651427400641814">Nitq girişini aktiv edin</translation>
 <translation id="5041394372352067729">Brayl ekranını səhifənin yuxarısına köçürün</translation>
 <translation id="5042770794184672516">Nitq dərəcəsini artırın</translation>
@@ -707,9 +722,11 @@
 <translation id="6793101435925451627">lstbx</translation>
 <translation id="6815255864998354418">Lemon Sarısı</translation>
 <translation id="6816066673340002913">Solğun Qızıl Sarısı</translation>
+<translation id="6826226459053491773">İki barmağınızla aşağı çəkin</translation>
 <translation id="6833103209700200188">Alt sərlövhə</translation>
 <translation id="6837853484260746864">Ses seçin:</translation>
 <translation id="6858047746862060282">Proloq</translation>
+<translation id="6859876496651143278">Bir barmağınızla sola çəkin</translation>
 <translation id="6865519907510167493">Səhv yazılmış</translation>
 <translation id="6894148351896207544">Cari vaxt və tarixi deyin</translation>
 <translation id="6896758677409633944">Kopyalayın</translation>
@@ -906,6 +923,7 @@
 <translation id="8428603554127842284">səviyyə <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
 <translation id="8446884382197647889">Ətraflı Məlumat</translation>
+<translation id="8448196839635577295">Hazırda ChromeVox fokusu yoxdur. Elementləri tapmaq üçün "araşdırın" seçiminə toxunun.</translation>
 <translation id="8455868257606149352">Maks <ph name="X" /></translation>
 <translation id="84575901236241018">giriş açarı var, <ph name="KEY" /></translation>
 <translation id="8463645336674919227">Qrammatik səhvlərdən çıxılır</translation>
@@ -991,6 +1009,7 @@
 <translation id="923331726185079994">ChromeVox Güncəlləndi</translation>
 <translation id="93384979447910801">Tünd Dəniz Yaşılı</translation>
 <translation id="948171205378458592">Nitq tempini azaldın</translation>
+<translation id="958854023026327378">Bir barmağınızla aşağı çəkin</translation>
 <translation id="962913030769097253">Növbəti səviyyə 1 başlıq</translation>
 <translation id="966588271015727539">Bluetooth brayl displeyi seçin</translation>
 <translation id="973955474346881951">Yapışmış rejimi Aktiv/Deaktiv edin</translation>

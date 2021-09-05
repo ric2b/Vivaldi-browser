@@ -5,7 +5,7 @@
 #include "third_party/blink/public/web/web_frame.h"
 
 #include <algorithm>
-#include "third_party/blink/public/common/frame/sandbox_flags.h"
+#include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/public/web/web_element.h"
@@ -288,15 +288,19 @@ WebFrame* WebFrame::FromFrame(Frame* frame) {
   return WebRemoteFrameImpl::FromFrame(To<RemoteFrame>(*frame));
 }
 
-WebFrame::WebFrame(WebTreeScopeType scope)
+WebFrame::WebFrame(mojom::blink::TreeScopeType scope,
+                   const base::UnguessableToken& frame_token)
     : scope_(scope),
+      frame_token_(frame_token),
       parent_(nullptr),
       previous_sibling_(nullptr),
       next_sibling_(nullptr),
       first_child_(nullptr),
       last_child_(nullptr),
       opener_(nullptr),
-      opened_frame_tracker_(new OpenedFrameTracker) {}
+      opened_frame_tracker_(new OpenedFrameTracker) {
+  DCHECK(frame_token_);
+}
 
 WebFrame::~WebFrame() {
   opened_frame_tracker_.reset(nullptr);

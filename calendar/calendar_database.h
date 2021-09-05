@@ -101,6 +101,8 @@ class CalendarDatabase : public EventDatabase,
   // Razes the database. Returns true if successful.
   bool Raze();
 
+  void CreateDefaultCalendarData();
+
   std::string GetDiagnosticInfo(int extended_error, sql::Statement* statement);
 
  private:

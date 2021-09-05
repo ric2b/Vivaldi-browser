@@ -105,19 +105,12 @@ class VideoMockCompositorFrameSink
   }
 
   MOCK_METHOD1(DidNotProduceFrame, void(const viz::BeginFrameAck&));
-
-  MOCK_METHOD2(DidAllocateSharedBitmap_,
-               void(base::ReadOnlySharedMemoryRegion* region,
-                    gpu::mojom::blink::MailboxPtr* id));
-  void DidAllocateSharedBitmap(base::ReadOnlySharedMemoryRegion region,
-                               gpu::mojom::blink::MailboxPtr id) override {
-    DidAllocateSharedBitmap_(&region, &id);
-  }
-
-  MOCK_METHOD1(DidDeleteSharedBitmap_, void(gpu::mojom::blink::MailboxPtr* id));
-  void DidDeleteSharedBitmap(gpu::mojom::blink::MailboxPtr id) override {
-    DidDeleteSharedBitmap_(&id);
-  }
+  MOCK_METHOD2(DidAllocateSharedBitmap,
+               void(base::ReadOnlySharedMemoryRegion region,
+                    const gpu::Mailbox& id));
+  MOCK_METHOD1(DidDeleteSharedBitmap, void(const gpu::Mailbox& id));
+  MOCK_METHOD1(InitializeCompositorFrameSinkType,
+               void(viz::mojom::CompositorFrameSinkType));
 
  private:
   mojo::Receiver<viz::mojom::blink::CompositorFrameSink> receiver_{this};
@@ -181,7 +174,7 @@ class VideoFrameSubmitterTest : public testing::Test {
         base::DoNothing(), reporting_cb,
         base::WrapUnique<MockVideoFrameResourceProvider>(resource_provider_));
 
-    submitter_->Initialize(video_frame_provider_.get());
+    submitter_->Initialize(video_frame_provider_.get(), false);
     mojo::PendingRemote<viz::mojom::blink::CompositorFrameSink> submitter_sink;
     sink_ = std::make_unique<StrictMock<VideoMockCompositorFrameSink>>(
         submitter_sink.InitWithNewPipeAndPassReceiver());

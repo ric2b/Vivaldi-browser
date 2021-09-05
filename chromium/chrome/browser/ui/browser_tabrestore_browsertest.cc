@@ -20,6 +20,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 
@@ -137,7 +138,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTabRestoreTest,
       /* select=*/true, /* pin=*/false, /* from_last_session=*/true,
       /* last_active_time=*/base::TimeTicks::Now(),
       /* storage_namespace=*/nullptr,
-      /* user_agent_override=*/std::string(), /* from_session_restore=*/true);
+      /* user_agent_override=*/sessions::SerializedUserAgentOverride(),
+      /* from_session_restore=*/true);
 
   EXPECT_TRUE(web_contents->GetController().GetPendingEntry());
 }
@@ -158,7 +160,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTabRestoreTest,
       /* select=*/false, /* pin=*/false, /* from_last_session=*/true,
       /* last_active_time=*/base::TimeTicks::Now(),
       /* storage_namespace=*/nullptr,
-      /* user_agent_override=*/std::string(), /* from_session_restore=*/true);
+      /* user_agent_override=*/sessions::SerializedUserAgentOverride(),
+      /* from_session_restore=*/true);
 
   EXPECT_FALSE(web_contents->GetController().GetPendingEntry());
 }

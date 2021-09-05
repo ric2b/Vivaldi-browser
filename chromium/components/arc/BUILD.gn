@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 
 static_library("arc") {
@@ -231,7 +232,6 @@ static_library("arc_base") {
   deps = [
     "//ash/public/cpp",
     "//base",
-    "//base/util/memory_pressure",
     "//chromeos/constants",
     "//chromeos/cryptohome",
     "//chromeos/dbus:common",
@@ -240,6 +240,7 @@ static_library("arc_base") {
     "//chromeos/dbus/session_manager",
     "//chromeos/dbus/session_manager:login_manager_proto",
     "//chromeos/dbus/upstart",
+    "//chromeos/memory:memory",
     "//chromeos/system:system",
     "//components/account_id",
     "//components/keyed_service/content",
@@ -309,6 +310,8 @@ static_library("arc_test_support") {
     "test/fake_bluetooth_instance.h",
     "test/fake_clipboard_instance.cc",
     "test/fake_clipboard_instance.h",
+    "test/fake_cros_config.cc",
+    "test/fake_cros_config.h",
     "test/fake_file_system_instance.cc",
     "test/fake_file_system_instance.h",
     "test/fake_intent_helper_instance.cc",
@@ -421,5 +424,14 @@ source_set("unit_tests") {
     "//ui/events",
     "//ui/events:dom_keycode_converter",
     "//url:url",
+  ]
+}
+
+fuzzer_test("arc_property_util_expand_property_contents_fuzzer") {
+  sources = [ "session/arc_property_util_expand_property_contents_fuzzer.cc" ]
+  deps = [
+    ":arc",
+    ":arc_test_support",
+    "//base",
   ]
 }

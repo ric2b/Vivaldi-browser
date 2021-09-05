@@ -257,6 +257,9 @@ class EventRow {
   std::string timezone() const { return timezone_; }
   void set_timezone(std::string timezone) { timezone_ = timezone; }
 
+  bool is_template() const { return is_template_; }
+  void set_is_template(bool is_template) { is_template_ = is_template; }
+
   EventID id_;
   CalendarID calendar_id_;
   AlarmID alarm_id_ = 0;
@@ -289,6 +292,7 @@ class EventRow {
   NotificationsToCreate notifications_to_create_;
   InvitesToCreate invites_to_create_;
   std::string timezone_;
+  bool is_template_;
 
  protected:
   void Swap(EventRow* other);

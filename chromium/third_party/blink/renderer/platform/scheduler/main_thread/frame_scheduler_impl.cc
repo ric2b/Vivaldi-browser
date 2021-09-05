@@ -187,7 +187,17 @@ FrameSchedulerImpl::FrameSchedulerImpl(
           "FrameScheduler.KeepActive",
           this,
           &tracing_controller_,
-          KeepActiveStateToString) {
+          KeepActiveStateToString),
+      waiting_for_contentful_paint_(true,
+                                    "FrameScheduler.WaitingForContentfulPaint",
+                                    this,
+                                    &tracing_controller_,
+                                    YesNoStateToString),
+      waiting_for_meaningful_paint_(true,
+                                    "FrameScheduler.WaitingForMeaningfulPaint",
+                                    this,
+                                    &tracing_controller_,
+                                    YesNoStateToString) {
   frame_task_queue_controller_.reset(
       new FrameTaskQueueController(main_thread_scheduler_, this, this));
 }
@@ -821,17 +831,33 @@ SchedulingLifecycleState FrameSchedulerImpl::CalculateLifecycleState(
 }
 
 void FrameSchedulerImpl::OnFirstContentfulPaint() {
-  main_thread_scheduler_->OnFirstContentfulPaint();
+  waiting_for_contentful_paint_ = false;
+  if (GetFrameType() == FrameScheduler::FrameType::kMainFrame)
+    main_thread_scheduler_->OnMainFramePaint();
 }
 
 void FrameSchedulerImpl::OnFirstMeaningfulPaint() {
-  main_thread_scheduler_->OnFirstMeaningfulPaint();
+  waiting_for_meaningful_paint_ = false;
+  if (GetFrameType() == FrameScheduler::FrameType::kMainFrame)
+    main_thread_scheduler_->OnMainFramePaint();
+}
+
+bool FrameSchedulerImpl::IsWaitingForContentfulPaint() const {
+  return waiting_for_contentful_paint_;
+}
+
+bool FrameSchedulerImpl::IsWaitingForMeaningfulPaint() const {
+  return waiting_for_meaningful_paint_;
 }
 
 bool FrameSchedulerImpl::ShouldThrottleTaskQueues() const {
+  // TODO(crbug.com/1078387): Convert the CHECK to a DCHECK once enough time has
+  // passed to confirm that it is correct. (November 2020).
+  CHECK(parent_page_scheduler_);
+
   if (!RuntimeEnabledFeatures::TimerThrottlingForBackgroundTabsEnabled())
     return false;
-  if (parent_page_scheduler_ && parent_page_scheduler_->IsAudioPlaying())
+  if (parent_page_scheduler_->IsAudioPlaying())
     return false;
   if (!parent_page_scheduler_->IsPageVisible())
     return true;

@@ -59,6 +59,8 @@ std::string DevicePlatformToString(SharingDevicePlatform device_platform) {
       return "Mac";
     case SharingDevicePlatform::kWindows:
       return "Windows";
+    case SharingDevicePlatform::kServer:
+      return "Server";
     case SharingDevicePlatform::kUnknown:
       return "Unknown";
   }
@@ -398,6 +400,11 @@ void LogSendSharingMessageResult(
     base::UmaHistogramEnumeration(
         base::StrCat(
             {metric_prefix, ".", PulseIntervalToString(pulse_interval)}),
+        result);
+    base::UmaHistogramEnumeration(
+        base::StrCat({metric_prefix, ".",
+                      DevicePlatformToString(receiving_device_platform), ".",
+                      PulseIntervalToString(pulse_interval)}),
         result);
   }
 }

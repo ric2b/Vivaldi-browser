@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/core/timing/performance_event_timing.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
+namespace blink {
 namespace {
 const base::TickClock* g_clock_for_testing = nullptr;
 
@@ -23,9 +24,6 @@ static base::TimeTicks Now() {
   return g_clock_for_testing ? g_clock_for_testing->NowTicks()
                              : base::TimeTicks::Now();
 }
-}  // namespace
-
-namespace blink {
 
 bool ShouldLogEvent(const Event& event) {
   return event.type() == event_type_names::kPointerdown ||
@@ -36,11 +34,22 @@ bool ShouldLogEvent(const Event& event) {
 }
 
 bool IsEventTypeForEventTiming(const Event& event) {
-  return (IsA<MouseEvent>(event) || IsA<PointerEvent>(event) ||
+  // Include only trusted events of certain kinds. Explicitly excluding input
+  // events that are considered continuous: event types for which the user agent
+  // may have timer-based dispatch under certain conditions. These are excluded
+  // since EventCounts cannot be used to properly computed percentiles on those.
+  // See spec: https://wicg.github.io/event-timing/#sec-events-exposed
+  return event.isTrusted() &&
+         (IsA<MouseEvent>(event) || IsA<PointerEvent>(event) ||
           IsA<TouchEvent>(event) || IsA<KeyboardEvent>(event) ||
           IsA<WheelEvent>(event) || event.IsInputEvent() ||
-          event.IsCompositionEvent()) &&
-         event.isTrusted();
+          event.IsCompositionEvent() || event.IsDragEvent()) &&
+         event.type() != event_type_names::kMousemove &&
+         event.type() != event_type_names::kPointermove &&
+         event.type() != event_type_names::kPointerrawupdate &&
+         event.type() != event_type_names::kTouchmove &&
+         event.type() != event_type_names::kWheel &&
+         event.type() != event_type_names::kDrag;
 }
 
 bool ShouldReportForEventTiming(WindowPerformance* performance) {
@@ -54,6 +63,8 @@ bool ShouldReportForEventTiming(WindowPerformance* performance) {
   return (!performance->IsEventTimingBufferFull() ||
           performance->HasObserverFor(PerformanceEntry::kEvent));
 }
+
+}  // namespace
 
 EventTiming::EventTiming(base::TimeTicks processing_start,
                          base::TimeTicks event_timestamp,
@@ -82,10 +93,8 @@ std::unique_ptr<EventTiming> EventTiming::Create(LocalDOMWindow* window,
 
   base::TimeTicks processing_start = Now();
   if (should_log_event) {
-    Document* document =
-        Document::DynamicFrom(performance->GetExecutionContext());
     InteractiveDetector* interactive_detector =
-        InteractiveDetector::From(*document);
+        InteractiveDetector::From(*window->document());
     if (interactive_detector) {
       interactive_detector->HandleForInputDelay(event, event_timestamp,
                                                 processing_start);
@@ -99,9 +108,10 @@ std::unique_ptr<EventTiming> EventTiming::Create(LocalDOMWindow* window,
 }
 
 void EventTiming::DidDispatchEvent(const Event& event) {
+  Node* target = event.target() ? event.target()->ToNode() : nullptr;
   performance_->RegisterEventTiming(event.type(), event_timestamp_,
                                     processing_start_, Now(),
-                                    event.cancelable());
+                                    event.cancelable(), target);
 }
 
 // static

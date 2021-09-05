@@ -95,7 +95,10 @@ FetchEvent::FetchEvent(ScriptState* script_state,
       observer_(respond_with_observer),
       preload_response_property_(MakeGarbageCollected<PreloadResponseProperty>(
           ExecutionContext::From(script_state))),
-      worker_timing_remote_(std::move(worker_timing_remote)) {
+      worker_timing_remote_(ExecutionContext::From(script_state)) {
+  worker_timing_remote_.Bind(std::move(worker_timing_remote),
+                             ExecutionContext::From(script_state)
+                                 ->GetTaskRunner(TaskType::kNetworking));
   if (!navigation_preload_sent)
     preload_response_property_->ResolveWithUndefined();
 
@@ -136,16 +139,12 @@ void FetchEvent::OnNavigationPreloadResponse(
           : FetchResponseData::Create();
   Vector<KURL> url_list(1);
   url_list[0] = preload_response_->CurrentRequestUrl();
-  response_data->SetURLList(url_list);
-  response_data->SetStatus(preload_response_->HttpStatusCode());
-  response_data->SetStatusMessage(preload_response_->HttpStatusText());
-  response_data->SetResponseTime(
-      preload_response_->ToResourceResponse().ResponseTime());
-  const HTTPHeaderMap& headers(
-      preload_response_->ToResourceResponse().HttpHeaderFields());
-  for (const auto& header : headers) {
-    response_data->HeaderList()->Append(header.key, header.value);
-  }
+
+  response_data->InitFromResourceResponse(
+      url_list, network::mojom::CredentialsMode::kInclude,
+      FetchRequestData::kBasicTainting,
+      preload_response_->ToResourceResponse());
+
   FetchResponseData* tainted_response =
       network_utils::IsRedirectResponseCode(preload_response_->HttpStatusCode())
           ? response_data->CreateOpaqueRedirectFilteredResponse()
@@ -209,7 +208,7 @@ void FetchEvent::OnNavigationPreloadComplete(
 }
 
 void FetchEvent::addPerformanceEntry(PerformanceMark* performance_mark) {
-  if (worker_timing_remote_) {
+  if (worker_timing_remote_.is_bound()) {
     auto mojo_performance_mark =
         performance_mark->ToMojoPerformanceMarkOrMeasure();
     worker_timing_remote_->AddPerformanceEntry(
@@ -218,7 +217,7 @@ void FetchEvent::addPerformanceEntry(PerformanceMark* performance_mark) {
 }
 
 void FetchEvent::addPerformanceEntry(PerformanceMeasure* performance_measure) {
-  if (worker_timing_remote_) {
+  if (worker_timing_remote_.is_bound()) {
     auto mojo_performance_measure =
         performance_measure->ToMojoPerformanceMarkOrMeasure();
     worker_timing_remote_->AddPerformanceEntry(
@@ -231,6 +230,7 @@ void FetchEvent::Trace(Visitor* visitor) {
   visitor->Trace(request_);
   visitor->Trace(preload_response_property_);
   visitor->Trace(body_completion_notifier_);
+  visitor->Trace(worker_timing_remote_);
   ExtendableEvent::Trace(visitor);
   ExecutionContextClient::Trace(visitor);
 }

@@ -6,23 +6,26 @@ package org.chromium.chrome.browser.firstrun;
 
 import android.accounts.Account;
 import android.app.Activity;
-import android.os.Bundle;
 import android.text.TextUtils;
 
 import androidx.annotation.VisibleForTesting;
-import androidx.fragment.app.Fragment;
 
 import org.chromium.chrome.browser.SyncFirstSetupCompleteSource;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInCallback;
 import org.chromium.chrome.browser.signin.UnifiedConsentServiceBridge;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
+import org.chromium.chrome.browser.sync.settings.ManageSyncSettings;
 import org.chromium.chrome.browser.sync.settings.SyncAndServicesSettings;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
+import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 
 /**
@@ -69,8 +72,8 @@ public final class FirstRunSignInProcessor {
         }
 
         // TODO(https://crbug.com/795292): Move this to SigninFirstRunFragment.
-        Account account =
-                AccountManagerFacadeProvider.getInstance().getAccountFromName(accountName);
+        Account account = AccountUtils.findAccountByName(
+                AccountManagerFacadeProvider.getInstance().tryGetGoogleAccounts(), accountName);
         if (account == null) {
             setFirstRunFlowSignInComplete(true);
             return;
@@ -80,7 +83,8 @@ public final class FirstRunSignInProcessor {
         signinManager.signIn(SigninAccessPoint.START_PAGE, account, new SignInCallback() {
             @Override
             public void onSignInComplete() {
-                UnifiedConsentServiceBridge.setUrlKeyedAnonymizedDataCollectionEnabled(true);
+                UnifiedConsentServiceBridge.setUrlKeyedAnonymizedDataCollectionEnabled(
+                        Profile.getLastUsedRegularProfile(), true);
                 // Show sync settings if user pressed the "Settings" button.
                 if (setUp) {
                     openSignInSettings(activity);
@@ -104,9 +108,14 @@ public final class FirstRunSignInProcessor {
      * Opens sign in settings as requested in the FRE sign-in dialog.
      */
     private static void openSignInSettings(Activity activity) {
-        final Class<? extends Fragment> fragment = SyncAndServicesSettings.class;
-        final Bundle arguments = SyncAndServicesSettings.createArguments(true);
-        SettingsLauncher.getInstance().launchSettingsPage(activity, fragment, arguments);
+        SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
+            settingsLauncher.launchSettingsActivity(
+                    activity, ManageSyncSettings.class, ManageSyncSettings.createArguments(true));
+        } else {
+            settingsLauncher.launchSettingsActivity(activity, SyncAndServicesSettings.class,
+                    SyncAndServicesSettings.createArguments(true));
+        }
     }
 
     /**

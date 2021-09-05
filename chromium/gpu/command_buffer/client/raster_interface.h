@@ -6,13 +6,13 @@
 #define GPU_COMMAND_BUFFER_CLIENT_RASTER_INTERFACE_H_
 
 #include <GLES2/gl2.h>
+#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "gpu/command_buffer/client/interface_base.h"
 #include "gpu/command_buffer/common/sync_token.h"
-
-struct SkImageInfo;
+#include "third_party/skia/include/core/SkImageInfo.h"
 
 namespace cc {
 class DisplayItemList;
@@ -60,8 +60,22 @@ class RasterInterface : public InterfaceBase {
                            int dst_x_offset,
                            int dst_y_offset,
                            GLenum texture_target,
+                           GLuint row_bytes,
                            const SkImageInfo& src_info,
                            const void* src_pixels) = 0;
+
+  virtual void ConvertYUVMailboxesToRGB(
+      const gpu::Mailbox& dest_mailbox,
+      SkYUVColorSpace planes_yuv_color_space,
+      const gpu::Mailbox& y_plane_mailbox,
+      const gpu::Mailbox& u_plane_mailbox,
+      const gpu::Mailbox& v_plane_mailbox) = 0;
+
+  virtual void ConvertNV12MailboxesToRGB(
+      const gpu::Mailbox& dest_mailbox,
+      SkYUVColorSpace planes_yuv_color_space,
+      const gpu::Mailbox& y_plane_mailbox,
+      const gpu::Mailbox& uv_planes_mailbox) = 0;
 
   // OOP-Raster
   virtual void BeginRasterCHROMIUM(GLuint sk_color,

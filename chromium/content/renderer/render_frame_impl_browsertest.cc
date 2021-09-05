@@ -113,7 +113,8 @@ class RenderFrameImplTest : public RenderViewTest {
 
     RenderFrameImpl::FromWebFrame(
         view_->GetMainRenderFrame()->GetWebFrame()->FirstChild())
-        ->OnUnload(kFrameProxyRouteId, false, frame_replication_state);
+        ->OnUnload(kFrameProxyRouteId, false, frame_replication_state,
+                   base::UnguessableToken::Create());
 
     mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
         stub_interface_provider;
@@ -128,8 +129,8 @@ class RenderFrameImplTest : public RenderViewTest {
         kSubframeRouteId, std::move(stub_interface_provider),
         std::move(stub_browser_interface_broker), MSG_ROUTING_NONE,
         MSG_ROUTING_NONE, kFrameProxyRouteId, MSG_ROUTING_NONE,
-        base::UnguessableToken::Create(), frame_replication_state,
-        &compositor_deps_, std::move(widget_params),
+        base::UnguessableToken::Create(), base::UnguessableToken::Create(),
+        frame_replication_state, &compositor_deps_, std::move(widget_params),
         blink::mojom::FrameOwnerProperties::New(),
         /*has_committed_real_load=*/true);
 
@@ -289,8 +290,9 @@ TEST_F(RenderFrameImplTest, LocalChildFrameWasShown) {
   blink::WebLocalFrame* parent_web_frame = frame()->GetWebFrame();
 
   parent_web_frame->CreateLocalChild(
-      blink::WebTreeScopeType::kDocument, grandchild,
-      grandchild->blink_interface_registry_.get());
+      blink::mojom::TreeScopeType::kDocument, grandchild,
+      grandchild->blink_interface_registry_.get(),
+      base::UnguessableToken::Create());
   grandchild->in_frame_tree_ = true;
   grandchild->Initialize();
 
@@ -538,8 +540,7 @@ TEST_F(RenderFrameImplTest, DISABLED_MainFrameDocumentIntersectionRecorded) {
   frame_widget()->OnMessageReceived(set_viewport_intersection_message);
   // Setting a new frame intersection in a local frame triggers the render frame
   // observer call.
-  EXPECT_EQ(observer.last_intersection_rect(),
-            blink::WebRect(7, -11, 200, 140));
+  EXPECT_EQ(observer.last_intersection_rect(), blink::WebRect(0, 0, 200, 140));
 }
 
 // Used to annotate the source of an interface request.

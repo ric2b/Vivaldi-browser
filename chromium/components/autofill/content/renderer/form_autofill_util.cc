@@ -13,12 +13,13 @@
 #include <utility>
 #include <vector>
 
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/i18n/case_conversion.h"
-#include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -70,8 +71,6 @@ using mojom::ButtonTitleType;
 
 namespace form_util {
 
-const size_t kMaxParseableFields = 200;
-
 namespace {
 
 // Maximal length of a button's title.
@@ -88,14 +87,14 @@ const char* const kButtonFeatures[] = {"button", "btn", "submit",
 
 // A bit field mask for FillForm functions to not fill some fields.
 enum FieldFilterMask {
-  FILTER_NONE                      = 0,
-  FILTER_DISABLED_ELEMENTS         = 1 << 0,
-  FILTER_READONLY_ELEMENTS         = 1 << 1,
+  FILTER_NONE = 0,
+  FILTER_DISABLED_ELEMENTS = 1 << 0,
+  FILTER_READONLY_ELEMENTS = 1 << 1,
   // Filters non-focusable elements with the exception of select elements, which
   // are sometimes made non-focusable because they are present for accessibility
   // while a prettier, non-<select> dropdown is shown. We still want to autofill
   // the non-focusable <select>.
-  FILTER_NON_FOCUSABLE_ELEMENTS    = 1 << 2,
+  FILTER_NON_FOCUSABLE_ELEMENTS = 1 << 2,
   FILTER_ALL_NON_EDITABLE_ELEMENTS = FILTER_DISABLED_ELEMENTS |
                                      FILTER_READONLY_ELEMENTS |
                                      FILTER_NON_FOCUSABLE_ELEMENTS,
@@ -204,10 +203,9 @@ size_t CalculateTableCellColumnSpan(const WebElement& element) {
 //  * CombineAndCollapseWhitespace("foo   ", "   bar", false) -> "foo bar"
 //  * CombineAndCollapseWhitespace(" foo", "bar ", false)     -> " foobar "
 //  * CombineAndCollapseWhitespace(" foo", "bar ", true)      -> " foo bar "
-const base::string16 CombineAndCollapseWhitespace(
-    const base::string16& prefix,
-    const base::string16& suffix,
-    bool force_whitespace) {
+const base::string16 CombineAndCollapseWhitespace(const base::string16& prefix,
+                                                  const base::string16& suffix,
+                                                  bool force_whitespace) {
   base::string16 prefix_trimmed;
   base::TrimPositions prefix_trailing_whitespace =
       base::TrimWhitespace(prefix, base::TRIM_TRAILING, &prefix_trimmed);
@@ -1057,6 +1055,11 @@ void ForEachMatchingFormFieldCommon(
     static base::NoDestructor<WebString> kValue("value");
     static base::NoDestructor<WebString> kPlaceholder("placeholder");
 
+    if (FieldRendererId(element->UniqueRendererFormControlId()) !=
+        data.fields[i].unique_renderer_id) {
+      continue;
+    }
+
     if (((filters & FILTER_DISABLED_ELEMENTS) && !element->IsEnabled()) ||
         ((filters & FILTER_READONLY_ELEMENTS) && element->IsReadOnly()) ||
         // See description for FILTER_NON_FOCUSABLE_ELEMENTS.
@@ -1511,8 +1514,8 @@ bool ScriptModifiedUsernameAcceptable(
   return field_data_manager->FindMachedValue(value);
 }
 
-}  // namespace
-
+// Helper function that strips any authentication data, as well as query and
+// ref portions of URL.
 GURL StripAuthAndParams(const GURL& gurl) {
   GURL::Replacements rep;
   rep.ClearUsername();
@@ -1521,6 +1524,8 @@ GURL StripAuthAndParams(const GURL& gurl) {
   rep.ClearRef();
   return gurl.ReplaceComponents(rep);
 }
+
+}  // namespace
 
 bool ExtractFormData(const WebFormElement& form_element,
                      const FieldDataManager& field_data_manager,
@@ -1533,7 +1538,8 @@ bool ExtractFormData(const WebFormElement& form_element,
       data, nullptr);
 }
 
-bool IsFormVisible(blink::WebLocalFrame* frame, uint32_t form_renderer_id) {
+bool IsFormVisible(blink::WebLocalFrame* frame,
+                   FormRendererId form_renderer_id) {
   WebDocument doc = frame->GetDocument();
   if (doc.IsNull())
     return false;
@@ -1542,7 +1548,7 @@ bool IsFormVisible(blink::WebLocalFrame* frame, uint32_t form_renderer_id) {
 }
 
 bool IsFormControlVisible(blink::WebLocalFrame* frame,
-                          uint32_t field_renderer_id) {
+                          FieldRendererId field_renderer_id) {
   WebDocument doc = frame->GetDocument();
   if (doc.IsNull())
     return false;
@@ -1561,9 +1567,7 @@ bool IsSomeControlElementVisible(
 }
 
 bool AreFormContentsVisible(const WebFormElement& form) {
-  WebVector<WebFormControlElement> control_elements;
-  form.GetFormControlElements(control_elements);
-  return IsSomeControlElementVisible(control_elements);
+  return IsSomeControlElementVisible(form.GetFormControlElements());
 }
 
 GURL GetCanonicalActionForForm(const WebFormElement& form) {
@@ -1577,6 +1581,14 @@ GURL GetCanonicalActionForForm(const WebFormElement& form) {
 GURL GetCanonicalOriginForDocument(const WebDocument& document) {
   GURL full_origin(document.Url());
   return StripAuthAndParams(full_origin);
+}
+
+GURL GetOriginWithoutAuthForDocument(const WebDocument& document) {
+  GURL::Replacements rep;
+  rep.ClearUsername();
+  rep.ClearPassword();
+  GURL full_origin(document.Url());
+  return full_origin.ReplaceComponents(rep);
 }
 
 bool IsMonthInput(const WebInputElement* element) {
@@ -1612,8 +1624,7 @@ bool IsCheckableElement(const WebInputElement* element) {
 }
 
 bool IsAutofillableInputElement(const WebInputElement* element) {
-  return IsTextInput(element) ||
-         IsMonthInput(element) ||
+  return IsTextInput(element) || IsMonthInput(element) ||
          IsCheckableElement(element);
 }
 
@@ -1665,10 +1676,8 @@ std::vector<blink::WebFormControlElement> ExtractAutofillableElementsFromSet(
 
 std::vector<WebFormControlElement> ExtractAutofillableElementsInForm(
     const WebFormElement& form_element) {
-  WebVector<WebFormControlElement> control_elements;
-  form_element.GetFormControlElements(control_elements);
-
-  return ExtractAutofillableElementsFromSet(control_elements);
+  return ExtractAutofillableElementsFromSet(
+      form_element.GetFormControlElements());
 }
 
 void WebFormControlElementToFormField(
@@ -1690,7 +1699,8 @@ void WebFormControlElementToFormField(
   field->name = element.NameForAutofill().Utf16();
   field->id_attribute = element.GetAttribute(*kId).Utf16();
   field->name_attribute = element.GetAttribute(*kName).Utf16();
-  field->unique_renderer_id = element.UniqueRendererFormControlId();
+  field->unique_renderer_id =
+      FieldRendererId(element.UniqueRendererFormControlId());
   field->form_control_ax_id = element.GetAxId();
   field->form_control_type = element.FormControlTypeForAutofill().Utf8();
   field->autocomplete_attribute = element.GetAttribute(*kAutocomplete).Utf8();
@@ -1708,10 +1718,10 @@ void WebFormControlElementToFormField(
   if (element.HasAttribute(*kClass))
     field->css_classes = element.GetAttribute(*kClass).Utf16();
 
-  if (field_data_manager &&
-      field_data_manager->HasFieldData(element.UniqueRendererFormControlId())) {
-    field->properties_mask = field_data_manager->GetFieldPropertiesMask(
-        element.UniqueRendererFormControlId());
+  const FieldRendererId renderer_id(element.UniqueRendererFormControlId());
+  if (field_data_manager && field_data_manager->HasFieldData(renderer_id)) {
+    field->properties_mask =
+        field_data_manager->GetFieldPropertiesMask(renderer_id);
   }
 
   field->aria_label = GetAriaLabel(element.GetDocument(), element);
@@ -1721,8 +1731,7 @@ void WebFormControlElementToFormField(
     return;
 
   const WebInputElement* input_element = ToWebInputElement(&element);
-  if (IsAutofillableInputElement(input_element) ||
-      IsTextAreaElement(element) ||
+  if (IsAutofillableInputElement(input_element) || IsTextAreaElement(element) ||
       IsSelectElement(element)) {
     // The browser doesn't need to differentiate between preview and autofill.
     field->is_autofilled = element.IsAutofilled();
@@ -1746,8 +1755,7 @@ void WebFormControlElementToFormField(
     // Set option strings on the field if available.
     DCHECK(IsSelectElement(element));
     const WebSelectElement select_element = element.ToConst<WebSelectElement>();
-    GetOptionStringsFromElement(select_element,
-                                &field->option_values,
+    GetOptionStringsFromElement(select_element, &field->option_values,
                                 &field->option_contents);
   }
   if (extract_mask & EXTRACT_BOUNDS) {
@@ -1793,10 +1801,10 @@ void WebFormControlElementToFormField(
   // this is one of recognised situations when the site-modified value is more
   // useful for filling.
   if (field_data_manager &&
-      field->properties_mask & (FieldPropertiesFlags::USER_TYPED |
-                                FieldPropertiesFlags::AUTOFILLED)) {
+      field->properties_mask & (FieldPropertiesFlags::kUserTyped |
+                                FieldPropertiesFlags::kAutofilled)) {
     const base::string16 typed_value = field_data_manager->GetUserTypedValue(
-        element.UniqueRendererFormControlId());
+        FieldRendererId(element.UniqueRendererFormControlId()));
 
     // The typed value is preserved for all passwords. It is also preserved for
     // potential usernames, as long as the |value| is not deemed acceptable.
@@ -1820,7 +1828,8 @@ bool WebFormElementToFormData(
     return false;
 
   form->name = GetFormIdentifier(form_element);
-  form->unique_renderer_id = form_element.UniqueRendererFormId();
+  form->unique_renderer_id =
+      FormRendererId(form_element.UniqueRendererFormId());
   form->url = GetCanonicalOriginForDocument(frame->GetDocument());
   form->action = GetCanonicalActionForForm(form_element);
   form->is_action_empty =
@@ -1841,13 +1850,11 @@ bool WebFormElementToFormData(
   if (!form->action.is_valid())
     form->action = GURL(blink::WebStringToGURL(form_element.Action()));
 
-  WebVector<WebFormControlElement> control_elements;
-  form_element.GetFormControlElements(control_elements);
-
   std::vector<blink::WebElement> dummy_fieldset;
   return FormOrFieldsetsToFormData(
-      &form_element, &form_control_element, dummy_fieldset, control_elements,
-      field_data_manager, extract_mask, form, field);
+      &form_element, &form_control_element, dummy_fieldset,
+      form_element.GetFormControlElements(), field_data_manager, extract_mask,
+      form, field);
 }
 
 std::vector<WebFormControlElement> GetUnownedFormFieldElements(
@@ -1924,22 +1931,15 @@ bool UnownedCheckoutFormElementsAndFieldSetsToFormData(
   if (url.IsStandard())
     path = base::ToLowerASCII(url.path());
 
-  const char* const kKeywords[] = {
-    "payment",
-    "checkout",
-    "address",
-    "delivery",
-    "shipping",
-    "wallet"
-  };
+  const char* const kKeywords[] = {"payment",  "checkout", "address",
+                                   "delivery", "shipping", "wallet"};
 
   for (const auto* keyword : kKeywords) {
     // Compare char16 elements of |title| with char elements of |keyword| using
     // operator==.
-    auto title_pos = std::search(title.begin(), title.end(),
-                                 keyword, keyword + strlen(keyword));
-    if (title_pos != title.end() ||
-        path.find(keyword) != std::string::npos) {
+    auto title_pos = std::search(title.begin(), title.end(), keyword,
+                                 keyword + strlen(keyword));
+    if (title_pos != title.end() || path.find(keyword) != std::string::npos) {
       form->is_formless_checkout = true;
       // Found a keyword: treat this as an unowned form.
       return UnownedFormElementsAndFieldSetsToFormData(
@@ -2088,8 +2088,7 @@ bool ClearPreviewedFormWithElement(const WebFormControlElement& element,
 
     // Only text input, textarea and select elements can be previewed.
     WebInputElement* input_element = ToWebInputElement(&control_element);
-    if (!IsTextInput(input_element) &&
-        !IsMonthInput(input_element) &&
+    if (!IsTextInput(input_element) && !IsMonthInput(input_element) &&
         !IsTextAreaElement(control_element) &&
         !IsSelectElement(control_element))
       continue;
@@ -2198,12 +2197,9 @@ ButtonTitleList InferButtonTitlesForTesting(const WebElement& form_element) {
 }
 
 WebFormElement FindFormByUniqueRendererId(WebDocument doc,
-                                          uint32_t form_renderer_id) {
-  blink::WebVector<WebFormElement> forms;
-  doc.Forms(forms);
-
-  for (const auto& form : forms) {
-    if (form.UniqueRendererFormId() == form_renderer_id)
+                                          FormRendererId form_renderer_id) {
+  for (const auto& form : doc.Forms()) {
+    if (FormRendererId(form.UniqueRendererFormId()) == form_renderer_id)
       return form;
   }
   return WebFormElement();
@@ -2211,7 +2207,7 @@ WebFormElement FindFormByUniqueRendererId(WebDocument doc,
 
 WebFormControlElement FindFormControlElementByUniqueRendererId(
     WebDocument doc,
-    uint32_t form_control_renderer_id) {
+    FieldRendererId form_control_renderer_id) {
   WebElementCollection elements = doc.All();
 
   for (WebElement element = elements.FirstItem(); !element.IsNull();
@@ -2219,7 +2215,8 @@ WebFormControlElement FindFormControlElementByUniqueRendererId(
     if (!element.IsFormControlElement())
       continue;
     WebFormControlElement control = element.To<WebFormControlElement>();
-    if (form_control_renderer_id == control.UniqueRendererFormControlId())
+    if (form_control_renderer_id ==
+        FieldRendererId(control.UniqueRendererFormControlId()))
       return control;
   }
 
@@ -2228,13 +2225,13 @@ WebFormControlElement FindFormControlElementByUniqueRendererId(
 
 std::vector<WebFormControlElement> FindFormControlElementsByUniqueRendererId(
     WebDocument doc,
-    const std::vector<uint32_t>& form_control_renderer_ids) {
+    const std::vector<FieldRendererId>& form_control_renderer_ids) {
   WebElementCollection elements = doc.All();
   std::vector<WebFormControlElement> result(form_control_renderer_ids.size());
 
   // Build a map from entries in |form_control_renderer_ids| to their indices,
   // for more efficient lookup.
-  std::map<uint32_t, size_t> renderer_id_to_index;
+  std::map<FieldRendererId, size_t> renderer_id_to_index;
   for (size_t i = 0; i < form_control_renderer_ids.size(); i++)
     renderer_id_to_index[form_control_renderer_ids[i]] = i;
 
@@ -2243,7 +2240,8 @@ std::vector<WebFormControlElement> FindFormControlElementsByUniqueRendererId(
     if (!element.IsFormControlElement())
       continue;
     WebFormControlElement control = element.To<WebFormControlElement>();
-    auto it = renderer_id_to_index.find(control.UniqueRendererFormControlId());
+    auto it = renderer_id_to_index.find(
+        FieldRendererId(control.UniqueRendererFormControlId()));
     if (it == renderer_id_to_index.end())
       continue;
     result[it->second] = control;
@@ -2254,8 +2252,8 @@ std::vector<WebFormControlElement> FindFormControlElementsByUniqueRendererId(
 
 std::vector<WebFormControlElement> FindFormControlElementsByUniqueRendererId(
     WebDocument doc,
-    uint32_t form_renderer_id,
-    const std::vector<uint32_t>& form_control_renderer_ids) {
+    FormRendererId form_renderer_id,
+    const std::vector<FieldRendererId>& form_control_renderer_ids) {
   std::vector<WebFormControlElement> result(form_control_renderer_ids.size());
   WebFormElement form = FindFormByUniqueRendererId(doc, form_renderer_id);
   if (form.IsNull())
@@ -2263,14 +2261,13 @@ std::vector<WebFormControlElement> FindFormControlElementsByUniqueRendererId(
 
   // Build a map from entries in |form_control_renderer_ids| to their indices,
   // for more efficient lookup.
-  std::map<uint32_t, size_t> renderer_id_to_index;
+  std::map<FieldRendererId, size_t> renderer_id_to_index;
   for (size_t i = 0; i < form_control_renderer_ids.size(); i++)
     renderer_id_to_index[form_control_renderer_ids[i]] = i;
 
-  WebVector<WebFormControlElement> fields;
-  form.GetFormControlElements(fields);
-  for (const auto& field : fields) {
-    auto it = renderer_id_to_index.find(field.UniqueRendererFormControlId());
+  for (const auto& field : form.GetFormControlElements()) {
+    auto it = renderer_id_to_index.find(
+        FieldRendererId(field.UniqueRendererFormControlId()));
     if (it == renderer_id_to_index.end())
       continue;
     result[it->second] = field;

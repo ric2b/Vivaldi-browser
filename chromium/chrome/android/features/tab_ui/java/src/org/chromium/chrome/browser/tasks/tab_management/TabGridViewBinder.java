@@ -151,15 +151,23 @@ class TabGridViewBinder {
     private static void bindClosableTabProperties(
             PropertyModel model, ViewLookupCachingFrameLayout view, PropertyKey propertyKey) {
         if (TabProperties.TAB_CLOSED_LISTENER == propertyKey) {
-            view.fastFindViewById(R.id.action_button).setOnClickListener(v -> {
-                int tabId = model.get(TabProperties.TAB_ID);
-                model.get(TabProperties.TAB_CLOSED_LISTENER).run(tabId);
-            });
+            if (model.get(TabProperties.TAB_CLOSED_LISTENER) == null) {
+                view.fastFindViewById(R.id.action_button).setOnClickListener(null);
+            } else {
+                view.fastFindViewById(R.id.action_button).setOnClickListener(v -> {
+                    int tabId = model.get(TabProperties.TAB_ID);
+                    model.get(TabProperties.TAB_CLOSED_LISTENER).run(tabId);
+                });
+            }
         } else if (TabProperties.TAB_SELECTED_LISTENER == propertyKey) {
-            view.setOnClickListener(v -> {
-                int tabId = model.get(TabProperties.TAB_ID);
-                model.get(TabProperties.TAB_SELECTED_LISTENER).run(tabId);
-            });
+            if (model.get(TabProperties.TAB_SELECTED_LISTENER) == null) {
+                view.setOnClickListener(null);
+            } else {
+                view.setOnClickListener(v -> {
+                    int tabId = model.get(TabProperties.TAB_ID);
+                    model.get(TabProperties.TAB_SELECTED_LISTENER).run(tabId);
+                });
+            }
         } else if (TabProperties.CREATE_GROUP_LISTENER == propertyKey) {
             TabListMediator.TabActionListener listener =
                     model.get(TabProperties.CREATE_GROUP_LISTENER);
@@ -292,8 +300,8 @@ class TabGridViewBinder {
         if (TabUiFeatureUtilities.isTabThumbnailAspectRatioNotOne()) {
             float expectedThumbnailAspectRatio =
                     (float) ChromeFeatureList.getFieldTrialParamByFeatureAsDouble(
-                            ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, "thumbnail_aspect_ratio",
-                            1.0);
+                            ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
+                            TabUiFeatureUtilities.THUMBNAIL_ASPECT_RATIO_PARAM, 1.0);
             expectedThumbnailAspectRatio =
                     MathUtils.clamp(expectedThumbnailAspectRatio, 0.5f, 2.0f);
             int height = (int) (thumbnail.getWidth() * 1.0 / expectedThumbnailAspectRatio);

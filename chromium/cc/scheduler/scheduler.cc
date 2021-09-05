@@ -9,8 +9,8 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
@@ -583,7 +583,9 @@ void Scheduler::FinishImplFrame() {
   // ensures that the acks are sent in order.
   if (!state_machine_.did_submit_in_last_frame()) {
     SendDidNotProduceFrame(begin_impl_frame_tracker_.Current(),
-                           FrameSkippedReason::kWaitingOnMain);
+                           state_machine_.draw_succeeded_in_last_frame()
+                               ? FrameSkippedReason::kNoDamage
+                               : FrameSkippedReason::kWaitingOnMain);
   }
 
   begin_impl_frame_tracker_.Finish();
@@ -605,8 +607,7 @@ void Scheduler::SendDidNotProduceFrame(const viz::BeginFrameArgs& args,
     return;
   last_begin_frame_ack_ = viz::BeginFrameAck(args, false /* has_damage */);
   client_->DidNotProduceFrame(last_begin_frame_ack_, reason);
-  if (reason == FrameSkippedReason::kNoDamage)
-    compositor_timing_history_->DidNotProduceFrame(args.frame_id);
+  compositor_timing_history_->DidNotProduceFrame(args.frame_id, reason);
 }
 
 // BeginImplFrame starts a compositor frame that will wait up until a deadline

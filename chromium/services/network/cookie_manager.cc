@@ -100,11 +100,11 @@ void CookieManager::GetCookieList(const GURL& url,
 }
 
 void CookieManager::SetCanonicalCookie(const net::CanonicalCookie& cookie,
-                                       const std::string& source_scheme,
+                                       const GURL& source_url,
                                        const net::CookieOptions& cookie_options,
                                        SetCanonicalCookieCallback callback) {
   cookie_store_->SetCanonicalCookieAsync(
-      std::make_unique<net::CanonicalCookie>(cookie), source_scheme,
+      std::make_unique<net::CanonicalCookie>(cookie), source_url,
       cookie_options, std::move(callback));
 }
 
@@ -274,6 +274,7 @@ void CookieManager::ConfigureCookieSettings(
       params.third_party_cookies_allowed_schemes);
   out->set_content_settings_for_legacy_cookie_access(
       params.settings_for_legacy_cookie_access);
+  out->set_storage_access_grants(params.settings_for_storage_access);
 }
 
 void CookieManager::CrashOnGetCookieList() {

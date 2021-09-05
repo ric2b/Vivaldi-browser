@@ -14,6 +14,7 @@
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/ios/browser/autofill_util.h"
 #include "components/password_manager/core/browser/form_parsing/form_parser.h"
+#include "components/password_manager/core/browser/password_form_filling.h"
 #include "components/password_manager/ios/account_select_fill_data.h"
 #include "components/password_manager/ios/js_password_manager.h"
 #import "ios/web/public/js_messaging/web_frame.h"
@@ -24,6 +25,8 @@
 #endif
 
 using autofill::FormData;
+using autofill::FormRendererId;
+using autofill::FieldRendererId;
 using autofill::PasswordForm;
 using autofill::PasswordFormFillData;
 using password_manager::FillData;
@@ -263,7 +266,7 @@ constexpr char kCommandPrefix[] = "passwordForm";
 #pragma mark - Public methods
 
 - (void)findPasswordFormsWithCompletionHandler:
-    (void (^)(const std::vector<FormData>&))completionHandler {
+    (void (^)(const std::vector<FormData>&, uint32_t))completionHandler {
   if (!_webState) {
     return;
   }
@@ -280,7 +283,17 @@ constexpr char kCommandPrefix[] = "passwordForm";
         [weakSelf getPasswordFormsFromJSON:jsonString
                                    pageURL:pageURL
                                      forms:&forms];
-        completionHandler(forms);
+        // Find the maximum extracted value.
+        uint32_t maxID = 0;
+        for (const auto& form : forms) {
+          if (form.unique_renderer_id)
+            maxID = std::max(maxID, form.unique_renderer_id.value());
+          for (const auto& field : form.fields) {
+            if (field.unique_renderer_id)
+              maxID = std::max(maxID, field.unique_renderer_id.value());
+          }
+        }
+        completionHandler(forms, maxID);
       }];
 }
 
@@ -300,13 +313,13 @@ constexpr char kCommandPrefix[] = "passwordForm";
        completionHandler:completionHandler];
 }
 
-- (void)fillPasswordForm:(NSString*)formName
-        newPasswordIdentifier:(NSString*)newPasswordIdentifier
-    confirmPasswordIdentifier:(NSString*)confirmPasswordIdentifier
+- (void)fillPasswordForm:(FormRendererId)formIdentifier
+        newPasswordIdentifier:(FieldRendererId)newPasswordIdentifier
+    confirmPasswordIdentifier:(FieldRendererId)confirmPasswordIdentifier
             generatedPassword:(NSString*)generatedPassword
             completionHandler:(nullable void (^)(BOOL))completionHandler {
   // Send JSON over to the web view.
-  [self.jsPasswordManager fillPasswordForm:formName
+  [self.jsPasswordManager fillPasswordForm:formIdentifier
                      newPasswordIdentifier:newPasswordIdentifier
                  confirmPasswordIdentifier:confirmPasswordIdentifier
                          generatedPassword:generatedPassword
@@ -337,7 +350,7 @@ constexpr char kCommandPrefix[] = "passwordForm";
                                (nullable void (^)(BOOL))completionHandler {
   __weak PasswordFormHelper* weakSelf = self;
   [self findPasswordFormsWithCompletionHandler:^(
-            const std::vector<FormData>& forms) {
+            const std::vector<FormData>& forms, uint32_t maxID) {
     PasswordFormHelper* strongSelf = weakSelf;
     for (const auto& form : forms) {
       std::vector<const PasswordForm*> matches;
@@ -349,8 +362,10 @@ constexpr char kCommandPrefix[] = "passwordForm";
 
       passwordForm->username_value = base::SysNSStringToUTF16(username);
       passwordForm->password_value = base::SysNSStringToUTF16(password);
-      PasswordFormFillData formData(*passwordForm, matches, *passwordForm,
-                                    false);
+      PasswordFormFillData formData =
+          password_manager::CreatePasswordFormFillData(
+              *passwordForm, matches, *passwordForm,
+              /*wait_for_username=*/false);
       [strongSelf fillPasswordForm:formData
                       withUsername:base::SysNSStringToUTF16(username)
                           password:base::SysNSStringToUTF16(password)
@@ -362,7 +377,7 @@ constexpr char kCommandPrefix[] = "passwordForm";
 // Finds the password form named |formName| and calls
 // |completionHandler| with the populated |FormData| data structure. |found| is
 // YES if the current form was found successfully, NO otherwise.
-- (void)extractPasswordFormData:(NSString*)formName
+- (void)extractPasswordFormData:(FormRendererId)formIdentifier
               completionHandler:(void (^)(BOOL found, const FormData& form))
                                     completionHandler {
   DCHECK(completionHandler);
@@ -394,8 +409,12 @@ constexpr char kCommandPrefix[] = "passwordForm";
     completionHandler(YES, formData);
   };
 
-  [self.jsPasswordManager extractForm:formName
+  [self.jsPasswordManager extractForm:formIdentifier
                     completionHandler:extractFormDataCompletionHandler];
+}
+
+- (void)setUpForUniqueIDsWithInitialState:(uint32_t)nextAvailableID {
+  [self.jsPasswordManager setUpForUniqueIDsWithInitialState:nextAvailableID];
 }
 
 @end

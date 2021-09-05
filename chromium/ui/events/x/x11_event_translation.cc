@@ -6,6 +6,8 @@
 
 #include <vector>
 
+#include "base/check.h"
+#include "base/notreached.h"
 #include "base/time/time.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
 #include "ui/events/event.h"
@@ -112,7 +114,7 @@ std::unique_ptr<MouseEvent> CreateMouseEvent(EventType type,
   if (enter_or_leave && xev.xcrossing.detail == NotifyInferior)
     return nullptr;
 
-  PointerDetails details{EventPointerType::POINTER_TYPE_MOUSE};
+  PointerDetails details{EventPointerType::kMouse};
   auto event = std::make_unique<MouseEvent>(
       type, EventLocationFromXEvent(xev), EventSystemLocationFromXEvent(xev),
       EventTimeFromXEvent(xev), EventFlagsFromXEvent(xev),

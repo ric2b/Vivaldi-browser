@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">जर्मन कीबोर्ड</translation>
 <translation id="1972984168337863910">फ़ाइल के लिए सुझाव पैनल को बड़ा करें</translation>
 <translation id="1984603991036629094">आर्मेनियाई फ़ोनेटिक कीबोर्ड</translation>
+<translation id="1995337122023280937">फ़ाइल की जगह पर जाएं</translation>
 <translation id="2001796770603320721">डिस्क में प्रबंधित करें</translation>
 <translation id="2009067268969781306">किसी डिस्क को फ़ॉर्मैट करने से उस पर सेव किया गया पूरा डेटा मिट जाएगा. यह कार्रवाई वापस नहीं ली जा सकती.</translation>
 <translation id="2028997212275086731">RAR संग्रह</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Google डिस्क तक नहीं पहुंचा जा सका. कृपया <ph name="BEGIN_LINK" />लॉग आउट करें<ph name="END_LINK" /> और वापस प्रवेश करें.</translation>
 <translation id="2649120831653069427">रेनबोफ़िश</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">फ़ाइल की जगह</translation>
 <translation id="2672394958563893062">एक गड़बड़ी हुई. शुरुआत से शुरू करने के लिए रिस्टार्ट पर क्लिक करें.</translation>
 <translation id="2676946222714718093">इस पर चलाया जा रहा है:</translation>
 <translation id="2735698359135166290">रोमानियाई मानक कीबोर्ड</translation>
@@ -160,7 +162,7 @@
 <translation id="2902734494705624966">यूएस विस्तारित</translation>
 <translation id="2923240520113693977">एस्टोनियाई</translation>
 <translation id="2924296707677495905">लिप्यंतरण (namaskaram → ನಮಸ್ಕಾರ)</translation>
-<translation id="2925966894897775835">पत्रक</translation>
+<translation id="2925966894897775835">Sheets</translation>
 <translation id="2938685643439809023">मंगोलियाई</translation>
 <translation id="2942290791863759244">जर्मन नियो 2 कीबोर्ड</translation>
 <translation id="2943400156390503548">स्लाइड</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> त्रुटियां.</translation>
 <translation id="3519867315646775981">लिप्यंतरण (shalom ← שלום)</translation>
 <translation id="3522708245912499433">पुर्तगाली</translation>
+<translation id="3524311639100184459">चेतावनी: ये फ़ाइलें अस्थायी हैं और डिस्क की जगह खाली करने के लिए अपने-आप मिटाई जा सकती हैं.  <ph name="BEGIN_LINK" />ज़्यादा जानें<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">फ़ोल्डर</translation>
 <translation id="3549797760399244642">drive.google.com पर जाएं...</translation>
 <translation id="357479282490346887">लिथुआनियाई</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">कीवी</translation>
 <translation id="3966388904776714213">ऑडियो प्लेयर</translation>
 <translation id="4002066346123236978">शीर्षक</translation>
+<translation id="4065397611279318371"><ph name="APP_NAME" /> ऐप्लिकेशन से फ़ाइलों को खोलने के लिए, पहले उन्हें <ph name="SHARED_DIRECTORY_LABEL" /> फ़ोल्डर में ले जाएं.</translation>
 <translation id="4070370845051020638">कैंटोनीज़ इनपुट पद्धति</translation>
 <translation id="4072248638558688893">तमिल कीबोर्ड (फ़ोनेटिक)</translation>
 <translation id="4124935795427217608">यूनिकॉर्न</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">अपने-आप एडजस्ट करें</translation>
 <translation id="4881695831933465202">खोलें</translation>
 <translation id="4886021172213954916">तमिल कीबोर्ड (टाइपराइटर)</translation>
+<translation id="4892969127351273348"><ph name="APP_NAME" /> के साथ नहीं खोला जा सकता</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> का बैक अप लेने के लिए तैयार है</translation>
 <translation id="4924638091161556692">निश्चित</translation>
 <translation id="4935975195727477204">जीनिया का फूल</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Linux के साथ शेयर करना प्रबंधित करें</translation>
 <translation id="6808193438228982088">लोमड़ी</translation>
 <translation id="6820687829547641339">Gzip संकुचित tar संग्रह</translation>
+<translation id="6823166707458800069">इस फ़ोल्डर में सेव की गई सभी फ़ाइलों का ऑनलाइन बैक अप अपने-आप लिया जाता है.</translation>
 <translation id="6825883775269213504">रूसी</translation>
 <translation id="6827236167376090743">यह वीडियो शाम होने तक लगातार चलता रहेगा.</translation>
 <translation id="6847101934483209767"><ph name="ENTRY_NAME" /> को चुनी गई चीज़ों से हटाया गया.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Google मैप</translation>
 <translation id="7419631653042041064">कतालान कीबोर्ड</translation>
 <translation id="7434823369735508263">यूके ड्वोराक कीबोर्ड</translation>
+<translation id="7447678886297481665">इस फ़ोल्डर में मौजूद फ़ाइलें सिर्फ़ पढ़ी जा सकती हैं. कुछ काम नहीं किए जा सकते.</translation>
 <translation id="7460898608667578234">उक्रेनियाई</translation>
 <translation id="7474889694310679759">कनाडाई अंग्रेज़ी कीबोर्ड</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> मिलीं

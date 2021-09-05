@@ -48,6 +48,11 @@
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
+#if defined(OS_CHROMEOS)
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
+#include "content/public/browser/web_contents.h"
+#endif
+
 #include "app/vivaldi_apptools.h"
 
 using content::BrowserThread;
@@ -465,10 +470,23 @@ ExtensionFunction::ResponseAction ManagementSetEnabledFunction::Run() {
       reason == disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED;
 
   // If the extension can't be enabled, only continue if we plan to prompt for
-  // parental approval.
+  // parental approval.  For any child or other type of managed user, if
+  // extension installation has been blocked, we stop the enabling of the
+  // extension here.
   if (disallow_enable && !prompt_parent_for_approval) {
     LOG(ERROR) << "ManagementSetEnabledFunction::Run: extension may not be "
                   "enabled, and we're not prompting for parent approval";
+
+#if defined(OS_CHROMEOS)
+    // On ChromeOS, if this is a child, show the dialog indicating that enabling
+    // extensions has been blocked by a parent.
+    if (supervised_user_service_delegate &&
+        supervised_user_service_delegate->IsChild(browser_context())) {
+      AddRef();  // Matched in OnBlockedByParentDialogDone().
+      ShowBlockedByParentDialog(target_extension);
+      return RespondLater();
+    }
+#endif
     return RespondNow(Error(keys::kUserCantModifyError, extension_id_));
   }
 
@@ -495,8 +513,8 @@ ExtensionFunction::ResponseAction ManagementSetEnabledFunction::Run() {
       requirements_checker_ =
           std::make_unique<RequirementsChecker>(target_extension);
       requirements_checker_->Start(
-          base::Bind(&ManagementSetEnabledFunction::OnRequirementsChecked,
-                     this));  // This bind creates a reference.
+          base::BindOnce(&ManagementSetEnabledFunction::OnRequirementsChecked,
+                         this));  // This bind creates a reference.
       return RespondLater();
     }
     // Handle parental approval for child accounts that have the ability to
@@ -598,11 +616,48 @@ void ManagementSetEnabledFunction::OnParentPermissionDone(
   }
 }
 
-ManagementUninstallFunctionBase::ManagementUninstallFunctionBase() {
+void ManagementSetEnabledFunction::ShowBlockedByParentDialog(
+    const Extension* extension) {
+#if defined(OS_CHROMEOS)
+  DCHECK(extension);
+  SupervisedUserServiceDelegate* supervised_user_service_delegate =
+      ManagementAPI::GetFactoryInstance()
+          ->Get(browser_context())
+          ->GetSupervisedUserServiceDelegate();
+
+  supervised_user_service_delegate
+      ->RecordExtensionEnableBlockedByParentDialogUmaMetric();
+
+  content::WebContents* contents = GetSenderWebContents();
+  web_modal::WebContentsModalDialogManager* manager =
+      web_modal::WebContentsModalDialogManager::FromWebContents(contents);
+  if (!contents || !contents->GetTopLevelNativeWindow() || !manager) {
+    // If the contents are null, or there is no top level native window to
+    // anchor the dialog on, or no dialog manager, skip showing the dialog and
+    // return the error immediately.
+    OnBlockedByParentDialogDone();
+    return;
+  }
+  supervised_user_service_delegate
+      ->ShowExtensionEnableBlockedByParentDialogForExtension(
+          extension, contents,
+          base::BindOnce(
+              &ManagementSetEnabledFunction::OnBlockedByParentDialogDone,
+              this));
+#endif
 }
 
-ManagementUninstallFunctionBase::~ManagementUninstallFunctionBase() {
+void ManagementSetEnabledFunction::OnBlockedByParentDialogDone() {
+#if defined(OS_CHROMEOS)
+  Respond(Error(keys::kUserCantModifyError, extension_id_));
+  // Matches the AddRef in Run().
+  Release();
+#endif
 }
+
+ManagementUninstallFunctionBase::ManagementUninstallFunctionBase() = default;
+
+ManagementUninstallFunctionBase::~ManagementUninstallFunctionBase() = default;
 
 ExtensionFunction::ResponseAction ManagementUninstallFunctionBase::Uninstall(
     const std::string& target_extension_id,
@@ -796,7 +851,7 @@ ExtensionFunction::ResponseAction ManagementCreateAppShortcutFunction::Run() {
     // Response is sent async in OnCloseShortcutPrompt().
     return RespondLater();
   } else {
-    return RespondNow(Error(error));
+    return RespondNow(Error(std::move(error)));
   }
 }
 

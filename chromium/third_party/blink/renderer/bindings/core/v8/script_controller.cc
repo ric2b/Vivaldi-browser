@@ -49,6 +49,7 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -130,8 +131,8 @@ v8::Local<v8::Value> ScriptController::ExecuteScriptAndReturnValue(
       return result;
 
     v8::MaybeLocal<v8::Value> maybe_result;
-    maybe_result = V8ScriptRunner::RunCompiledScript(
-        GetIsolate(), script, GetFrame()->GetDocument()->ToExecutionContext());
+    maybe_result = V8ScriptRunner::RunCompiledScript(GetIsolate(), script,
+                                                     GetFrame()->DomWindow());
     probe::ProduceCompilationCache(frame_, source, script);
     V8CodeCache::ProduceCache(GetIsolate(), script, source,
                               produce_cache_options);
@@ -242,8 +243,7 @@ void ScriptController::ExecuteJavaScriptURL(
 
   bool should_bypass_main_world_content_security_policy =
       check_main_world_csp == network::mojom::CSPDisposition::DO_NOT_CHECK ||
-      ContentSecurityPolicy::ShouldBypassMainWorld(
-          GetFrame()->GetDocument()->ToExecutionContext());
+      ContentSecurityPolicy::ShouldBypassMainWorld(GetFrame()->DomWindow());
   if (!GetFrame()->GetPage())
     return;
 
@@ -258,7 +258,7 @@ void ScriptController::ExecuteJavaScriptURL(
   script_source = script_source.Substring(kJavascriptSchemeLength);
   if (!should_bypass_main_world_content_security_policy) {
     script_source = TrustedTypesCheckForJavascriptURLinNavigation(
-        script_source, GetFrame()->GetDocument());
+        script_source, GetFrame()->DomWindow());
     if (script_source.IsEmpty())
       return;
   }
@@ -299,12 +299,14 @@ void ScriptController::ExecuteJavaScriptURL(
                     WebFeature::kReplaceDocumentViaJavaScriptURL);
   auto params = std::make_unique<WebNavigationParams>();
   params->url = GetFrame()->GetDocument()->Url();
+  if (auto* owner = GetFrame()->Owner())
+    params->frame_policy = owner->GetFramePolicy();
 
   String result = ToCoreString(v8::Local<v8::String>::Cast(v8_result));
   WebNavigationParams::FillStaticResponse(params.get(), "text/html", "UTF-8",
                                           StringUTF8Adaptor(result));
   GetFrame()->Loader().CommitNavigation(std::move(params), nullptr,
-                                        true /* is_javascript_url */);
+                                        CommitReason::kJavascriptUrl);
 }
 
 void ScriptController::ExecuteScriptInMainWorld(

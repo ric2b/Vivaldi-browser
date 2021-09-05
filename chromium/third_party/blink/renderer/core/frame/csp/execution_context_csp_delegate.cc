@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/core/frame/csp/execution_context_csp_delegate.h"
 
+#include "services/network/public/cpp/web_sandbox_flags.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/security_context/insecure_request_policy.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
@@ -41,15 +43,12 @@ const SecurityOrigin* ExecutionContextCSPDelegate::GetSecurityOrigin() {
   return execution_context_->GetSecurityOrigin();
 }
 
-SecureContextMode ExecutionContextCSPDelegate::GetSecureContextMode() {
-  return GetSecurityContext().GetSecureContextMode();
-}
-
 const KURL& ExecutionContextCSPDelegate::Url() const {
   return execution_context_->Url();
 }
 
-void ExecutionContextCSPDelegate::SetSandboxFlags(SandboxFlags mask) {
+void ExecutionContextCSPDelegate::SetSandboxFlags(
+    network::mojom::blink::WebSandboxFlags mask) {
   // Ideally sandbox flags are determined at construction time since
   // sandbox flags influence the security origin and that influences
   // the Agent that is assigned for the ExecutionContext. Changing
@@ -67,7 +66,8 @@ void ExecutionContextCSPDelegate::SetSandboxFlags(SandboxFlags mask) {
   // already been set on the security context. Meta tags can't set them
   // and we should have already constructed the document with the correct
   // sandbox flags from CSP already.
-  mojom::blink::WebSandboxFlags flags = GetSecurityContext().GetSandboxFlags();
+  network::mojom::blink::WebSandboxFlags flags =
+      GetSecurityContext().GetSandboxFlags();
   CHECK_EQ(flags | mask, flags);
 }
 
@@ -180,7 +180,7 @@ void ExecutionContextCSPDelegate::PostViolationReport(
   auto* body = MakeGarbageCollected<CSPViolationReportBody>(violation_data);
   Report* observed_report = MakeGarbageCollected<Report>(
       ReportType::kCSPViolation, Url().GetString(), body);
-  ReportingContext::From(document->ToExecutionContext())
+  ReportingContext::From(execution_context_.Get())
       ->QueueReport(observed_report,
                     use_reporting_api ? report_endpoints : Vector<String>());
 
@@ -229,11 +229,11 @@ void ExecutionContextCSPDelegate::ReportBlockedScriptExecutionToInspector(
 
 void ExecutionContextCSPDelegate::DidAddContentSecurityPolicies(
     WTF::Vector<network::mojom::blink::ContentSecurityPolicyPtr> policies) {
-  Document* document = GetDocument();
-  if (!document)
+  auto* window = DynamicTo<LocalDOMWindow>(execution_context_.Get());
+  if (!window)
     return;
 
-  LocalFrame* frame = document->GetFrame();
+  LocalFrame* frame = window->GetFrame();
   if (!frame)
     return;
 

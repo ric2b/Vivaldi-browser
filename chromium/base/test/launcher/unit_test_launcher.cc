@@ -17,6 +17,7 @@
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/sequence_checker.h"
@@ -317,9 +318,7 @@ CommandLine DefaultUnitTestPlatformDelegate::GetCommandLineForChildGTestProcess(
 
   std::string long_flags(
       StrCat({"--", kGTestFilterFlag, "=", JoinString(test_names, ":")}));
-  CHECK_EQ(static_cast<int>(long_flags.size()),
-           WriteFile(flag_file, long_flags.data(),
-                     static_cast<int>(long_flags.size())));
+  CHECK(WriteFile(flag_file, long_flags));
 
   new_cmd_line.AppendSwitchPath(switches::kTestLauncherOutput, output_file);
   new_cmd_line.AppendSwitchPath(kGTestFlagfileFlag, flag_file);

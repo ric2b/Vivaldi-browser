@@ -5,13 +5,9 @@
 #include "components/permissions/permissions_client.h"
 
 #include "base/callback.h"
-#include "build/build_config.h"
 #include "components/permissions/notification_permission_ui_selector.h"
 
-#if defined(OS_ANDROID)
-#include "base/android/jni_android.h"
-#include "components/permissions/android/jni_headers/PermissionsClient_jni.h"
-#else
+#if !defined(OS_ANDROID)
 #include "ui/gfx/paint_vector_icon.h"
 #endif
 
@@ -47,6 +43,14 @@ void PermissionsClient::AreSitesImportant(
   for (auto& entry : *origins)
     entry.second = false;
 }
+
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+bool PermissionsClient::IsCookieDeletionDisabled(
+    content::BrowserContext* browser_context,
+    const GURL& origin) {
+  return false;
+}
+#endif
 
 void PermissionsClient::GetUkmSourceId(content::BrowserContext* browser_context,
                                        const content::WebContents* web_contents,
@@ -118,8 +122,11 @@ infobars::InfoBar* PermissionsClient::MaybeCreateInfoBar(
   return nullptr;
 }
 
-base::android::ScopedJavaLocalRef<jobject> PermissionsClient::GetJavaObject() {
-  return Java_PermissionsClient_get(base::android::AttachCurrentThread());
+void PermissionsClient::RepromptForAndroidPermissions(
+    content::WebContents* web_contents,
+    const std::vector<ContentSettingsType>& content_settings_types,
+    PermissionsUpdatedCallback callback) {
+  std::move(callback).Run(false);
 }
 
 int PermissionsClient::MapToJavaDrawableId(int resource_id) {

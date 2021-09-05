@@ -19,11 +19,11 @@
 
 namespace blink {
 
-class Document;
 class DOMParser;
+class Document;
 class ExecutionContext;
-class Range;
 class QualifiedName;
+class Range;
 class ScriptState;
 
 CORE_EXPORT void V8ConstructorAttributeGetter(
@@ -98,6 +98,16 @@ void V8SetReflectedNullableDOMStringAttribute(
 
 namespace bindings {
 
+// Returns the length of arguments ignoring the undefined values at the end.
+inline int NonUndefinedArgumentLength(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  for (int index = info.Length() - 1; 0 <= index; --index) {
+    if (!info[index]->IsUndefined())
+      return index + 1;
+  }
+  return 0;
+}
+
 template <typename T, typename... ExtraArgs>
 typename IDLSequence<T>::ImplType VariadicArgumentsToNativeValues(
     v8::Isolate* isolate,
@@ -150,6 +160,19 @@ CORE_EXPORT ExecutionContext* ExecutionContextFromV8Wrappable(
     const Range* range);
 CORE_EXPORT ExecutionContext* ExecutionContextFromV8Wrappable(
     const DOMParser* parser);
+
+CORE_EXPORT v8::MaybeLocal<v8::Function> CreateNamedConstructorFunction(
+    ScriptState* script_state,
+    v8::FunctionCallback callback,
+    const char* func_name,
+    int func_length,
+    const WrapperTypeInfo* wrapper_type_info);
+
+CORE_EXPORT void InstallUnscopablePropertyNames(
+    v8::Isolate* isolate,
+    v8::Local<v8::Context> context,
+    v8::Local<v8::Object> prototype_object,
+    base::span<const char* const> property_name_table);
 
 CORE_EXPORT v8::Local<v8::Array> EnumerateIndexedProperties(
     v8::Isolate* isolate,

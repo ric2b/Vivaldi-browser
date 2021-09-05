@@ -126,6 +126,8 @@ class MockSearchIPCRouterDelegate : public SearchIPCRouter::Delegate {
                     bool ctrl_key,
                     bool meta_key,
                     bool shift_key));
+  MOCK_METHOD1(ToggleSuggestionGroupIdVisibility,
+               void(int32_t suggestion_group_id));
 };
 
 class MockSearchIPCRouterPolicy : public SearchIPCRouter::Policy {
@@ -169,13 +171,14 @@ class MockSearchIPCRouterPolicy : public SearchIPCRouter::Policy {
   MOCK_METHOD0(ShouldProcessOpenExtensionsPage, bool());
   MOCK_METHOD1(ShouldProcessOpenAutocompleteMatch, bool(bool));
   MOCK_METHOD0(ShouldProcessDeleteAutocompleteMatch, bool());
+  MOCK_METHOD0(ShouldProcessToggleSuggestionGroupIdVisibility, bool());
 };
 
 class MockEmbeddedSearchClientFactory
     : public SearchIPCRouter::EmbeddedSearchClientFactory {
  public:
   MOCK_METHOD0(GetEmbeddedSearchClient,
-               chrome::mojom::EmbeddedSearchClient*(void));
+               search::mojom::EmbeddedSearchClient*(void));
 };
 
 }  // namespace
@@ -1102,9 +1105,10 @@ TEST_F(SearchIPCRouterTest, SendAutocompleteResultChanged) {
       .Times(1);
 
   GetSearchIPCRouter().AutocompleteResultChanged(
-      chrome::mojom::AutocompleteResult::New(
+      search::mojom::AutocompleteResult::New(
           base::string16(),
-          std::vector<chrome::mojom::AutocompleteMatchPtr>()));
+          base::flat_map<int32_t, search::mojom::SuggestionGroupPtr>(),
+          std::vector<search::mojom::AutocompleteMatchPtr>()));
 }
 
 TEST_F(SearchIPCRouterTest, IgnoreAutocompleteResultChanged) {
@@ -1118,9 +1122,10 @@ TEST_F(SearchIPCRouterTest, IgnoreAutocompleteResultChanged) {
       .Times(0);
 
   GetSearchIPCRouter().AutocompleteResultChanged(
-      chrome::mojom::AutocompleteResult::New(
+      search::mojom::AutocompleteResult::New(
           base::string16(),
-          std::vector<chrome::mojom::AutocompleteMatchPtr>()));
+          base::flat_map<int32_t, search::mojom::SuggestionGroupPtr>(),
+          std::vector<search::mojom::AutocompleteMatchPtr>()));
 }
 
 TEST_F(SearchIPCRouterTest, SendAutocompleteMatchImageAvailable) {
@@ -1202,6 +1207,30 @@ TEST_F(SearchIPCRouterTest, IgnoreDeleteAutocompleteMatch) {
       .WillOnce(Return(false));
 
   GetSearchIPCRouter().DeleteAutocompleteMatch(0u);
+}
+
+TEST_F(SearchIPCRouterTest, SendToggleSuggestionGroupIdVisibility) {
+  NavigateAndCommitActiveTab(GURL("chrome-search://foo/bar"));
+  SetupMockDelegateAndPolicy();
+  MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
+  EXPECT_CALL(*mock_delegate(), ToggleSuggestionGroupIdVisibility(_)).Times(1);
+  EXPECT_CALL(*policy, ShouldProcessToggleSuggestionGroupIdVisibility())
+      .Times(1)
+      .WillOnce(Return(true));
+
+  GetSearchIPCRouter().ToggleSuggestionGroupIdVisibility(1u);
+}
+
+TEST_F(SearchIPCRouterTest, IgnoreToggleSuggestionGroupIdVisibility) {
+  NavigateAndCommitActiveTab(GURL("chrome-search://foo/bar"));
+  SetupMockDelegateAndPolicy();
+  MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
+  EXPECT_CALL(*mock_delegate(), ToggleSuggestionGroupIdVisibility(_)).Times(0);
+  EXPECT_CALL(*policy, ShouldProcessToggleSuggestionGroupIdVisibility())
+      .Times(1)
+      .WillOnce(Return(false));
+
+  GetSearchIPCRouter().ToggleSuggestionGroupIdVisibility(1u);
 }
 
 TEST_F(SearchIPCRouterTest, IgnoreStopAutoComplete) {

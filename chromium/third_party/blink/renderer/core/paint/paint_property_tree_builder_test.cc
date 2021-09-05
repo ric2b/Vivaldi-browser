@@ -4322,11 +4322,34 @@ TEST_P(PaintPropertyTreeBuilderTest, LayerUnderOverflowClipUnderMultiColumn) {
   EXPECT_EQ(1u, NumFragments(GetLayoutObjectByElementId("layer")));
 }
 
-TEST_P(PaintPropertyTreeBuilderTest, CompositedUnderMultiColumn) {
-  // TODO(crbug.com/1064341): This test crashes in CompositeAfterPaint. Fix it.
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
+TEST_P(PaintPropertyTreeBuilderTest, OverflowClipUnderMultiColumn) {
+  SetBodyInnerHTML(R"HTML(
+    <style>body { margin: 0; }</style>
+    <div style='columns: 4; height: 100px; column-fill: auto; column-gap: 0'>
+      <div id='clip' style='height: 200px; overflow: hidden'>
+        <div id='child1' style='height: 400px'></div>
+        <div id='child2' style='height: 400px'></div>
+      </div>
+    </div>
+  )HTML");
 
+  const auto* clip = GetLayoutObjectByElementId("clip");
+  ASSERT_EQ(2u, NumFragments(clip));
+  EXPECT_EQ(LayoutUnit(), FragmentAt(clip, 0).LogicalTopInFlowThread());
+  EXPECT_EQ(LayoutUnit(100), FragmentAt(clip, 1).LogicalTopInFlowThread());
+  const auto* child1 = GetLayoutObjectByElementId("child1");
+  ASSERT_EQ(2u, NumFragments(child1));
+  EXPECT_EQ(LayoutUnit(), FragmentAt(child1, 0).LogicalTopInFlowThread());
+  EXPECT_EQ(PhysicalOffset(), FragmentAt(child1, 0).PaintOffset());
+  EXPECT_EQ(LayoutUnit(100), FragmentAt(child1, 1).LogicalTopInFlowThread());
+  EXPECT_EQ(PhysicalOffset(200, -100), FragmentAt(child1, 1).PaintOffset());
+  const auto* child2 = GetLayoutObjectByElementId("child2");
+  ASSERT_EQ(1u, NumFragments(child2));
+  EXPECT_EQ(LayoutUnit(100), FragmentAt(child2, 0).LogicalTopInFlowThread());
+  EXPECT_EQ(PhysicalOffset(200, 300), FragmentAt(child2, 0).PaintOffset());
+}
+
+TEST_P(PaintPropertyTreeBuilderTest, CompositedUnderMultiColumn) {
   SetBodyInnerHTML(R"HTML(
     <style>body { margin: 0; }</style>
     <div id='multicol' style='columns:3; column-fill:auto; column-gap: 0;
@@ -4475,10 +4498,6 @@ TEST_P(PaintPropertyTreeBuilderTest, FrameUnderMulticol) {
 }
 
 TEST_P(PaintPropertyTreeBuilderTest, CompositedMulticolFrameUnderMulticol) {
-  // TODO(crbug.com/1064341): This test crashes in CompositeAfterPaint. Fix it.
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
   SetBodyInnerHTML(R"HTML(
     <style>body { margin: 0 }</style>
     <div style='columns: 3; column-gap: 0; column-fill: auto;
@@ -5627,10 +5646,6 @@ TEST_P(PaintPropertyTreeBuilderTest, CompositedLayerSkipsFragmentClip) {
 }
 
 TEST_P(PaintPropertyTreeBuilderTest, CompositedLayerUnderClipUnderMulticol) {
-  // TODO(crbug.com/1064341): This test crashes in CompositeAfterPaint. Fix it.
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
   SetBodyInnerHTML(R"HTML(
     <div id="multicol" style="columns: 2">
       <div id="clip" style="height: 100px; overflow: hidden">
@@ -6742,6 +6757,50 @@ TEST_P(PaintPropertyTreeBuilderTest, CompositedInline) {
   ASSERT_TRUE(properties);
   ASSERT_TRUE(properties->Transform());
   EXPECT_TRUE(properties->Transform()->HasDirectCompositingReasons());
+}
+
+TEST_P(PaintPropertyTreeBuilderTest, OutOfFlowContainedInMulticol) {
+  SetBodyInnerHTML(R"HTML(
+    <div id="columns" style="columns: 2; height: 100px">
+      <div id="relative"
+           style="position: relative; height: 200px; transform: translateX(0)">
+        <div style="overflow: scroll">
+          <div id="absolute"
+               style="position: absolute; width: 100%; height: 200px"></div>
+          <div id="fixed"
+               style="position: fixed; width: 100%; height: 200px"></div>
+        </div>
+      </div>
+    </div>
+  )HTML");
+
+  const auto* flow_thread =
+      GetLayoutObjectByElementId("columns")->SlowFirstChild();
+  ASSERT_EQ(2u, NumFragments(flow_thread));
+  const auto* relative = GetLayoutObjectByElementId("relative");
+  ASSERT_EQ(2u, NumFragments(relative));
+  const auto* absolute = GetLayoutObjectByElementId("absolute");
+  ASSERT_EQ(2u, NumFragments(absolute));
+  const auto* fixed = GetLayoutObjectByElementId("fixed");
+  ASSERT_EQ(2u, NumFragments(fixed));
+
+  // For now we use the container's first fragment's transform as the parent of
+  // the transforms of all fragments of out-of-flow descendants.
+  const auto* relative_transform =
+      FragmentAt(relative, 0).PaintProperties()->Transform();
+  for (unsigned i = 0; i < NumFragments(flow_thread); i++) {
+    SCOPED_TRACE(testing::Message() << "Fragment " << i);
+    const auto* fragment_clip =
+        FragmentAt(flow_thread, i).PaintProperties()->FragmentClip();
+    const auto& absolute_properties =
+        FragmentAt(absolute, i).LocalBorderBoxProperties();
+    const auto& fixed_properties =
+        FragmentAt(fixed, i).LocalBorderBoxProperties();
+    EXPECT_EQ(fragment_clip, &absolute_properties.Clip());
+    EXPECT_EQ(fragment_clip, &fixed_properties.Clip());
+    EXPECT_EQ(relative_transform, &absolute_properties.Transform());
+    EXPECT_EQ(relative_transform, &fixed_properties.Transform());
+  }
 }
 
 }  // namespace blink

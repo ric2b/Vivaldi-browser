@@ -61,6 +61,7 @@ const char kClientID[] = "fake-client-id";
 const char kMachineID[] = "fake-machine-id";
 const char kMachineModel[] = "fake-machine-model";
 const char kBrandCode[] = "fake-brand-code";
+const char kAttestedDeviceId[] = "fake-attested-device-id";
 const char kEthernetMacAddress[] = "fake-ethernet-mac-address";
 const char kDockMacAddress[] = "fake-dock-mac-address";
 const char kManufactureDate[] = "fake-manufacture-date";
@@ -138,6 +139,8 @@ class CloudPolicyClientTest : public testing::Test {
     register_request->set_machine_id(kMachineID);
     register_request->set_machine_model(kMachineModel);
     register_request->set_brand_code(kBrandCode);
+    register_request->mutable_device_register_identification()
+        ->set_attested_device_id(kAttestedDeviceId);
     register_request->set_ethernet_mac_address(kEthernetMacAddress);
     register_request->set_dock_mac_address(kDockMacAddress);
     register_request->set_manufacture_date(kManufactureDate);
@@ -152,6 +155,8 @@ class CloudPolicyClientTest : public testing::Test {
     reregister_request->set_machine_id(kMachineID);
     reregister_request->set_machine_model(kMachineModel);
     reregister_request->set_brand_code(kBrandCode);
+    reregister_request->mutable_device_register_identification()
+        ->set_attested_device_id(kAttestedDeviceId);
     reregister_request->set_ethernet_mac_address(kEthernetMacAddress);
     reregister_request->set_dock_mac_address(kDockMacAddress);
     reregister_request->set_manufacture_date(kManufactureDate);
@@ -172,6 +177,8 @@ class CloudPolicyClientTest : public testing::Test {
     request->set_machine_id(kMachineID);
     request->set_machine_model(kMachineModel);
     request->set_brand_code(kBrandCode);
+    request->mutable_device_register_identification()->set_attested_device_id(
+        kAttestedDeviceId);
     request->set_ethernet_mac_address(kEthernetMacAddress);
     request->set_dock_mac_address(kDockMacAddress);
     request->set_manufacture_date(kManufactureDate);
@@ -309,9 +316,9 @@ class CloudPolicyClientTest : public testing::Test {
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             &url_loader_factory_);
     client_ = std::make_unique<CloudPolicyClient>(
-        kMachineID, kMachineModel, kBrandCode, kEthernetMacAddress,
-        kDockMacAddress, kManufactureDate, &service_,
-        shared_url_loader_factory_, &fake_signing_service_,
+        kMachineID, kMachineModel, kBrandCode, kAttestedDeviceId,
+        kEthernetMacAddress, kDockMacAddress, kManufactureDate,
+        &fake_signing_service_, &service_, shared_url_loader_factory_,
         base::BindRepeating(
             &MockDeviceDMTokenCallbackObserver::OnDeviceDMTokenRequested,
             base::Unretained(&device_dmtoken_callback_observer_)));
@@ -1932,6 +1939,7 @@ void CloudPolicyClientCertProvisioningStartCsrTest::RunTest(
         callback_observer) {
   const std::string cert_scope = "fake_cert_scope_1";
   const std::string cert_profile_id = "fake_cert_profile_id_1";
+  const std::string cert_profile_version = "fake_cert_profile_version_1";
   const std::string public_key = "fake_public_key_1";
 
   em::DeviceManagementRequest expected_request;
@@ -1940,6 +1948,7 @@ void CloudPolicyClientCertProvisioningStartCsrTest::RunTest(
         expected_request.mutable_client_certificate_provisioning_request();
     inner_request->set_certificate_scope(cert_scope);
     inner_request->set_cert_profile_id(cert_profile_id);
+    inner_request->set_policy_version(cert_profile_version);
     inner_request->set_public_key(public_key);
     // Sets the request type, no actual data is required.
     inner_request->mutable_start_csr_request();
@@ -1953,7 +1962,7 @@ void CloudPolicyClientCertProvisioningStartCsrTest::RunTest(
                       service_.StartJobOKAsync(fake_response)));
 
   client_->ClientCertProvisioningStartCsr(
-      cert_scope, cert_profile_id, public_key,
+      cert_scope, cert_profile_id, cert_profile_version, public_key,
       base::BindOnce(
           &MockClientCertProvisioningStartCsrCallbackObserver::Callback,
           base::Unretained(&callback_observer)));
@@ -2079,6 +2088,7 @@ void CloudPolicyClientCertProvisioningFinishCsrTest::RunTest(
         callback_observer) {
   const std::string cert_scope = "fake_cert_scope_1";
   const std::string cert_profile_id = "fake_cert_profile_id_1";
+  const std::string cert_profile_version = "fake_cert_profile_version_1";
   const std::string public_key = "fake_public_key_1";
   const std::string va_challenge_response = "fake_va_challenge_response_1";
   const std::string signature = "fake_signature_1";
@@ -2089,6 +2099,7 @@ void CloudPolicyClientCertProvisioningFinishCsrTest::RunTest(
         expected_request.mutable_client_certificate_provisioning_request();
     inner_request->set_certificate_scope(cert_scope);
     inner_request->set_cert_profile_id(cert_profile_id);
+    inner_request->set_policy_version(cert_profile_version);
     inner_request->set_public_key(public_key);
 
     em::FinishCsrRequest* finish_csr_request =
@@ -2105,7 +2116,8 @@ void CloudPolicyClientCertProvisioningFinishCsrTest::RunTest(
                       service_.StartJobOKAsync(fake_response)));
 
   client_->ClientCertProvisioningFinishCsr(
-      cert_scope, cert_profile_id, public_key, va_challenge_response, signature,
+      cert_scope, cert_profile_id, cert_profile_version, public_key,
+      va_challenge_response, signature,
       base::BindOnce(
           &MockClientCertProvisioningFinishCsrCallbackObserver::Callback,
           base::Unretained(&callback_observer)));
@@ -2191,6 +2203,7 @@ void CloudPolicyClientCertProvisioningDownloadCertTest::RunTest(
         callback_observer) {
   const std::string cert_scope = "fake_cert_scope_1";
   const std::string cert_profile_id = "fake_cert_profile_id_1";
+  const std::string cert_profile_version = "fake_cert_profile_version_1";
   const std::string public_key = "fake_public_key_1";
 
   em::DeviceManagementRequest expected_request;
@@ -2199,6 +2212,7 @@ void CloudPolicyClientCertProvisioningDownloadCertTest::RunTest(
         expected_request.mutable_client_certificate_provisioning_request();
     inner_request->set_certificate_scope(cert_scope);
     inner_request->set_cert_profile_id(cert_profile_id);
+    inner_request->set_policy_version(cert_profile_version);
     inner_request->set_public_key(public_key);
     // Sets the request type, no actual data is required.
     inner_request->mutable_download_cert_request();
@@ -2212,7 +2226,7 @@ void CloudPolicyClientCertProvisioningDownloadCertTest::RunTest(
                       service_.StartJobOKAsync(fake_response)));
 
   client_->ClientCertProvisioningDownloadCert(
-      cert_scope, cert_profile_id, public_key,
+      cert_scope, cert_profile_id, cert_profile_version, public_key,
       base::BindOnce(
           &MockClientCertProvisioningDownloadCertCallbackObserver::Callback,
           base::Unretained(&callback_observer)));

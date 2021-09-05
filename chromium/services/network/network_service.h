@@ -175,9 +175,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
 #endif
   void SetEnvironment(
       std::vector<mojom::EnvironmentVariablePtr> environment) override;
-  void SetTrustTokenKeyCommitments(
-      base::flat_map<url::Origin, mojom::TrustTokenKeyCommitmentResultPtr>
-          commitments) override;
+  void SetTrustTokenKeyCommitments(const std::string& raw_commitments,
+                                   base::OnceClosure done) override;
 
 #if defined(OS_ANDROID)
   void DumpWithoutCrashing(base::Time dump_request_time) override;
@@ -240,6 +239,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
     return split_auth_cache_by_network_isolation_key_;
   }
 
+  // From initialization on, this will be non-null and will always point to the
+  // same object (although the object's state can change on updates to the
+  // commitments). As a consequence, it's safe to store long-lived copies of the
+  // pointer.
   const TrustTokenKeyCommitments* trust_token_key_commitments() const {
     return trust_token_key_commitments_.get();
   }

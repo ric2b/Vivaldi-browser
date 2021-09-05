@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <set>
+#include <utility>
 
 #include "base/no_destructor.h"
 #include "base/stl_util.h"
@@ -18,7 +19,6 @@
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_role_properties.h"
-#include "ui/accessibility/ax_text_utils.h"
 #include "ui/gfx/transform.h"
 
 namespace ui {
@@ -880,6 +880,20 @@ void AXNodeData::SetTextDirection(ax::mojom::TextDirection text_direction) {
   }
 }
 
+bool AXNodeData::IsActivatable() const {
+  return IsTextField() || role == ax::mojom::Role::kListBox;
+}
+
+bool AXNodeData::IsButtonPressed() const {
+  // Currently there is no internal representation for |aria-pressed|, and
+  // we map |aria-pressed="true"| to ax::mojom::CheckedState::kTrue for a native
+  // button or role="button".
+  // https://www.w3.org/TR/wai-aria-1.1/#aria-pressed
+  if (IsButton(role) && GetCheckedState() == ax::mojom::CheckedState::kTrue)
+    return true;
+  return false;
+}
+
 bool AXNodeData::IsClickable() const {
   // If it has a custom default action verb except for
   // ax::mojom::DefaultActionVerb::kClickAncestor, it's definitely clickable.
@@ -893,18 +907,45 @@ bool AXNodeData::IsClickable() const {
 }
 
 bool AXNodeData::IsIgnored() const {
-  if (HasState(ax::mojom::State::kIgnored) || role == ax::mojom::Role::kIgnored)
-    return true;
-  return false;
+  return HasState(ax::mojom::State::kIgnored) ||
+         role == ax::mojom::Role::kIgnored;
+}
+
+bool AXNodeData::IsInvisibleOrIgnored() const {
+  return IsIgnored() || HasState(ax::mojom::State::kInvisible);
 }
 
 bool AXNodeData::IsInvocable() const {
   // A control is "invocable" if it initiates an action when activated but
   // does not maintain any state. A control that maintains state when activated
   // would be considered a toggle or expand-collapse element - these elements
-  // are "clickable" but not "invocable".
-  return IsClickable() && !SupportsExpandCollapse() &&
-         !ui::SupportsToggle(role);
+  // are "clickable" but not "invocable". Similarly, if the action only involves
+  // activating the control, such as when clicking a text field, the control is
+  // not considered "invocable".
+  return IsClickable() && !IsActivatable() && !SupportsExpandCollapse() &&
+         !SupportsToggle(role);
+}
+
+bool AXNodeData::IsMenuButton() const {
+  // According to the WAI-ARIA spec, a menu button is a native button or an ARIA
+  // role="button" that opens a menu. Although ARIA does not include a role
+  // specifically for menu buttons, screen readers identify buttons that have
+  // aria-haspopup="true" or aria-haspopup="menu" as menu buttons, and Blink
+  // maps both to HasPopup::kMenu.
+  // https://www.w3.org/TR/wai-aria-practices/#menubutton
+  // https://www.w3.org/TR/wai-aria-1.1/#aria-haspopup
+  if (IsButton(role) && GetHasPopup() == ax::mojom::HasPopup::kMenu)
+    return true;
+
+  return false;
+}
+
+bool AXNodeData::IsTextField() const {
+  return IsPlainTextField() || IsRichTextField();
+}
+
+bool AXNodeData::IsPasswordField() const {
+  return IsTextField() && HasState(ax::mojom::State::kProtected);
 }
 
 bool AXNodeData::IsPlainTextField() const {
@@ -916,6 +957,11 @@ bool AXNodeData::IsPlainTextField() const {
           role == ax::mojom::Role::kTextFieldWithComboBox ||
           role == ax::mojom::Role::kSearchBox ||
           GetBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot));
+}
+
+bool AXNodeData::IsRichTextField() const {
+  return GetBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot) &&
+         HasState(ax::mojom::State::kRichlyEditable);
 }
 
 bool AXNodeData::IsReadOnlyOrDisabled() const {
@@ -938,23 +984,12 @@ bool AXNodeData::IsReadOnlyOrDisabled() const {
 }
 
 bool AXNodeData::IsRangeValueSupported() const {
-  // https://www.w3.org/TR/wai-aria-1.1/#aria-valuenow
-  // https://www.w3.org/TR/wai-aria-1.1/#aria-valuetext
-  // Roles that support aria-valuetext / aria-valuenow
-  switch (role) {
-    case ax::mojom::Role::kMeter:
-    case ax::mojom::Role::kProgressIndicator:
-    case ax::mojom::Role::kScrollBar:
-    case ax::mojom::Role::kSlider:
-    case ax::mojom::Role::kSpinButton:
-      return true;
-    case ax::mojom::Role::kSplitter:
-      // According to the ARIA spec, role="separator" acts as a splitter only
-      // when focusable, and supports a range only in that case.
-      return HasState(ax::mojom::State::kFocusable);
-    default:
-      return false;
+  if (role == ax::mojom::Role::kSplitter) {
+    // According to the ARIA spec, role="separator" acts as a splitter only
+    // when focusable, and supports a range only in that case.
+    return HasState(ax::mojom::State::kFocusable);
   }
+  return ui::IsRangeValueSupported(role);
 }
 
 bool AXNodeData::SupportsExpandCollapse() const {
@@ -997,9 +1032,9 @@ std::string AXNodeData::ToString() const {
     std::string value = base::NumberToString(int_attribute.second);
     switch (int_attribute.first) {
       case ax::mojom::IntAttribute::kDefaultActionVerb:
-        result += " action=" + base::UTF16ToUTF8(ActionVerbToUnlocalizedString(
-                                   static_cast<ax::mojom::DefaultActionVerb>(
-                                       int_attribute.second)));
+        result += std::string(" action=") +
+                  ui::ToString(static_cast<ax::mojom::DefaultActionVerb>(
+                      int_attribute.second));
         break;
       case ax::mojom::IntAttribute::kScrollX:
         result += " scroll_x=" + value;

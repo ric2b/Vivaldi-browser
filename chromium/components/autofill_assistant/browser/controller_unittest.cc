@@ -74,9 +74,11 @@ struct MockCollectUserDataOptions : public CollectUserDataOptions {
     base::MockOnceCallback<void(UserData*, const UserModel*)>
         mock_confirm_callback;
     confirm_callback = mock_confirm_callback.Get();
-    base::MockOnceCallback<void(int)> mock_actions_callback;
+    base::MockOnceCallback<void(int, UserData*, const UserModel*)>
+        mock_actions_callback;
     additional_actions_callback = mock_actions_callback.Get();
-    base::MockOnceCallback<void(int)> mock_terms_callback;
+    base::MockOnceCallback<void(int, UserData*, const UserModel*)>
+        mock_terms_callback;
     terms_link_callback = mock_terms_callback.Get();
   }
 };
@@ -246,11 +248,12 @@ std::ostream& operator<<(std::ostream& out, const NavigationState& state) {
 
 // A Listener that keeps track of the reported state of the delegate captured
 // from OnNavigationStateChanged.
-class NavigationStateChangeListener : public ScriptExecutorDelegate::Listener {
+class NavigationStateChangeListener
+    : public ScriptExecutorDelegate::NavigationListener {
  public:
   explicit NavigationStateChangeListener(ScriptExecutorDelegate* delegate)
       : delegate_(delegate) {}
-  ~NavigationStateChangeListener() = default;
+  ~NavigationStateChangeListener() override;
   void OnNavigationStateChanged() override;
 
   std::vector<NavigationState> events;
@@ -258,6 +261,8 @@ class NavigationStateChangeListener : public ScriptExecutorDelegate::Listener {
  private:
   ScriptExecutorDelegate* const delegate_;
 };
+
+NavigationStateChangeListener::~NavigationStateChangeListener() {}
 
 void NavigationStateChangeListener::OnNavigationStateChanged() {
   NavigationState state;
@@ -922,11 +927,21 @@ TEST_F(ControllerTest, DelayStartupIfLoading) {
 
   Start("http://a.example.com/");
   EXPECT_EQ(AutofillAssistantState::INACTIVE, controller_->GetState());
+  EXPECT_EQ(controller_->GetDeeplinkURL().host(), "a.example.com");
 
-  content::NavigationSimulator::NavigateAndCommitFromDocument(
-      GURL("http://b.example.com"), web_contents()->GetMainFrame());
+  // Initial navigation.
+  SimulateNavigateToUrl(GURL("http://b.example.com"));
   EXPECT_THAT(states_, ElementsAre(AutofillAssistantState::STARTING,
                                    AutofillAssistantState::STOPPED));
+  EXPECT_EQ(controller_->GetDeeplinkURL().host(), "a.example.com");
+  EXPECT_EQ(controller_->GetScriptURL().host(), "b.example.com");
+  EXPECT_EQ(controller_->GetCurrentURL().host(), "b.example.com");
+
+  // Navigation during the flow.
+  SimulateNavigateToUrl(GURL("http://c.example.com"));
+  EXPECT_EQ(controller_->GetDeeplinkURL().host(), "a.example.com");
+  EXPECT_EQ(controller_->GetScriptURL().host(), "b.example.com");
+  EXPECT_EQ(controller_->GetCurrentURL().host(), "c.example.com");
 }
 
 TEST_F(ControllerTest, WaitForNavigationActionTimesOut) {
@@ -1569,6 +1584,77 @@ TEST_F(ControllerTest, UnexpectedNavigationDuringPromptAction) {
   EXPECT_THAT(states_, ElementsAre(AutofillAssistantState::STARTING,
                                    AutofillAssistantState::RUNNING,
                                    AutofillAssistantState::PROMPT,
+                                   AutofillAssistantState::STOPPED));
+}
+
+TEST_F(ControllerTest, NavigationToGooglePropertyDestroysUI) {
+  SupportsScriptResponseProto script_response;
+  AddRunnableScript(&script_response, "autostart")
+      ->mutable_presentation()
+      ->set_autostart(true);
+  SetNextScriptResponse(script_response);
+
+  ActionsResponseProto autostart_script;
+  autostart_script.add_actions()
+      ->mutable_prompt()
+      ->add_choices()
+      ->mutable_chip()
+      ->set_text("continue");
+  SetupActionsForScript("autostart", autostart_script);
+
+  Start();
+  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
+
+  EXPECT_CALL(mock_client_, Shutdown(Metrics::DropOutReason::NAVIGATION));
+  EXPECT_CALL(mock_client_, DestroyUI);
+  GURL google("https://google.com/search");
+  SetLastCommittedUrl(google);
+  content::NavigationSimulator::NavigateAndCommitFromBrowser(web_contents(),
+                                                             google);
+
+  EXPECT_EQ(AutofillAssistantState::STOPPED, controller_->GetState());
+
+  // Full history of state transitions.
+  EXPECT_THAT(states_, ElementsAre(AutofillAssistantState::STARTING,
+                                   AutofillAssistantState::RUNNING,
+                                   AutofillAssistantState::PROMPT,
+                                   AutofillAssistantState::STOPPED));
+}
+
+TEST_F(ControllerTest, DomainChangeToGooglePropertyDuringBrowseDestroysUI) {
+  SupportsScriptResponseProto script_response;
+  AddRunnableScript(&script_response, "runnable")
+      ->mutable_presentation()
+      ->set_autostart(true);
+  ActionsResponseProto runnable_script;
+  auto* prompt = runnable_script.add_actions()->mutable_prompt();
+  prompt->set_browse_mode(true);
+  prompt->add_choices()->mutable_chip()->set_text("continue");
+  SetupActionsForScript("runnable", runnable_script);
+  std::string response_str;
+  script_response.SerializeToString(&response_str);
+  EXPECT_CALL(*mock_service_,
+              OnGetScriptsForUrl(GURL("http://a.example.com/"), _, _))
+      .WillOnce(RunOnceCallback<2>(true, response_str));
+
+  Start("http://a.example.com/");
+  EXPECT_EQ(AutofillAssistantState::BROWSE, controller_->GetState());
+
+  EXPECT_CALL(
+      mock_client_,
+      Shutdown(Metrics::DropOutReason::DOMAIN_CHANGE_DURING_BROWSE_MODE));
+  EXPECT_CALL(mock_client_, DestroyUI);
+  GURL google("https://google.com/search");
+  SetLastCommittedUrl(google);
+  content::NavigationSimulator::NavigateAndCommitFromBrowser(web_contents(),
+                                                             google);
+
+  EXPECT_EQ(AutofillAssistantState::STOPPED, controller_->GetState());
+
+  // Full history of state transitions.
+  EXPECT_THAT(states_, ElementsAre(AutofillAssistantState::STARTING,
+                                   AutofillAssistantState::RUNNING,
+                                   AutofillAssistantState::BROWSE,
                                    AutofillAssistantState::STOPPED));
 }
 
@@ -2221,6 +2307,64 @@ TEST_F(ControllerTest, BlockPasswordChangeFlow) {
   EXPECT_FALSE(
       controller_->Start(initialUrl, TriggerContext::Create(parameters, "")));
   EXPECT_FALSE(GetUserData()->selected_login_);
+}
+
+TEST_F(ControllerTest, EndPromptWithOnEndNavigation) {
+  // A single script, with a prompt action and on_end_navigation enabled.
+  SupportsScriptResponseProto script_response;
+  AddRunnableScript(&script_response, "script")
+      ->mutable_presentation()
+      ->set_autostart(true);
+  SetupScripts(script_response);
+
+  ActionsResponseProto actions_response;
+  auto* action = actions_response.add_actions()->mutable_prompt();
+  action->set_end_on_navigation(true);
+  action->add_choices()->mutable_chip()->set_text("ok");
+
+  actions_response.add_actions()
+      ->mutable_prompt()
+      ->add_choices()
+      ->mutable_chip()
+      ->set_text("ok 2");
+
+  SetupActionsForScript("script", actions_response);
+
+  std::vector<ProcessedActionProto> processed_actions_capture;
+  EXPECT_CALL(*mock_service_, OnGetNextActions(_, _, _, _, _))
+      .WillOnce(DoAll(SaveArg<3>(&processed_actions_capture),
+                      RunOnceCallback<4>(true, "")));
+
+  Start("http://a.example.com/path");
+
+  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
+  EXPECT_THAT(controller_->GetUserActions(),
+              ElementsAre(Property(&UserAction::chip,
+                                   Field(&Chip::text, StrEq("ok")))));
+
+  std::unique_ptr<content::NavigationSimulator> simulator =
+      content::NavigationSimulator::CreateRendererInitiated(
+          GURL("http://a.example.com/path"), web_contents()->GetMainFrame());
+  simulator->SetTransition(ui::PAGE_TRANSITION_LINK);
+  simulator->Start();
+  task_environment()->FastForwardBy(base::TimeDelta::FromSeconds(1));
+
+  // Commit the navigation, which will end the current prompt.
+  EXPECT_THAT(processed_actions_capture, SizeIs(0));
+  simulator->Commit();
+
+  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
+  EXPECT_THAT(controller_->GetUserActions(),
+              ElementsAre(Property(&UserAction::chip,
+                                   Field(&Chip::text, StrEq("ok 2")))));
+
+  EXPECT_TRUE(controller_->PerformUserAction(0));
+
+  EXPECT_THAT(processed_actions_capture, SizeIs(2));
+  EXPECT_EQ(ACTION_APPLIED, processed_actions_capture[0].status());
+  EXPECT_EQ(ACTION_APPLIED, processed_actions_capture[1].status());
+  EXPECT_TRUE(processed_actions_capture[0].prompt_choice().navigation_ended());
+  EXPECT_FALSE(processed_actions_capture[1].prompt_choice().navigation_ended());
 }
 
 }  // namespace autofill_assistant

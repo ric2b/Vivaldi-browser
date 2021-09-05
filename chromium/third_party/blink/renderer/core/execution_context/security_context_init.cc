@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/core/execution_context/security_context_init.h"
 
+#include "base/metrics/histogram_macros.h"
+#include "services/network/public/cpp/web_sandbox_flags.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/document_init.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -14,6 +16,7 @@
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
+#include "third_party/blink/renderer/core/frame/sandbox_flags.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/imports/html_imports_controller.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
@@ -118,7 +121,7 @@ void SecurityContextInit::ApplyPendingDataToDocument(Document& document) const {
   for (auto feature : feature_count_)
     UseCounter::Count(document, feature);
   for (auto feature : parsed_feature_policies_)
-    document.ToExecutionContext()->FeaturePolicyFeatureObserved(feature);
+    document.GetExecutionContext()->FeaturePolicyFeatureObserved(feature);
   for (const auto& message : feature_policy_parse_messages_) {
     document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kSecurity,
@@ -133,78 +136,40 @@ void SecurityContextInit::ApplyPendingDataToDocument(Document& document) const {
   }
   if (!report_only_feature_policy_header_.empty())
     UseCounter::Count(document, WebFeature::kFeaturePolicyReportOnlyHeader);
+
+  if (!document_policy_.feature_state.empty())
+    UseCounter::Count(document, WebFeature::kDocumentPolicyHeader);
+
+  if (!report_only_document_policy_.feature_state.empty())
+    UseCounter::Count(document, WebFeature::kDocumentPolicyReportOnlyHeader);
+
+  for (const auto& policy_entry : document_policy_.feature_state) {
+    UMA_HISTOGRAM_ENUMERATION("Blink.UseCounter.DocumentPolicy.Header",
+                              policy_entry.first);
+  }
 }
 
 void SecurityContextInit::InitializeContentSecurityPolicy(
     const DocumentInit& initializer) {
-  auto* frame = initializer.GetFrame();
-  ContentSecurityPolicy* last_origin_document_csp =
-      frame ? frame->Loader().GetLastOriginDocumentCSP() : nullptr;
-
-  KURL url;
-  if (initializer.ShouldSetURL())
-    url = initializer.Url().IsEmpty() ? BlankURL() : initializer.Url();
-
-  // Alias certain security properties from |owner_document|. Used for the
-  // case of about:blank pages inheriting the security properties of their
-  // requestor context.
+  // --------------
+  // THE MAIN PATH:
+  // --------------
   //
-  // Note that this is currently somewhat broken; Blink always inherits from
-  // the parent or opener, even though it should actually be inherited from
-  // the request initiator.
-  if (url.IsEmpty() && initializer.HasSecurityContext() &&
-      !initializer.OriginToCommit() && initializer.OwnerDocument()) {
-    last_origin_document_csp =
-        initializer.OwnerDocument()->GetContentSecurityPolicy();
-  }
-
+  // This path is used (among others) to load a document inside a frame. In this
+  // case, the CSP is computed by:
+  // - FrameLoader::CreateCSPForInitialEmptyDocument() or
+  // - FrameLoader::CreateCSP().
   csp_ = initializer.GetContentSecurityPolicy();
+  if (csp_)
+    return;
 
-  if (!csp_) {
-    if (initializer.ImportsController()) {
-      // If this document is an HTML import, grab a reference to its master
-      // document's Content Security Policy. We don't bind the CSP's delegate
-      // in 'InitSecurityPolicy' in this case, as we can't rebind the master
-      // document's policy object: The Content Security Policy's delegate
-      // needs to remain set to the master document.
-      csp_ =
-          initializer.ImportsController()->Master()->GetContentSecurityPolicy();
-      return;
-    }
-
-    csp_ = MakeGarbageCollected<ContentSecurityPolicy>();
-    bind_csp_immediately_ = true;
-  }
-
-  // We should inherit the navigation initiator CSP if the document is loaded
-  // using a local-scheme url.
-  //
-  // Note: about:srcdoc inherits CSP from its parent, not from its initiator.
-  // In this case, the initializer.GetContentSecurityPolicy() is used.
-  if (last_origin_document_csp && !url.IsAboutSrcdocURL() &&
-      (url.IsEmpty() || url.ProtocolIsAbout() || url.ProtocolIsData() ||
-       url.ProtocolIs("blob") || url.ProtocolIs("filesystem"))) {
-    csp_->CopyStateFrom(last_origin_document_csp);
-  }
-
-  if (initializer.GetType() == DocumentInit::Type::kPlugin) {
-    if (last_origin_document_csp) {
-      csp_->CopyPluginTypesFrom(last_origin_document_csp);
-      return;
-    }
-
-    // TODO(andypaicu): This should inherit the origin document's plugin types
-    // but because this could be a OOPIF document it might not have access. In
-    // this situation we fallback on using the parent/opener:
-    if (frame) {
-      Frame* inherit_from = frame->Tree().Parent() ? frame->Tree().Parent()
-                                                   : frame->Client()->Opener();
-      if (inherit_from && frame != inherit_from) {
-        csp_->CopyPluginTypesFrom(
-            inherit_from->GetSecurityContext()->GetContentSecurityPolicy());
-      }
-    }
-  }
+  // A few users of DocumentInit do not specify the CSP to be used. An empty CSP
+  // is used in this case.
+  // TODO(arthursonzogni): Audit every users of DocumentInit::Create() that do
+  // not specify a CSP to be used. Ideally they should be forced to explicitly
+  // choose one.
+  csp_ = MakeGarbageCollected<ContentSecurityPolicy>();
+  bind_csp_immediately_ = true;
 }
 
 void SecurityContextInit::InitializeSandboxFlags(
@@ -218,9 +183,9 @@ void SecurityContextInit::InitializeSandboxFlags(
     // Document's URL and origin. Instead, force a Document loaded from a
     // MHTML archive to be sandboxed, providing exceptions only for creating
     // new windows.
-    sandbox_flags_ |= (mojom::blink::WebSandboxFlags::kAll &
-                       ~(mojom::blink::WebSandboxFlags::kPopups |
-                         mojom::blink::WebSandboxFlags::
+    sandbox_flags_ |= (network::mojom::blink::WebSandboxFlags::kAll &
+                       ~(network::mojom::blink::WebSandboxFlags::kPopups |
+                         network::mojom::blink::WebSandboxFlags::
                              kPropagatesToAuxiliaryBrowsingContexts));
   }
 }
@@ -228,8 +193,8 @@ void SecurityContextInit::InitializeSandboxFlags(
 void SecurityContextInit::InitializeOrigin(const DocumentInit& initializer) {
   scoped_refptr<SecurityOrigin> document_origin =
       initializer.GetDocumentOrigin();
-  if ((sandbox_flags_ & mojom::blink::WebSandboxFlags::kOrigin) !=
-      mojom::blink::WebSandboxFlags::kNone) {
+  if ((sandbox_flags_ & network::mojom::blink::WebSandboxFlags::kOrigin) !=
+      network::mojom::blink::WebSandboxFlags::kNone) {
     scoped_refptr<SecurityOrigin> sandboxed_origin =
         initializer.OriginToCommit() ? initializer.OriginToCommit()
                                      : document_origin->DeriveNewOpaqueOrigin();
@@ -300,15 +265,26 @@ void SecurityContextInit::InitializeOrigin(const DocumentInit& initializer) {
 
 void SecurityContextInit::InitializeDocumentPolicy(
     const DocumentInit& initializer) {
+  if (!RuntimeEnabledFeatures::DocumentPolicyEnabled(this))
+    return;
+
   // Because Document-Policy http header is parsed in DocumentLoader,
   // when origin trial context is not initialized yet.
   // Needs to filter out features that are not in origin trial after
   // we have origin trial information available.
   document_policy_ = FilterByOriginTrial(initializer.GetDocumentPolicy(), this);
 
+  // Handle Report-Only-Document-Policy HTTP header.
+  // Console messages generated from logger are discarded, because currently
+  // there is no way to output them to console.
+  // Calling |Document::AddConsoleMessage| in
+  // |SecurityContextInit::ApplyPendingDataToDocument| will have no effect,
+  // because when the function is called, the document is not fully initialized
+  // yet (|document_| field in current frame is not yet initialized yet).
+  PolicyParserMessageBuffer logger("%s", /* discard_message */ true);
   base::Optional<DocumentPolicy::ParsedDocumentPolicy>
       report_only_parsed_policy = DocumentPolicyParser::Parse(
-          initializer.ReportOnlyDocumentPolicyHeader());
+          initializer.ReportOnlyDocumentPolicyHeader(), logger);
   if (report_only_parsed_policy) {
     report_only_document_policy_ =
         FilterByOriginTrial(*report_only_parsed_policy, this);
@@ -337,7 +313,7 @@ void SecurityContextInit::InitializeFeaturePolicy(
       initializer.ReportOnlyFeaturePolicyHeader(), security_origin_,
       &report_only_feature_policy_parse_messages_, this);
 
-  if (sandbox_flags_ != mojom::blink::WebSandboxFlags::kNone &&
+  if (sandbox_flags_ != network::mojom::blink::WebSandboxFlags::kNone &&
       RuntimeEnabledFeatures::FeaturePolicyForSandboxEnabled()) {
     // The sandbox flags might have come from CSP header or the browser; in
     // such cases the sandbox is not part of the container policy. They are
@@ -356,8 +332,8 @@ void SecurityContextInit::InitializeFeaturePolicy(
   // feature policy is initialized.
   if (RuntimeEnabledFeatures::BlockingFocusWithoutUserActivationEnabled() &&
       frame && frame->Tree().Parent() &&
-      (sandbox_flags_ & mojom::blink::WebSandboxFlags::kNavigation) !=
-          mojom::blink::WebSandboxFlags::kNone) {
+      (sandbox_flags_ & network::mojom::blink::WebSandboxFlags::kNavigation) !=
+          network::mojom::blink::WebSandboxFlags::kNone) {
     // Enforcing the policy for sandbox frames (for context see
     // https://crbug.com/954349).
     DisallowFeatureIfNotPresent(
@@ -464,7 +440,7 @@ void SecurityContextInit::InitializeSecureContextMode(
     secure_context_mode_ = SecureContextMode::kInsecureContext;
   }
   bool is_secure = secure_context_mode_ == SecureContextMode::kSecureContext;
-  if (GetSandboxFlags() != mojom::blink::WebSandboxFlags::kNone) {
+  if (GetSandboxFlags() != network::mojom::blink::WebSandboxFlags::kNone) {
     feature_count_.insert(
         is_secure ? WebFeature::kSecureContextCheckForSandboxedOriginPassed
                   : WebFeature::kSecureContextCheckForSandboxedOriginFailed);

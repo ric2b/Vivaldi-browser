@@ -6,6 +6,7 @@ static_library("calendar") {
   sources = [
     "account_table.cc",
     "account_table.h",
+    "account_type.cc",
     "account_type.h",
     "calendar_backend.cc",
     "calendar_backend.h",

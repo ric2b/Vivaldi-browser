@@ -92,16 +92,48 @@ class MediaHistoryKeyedService : public KeyedService,
       base::OnceCallback<
           void(std::vector<media_feeds::mojom::MediaFeedItemPtr>)> callback);
 
-  // Replaces the media items in |feed_id|. This will delete any old feed items
-  // and store the new ones in |items|. This will also update the |result|,
-  // |expiry_time|, |logos| and |display_name| for the feed.
-  void StoreMediaFeedFetchResult(
-      const int64_t feed_id,
-      std::vector<media_feeds::mojom::MediaFeedItemPtr> items,
-      const media_feeds::mojom::FetchResult result,
-      const base::Time& expiry_time,
-      const std::vector<media_session::MediaImage>& logos,
-      const std::string& display_name);
+  // Information about a completed media feed fetch, such as the feed items,
+  // feed info, and fetch status code.
+  struct MediaFeedFetchResult {
+    ~MediaFeedFetchResult();
+    MediaFeedFetchResult();
+    MediaFeedFetchResult(MediaFeedFetchResult&& t);
+
+    MediaFeedFetchResult(const MediaFeedFetchResult&) = delete;
+    void operator=(const MediaFeedFetchResult&) = delete;
+
+    int64_t feed_id;
+
+    // The feed items that were fetched. Only contains valid items.
+    std::vector<media_feeds::mojom::MediaFeedItemPtr> items;
+
+    // The status code for the fetch.
+    media_feeds::mojom::FetchResult status;
+
+    // If the feed was fetched from the browser cache then this should be true.
+    bool was_fetched_from_cache = false;
+
+    // Logos representing the feed.
+    std::vector<media_feeds::mojom::MediaImagePtr> logos;
+
+    // The display name for the feed.
+    std::string display_name;
+
+    // Origins associated with the feed that are linked to the login state of
+    // the feed.
+    std::set<url::Origin> associated_origins;
+
+    // The reset token for the feed.
+    base::Optional<base::UnguessableToken> reset_token;
+
+    // Information about the currently logged in user.
+    media_feeds::mojom::UserIdentifierPtr user_identifier;
+  };
+  // Replaces the media items in |result.feed_id|. This will delete any old feed
+  // items and store the new ones in |result.items|. This will also update the
+  // |result.status|, |result.logos| and |result.display_name| for the feed.
+  void StoreMediaFeedFetchResult(MediaFeedFetchResult result,
+                                 base::OnceClosure callback);
 
   void GetURLsInTableForTest(const std::string& table,
                              base::OnceCallback<void(std::set<GURL>)> callback);
@@ -132,11 +164,100 @@ class MediaHistoryKeyedService : public KeyedService,
   // for waiting for database operations in tests.
   void PostTaskToDBForTest(base::OnceClosure callback);
 
-  // Returns all the rows in the media feeds table.  This is only used for
-  // debugging because it loads all rows in the table.
-  void GetMediaFeedsForDebug(
+  // Returns Media Feeds.
+  struct GetMediaFeedsRequest {
+    enum class Type {
+      // Return all the fields for debugging.
+      kDebugAll,
+
+      // Returns the top feeds to be fetched. These will be sorted by the
+      // by audio+video watchtime descending and we will also populate the
+      // |origin_audio_video_watchtime_percentile| field in |MediaFeedPtr|.
+      kTopFeedsForFetch,
+
+      // Returns the top feeds to be displayed. These will be sorted by the
+      // by audio+video watchtime descending and we will also populate the
+      // |origin_audio_video_watchtime_percentile| field in |MediaFeedPtr|.
+      kTopFeedsForDisplay
+    };
+
+    static GetMediaFeedsRequest CreateTopFeedsForFetch(
+        unsigned limit,
+        base::TimeDelta audio_video_watchtime_min);
+
+    static GetMediaFeedsRequest CreateTopFeedsForDisplay(
+        unsigned limit,
+        base::TimeDelta audio_video_watchtime_min,
+        int fetched_items_min,
+        bool fetched_items_min_should_be_safe);
+
+    GetMediaFeedsRequest();
+    GetMediaFeedsRequest(const GetMediaFeedsRequest& t);
+
+    Type type = Type::kDebugAll;
+
+    // The maximum number of feeds to return. Only valid for |kTopFeedsForFetch|
+    // and |kTopFeedsForDisplay|.
+    base::Optional<unsigned> limit;
+
+    // The minimum audio+video watchtime required on the origin to return the
+    // feed. Only valid for |kTopFeedsForFetch| and |kTopFeedsForDisplay|.
+    base::Optional<base::TimeDelta> audio_video_watchtime_min;
+
+    // The minimum number of fetched items that are required and whether they
+    // should have passed safe search. Only valid for |kTopFeedsForDisplay|.
+    base::Optional<int> fetched_items_min;
+    bool fetched_items_min_should_be_safe = false;
+  };
+  void GetMediaFeeds(
+      const GetMediaFeedsRequest& request,
       base::OnceCallback<void(std::vector<media_feeds::mojom::MediaFeedPtr>)>
           callback);
+
+  // Updates the display time for the Media Feed with |feed_id| to now.
+  void UpdateMediaFeedDisplayTime(const int64_t feed_id);
+
+  // Increment the media feed items shown counter by one.
+  void IncrementMediaFeedItemsShownCount(const std::set<int64_t> feed_item_ids);
+
+  // Marks a media feed item as clicked. This is when the user has opened the
+  // item in the UI.
+  void MarkMediaFeedItemAsClicked(const int64_t& feed_item_id);
+
+  // Resets a Media Feed by deleting any items and resetting it to defaults. If
+  // |include_subdomains| is true then this will reset any feeds on any
+  // subdomain of |origin|.
+  void ResetMediaFeed(const url::Origin& origin,
+                      media_feeds::mojom::ResetReason reason,
+                      const bool include_subdomains = false);
+
+  // Resets any Media Feeds that were fetched between |start_time| and
+  // |end_time|. This will delete any items and reset them to defaults. The
+  // reason will be set to |kCache|.
+  using CacheClearingFilter = base::RepeatingCallback<bool(const GURL& url)>;
+  void ResetMediaFeedDueToCacheClearing(const base::Time& start_time,
+                                        const base::Time& end_time,
+                                        CacheClearingFilter filter,
+                                        base::OnceClosure callback);
+
+  // Deletes the Media Feed and runs the callback.
+  void DeleteMediaFeed(const int64_t feed_id, base::OnceClosure callback);
+
+  // Gets the details needed to fetch a Media Feed.
+  struct MediaFeedFetchDetails {
+    MediaFeedFetchDetails();
+    ~MediaFeedFetchDetails();
+    MediaFeedFetchDetails(MediaFeedFetchDetails&& t);
+    MediaFeedFetchDetails& operator=(const MediaFeedFetchDetails&);
+
+    GURL url;
+    media_feeds::mojom::FetchResult last_fetch_result;
+    base::Optional<base::UnguessableToken> reset_token;
+  };
+  using GetMediaFeedFetchDetailsCallback =
+      base::OnceCallback<void(base::Optional<MediaFeedFetchDetails>)>;
+  void GetMediaFeedFetchDetails(const int64_t feed_id,
+                                GetMediaFeedFetchDetailsCallback callback);
 
  private:
   class StoreHolder;

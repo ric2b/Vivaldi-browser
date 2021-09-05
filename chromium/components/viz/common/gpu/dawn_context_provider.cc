@@ -4,11 +4,11 @@
 
 #include "components/viz/common/gpu/dawn_context_provider.h"
 
-#include <dawn/dawn_proc.h>
-
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "build/build_config.h"
+#include "third_party/dawn/src/include/dawn/dawn_proc.h"
 
 namespace viz {
 
@@ -51,10 +51,16 @@ wgpu::Device DawnContextProvider::CreateDevice(dawn_native::BackendType type) {
   DawnProcTable backend_procs = dawn_native::GetProcs();
   dawnProcSetProcs(&backend_procs);
 
+  // Disable validation in non-DCHECK builds.
+  dawn_native::DeviceDescriptor descriptor;
+#if !DCHECK_IS_ON()
+  descriptor.forceEnabledToggles = {"skip_validation"};
+#endif
+
   std::vector<dawn_native::Adapter> adapters = instance_.GetAdapters();
   for (dawn_native::Adapter adapter : adapters) {
     if (adapter.GetBackendType() == type)
-      return adapter.CreateDevice();
+      return adapter.CreateDevice(&descriptor);
   }
   return nullptr;
 }

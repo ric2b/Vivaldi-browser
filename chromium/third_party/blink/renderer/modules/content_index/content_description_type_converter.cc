@@ -59,7 +59,7 @@ blink::mojom::blink::ContentDescriptionPtr TypeConverter<
     result->icons.push_back(blink::mojom::blink::ContentIconDefinition::New(
         icon->src(), icon->sizes(), icon->type()));
   }
-  result->launch_url = description->launchUrl();
+  result->launch_url = description->url();
 
   return result;
 }
@@ -76,16 +76,17 @@ TypeConverter<blink::ContentDescription*,
 
   blink::HeapVector<blink::Member<blink::ContentIconDefinition>> blink_icons;
   for (const auto& icon : description->icons) {
-    auto* blink_icon =
-        blink::MakeGarbageCollected<blink::ContentIconDefinition>();
+    auto* blink_icon = blink::ContentIconDefinition::Create();
     blink_icon->setSrc(icon->src);
-    blink_icon->setSizes(icon->sizes);
-    blink_icon->setType(icon->type);
+    if (!icon->sizes.IsNull())
+      blink_icon->setSizes(icon->sizes);
+    if (!icon->type.IsNull())
+      blink_icon->setType(icon->type);
     blink_icons.push_back(blink_icon);
   }
   result->setIcons(blink_icons);
 
-  result->setLaunchUrl(description->launch_url);
+  result->setUrl(description->launch_url);
   return result;
 }
 

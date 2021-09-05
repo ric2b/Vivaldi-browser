@@ -19,7 +19,6 @@
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
-#include "chrome/browser/previews/previews_lite_page_redirect_decider.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
 #include "chrome/browser/signin/signin_promo.h"
@@ -94,12 +93,20 @@ namespace {
 
 bool allow_os_settings_in_tab = false;
 
-// Returns true if the specified Browser can open tabs. Not all Browsers support
-// multiple tabs, such as app frames and popups. This function returns false for
-// those types of Browser.
-bool WindowCanOpenTabs(Browser* browser) {
-  return browser->CanSupportWindowFeature(Browser::FEATURE_TABSTRIP) ||
-         browser->tab_strip_model()->empty();
+// Returns true if |params.browser| exists and can open a new tab for
+// |params.url|. Not all browsers support multiple tabs, such as app frames and
+// popups. TYPE_APP will only open a new tab if the URL is within the app scope.
+bool WindowCanOpenTabs(const NavigateParams& params) {
+  if (!params.browser)
+    return false;
+
+  if (params.browser->app_controller() &&
+      !params.browser->app_controller()->IsUrlInAppScope(params.url)) {
+    return false;
+  }
+
+  return params.browser->CanSupportWindowFeature(Browser::FEATURE_TABSTRIP) ||
+         params.browser->tab_strip_model()->empty();
 }
 
 // Finds an existing Browser compatible with |profile|, making a new one if no
@@ -189,13 +196,16 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
       // re-run with NEW_WINDOW.
       return {GetOrCreateBrowser(profile, params.user_gesture), -1};
     case WindowOpenDisposition::SINGLETON_TAB: {
-      int index = GetIndexOfExistingTab(params.browser, params);
-      if (index >= 0)
-        return {params.browser, index};
-      // If this window can't open tabs, then it would load in a random
-      // window, potentially opening a second copy. Instead, make an extra
-      // effort to see if there's an already open copy.
-      if (params.browser && !WindowCanOpenTabs(params.browser)) {
+      // If we have a browser window, check it first.
+      if (params.browser) {
+        int index = GetIndexOfExistingTab(params.browser, params);
+        if (index >= 0)
+          return {params.browser, index};
+      }
+      // If we don't have a a window, or if this window can't open tabs, then
+      // it would load in a random window, potentially opening a second copy.
+      // Instead, make an extra effort to see if there's an already open copy.
+      if (!WindowCanOpenTabs(params)) {
         std::pair<Browser*, int> index =
             GetIndexAndBrowserOfExistingTab(profile, params);
         if (index.first)
@@ -206,7 +216,7 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
     case WindowOpenDisposition::NEW_FOREGROUND_TAB:
     case WindowOpenDisposition::NEW_BACKGROUND_TAB:
       // See if we can open the tab in the window this navigator is bound to.
-      if (params.browser && WindowCanOpenTabs(params.browser))
+      if (WindowCanOpenTabs(params))
         return {params.browser, -1};
 
       // Find a compatible window and re-execute this command in it. Otherwise
@@ -222,11 +232,6 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
             web_app::GenerateApplicationNameFromAppId(params.extension_app_id);
       } else if (params.browser && !params.browser->app_name().empty()) {
         app_name = params.browser->app_name();
-      } else if (params.source_contents) {
-        std::string app_id =
-            apps::GetAppIdForWebContents(params.source_contents);
-        if (!app_id.empty())
-          app_name = web_app::GenerateApplicationNameFromAppId(app_id);
       }
 #endif
       if (app_name.empty()) {
@@ -236,7 +241,7 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
         browser_params.initial_bounds = params.window_bounds;
         return {new Browser(browser_params), -1};
       }
-      return {new Browser(Browser::CreateParams::CreateForApp(
+      return {new Browser(Browser::CreateParams::CreateForAppPopup(
                   app_name, params.trusted_source, params.window_bounds,
                   profile, params.user_gesture)),
               -1};
@@ -247,7 +252,7 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
               -1};
     case WindowOpenDisposition::OFF_THE_RECORD:
       // Make or find an incognito window.
-      return {GetOrCreateBrowser(profile->GetOffTheRecordProfile(),
+      return {GetOrCreateBrowser(profile->GetPrimaryOTRProfile(),
                                  params.user_gesture),
               -1};
     // The following types result in no navigation.
@@ -327,6 +332,7 @@ void LoadURLInContents(WebContents* target_contents,
                        const GURL& url,
                        NavigateParams* params) {
   NavigationController::LoadURLParams load_url_params(url);
+  load_url_params.initiator_routing_id = params->initiator_routing_id;
   load_url_params.initiator_origin = params->initiator_origin;
   load_url_params.source_site_instance = params->source_site_instance;
   load_url_params.referrer = params->referrer;
@@ -345,15 +351,14 @@ void LoadURLInContents(WebContents* target_contents,
   load_url_params.was_activated = params->was_activated;
   load_url_params.href_translate = params->href_translate;
   load_url_params.reload_type = params->reload_type;
+  load_url_params.impression = params->impression;
 
   // |frame_tree_node_id| is kNoFrameTreeNodeId for main frame navigations.
   if (params->frame_tree_node_id ==
       content::RenderFrameHost::kNoFrameTreeNodeId) {
     load_url_params.navigation_ui_data =
         ChromeNavigationUIData::CreateForMainFrameNavigation(
-            target_contents, params->disposition,
-            PreviewsLitePageRedirectDecider::GeneratePageIdForProfile(
-                GetSourceProfile(params)));
+            target_contents, params->disposition);
   }
 
   if (params->post_data) {

@@ -25,7 +25,7 @@ class MediaHistoryOriginTable : public MediaHistoryTableBase {
   static std::string GetOriginForStorage(const url::Origin& origin);
 
  private:
-  friend class MediaHistoryStoreInternal;
+  friend class MediaHistoryStore;
 
   explicit MediaHistoryOriginTable(
       scoped_refptr<base::UpdateableSequencedTaskRunner> db_task_runner);
@@ -40,6 +40,10 @@ class MediaHistoryOriginTable : public MediaHistoryTableBase {
   // Returns a flag indicating whether watchtime was increased successfully.
   bool IncrementAggregateAudioVideoWatchTime(const url::Origin& origin,
                                              const base::TimeDelta& time);
+
+  // Recalculates the aggregate audio+video watchtime and returns a flag as to
+  // whether this was successful.
+  bool RecalculateAggregateAudioVideoWatchTime(const url::Origin& origin);
 
   // Deletes an origin from the database and returns a flag as to whether this
   // was successful.

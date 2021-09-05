@@ -42,7 +42,6 @@ class AppsContainerView;
 class AppsGridView;
 class AssistantPageView;
 class ExpandArrowView;
-class HorizontalPageContainer;
 class SearchBoxView;
 class SearchResultAnswerCardView;
 class SearchResultListView;
@@ -57,16 +56,6 @@ class SearchResultTileItemListView;
 class APP_LIST_EXPORT ContentsView : public views::View,
                                      public PaginationModelObserver {
  public:
-  // This class observes the search box Updates.
-  class SearchBoxUpdateObserver : public base::CheckedObserver {
-   public:
-    // Called when search box bounds is updated.
-    virtual void OnSearchBoxBoundsUpdated() = 0;
-
-    // Called when the search box is cleaded and deactivated.
-    virtual void OnSearchBoxClearAndDeactivated() = 0;
-  };
-
   // Used to SetActiveState without animations.
   class ScopedSetActiveStateAnimationDisabler {
    public:
@@ -142,8 +131,6 @@ class APP_LIST_EXPORT ContentsView : public views::View,
 
   int NumLauncherPages() const;
 
-  AppsContainerView* GetAppsContainerView();
-
   SearchResultPageView* search_results_page_view() const {
     return search_results_page_view_;
   }
@@ -157,8 +144,8 @@ class APP_LIST_EXPORT ContentsView : public views::View,
   SearchResultListView* search_result_list_view_for_test() const {
     return search_result_list_view_;
   }
-  HorizontalPageContainer* horizontal_page_container() const {
-    return horizontal_page_container_;
+  AppsContainerView* apps_container_view() const {
+    return apps_container_view_;
   }
   AppListPage* GetPageView(int index) const;
 
@@ -226,11 +213,6 @@ class APP_LIST_EXPORT ContentsView : public views::View,
   std::unique_ptr<ui::ScopedLayerAnimationSettings>
   CreateTransitionAnimationSettings(ui::Layer* layer) const;
 
-  void NotifySearchBoxBoundsUpdated();
-
-  void AddSearchBoxUpdateObserver(SearchBoxUpdateObserver* observer);
-  void RemoveSearchBoxUpdateObserver(SearchBoxUpdateObserver* observer);
-
   // Adjusts search box view size so it fits within the contents view margins
   // (when centered).
   gfx::Size AdjustSearchBoxSizeToFitMargins(
@@ -248,10 +230,6 @@ class APP_LIST_EXPORT ContentsView : public views::View,
   void UpdateSearchBoxAnimation(double progress,
                                 AppListState current_state,
                                 AppListState target_state);
-
-  // Updates the opacity of the expand arrow to the target state. Set |animate|
-  // to true when the opacity changes gradually.
-  void UpdateExpandArrowOpacity(AppListState target_state, bool animate);
 
   // Updates the expand arrow's behavior based on AppListViewState.
   void UpdateExpandArrowBehavior(AppListViewState target_state);
@@ -295,7 +273,7 @@ class APP_LIST_EXPORT ContentsView : public views::View,
 
   // Sub-views of the ContentsView. All owned by the views hierarchy.
   AssistantPageView* assistant_page_view_ = nullptr;
-  HorizontalPageContainer* horizontal_page_container_ = nullptr;
+  AppsContainerView* apps_container_view_ = nullptr;
   SearchResultPageView* search_results_page_view_ = nullptr;
   SearchResultAnswerCardView* search_result_answer_card_view_ = nullptr;
   SearchResultTileItemListView* search_result_tile_item_list_view_ = nullptr;
@@ -334,8 +312,6 @@ class APP_LIST_EXPORT ContentsView : public views::View,
   // to a new app list view state.
   base::Optional<AppListState> target_page_for_last_view_state_update_;
   base::Optional<AppListViewState> last_target_view_state_;
-
-  base::ObserverList<SearchBoxUpdateObserver> search_box_observers_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentsView);
 };

@@ -5,11 +5,12 @@
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_handler.h"
 
 #include "base/strings/string_number_conversions.h"
-#include "chrome/browser/ui/webui/settings/chromeos/os_settings_localized_strings_provider.h"
+#include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/chromeos/local_search_service/local_search_service.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_concept.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_result_icon.mojom.h"
-#include "chrome/services/local_search_service/local_search_service_impl.h"
-#include "chrome/services/local_search_service/public/mojom/types.mojom.h"
+#include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
+#include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace chromeos {
@@ -18,16 +19,25 @@ namespace {
 
 const int32_t kLocalSearchServiceMaxResults = 10;
 
+// TODO(https://crbug.com/1071700): Delete this function.
+std::vector<base::string16> GenerateDummySettingsHierarchy(
+    const char* url_path_with_parameters) {
+  std::vector<base::string16> hierarchy;
+  hierarchy.push_back(l10n_util::GetStringUTF16(IDS_INTERNAL_APP_SETTINGS));
+  hierarchy.push_back(base::ASCIIToUTF16(url_path_with_parameters));
+  return hierarchy;
+}
+
 }  // namespace
 
 // static
 const size_t SearchHandler::kNumMaxResults = 5;
 
 SearchHandler::SearchHandler(
-    OsSettingsLocalizedStringsProvider* strings_provider,
-    local_search_service::LocalSearchServiceImpl* local_search_service)
-    : strings_provider_(strings_provider),
-      index_(local_search_service->GetIndexImpl(
+    SearchTagRegistry* search_tag_registry,
+    local_search_service::LocalSearchService* local_search_service)
+    : search_tag_registry_(search_tag_registry),
+      index_(local_search_service->GetIndex(
           local_search_service::IndexId::kCrosSettings)) {}
 
 SearchHandler::~SearchHandler() = default;
@@ -84,7 +94,7 @@ mojom::SearchResultPtr SearchHandler::ResultToSearchResult(
     return nullptr;
 
   const SearchConcept* concept =
-      strings_provider_->GetCanonicalTagMetadata(message_id);
+      search_tag_registry_->GetCanonicalTagMetadata(message_id);
 
   // If the concept was not registered, no metadata is available. This can occur
   // if the search tag was dynamically unregistered during the asynchronous
@@ -92,15 +102,29 @@ mojom::SearchResultPtr SearchHandler::ResultToSearchResult(
   if (!concept)
     return nullptr;
 
-  return mojom::SearchResult::New(l10n_util::GetStringUTF16(message_id),
-                                  concept->url_path_with_parameters,
-                                  concept->icon);
-}
+  mojom::SearchResultIdentifierPtr result_id;
+  switch (concept->type) {
+    case mojom::SearchResultType::kSection:
+      result_id =
+          mojom::SearchResultIdentifier::NewSection(concept->id.section);
+      break;
+    case mojom::SearchResultType::kSubpage:
+      result_id =
+          mojom::SearchResultIdentifier::NewSubpage(concept->id.subpage);
+      break;
+    case mojom::SearchResultType::kSetting:
+      result_id =
+          mojom::SearchResultIdentifier::NewSetting(concept->id.setting);
+      break;
+  }
 
-void SearchHandler::Shutdown() {
-  strings_provider_ = nullptr;
-  index_ = nullptr;
-  receivers_.Clear();
+  // TODO(https://crbug.com/1071700): Generate real hierarchy instead of using
+  // GenerateDummySettingsHierarchy().
+  return mojom::SearchResult::New(
+      l10n_util::GetStringUTF16(message_id), concept->url_path_with_parameters,
+      concept->icon, result.score,
+      GenerateDummySettingsHierarchy(concept->url_path_with_parameters),
+      concept->default_rank, concept->type, std::move(result_id));
 }
 
 }  // namespace settings

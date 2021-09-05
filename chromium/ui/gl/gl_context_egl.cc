@@ -11,12 +11,6 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 
-#if defined(USE_X11)
-// Must be included before khronos headers or they will pollute the
-// global scope with X11 macros.
-#include "ui/gfx/x/x11.h"
-#endif
-
 #include "third_party/khronos/EGL/egl.h"
 #include "third_party/khronos/EGL/eglext.h"
 #include "ui/gl/egl_util.h"
@@ -62,6 +56,13 @@
 #define EGL_CONTEXT_PRIORITY_MEDIUM_IMG 0x3102
 #define EGL_CONTEXT_PRIORITY_LOW_IMG 0x3103
 #endif /* EGL_CONTEXT_PRIORITY_LEVEL */
+
+#ifndef EGL_ANGLE_power_preference
+#define EGL_ANGLE_power_preference 1
+#define EGL_POWER_PREFERENCE_ANGLE 0x3482
+#define EGL_LOW_POWER_ANGLE 0x0001
+#define EGL_HIGH_POWER_ANGLE 0x0002
+#endif /* EGL_ANGLE_power_preference */
 
 using ui::GetLastEGLErrorString;
 
@@ -200,6 +201,24 @@ bool GLContextEGL::Initialize(GLSurface* compatible_surface,
     // relies on the returned context being the exact version it requested.
     context_attributes.push_back(EGL_CONTEXT_OPENGL_BACKWARDS_COMPATIBLE_ANGLE);
     context_attributes.push_back(EGL_FALSE);
+  }
+
+  if (GLSurfaceEGL::IsANGLEPowerPreferenceSupported()) {
+    switch (attribs.gpu_preference) {
+      case GpuPreference ::kDefault:
+        // Don't request any GPU, let ANGLE and the native driver decide.
+        break;
+      case GpuPreference ::kLowPower:
+        context_attributes.push_back(EGL_POWER_PREFERENCE_ANGLE);
+        context_attributes.push_back(EGL_LOW_POWER_ANGLE);
+        break;
+      case GpuPreference ::kHighPerformance:
+        context_attributes.push_back(EGL_POWER_PREFERENCE_ANGLE);
+        context_attributes.push_back(EGL_HIGH_POWER_ANGLE);
+        break;
+      default:
+        NOTREACHED();
+    }
   }
 
   // Append final EGL_NONE to signal the context attributes are finished

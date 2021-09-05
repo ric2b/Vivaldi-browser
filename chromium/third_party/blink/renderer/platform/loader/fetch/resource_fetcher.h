@@ -31,7 +31,6 @@
 #include <utility>
 
 #include "base/single_thread_task_runner.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/controller_service_worker_mode.mojom-blink-forward.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -39,6 +38,8 @@
 #include "third_party/blink/renderer/platform/loader/fetch/preload_key.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_priority.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_scheduler.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
@@ -53,7 +54,7 @@ class DetachableConsoleLogger;
 class DetachableUseCounter;
 class DetachableResourceFetcherProperties;
 class FetchContext;
-class FrameScheduler;
+class FrameOrWorkerScheduler;
 class MHTMLArchive;
 class KURL;
 class Resource;
@@ -131,10 +132,10 @@ class PLATFORM_EXPORT ResourceFetcher
     resource_load_observer_ = observer;
   }
 
-  // Triggers a fetch based on the given FetchParameters (if there isn't a
-  // suitable Resource already cached) and registers the given ResourceClient
-  // with the Resource. Guaranteed to return a non-null Resource of the subtype
-  // specified by ResourceFactory::GetType().
+  // Triggers or defers a fetch based on the given FetchParameters (if there
+  // isn't a suitable Resource already cached) and registers the given
+  // ResourceClient with the Resource. Guaranteed to return a non-null Resource
+  // of the subtype specified by ResourceFactory::GetType().
   Resource* RequestResource(FetchParameters&,
                             const ResourceFactory&,
                             ResourceClient*);
@@ -162,13 +163,18 @@ class PLATFORM_EXPORT ResourceFetcher
     return cached_resources_map_;
   }
 
+  enum class LoadBlockingPolicy {
+    kDefault,
+    kForceNonBlockingLoad,
+  };
+
   // Binds the given Resource instance to this ResourceFetcher instance to
   // start loading the Resource actually.
   // Usually, RequestResource() calls this method internally, but needs to
   // call this method explicitly on cases such as ResourceNeedsLoad() returning
   // false.
   bool StartLoad(Resource*);
-  bool StartLoad(Resource*, ResourceRequestBody);
+  bool StartLoad(Resource*, ResourceRequestBody, LoadBlockingPolicy);
 
   void SetAutoLoadImages(bool);
   void SetImagesEnabled(bool);
@@ -254,7 +260,7 @@ class PLATFORM_EXPORT ResourceFetcher
 
   mojom::blink::BlobRegistry* GetBlobRegistry();
 
-  FrameScheduler* GetFrameScheduler();
+  FrameOrWorkerScheduler* GetFrameOrWorkerScheduler();
 
   ResourceLoadPriority ComputeLoadPriorityForTesting(
       ResourceType type,
@@ -269,6 +275,11 @@ class PLATFORM_EXPORT ResourceFetcher
 
   void SetShouldLogRequestAsInvalidInImportedDocument() {
     should_log_request_as_invalid_in_imported_document_ = true;
+  }
+
+  void SetThrottleOptionOverride(
+      ResourceLoadScheduler::ThrottleOptionOverride throttle_option_override) {
+    scheduler_->SetThrottleOptionOverride(throttle_option_override);
   }
 
   void setServeOnlyCachedResources(bool);
@@ -304,7 +315,6 @@ class PLATFORM_EXPORT ResourceFetcher
   base::Optional<ResourceRequestBlockedReason> PrepareRequest(
       FetchParameters&,
       const ResourceFactory&,
-      uint64_t identifier,
       WebScopedVirtualTimePauser& virtual_time_pauser);
 
   Resource* ResourceForStaticData(const FetchParameters&,
@@ -358,8 +368,7 @@ class PLATFORM_EXPORT ResourceFetcher
   void MoveResourceLoaderToNonBlocking(ResourceLoader*);
   void RemoveResourceLoader(ResourceLoader*);
 
-  void DidLoadResourceFromMemoryCache(uint64_t identifier,
-                                      Resource*,
+  void DidLoadResourceFromMemoryCache(Resource*,
                                       const ResourceRequest&,
                                       bool is_static_data);
 
@@ -415,14 +424,16 @@ class PLATFORM_EXPORT ResourceFetcher
   std::unique_ptr<HashSet<String>> preloaded_urls_for_test_;
 
   // TODO(altimin): Move FrameScheduler to oilpan.
-  base::WeakPtr<FrameScheduler> frame_scheduler_;
+  base::WeakPtr<FrameOrWorkerScheduler> frame_or_worker_scheduler_;
 
   // Timeout timer for keepalive requests.
   TaskHandle keepalive_loaders_task_handle_;
 
   uint32_t inflight_keepalive_bytes_ = 0;
 
-  mojo::Remote<mojom::blink::BlobRegistry> blob_registry_remote_;
+  HeapMojoRemote<mojom::blink::BlobRegistry,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
+      blob_registry_remote_;
 
   // This is not in the bit field below because we want to use AutoReset.
   bool is_in_request_resource_ = false;
@@ -489,7 +500,9 @@ struct PLATFORM_EXPORT ResourceFetcherInit final {
   ResourceLoadScheduler::ThrottlingPolicy initial_throttling_policy =
       ResourceLoadScheduler::ThrottlingPolicy::kNormal;
   MHTMLArchive* archive = nullptr;
-  FrameScheduler* frame_scheduler = nullptr;
+  FrameOrWorkerScheduler* frame_or_worker_scheduler = nullptr;
+  ResourceLoadScheduler::ThrottleOptionOverride throttle_option_override =
+      ResourceLoadScheduler::ThrottleOptionOverride::kNone;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceFetcherInit);
 };

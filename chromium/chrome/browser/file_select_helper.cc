@@ -18,6 +18,7 @@
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -334,7 +335,8 @@ void FileSelectHelper::PerformSafeBrowsingDeepScanIfNeeded(
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   safe_browsing::DeepScanningDialogDelegate::Data data;
   if (safe_browsing::DeepScanningDialogDelegate::IsEnabled(
-          profile_, render_frame_host_->GetLastCommittedURL(), &data)) {
+          profile_, render_frame_host_->GetLastCommittedURL(), &data,
+          enterprise_connectors::AnalysisConnector::FILE_ATTACHED)) {
     data.paths.reserve(list.size());
     for (const auto& file : list)
       data.paths.push_back(file->get_native_file()->file_path);
@@ -445,18 +447,18 @@ FileSelectHelper::GetFileTypesFromAcceptType(
   // Find the corresponding extensions.
   int valid_type_count = 0;
   int description_id = 0;
-  for (size_t i = 0; i < accept_types.size(); ++i) {
-    std::string ascii_type = base::UTF16ToASCII(accept_types[i]);
-    if (!IsAcceptTypeValid(ascii_type))
-      continue;
-
+  for (const auto& accept_type : accept_types) {
     size_t old_extension_size = extensions->size();
-    if (ascii_type[0] == '.') {
+    if (accept_type[0] == '.') {
       // If the type starts with a period it is assumed to be a file extension
       // so we just have to add it to the list.
-      base::FilePath::StringType ext(ascii_type.begin(), ascii_type.end());
+      base::FilePath::StringType ext =
+          base::FilePath::FromUTF16Unsafe(accept_type).value();
       extensions->push_back(ext.substr(1));
     } else {
+      if (!base::IsStringASCII(accept_type))
+        continue;
+      std::string ascii_type = base::UTF16ToASCII(accept_type);
       if (ascii_type == "image/*")
         description_id = IDS_IMAGE_FILES;
       else if (ascii_type == "audio/*")

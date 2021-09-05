@@ -8,6 +8,8 @@
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_action_handler.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #include "ios/chrome/common/ui/util/dynamic_type_util.h"
+#import "ios/chrome/common/ui/util/image_util.h"
+#import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -21,6 +23,8 @@ NSString* const kConfirmationAlertSubtitleAccessibilityIdentifier =
     @"kConfirmationAlertSubtitleAccessibilityIdentifier";
 NSString* const kConfirmationAlertPrimaryActionAccessibilityIdentifier =
     @"kConfirmationAlertPrimaryActionAccessibilityIdentifier";
+NSString* const kConfirmationAlertBarPrimaryActionAccessibilityIdentifier =
+    @"kConfirmationAlertBarPrimaryActionAccessibilityIdentifier";
 
 namespace {
 
@@ -28,6 +32,7 @@ constexpr CGFloat kButtonVerticalInsets = 17;
 constexpr CGFloat kPrimaryButtonCornerRadius = 13;
 constexpr CGFloat kStackViewSpacing = 8;
 constexpr CGFloat kStackViewSpacingAfterIllustration = 27;
+constexpr CGFloat kGeneratedImagePadding = 20;
 // The multiplier used when in regular horizontal size class.
 constexpr CGFloat kSafeAreaMultiplier = 0.8;
 
@@ -35,9 +40,15 @@ constexpr CGFloat kSafeAreaMultiplier = 0.8;
 
 @interface ConfirmationAlertViewController () <UIToolbarDelegate>
 
+// Container view that will wrap the views making up the content.
+@property(nonatomic, strong) UIStackView* stackView;
+
 // References to the UI properties that need to be updated when the trait
 // collection changes.
 @property(nonatomic, strong) UIButton* primaryActionButton;
+@property(nonatomic, strong) UIToolbar* topToolbar;
+@property(nonatomic, strong) NSArray* regularHeightToolbarItems;
+@property(nonatomic, strong) NSArray* compactHeightToolbarItems;
 @property(nonatomic, strong) UIImageView* imageView;
 // Constraints.
 @property(nonatomic, strong)
@@ -45,7 +56,9 @@ constexpr CGFloat kSafeAreaMultiplier = 0.8;
 @property(nonatomic, strong)
     NSArray<NSLayoutConstraint*>* regularWidthConstraints;
 @property(nonatomic, strong)
-    NSLayoutConstraint* scrollViewBottomVerticalConstraint;
+    NSLayoutConstraint* regularHeightScrollViewBottomVerticalConstraint;
+@property(nonatomic, strong)
+    NSLayoutConstraint* compactHeightScrollViewBottomVerticalConstraint;
 @property(nonatomic, strong)
     NSLayoutConstraint* primaryButtonBottomVerticalConstraint;
 @end
@@ -54,23 +67,31 @@ constexpr CGFloat kSafeAreaMultiplier = 0.8;
 
 #pragma mark - Public
 
+- (instancetype)init {
+  self = [super init];
+  if (self) {
+    _customSpacingAfterImage = kStackViewSpacingAfterIllustration;
+  }
+  return self;
+}
+
 - (void)viewDidLoad {
   [super viewDidLoad];
 
   self.view.backgroundColor = [UIColor colorNamed:kBackgroundColor];
 
-  UIToolbar* topToolbar = [self createTopToolbar];
-  [self.view addSubview:topToolbar];
+  self.topToolbar = [self createTopToolbar];
+  [self.view addSubview:self.topToolbar];
 
   self.imageView = [self createImageView];
   UILabel* title = [self createTitleLabel];
   UILabel* subtitle = [self createSubtitleLabel];
 
-  UIStackView* stackView = [self
-      createStackViewWithArrangedSubviews:@[ self.imageView, title, subtitle ]];
+  NSArray* stackSubviews = @[ self.imageView, title, subtitle ];
+  self.stackView = [self createStackViewWithArrangedSubviews:stackSubviews];
 
   UIScrollView* scrollView = [self createScrollView];
-  [scrollView addSubview:stackView];
+  [scrollView addSubview:self.stackView];
   [self.view addSubview:scrollView];
 
   self.view.preservesSuperviewLayoutMargins = YES;
@@ -78,7 +99,7 @@ constexpr CGFloat kSafeAreaMultiplier = 0.8;
 
   // Toolbar constraints to the top.
   AddSameConstraintsToSides(
-      topToolbar, self.view.safeAreaLayoutGuide,
+      self.topToolbar, self.view.safeAreaLayoutGuide,
       LayoutSides::kTrailing | LayoutSides::kTop | LayoutSides::kLeading);
 
   // Scroll View constraints to the height of its content. Can be overridden.
@@ -101,7 +122,7 @@ constexpr CGFloat kSafeAreaMultiplier = 0.8;
 
   // Constraint the content of the scroll view to the size of the stack view.
   // This defines the content area.
-  AddSameConstraints(stackView, scrollView);
+  AddSameConstraints(self.stackView, scrollView);
 
   // Disable horizontal scrolling and constraint the content size to the scroll
   // view size.
@@ -146,26 +167,46 @@ constexpr CGFloat kSafeAreaMultiplier = 0.8;
     self.primaryActionButton = primaryActionButton;
   }
 
-  // Constraing the image to the scroll view size and its aspect ratio.
-  [self.imageView
-      setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
-                                      forAxis:UILayoutConstraintAxisHorizontal];
-  [self.imageView
-      setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
-                                      forAxis:UILayoutConstraintAxisVertical];
-  CGFloat imageAspectRatio =
-      self.imageView.image.size.width / self.imageView.image.size.height;
-  self.scrollViewBottomVerticalConstraint = [scrollView.bottomAnchor
-      constraintLessThanOrEqualToAnchor:scrollViewBottomAnchor];
+  self.regularHeightScrollViewBottomVerticalConstraint =
+      [scrollView.bottomAnchor
+          constraintLessThanOrEqualToAnchor:scrollViewBottomAnchor];
+  self.compactHeightScrollViewBottomVerticalConstraint =
+      [scrollView.bottomAnchor
+          constraintLessThanOrEqualToAnchor:scrollViewBottomAnchor];
+
+  if (self.alwaysShowImage && self.primaryActionAvailable) {
+    // If we always want to show the image, then it means we must hide the
+    // button when in compact height mode - meaning we have to constraint the
+    // scrollview's bottom to the safeArea's bottom.
+    self.compactHeightScrollViewBottomVerticalConstraint =
+        [scrollView.bottomAnchor
+            constraintLessThanOrEqualToAnchor:self.view.safeAreaLayoutGuide
+                                                  .bottomAnchor];
+  }
 
   [NSLayoutConstraint activateConstraints:@[
-    [self.imageView.widthAnchor
-        constraintEqualToAnchor:self.imageView.heightAnchor
-                     multiplier:imageAspectRatio],
     [scrollView.topAnchor
-        constraintGreaterThanOrEqualToAnchor:topToolbar.bottomAnchor],
-    self.scrollViewBottomVerticalConstraint,
+        constraintGreaterThanOrEqualToAnchor:self.topToolbar.bottomAnchor],
   ]];
+
+  if (!self.imageHasFixedSize) {
+    // Constrain the image to the scroll view size and its aspect ratio.
+    [self.imageView
+        setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                        forAxis:
+                                            UILayoutConstraintAxisHorizontal];
+    [self.imageView
+        setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                        forAxis:UILayoutConstraintAxisVertical];
+    CGFloat imageAspectRatio =
+        self.imageView.image.size.width / self.imageView.image.size.height;
+
+    [NSLayoutConstraint activateConstraints:@[
+      [self.imageView.widthAnchor
+          constraintEqualToAnchor:self.imageView.heightAnchor
+                       multiplier:imageAspectRatio],
+    ]];
+  }
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
@@ -206,7 +247,6 @@ constexpr CGFloat kSafeAreaMultiplier = 0.8;
 - (void)updateViewConstraints {
   CGFloat marginValue =
       self.view.layoutMargins.left - self.view.safeAreaInsets.left;
-  self.scrollViewBottomVerticalConstraint.constant = -marginValue;
   self.primaryButtonBottomVerticalConstraint.constant = -marginValue;
   if (self.traitCollection.horizontalSizeClass ==
       UIUserInterfaceSizeClassCompact) {
@@ -216,9 +256,50 @@ constexpr CGFloat kSafeAreaMultiplier = 0.8;
     [NSLayoutConstraint deactivateConstraints:self.compactWidthConstraints];
     [NSLayoutConstraint activateConstraints:self.regularWidthConstraints];
   }
-  self.imageView.hidden =
+
+  BOOL isVerticalCompact =
       self.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact;
+
+  NSLayoutConstraint* oldBottomConstraint;
+  NSLayoutConstraint* newBottomConstraint;
+  if (isVerticalCompact) {
+    oldBottomConstraint = self.regularHeightScrollViewBottomVerticalConstraint;
+    newBottomConstraint = self.compactHeightScrollViewBottomVerticalConstraint;
+
+    // Use setItems:animated method instead of setting the items property, as
+    // that causes issues with the Done button. See crbug.com/1082723
+    [self.topToolbar setItems:self.compactHeightToolbarItems animated:YES];
+  } else {
+    oldBottomConstraint = self.compactHeightScrollViewBottomVerticalConstraint;
+    newBottomConstraint = self.regularHeightScrollViewBottomVerticalConstraint;
+
+    // Use setItems:animated method instead of setting the items property, as
+    // that causes issues with the Done button. See crbug.com/1082723
+    [self.topToolbar setItems:self.regularHeightToolbarItems animated:YES];
+  }
+
+  newBottomConstraint.constant = -marginValue;
+  [NSLayoutConstraint deactivateConstraints:@[ oldBottomConstraint ]];
+  [NSLayoutConstraint activateConstraints:@[ newBottomConstraint ]];
+
+  if (self.alwaysShowImage) {
+    // Update the primary action button visibility.
+    [self.primaryActionButton setHidden:isVerticalCompact];
+  } else {
+    [self.imageView setHidden:isVerticalCompact];
+  }
+
+  // Allow toolbar to update its height based on new layout.
+  [self.topToolbar invalidateIntrinsicContentSize];
+
   [super updateViewConstraints];
+}
+
+- (UIImage*)content {
+  UIEdgeInsets padding =
+      UIEdgeInsetsMake(kGeneratedImagePadding, kGeneratedImagePadding,
+                       kGeneratedImagePadding, kGeneratedImagePadding);
+  return ImageFromView(self.stackView, self.view.backgroundColor, padding);
 }
 
 #pragma mark - UIToolbarDelegate
@@ -252,56 +333,95 @@ constexpr CGFloat kSafeAreaMultiplier = 0.8;
           forToolbarPosition:UIBarPositionAny];
   [topToolbar setBarTintColor:[UIColor colorNamed:kBackgroundColor]];
   topToolbar.delegate = self;
-  NSMutableArray* items = [[NSMutableArray alloc] init];
+
+  NSMutableArray* regularHeightItems = [[NSMutableArray alloc] init];
+  NSMutableArray* compactHeightItems = [[NSMutableArray alloc] init];
   if (self.helpButtonAvailable) {
     UIBarButtonItem* helpButton = [[UIBarButtonItem alloc]
         initWithImage:[UIImage imageNamed:@"confirmation_alert_ic_help"]
                 style:UIBarButtonItemStylePlain
                target:self
                action:@selector(didTapHelpButton)];
-    [items addObject:helpButton];
+    [regularHeightItems addObject:helpButton];
+    [compactHeightItems addObject:helpButton];
     helpButton.accessibilityIdentifier =
         kConfirmationAlertMoreInfoAccessibilityIdentifier;
     // Set the help button as the left button item so it can be used as a
     // popover anchor.
     _helpButton = helpButton;
   }
+
+  if (self.alwaysShowImage && self.primaryActionAvailable) {
+    if (self.helpButtonAvailable) {
+      // Add margin with help button.
+      UIBarButtonItem* fixedSpacer = [[UIBarButtonItem alloc]
+          initWithBarButtonSystemItem:UIBarButtonSystemItemFixedSpace
+                               target:nil
+                               action:nil];
+      fixedSpacer.width = 15.0f;
+      [compactHeightItems addObject:fixedSpacer];
+    }
+
+    UIBarButtonItem* primaryActionBarButton = [[UIBarButtonItem alloc]
+        initWithBarButtonSystemItem:self.primaryActionBarButtonStyle
+                             target:self
+                             action:@selector(didTapPrimaryActionButton)];
+    primaryActionBarButton.accessibilityIdentifier =
+        kConfirmationAlertBarPrimaryActionAccessibilityIdentifier;
+
+    // Only shows up in constraint height mode.
+    [compactHeightItems addObject:primaryActionBarButton];
+  }
+
   UIBarButtonItem* spacer = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
                            target:nil
                            action:nil];
-  [items addObject:spacer];
+  [regularHeightItems addObject:spacer];
+  [compactHeightItems addObject:spacer];
 
   UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemDone
                            target:self
                            action:@selector(didTapDoneButton)];
-  [items addObject:doneButton];
+  [regularHeightItems addObject:doneButton];
+  [compactHeightItems addObject:doneButton];
 
-  topToolbar.items = items;
   topToolbar.translatesAutoresizingMaskIntoConstraints = NO;
+
+  self.regularHeightToolbarItems = regularHeightItems;
+  self.compactHeightToolbarItems = compactHeightItems;
+
   return topToolbar;
 }
 
 // Helper to create the image view.
 - (UIImageView*)createImageView {
-  UIImage* image = [UIImage imageNamed:self.imageName];
-  UIImageView* imageView = [[UIImageView alloc] initWithImage:image];
+  UIImageView* imageView = [[UIImageView alloc] initWithImage:self.image];
   imageView.contentMode = UIViewContentModeScaleAspectFit;
+
+  if (self.imageAccessibilityLabel) {
+    imageView.isAccessibilityElement = YES;
+    imageView.accessibilityLabel = self.imageAccessibilityLabel;
+  }
+
   imageView.translatesAutoresizingMaskIntoConstraints = NO;
   return imageView;
 }
 
 // Helper to create the title label.
 - (UILabel*)createTitleLabel {
+  if (!self.titleTextStyle) {
+    self.titleTextStyle = UIFontTextStyleTitle1;
+  }
   UILabel* title = [[UILabel alloc] init];
   title.numberOfLines = 0;
   UIFontDescriptor* descriptor = [UIFontDescriptor
-      preferredFontDescriptorWithTextStyle:UIFontTextStyleTitle1];
+      preferredFontDescriptorWithTextStyle:self.titleTextStyle];
   UIFont* font = [UIFont systemFontOfSize:descriptor.pointSize
                                    weight:UIFontWeightBold];
   UIFontMetrics* fontMetrics =
-      [UIFontMetrics metricsForTextStyle:UIFontTextStyleTitle1];
+      [UIFontMetrics metricsForTextStyle:self.titleTextStyle];
   title.font = [fontMetrics scaledFontForFont:font];
   title.textColor = [UIColor colorNamed:kTextPrimaryColor];
   title.text = self.titleString.capitalizedString;
@@ -342,10 +462,16 @@ constexpr CGFloat kSafeAreaMultiplier = 0.8;
     (NSArray<UIView*>*)subviews {
   UIStackView* stackView =
       [[UIStackView alloc] initWithArrangedSubviews:subviews];
-  [stackView setCustomSpacing:kStackViewSpacingAfterIllustration
+  [stackView setCustomSpacing:self.customSpacingAfterImage
                     afterView:self.imageView];
+
+  if (self.imageHasFixedSize) {
+    stackView.alignment = UIStackViewAlignmentCenter;
+  } else {
+    stackView.alignment = UIStackViewAlignmentFill;
+  }
+
   stackView.axis = UILayoutConstraintAxisVertical;
-  stackView.alignment = UIStackViewAlignmentFill;
   stackView.translatesAutoresizingMaskIntoConstraints = NO;
   stackView.spacing = kStackViewSpacing;
   return stackView;
@@ -371,6 +497,17 @@ constexpr CGFloat kSafeAreaMultiplier = 0.8;
   primaryActionButton.translatesAutoresizingMaskIntoConstraints = NO;
   primaryActionButton.accessibilityIdentifier =
       kConfirmationAlertPrimaryActionAccessibilityIdentifier;
+
+#if defined(__IPHONE_13_4)
+  if (@available(iOS 13.4, *)) {
+    if (self.pointerInteractionEnabled) {
+      primaryActionButton.pointerInteractionEnabled = YES;
+      primaryActionButton.pointerStyleProvider =
+          CreateOpaqueButtonPointerStyleProvider();
+    }
+  }
+#endif  // defined(__IPHONE_13_4)
+
   return primaryActionButton;
 }
 

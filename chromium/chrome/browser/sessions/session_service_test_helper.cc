@@ -43,7 +43,7 @@ void SessionServiceTestHelper::SetTabExtensionAppID(
 void SessionServiceTestHelper::SetTabUserAgentOverride(
     const SessionID& window_id,
     const SessionID& tab_id,
-    const std::string& user_agent_override) {
+    const sessions::SerializedUserAgentOverride& user_agent_override) {
   service()->SetTabUserAgentOverride(window_id, tab_id, user_agent_override);
 }
 
@@ -131,4 +131,17 @@ void SessionServiceTestHelper::SetAvailableRange(
 bool SessionServiceTestHelper::GetAvailableRange(const SessionID& tab_id,
                                                  std::pair<int, int>* range) {
   return service_->GetAvailableRangeForTest(tab_id, range);
+}
+
+void SessionServiceTestHelper::SetHasOpenTrackableBrowsers(
+    bool has_open_trackable_browsers) {
+  service_->has_open_trackable_browser_for_test_ = has_open_trackable_browsers;
+}
+
+bool SessionServiceTestHelper::GetHasOpenTrackableBrowsers() {
+  return service_->has_open_trackable_browsers_;
+}
+
+void SessionServiceTestHelper::SetIsOnlyOneTabLeft(bool is_only_one_tab_left) {
+  service_->is_only_one_tab_left_for_test_ = is_only_one_tab_left;
 }

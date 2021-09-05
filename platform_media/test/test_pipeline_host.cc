@@ -7,10 +7,11 @@
 
 #include "platform_media/test/test_pipeline_host.h"
 
+#include "platform_media/common/platform_ipc_util.h"
+#include "platform_media/common/video_frame_transformer.h"
 #include "platform_media/gpu/pipeline/platform_media_pipeline.h"
 #include "platform_media/gpu/pipeline/platform_media_pipeline_factory.h"
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
-#include "platform_media/common/video_frame_transformer.h"
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -37,24 +38,34 @@ void TestPipelineHost::Initialize(const std::string& mimetype,
   CHECK(!init_cb_);
   init_cb_ = std::move(callback);
 
+  base::MappedReadOnlyRegion region_and_mapping =
+      base::ReadOnlySharedMemoryRegion::Create(kIPCSourceSharedMemorySize);
+  CHECK(region_and_mapping.IsValid());
+  base::ReadOnlySharedMemoryMapping data_source_mapping =
+      region_and_mapping.region.Map();
+  CHECK(data_source_mapping.IsValid());
+
+  ipc_data_source::Reader source_reader = base::BindRepeating(
+      &TestPipelineHost::ReadRawData, weak_ptr_factory_.GetWeakPtr());
+
+  // The reader must be called from the current thread.
+  source_reader = BindToCurrentLoop(std::move(source_reader));
+
   if (!platform_pipeline_factory_) {
     platform_pipeline_factory_ = PlatformMediaPipelineFactory::Create();
   }
   platform_pipeline_ = platform_pipeline_factory_->CreatePipeline();
   CHECK(platform_pipeline_);
-  ipc_data_source::Reader source_reader = base::BindRepeating(
-      &TestPipelineHost::ReadRawData, weak_ptr_factory_.GetWeakPtr());
-
-  // The reader must be called from the current thread
-  source_reader = BindToCurrentLoop(std::move(source_reader));
   ipc_data_source::Info source_info;
   source_info.is_streaming = data_source_->IsStreaming();
   if (!data_source_->GetSize(&source_info.size)) {
     source_info.size = -1;
   }
   source_info.mime_type = mimetype;
-  platform_pipeline_->Initialize(std::move(source_reader),
-                                 std::move(source_info),
+  source_info.buffer.Init(std::move(data_source_mapping),
+                          std::move(source_reader));
+
+  platform_pipeline_->Initialize(std::move(source_info),
                                  base::Bind(&TestPipelineHost::Initialized,
                                             weak_ptr_factory_.GetWeakPtr()));
 }
@@ -115,26 +126,35 @@ void TestPipelineHost::Initialized(
   std::move(init_cb_).Run(success);
 }
 
-void TestPipelineHost::ReadRawData(int64_t position,
-                                   int size,
-                                   ipc_data_source::ReadCB read_cb) {
+void TestPipelineHost::ReadRawData(ipc_data_source::Buffer buffer) {
+  CHECK(buffer);
+  int size = buffer.GetRequestedSize();
   CHECK(size > 0);
-  std::unique_ptr<uint8_t[]> data_holder(new uint8_t[size]);
 
+  // As we use a weak_ptr, this instance holding raw_data_mapping_ can be
+  // deleted before data_source finishes accessing the data. To ensure that the
+  // pointer stays valid move the mapping as a bound callback argument and move
+  // it back when the callback is called.
+  //
   // C++ does not define the order of argument evaluation, so get the pointer
   // before base::Bind() can be evaluated and call the move constructor for
-  // data_holder.
-  uint8_t* data = data_holder.get();
+  // raw_data_mapping_.
+  uint8_t* data = raw_data_mapping_.GetMemoryAs<uint8_t>();
+  int64_t position = buffer.GetReadPosition();
   data_source_->Read(
       position, size, data,
       base::AdaptCallbackForRepeating(base::BindOnce(
           &TestPipelineHost::OnReadRawDataDone, weak_ptr_factory_.GetWeakPtr(),
-          std::move(read_cb), std::move(data_holder))));
+          std::move(buffer), std::move(raw_data_mapping_))));
 }
 
-void TestPipelineHost::OnReadRawDataDone(ipc_data_source::ReadCB read_cb, std::unique_ptr<uint8_t[]> data,
-                                         int size) {
-  std::move(read_cb).Run(size, data.get());
+void TestPipelineHost::OnReadRawDataDone(
+    ipc_data_source::Buffer buffer,
+    base::WritableSharedMemoryMapping raw_data_mapping,
+    int size) {
+  raw_data_mapping_ = std::move(raw_data_mapping);
+  buffer.SetReadSize(size);
+  ipc_data_source::Buffer::SendReply(std::move(buffer));
 }
 
 void TestPipelineHost::DataReady(DemuxerStream::ReadCB read_cb,

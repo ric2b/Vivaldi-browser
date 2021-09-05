@@ -4,11 +4,12 @@
 
 #include "ash/assistant/ui/main_stage/animated_container_view.h"
 
-#include "ash/assistant/model/assistant_interaction_model_observer.h"
+#include <utility>
+
 #include "ash/assistant/model/assistant_response.h"
 #include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/assistant/ui/main_stage/element_animator.h"
-#include "chromeos/services/assistant/public/features.h"
+#include "chromeos/services/assistant/public/cpp/features.h"
 #include "ui/compositor/callback_layer_animation_observer.h"
 #include "ui/compositor/layer_animator.h"
 
@@ -24,7 +25,7 @@ using chromeos::assistant::features::IsResponseProcessingV2Enabled;
 
 class AnimatedContainerView::ScopedDisablePreferredSizeChanged {
  public:
-  ScopedDisablePreferredSizeChanged(AnimatedContainerView* view)
+  explicit ScopedDisablePreferredSizeChanged(AnimatedContainerView* view)
       : view_(view), original_value_(view_->propagate_preferred_size_changed_) {
     view_->SetPropagatePreferredSizeChanged(false);
   }
@@ -42,15 +43,18 @@ class AnimatedContainerView::ScopedDisablePreferredSizeChanged {
 
 AnimatedContainerView::AnimatedContainerView(AssistantViewDelegate* delegate)
     : delegate_(delegate) {
-  // The AssistantViewDelegate should outlive AnimatedContainerView.
-  delegate_->AddInteractionModelObserver(this);
+  assistant_controller_observer_.Add(AssistantController::Get());
+  assistant_interaction_model_observer_.Add(
+      AssistantInteractionController::Get());
+
+  AddScrollViewObserver(this);
 }
 
 AnimatedContainerView::~AnimatedContainerView() {
   if (IsResponseProcessingV2Enabled() && response_)
     response_.get()->RemoveObserver(this);
 
-  delegate_->RemoveInteractionModelObserver(this);
+  RemoveScrollViewObserver(this);
 }
 
 void AnimatedContainerView::PreferredSizeChanged() {
@@ -69,6 +73,12 @@ void AnimatedContainerView::OnChildViewRemoved(View* observed_view,
       return;
     }
   }
+}
+
+void AnimatedContainerView::OnAssistantControllerDestroying() {
+  assistant_interaction_model_observer_.Remove(
+      AssistantInteractionController::Get());
+  assistant_controller_observer_.Remove(AssistantController::Get());
 }
 
 void AnimatedContainerView::OnCommittedQueryChanged(
@@ -164,10 +174,10 @@ void AnimatedContainerView::ChangeResponse(
   // view hierarchy can be removed before the underlying views are destroyed.
   queued_response_ = response;
 
-  // If we are currently fading out the old content, don't interrupt it.
-  // When the fading out is completed, it will detect we've got a queued
-  // response and animate it in.
-  if (fade_out_in_progress_)
+  // If we are currently animating-/fading-out the old content, don't interrupt
+  // it. When the animating-/fading-out is completed, it will detect we've got a
+  // queued response and animate it in.
+  if (animate_out_in_progress_ || fade_out_in_progress_)
     return;
 
   // If we don't have any pre-existing content, there is nothing to animate off
@@ -176,6 +186,8 @@ void AnimatedContainerView::ChangeResponse(
     AddResponse(std::move(queued_response_));
     return;
   }
+
+  animate_out_in_progress_ = true;
 
   // There is a previous response on stage, so we'll animate it off before
   // adding the new response. The new response will be added upon invocation
@@ -318,6 +330,8 @@ bool AnimatedContainerView::AnimateOutObserverCallback(
   // observer. No further action is needed.
   if (!weak_ptr)
     return true;
+
+  weak_ptr->animate_out_in_progress_ = false;
 
   // If the exit animation was aborted, we just return true to delete our
   // observer. No further action is needed.

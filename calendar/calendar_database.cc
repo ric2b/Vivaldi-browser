@@ -40,8 +40,8 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 5;
-const int kCompatibleVersionNumber = 5;
+const int kCurrentVersionNumber = 7;
+const int kCompatibleVersionNumber = 7;
 
 sql::InitStatus LogMigrationFailure(int from_version) {
   LOG(ERROR) << "Calendar DB failed to migrate from version " << from_version
@@ -128,7 +128,7 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
     return version_status;
   }
 
-  CreateDefaultCalendar();
+  CreateDefaultCalendarData();
 
   return committer.Commit() ? sql::INIT_OK : sql::INIT_FAILURE;
 }
@@ -178,6 +178,13 @@ bool CalendarDatabase::Raze() {
 
 sql::Database& CalendarDatabase::GetDB() {
   return db_;
+}
+
+void CalendarDatabase::CreateDefaultCalendarData() {
+  AccountID account_id = CreateDefaultAccount();
+  if (account_id) {
+    CreateDefaultCalendar(account_id);
+  }
 }
 
 sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
@@ -238,6 +245,28 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
   if (cur_version == 5) {
     // Version prior to adding partstat column to invite table
     if (!MigrateCalendarToVersion6()) {
+      return LogMigrationFailure(cur_version);
+    }
+    ++cur_version;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 6) {
+    // Version prior to adding username column to invite account
+    if (!MigrateCalendarToVersion7()) {
+      return LogMigrationFailure(cur_version);
+    }
+    ++cur_version;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 7) {
+    // Version prior to adding is_template column to events table
+    if (!MigrateCalendarToVersion8()) {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;

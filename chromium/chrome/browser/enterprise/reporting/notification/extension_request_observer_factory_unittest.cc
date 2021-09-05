@@ -24,6 +24,81 @@ class ExtensionRequestObserverFactoryTest : public ::testing::Test {
   TestingProfileManager profile_manager_{TestingBrowserProcess::GetGlobal()};
 };
 
+TEST_F(ExtensionRequestObserverFactoryTest, LoadSpecificProfile) {
+  TestingProfile* profile = profile_manager()->CreateTestingProfile(kProfile1);
+  ExtensionRequestObserverFactory factory_(profile);
+  EXPECT_TRUE(factory_.GetObserverByProfileForTesting(profile));
+  EXPECT_EQ(1, factory_.GetNumberOfObserversForTesting());
+}
+
+TEST_F(ExtensionRequestObserverFactoryTest, LoadSpecificProfile_AddProfile) {
+  TestingProfile* profile1 = profile_manager()->CreateTestingProfile(kProfile1);
+  ExtensionRequestObserverFactory factory_(profile1);
+  EXPECT_TRUE(factory_.GetObserverByProfileForTesting(profile1));
+  EXPECT_EQ(1, factory_.GetNumberOfObserversForTesting());
+
+  // The change of profile manager won't impact the loaded profile number in the
+  // factory if there is only one specific profile is loaded in the constructor.
+  TestingProfile* profile2 = profile_manager()->CreateTestingProfile(kProfile2);
+  EXPECT_FALSE(factory_.GetObserverByProfileForTesting(profile2));
+  EXPECT_EQ(1, factory_.GetNumberOfObserversForTesting());
+}
+
+TEST_F(ExtensionRequestObserverFactoryTest,
+       LoadSpecificProfile_OnProfileAdded_OnProfileDeletion) {
+  TestingProfile* profile1 = profile_manager()->CreateTestingProfile(kProfile1);
+  ExtensionRequestObserverFactory factory_(profile1);
+  EXPECT_TRUE(factory_.GetObserverByProfileForTesting(profile1));
+  EXPECT_EQ(1, factory_.GetNumberOfObserversForTesting());
+
+  // Nothing happens if the profile to remove is not provided in the
+  // constructor.
+  TestingProfile* profile2 = profile_manager()->CreateTestingProfile(kProfile2);
+  factory_.OnProfileMarkedForPermanentDeletion(profile2);
+  EXPECT_TRUE(factory_.GetObserverByProfileForTesting(profile1));
+  EXPECT_EQ(1, factory_.GetNumberOfObserversForTesting());
+
+  // The specific observer is removed.
+  factory_.OnProfileMarkedForPermanentDeletion(profile1);
+  EXPECT_FALSE(factory_.GetObserverByProfileForTesting(profile1));
+  EXPECT_EQ(0, factory_.GetNumberOfObserversForTesting());
+
+  // Nothing happens if the profile to add is not provided in the constructor.
+  factory_.OnProfileAdded(profile2);
+  EXPECT_FALSE(factory_.GetObserverByProfileForTesting(profile2));
+  EXPECT_EQ(0, factory_.GetNumberOfObserversForTesting());
+
+  // The specific observer can be added back.
+  factory_.OnProfileAdded(profile1);
+  EXPECT_TRUE(factory_.GetObserverByProfileForTesting(profile1));
+  EXPECT_EQ(1, factory_.GetNumberOfObserversForTesting());
+
+  // Nothing happens if the specific observer is added twice.
+  factory_.OnProfileAdded(profile1);
+  EXPECT_TRUE(factory_.GetObserverByProfileForTesting(profile1));
+  EXPECT_EQ(1, factory_.GetNumberOfObserversForTesting());
+}
+
+TEST_F(ExtensionRequestObserverFactoryTest, OnProfileWillBeDestroyed) {
+  TestingProfile* profile = profile_manager()->CreateTestingProfile(kProfile1);
+  ExtensionRequestObserverFactory factory_(profile);
+  EXPECT_TRUE(factory_.GetObserverByProfileForTesting(profile));
+  EXPECT_EQ(1, factory_.GetNumberOfObserversForTesting());
+
+  // If the profile to be destroyed is not same as the one assigned in the
+  // constructor. Nothing will happen.
+  TestingProfile* profile2 = profile_manager()->CreateTestingProfile(kProfile2);
+  factory_.OnProfileWillBeDestroyed(profile2);
+  EXPECT_TRUE(factory_.GetObserverByProfileForTesting(profile));
+  EXPECT_EQ(1, factory_.GetNumberOfObserversForTesting());
+
+  // If the profile to be destroyed is same as the one assigned in the
+  // constructor. The corresponding observer will be removed.
+  factory_.OnProfileWillBeDestroyed(profile);
+  EXPECT_FALSE(factory_.GetObserverByProfileForTesting(profile));
+  EXPECT_EQ(0, factory_.GetNumberOfObserversForTesting());
+}
+
 TEST_F(ExtensionRequestObserverFactoryTest, LoadExistProfile) {
   TestingProfile* profile = profile_manager()->CreateTestingProfile(kProfile1);
   ExtensionRequestObserverFactory factory_;

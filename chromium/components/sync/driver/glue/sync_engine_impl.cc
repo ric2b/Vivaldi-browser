@@ -185,30 +185,10 @@ void SyncEngineImpl::ConfigureDataTypes(ConfigureParams params) {
                                 std::move(params)));
 }
 
-void SyncEngineImpl::RegisterDirectoryDataType(ModelType type,
-                                               ModelSafeGroup group) {
-  model_type_connector_->RegisterDirectoryType(type, group);
-}
-
-void SyncEngineImpl::UnregisterDirectoryDataType(ModelType type) {
-  model_type_connector_->UnregisterDirectoryType(type);
-}
-
 void SyncEngineImpl::EnableEncryptEverything() {
   sync_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&SyncEngineBackend::DoEnableEncryptEverything, backend_));
-}
-
-void SyncEngineImpl::ActivateDirectoryDataType(
-    ModelType type,
-    ModelSafeGroup group,
-    ChangeProcessor* change_processor) {
-  registrar_->ActivateDataType(type, group, change_processor, GetUserShare());
-}
-
-void SyncEngineImpl::DeactivateDirectoryDataType(ModelType type) {
-  registrar_->DeactivateDataType(type);
 }
 
 void SyncEngineImpl::ActivateNonBlockingDataType(
@@ -223,6 +203,14 @@ void SyncEngineImpl::ActivateNonBlockingDataType(
 
 void SyncEngineImpl::DeactivateNonBlockingDataType(ModelType type) {
   model_type_connector_->DisconnectNonBlockingType(type);
+}
+
+void SyncEngineImpl::ActivateProxyDataType(ModelType type) {
+  model_type_connector_->ConnectProxyType(type);
+}
+
+void SyncEngineImpl::DeactivateProxyDataType(ModelType type) {
+  model_type_connector_->DisconnectProxyType(type);
 }
 
 UserShare* SyncEngineImpl::GetUserShare() const {
@@ -303,8 +291,6 @@ void SyncEngineImpl::FinishConfigureDataTypesOnFrontendLoop(
 #if defined(OS_ANDROID)
     if (!sessions_invalidation_enabled_) {
       invalidation_enabled_types.Remove(syncer::SESSIONS);
-      invalidation_enabled_types.Remove(syncer::FAVICON_IMAGES);
-      invalidation_enabled_types.Remove(syncer::FAVICON_TRACKING);
     }
 #endif
     bool success = invalidator_->UpdateInterestedTopics(
@@ -324,8 +310,7 @@ void SyncEngineImpl::HandleInitializationSuccessOnFrontendLoop(
     const WeakHandle<DataTypeDebugInfoListener> debug_info_listener,
     std::unique_ptr<ModelTypeConnector> model_type_connector,
     const std::string& birthday,
-    const std::string& bag_of_chips,
-    const std::string& last_keystore_key) {
+    const std::string& bag_of_chips) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   model_type_connector_ = std::move(model_type_connector);
@@ -342,8 +327,7 @@ void SyncEngineImpl::HandleInitializationSuccessOnFrontendLoop(
   }
 
   host_->OnEngineInitialized(initial_types, js_backend, debug_info_listener,
-                             birthday, bag_of_chips, last_keystore_key,
-                             /*success=*/true);
+                             birthday, bag_of_chips, /*success=*/true);
 }
 
 void SyncEngineImpl::HandleInitializationFailureOnFrontendLoop() {
@@ -351,19 +335,17 @@ void SyncEngineImpl::HandleInitializationFailureOnFrontendLoop() {
   host_->OnEngineInitialized(ModelTypeSet(), WeakHandle<JsBackend>(),
                              WeakHandle<DataTypeDebugInfoListener>(),
                              /*birthday=*/"", /*bag_of_chips=*/"",
-                             /*last_keystore_key=*/"",
                              /*success=*/false);
 }
 
 void SyncEngineImpl::HandleSyncCycleCompletedOnFrontendLoop(
-    const SyncCycleSnapshot& snapshot,
-    const std::string& last_keystore_key) {
+    const SyncCycleSnapshot& snapshot) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Process any changes to the datatypes we're syncing.
   // TODO(sync): add support for removing types.
   if (IsInitialized()) {
-    host_->OnSyncCycleCompleted(snapshot, last_keystore_key);
+    host_->OnSyncCycleCompleted(snapshot);
   }
 }
 
@@ -467,8 +449,6 @@ void SyncEngineImpl::SetInvalidationsForSessionsEnabled(bool enabled) {
       Difference(last_enabled_types_, CommitOnlyTypes()));
   if (!enabled) {
     enabled_for_invalidation.Remove(syncer::SESSIONS);
-    enabled_for_invalidation.Remove(syncer::FAVICON_IMAGES);
-    enabled_for_invalidation.Remove(syncer::FAVICON_TRACKING);
   }
   bool success = invalidator_->UpdateInterestedTopics(
       this, ModelTypeSetToTopicSet(enabled_for_invalidation));

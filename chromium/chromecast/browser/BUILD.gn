@@ -149,6 +149,7 @@ cast_source_set("browser") {
     ":public",
     "//chromecast/browser/metrics",
     "//chromecast/metrics",
+    "//components/media_control/mojom",
   ]
 
   deps = [
@@ -183,6 +184,7 @@ cast_source_set("browser") {
     "//chromecast/service",
     "//components/cdm/browser",
     "//components/download/public/common:public",
+    "//components/media_control/browser",
     "//components/metrics",
     "//components/metrics:gpu",
     "//components/metrics:net",
@@ -206,10 +208,12 @@ cast_source_set("browser") {
     "//gpu",
     "//ipc",
     "//media",
+    "//media/mojo/services",
     "//net",
     "//services/media_session/public/mojom",
     "//services/network/public/mojom",
     "//services/service_manager/public/cpp",
+    "//third_party/blink/public/common:headers",
     "//ui/base",
     "//ui/compositor",
     "//ui/display",
@@ -289,7 +293,7 @@ cast_source_set("browser") {
     # TODO(crbug.com/933142): Fuchsia needs its own methods to bridge with heap
     # profiling service
     deps += [
-      "//components/heap_profiling",
+      "//components/heap_profiling/multi_process",
       "//components/services/heap_profiling",
       "//components/services/heap_profiling/public/cpp",
       "//components/services/heap_profiling/public/mojom",
@@ -298,10 +302,6 @@ cast_source_set("browser") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
-  }
-
-  if (enable_mojo_media) {
-    deps += [ "//media/mojo/services" ]
   }
 
   if (enable_external_mojo_services) {
@@ -334,6 +334,8 @@ cast_source_set("browser") {
       "extensions/api/i18n/i18n_api.h",
       "extensions/api/identity/identity_api.cc",
       "extensions/api/identity/identity_api.h",
+      "extensions/api/login_state/login_state.cc",
+      "extensions/api/login_state/login_state.h",
       "extensions/api/notifications/notifications_api.cc",
       "extensions/api/notifications/notifications_api.h",
       "extensions/api/settings_private/settings_private_api.cc",
@@ -360,6 +362,8 @@ cast_source_set("browser") {
       "extensions/cast_extensions_browser_api_provider.h",
       "extensions/cast_extensions_browser_client.cc",
       "extensions/cast_extensions_browser_client.h",
+      "extensions/cast_kiosk_delegate.cc",
+      "extensions/cast_kiosk_delegate.h",
       "extensions/cast_prefs.cc",
       "extensions/cast_prefs.h",
       "extensions/stub_storage_monitor.cc",
@@ -487,6 +491,10 @@ cast_source_set("test_support") {
   sources = [
     "test/cast_browser_test.cc",
     "test/cast_browser_test.h",
+    "test/mock_cast_content_window_delegate.cc",
+    "test/mock_cast_content_window_delegate.h",
+    "test/mock_cast_web_view.cc",
+    "test/mock_cast_web_view.h",
   ]
 
   public_deps = [
@@ -500,6 +508,7 @@ cast_source_set("test_support") {
     "//components/prefs:test_support",
     "//content/public/browser",
     "//content/public/common",
+    "//testing/gmock",
     "//testing/gtest",
   ]
 }
@@ -513,6 +522,7 @@ cast_source_set("browsertests") {
     "renderer_prelauncher_test.cc",
     "test/cast_features_browsertest.cc",
     "test/cast_navigation_browsertest.cc",
+    "webview/webview_browsertest.cc",
   ]
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
@@ -524,6 +534,7 @@ cast_source_set("browsertests") {
     "//chromecast/base",
     "//chromecast/base:chromecast_switches",
     "//chromecast/base/metrics",
+    "//components/keyed_service/content",
     "//components/prefs",
     "//content/public/browser",
     "//content/test:test_support",

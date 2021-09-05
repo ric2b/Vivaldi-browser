@@ -68,6 +68,7 @@ class AX_EXPORT AXNode final {
   template <typename NodeType,
             NodeType* (NodeType::*NextSibling)() const,
             NodeType* (NodeType::*PreviousSibling)() const,
+            NodeType* (NodeType::*FirstChild)() const,
             NodeType* (NodeType::*LastChild)() const>
   class ChildIteratorBase {
    public:
@@ -128,9 +129,17 @@ class AX_EXPORT AXNode final {
       ChildIteratorBase<AXNode,
                         &AXNode::GetNextUnignoredSibling,
                         &AXNode::GetPreviousUnignoredSibling,
+                        &AXNode::GetFirstUnignoredChild,
                         &AXNode::GetLastUnignoredChild>;
   UnignoredChildIterator UnignoredChildrenBegin() const;
   UnignoredChildIterator UnignoredChildrenEnd() const;
+
+  // Walking the tree including both ignored and unignored nodes.
+  // These methods consider only the direct children or siblings of a node.
+  AXNode* GetFirstChild() const;
+  AXNode* GetLastChild() const;
+  AXNode* GetPreviousSibling() const;
+  AXNode* GetNextSibling() const;
 
   // Returns true if the node has any of the text related roles.
   bool IsText() const;
@@ -388,6 +397,15 @@ class AX_EXPORT AXNode final {
   // of a list marker node. Returns false otherwise.
   bool IsInListMarker() const;
 
+  // Returns true if this node is a collapsed popup button that is parent to a
+  // menu list popup.
+  bool IsCollapsedMenuListPopUpButton() const;
+
+  // Returns the popup button ancestor of this current node if any. The popup
+  // button needs to be the parent of a menu list popup and needs to be
+  // collapsed.
+  AXNode* GetCollapsedMenuListPopUpButtonAncestor() const;
+
  private:
   // Computes the text offset where each line starts by traversing all child
   // leaf nodes.
@@ -420,72 +438,125 @@ AX_EXPORT std::ostream& operator<<(std::ostream& stream, const AXNode& node);
 template <typename NodeType,
           NodeType* (NodeType::*NextSibling)() const,
           NodeType* (NodeType::*PreviousSibling)() const,
+          NodeType* (NodeType::*FirstChild)() const,
           NodeType* (NodeType::*LastChild)() const>
-AXNode::ChildIteratorBase<NodeType, NextSibling, PreviousSibling, LastChild>::
-    ChildIteratorBase(const NodeType* parent, NodeType* child)
+AXNode::ChildIteratorBase<NodeType,
+                          NextSibling,
+                          PreviousSibling,
+                          FirstChild,
+                          LastChild>::ChildIteratorBase(const NodeType* parent,
+                                                        NodeType* child)
     : parent_(parent), child_(child) {}
 
 template <typename NodeType,
           NodeType* (NodeType::*NextSibling)() const,
           NodeType* (NodeType::*PreviousSibling)() const,
+          NodeType* (NodeType::*FirstChild)() const,
           NodeType* (NodeType::*LastChild)() const>
-AXNode::ChildIteratorBase<NodeType, NextSibling, PreviousSibling, LastChild>::
-    ChildIteratorBase(const ChildIteratorBase& it)
+AXNode::ChildIteratorBase<NodeType,
+                          NextSibling,
+                          PreviousSibling,
+                          FirstChild,
+                          LastChild>::ChildIteratorBase(const ChildIteratorBase&
+                                                            it)
     : parent_(it.parent_), child_(it.child_) {}
 
 template <typename NodeType,
           NodeType* (NodeType::*NextSibling)() const,
           NodeType* (NodeType::*PreviousSibling)() const,
+          NodeType* (NodeType::*FirstChild)() const,
           NodeType* (NodeType::*LastChild)() const>
-bool AXNode::
-    ChildIteratorBase<NodeType, NextSibling, PreviousSibling, LastChild>::
-    operator==(const ChildIteratorBase& rhs) const {
+bool AXNode::ChildIteratorBase<NodeType,
+                               NextSibling,
+                               PreviousSibling,
+                               FirstChild,
+                               LastChild>::operator==(const ChildIteratorBase&
+                                                          rhs) const {
   return parent_ == rhs.parent_ && child_ == rhs.child_;
 }
 
 template <typename NodeType,
           NodeType* (NodeType::*NextSibling)() const,
           NodeType* (NodeType::*PreviousSibling)() const,
+          NodeType* (NodeType::*FirstChild)() const,
           NodeType* (NodeType::*LastChild)() const>
-bool AXNode::
-    ChildIteratorBase<NodeType, NextSibling, PreviousSibling, LastChild>::
-    operator!=(const ChildIteratorBase& rhs) const {
+bool AXNode::ChildIteratorBase<NodeType,
+                               NextSibling,
+                               PreviousSibling,
+                               FirstChild,
+                               LastChild>::operator!=(const ChildIteratorBase&
+                                                          rhs) const {
   return parent_ != rhs.parent_ || child_ != rhs.child_;
 }
 
 template <typename NodeType,
           NodeType* (NodeType::*NextSibling)() const,
           NodeType* (NodeType::*PreviousSibling)() const,
+          NodeType* (NodeType::*FirstChild)() const,
           NodeType* (NodeType::*LastChild)() const>
-AXNode::ChildIteratorBase<NodeType, NextSibling, PreviousSibling, LastChild>&
-AXNode::ChildIteratorBase<NodeType, NextSibling, PreviousSibling, LastChild>::
-operator++() {
-  if (child_)
-    child_ = (child_->*NextSibling)();
+AXNode::ChildIteratorBase<NodeType,
+                          NextSibling,
+                          PreviousSibling,
+                          FirstChild,
+                          LastChild>&
+AXNode::ChildIteratorBase<NodeType,
+                          NextSibling,
+                          PreviousSibling,
+                          FirstChild,
+                          LastChild>::operator++() {
+  // |child_ = nullptr| denotes the iterator's past-the-end condition. When we
+  // increment the iterator past the end, we remain at the past-the-end iterator
+  // condition.
+  if (child_ && parent_) {
+    if (child_ == (parent_->*LastChild)())
+      child_ = nullptr;
+    else
+      child_ = (child_->*NextSibling)();
+  }
+
   return *this;
 }
 
 template <typename NodeType,
           NodeType* (NodeType::*NextSibling)() const,
           NodeType* (NodeType::*PreviousSibling)() const,
+          NodeType* (NodeType::*FirstChild)() const,
           NodeType* (NodeType::*LastChild)() const>
-AXNode::ChildIteratorBase<NodeType, NextSibling, PreviousSibling, LastChild>&
-AXNode::ChildIteratorBase<NodeType, NextSibling, PreviousSibling, LastChild>::
-operator--() {
-  if (child_)
-    child_ = (child_->*PreviousSibling)();
-  else
-    child_ = (parent_->*LastChild)();
+AXNode::ChildIteratorBase<NodeType,
+                          NextSibling,
+                          PreviousSibling,
+                          FirstChild,
+                          LastChild>&
+AXNode::ChildIteratorBase<NodeType,
+                          NextSibling,
+                          PreviousSibling,
+                          FirstChild,
+                          LastChild>::operator--() {
+  if (parent_) {
+    // If the iterator is past the end, |child_=nullptr|, decrement the iterator
+    // gives us the last iterator element.
+    if (!child_)
+      child_ = (parent_->*LastChild)();
+    // Decrement the iterator gives us the previous element, except when the
+    // iterator is at the beginning; in which case, decrementing the iterator
+    // remains at the beginning.
+    else if (child_ != (parent_->*FirstChild)())
+      child_ = (child_->*PreviousSibling)();
+  }
+
   return *this;
 }
 
 template <typename NodeType,
           NodeType* (NodeType::*NextSibling)() const,
           NodeType* (NodeType::*PreviousSibling)() const,
+          NodeType* (NodeType::*FirstChild)() const,
           NodeType* (NodeType::*LastChild)() const>
-NodeType* AXNode::
-    ChildIteratorBase<NodeType, NextSibling, PreviousSibling, LastChild>::get()
-        const {
+NodeType* AXNode::ChildIteratorBase<NodeType,
+                                    NextSibling,
+                                    PreviousSibling,
+                                    FirstChild,
+                                    LastChild>::get() const {
   DCHECK(child_);
   return child_;
 }
@@ -493,10 +564,13 @@ NodeType* AXNode::
 template <typename NodeType,
           NodeType* (NodeType::*NextSibling)() const,
           NodeType* (NodeType::*PreviousSibling)() const,
+          NodeType* (NodeType::*FirstChild)() const,
           NodeType* (NodeType::*LastChild)() const>
-NodeType& AXNode::
-    ChildIteratorBase<NodeType, NextSibling, PreviousSibling, LastChild>::
-    operator*() const {
+NodeType& AXNode::ChildIteratorBase<NodeType,
+                                    NextSibling,
+                                    PreviousSibling,
+                                    FirstChild,
+                                    LastChild>::operator*() const {
   DCHECK(child_);
   return *child_;
 }
@@ -504,10 +578,13 @@ NodeType& AXNode::
 template <typename NodeType,
           NodeType* (NodeType::*NextSibling)() const,
           NodeType* (NodeType::*PreviousSibling)() const,
+          NodeType* (NodeType::*FirstChild)() const,
           NodeType* (NodeType::*LastChild)() const>
-NodeType* AXNode::
-    ChildIteratorBase<NodeType, NextSibling, PreviousSibling, LastChild>::
-    operator->() const {
+NodeType* AXNode::ChildIteratorBase<NodeType,
+                                    NextSibling,
+                                    PreviousSibling,
+                                    FirstChild,
+                                    LastChild>::operator->() const {
   DCHECK(child_);
   return child_;
 }

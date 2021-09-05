@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Almanca klavye</translation>
 <translation id="1972984168337863910">Dosyalar geri bildirim panellerini genişlet</translation>
 <translation id="1984603991036629094">Ermenice Fonetik klavye</translation>
+<translation id="1995337122023280937">Dosya konumuna git</translation>
 <translation id="2001796770603320721">Drive'da Yönet</translation>
 <translation id="2009067268969781306">Bir sürücünün biçimlendirilmesi, üzerinde depolanan tüm verileri siler. Bu işlem geri alınamaz.</translation>
 <translation id="2028997212275086731">RAR arşivi</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Google Drive'a erişilemedi. Lütfen <ph name="BEGIN_LINK" />çıkıp<ph name="END_LINK" /> tekrar giriş yapın.</translation>
 <translation id="2649120831653069427">Gökkuşağı Balığı</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">Dosya konumu</translation>
 <translation id="2672394958563893062">Bir hata oluştu. Baştan başlamak için tıklayın.</translation>
 <translation id="2676946222714718093">Şurada oynatılıyor:</translation>
 <translation id="2735698359135166290">Rumence standart klavye</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> hata.</translation>
 <translation id="3519867315646775981">Harf çevirisi (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portekizce</translation>
+<translation id="3524311639100184459">Dikkat: Bu dosyalar geçicidir ve disk alanından kazanmak için otomatik olarak silinebilir.  <ph name="BEGIN_LINK" />Daha Fazla Bilgi<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Klasör</translation>
 <translation id="3549797760399244642">drive.google.com'a git...</translation>
 <translation id="357479282490346887">Litvanca</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kivi</translation>
 <translation id="3966388904776714213">Ses Çalar</translation>
 <translation id="4002066346123236978">Başlık</translation>
+<translation id="4065397611279318371">Dosyaları <ph name="APP_NAME" /> uygulamalarıyla açmak için önce <ph name="SHARED_DIRECTORY_LABEL" /> klasörüne taşıyın.</translation>
 <translation id="4070370845051020638">Kantonca giriş yöntemi</translation>
 <translation id="4072248638558688893">Tamilce klavye (Fonetik)</translation>
 <translation id="4124935795427217608">Tek boynuzlu at</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Otomatik düzelt</translation>
 <translation id="4881695831933465202">Aç</translation>
 <translation id="4886021172213954916">Tamilce klavye (Daktilo)</translation>
+<translation id="4892969127351273348"><ph name="APP_NAME" /> ile açılamıyor</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> yedeklenmeye hazır</translation>
 <translation id="4924638091161556692">Sabit</translation>
 <translation id="4935975195727477204">Gazania Çiçeği</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Linux paylaşımını yönet</translation>
 <translation id="6808193438228982088">Tilki</translation>
 <translation id="6820687829547641339">Gzip sıkıştırılmış tar arşivi</translation>
+<translation id="6823166707458800069">Bu klasöre kaydedilen tüm dosyalar otomatik olarak web üzerinde yedeklenir.</translation>
 <translation id="6825883775269213504">Rusça</translation>
 <translation id="6827236167376090743">Bu video sürekli olarak oynatılacaktır.</translation>
 <translation id="6847101934483209767"><ph name="ENTRY_NAME" /> seçimden kaldırıldı.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Google harita</translation>
 <translation id="7419631653042041064">Katalanca klavye</translation>
 <translation id="7434823369735508263">İngiltere Dvorak klavye</translation>
+<translation id="7447678886297481665">Bu klasördeki dosyalar salt okunurdur. Bazı işlemler desteklenmez.</translation>
 <translation id="7460898608667578234">Ukraynaca</translation>
 <translation id="7474889694310679759">İngilizce (Kanada) klavye</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> bulundu

@@ -10,10 +10,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentActivity;
-import android.support.v4.app.FragmentManager;
-import android.support.v4.app.FragmentTransaction;
 import android.text.TextUtils;
 import android.view.ContextMenu;
 import android.view.KeyEvent;
@@ -23,7 +19,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup.LayoutParams;
 import android.view.WindowManager;
-import android.webkit.ValueCallback;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
@@ -32,9 +27,14 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.ViewSwitcher;
 
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentActivity;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentTransaction;
+
+import org.chromium.base.IntentUtils;
 import org.chromium.weblayer.Browser;
 import org.chromium.weblayer.ContextMenuParams;
-import org.chromium.weblayer.DownloadCallback;
 import org.chromium.weblayer.ErrorPageCallback;
 import org.chromium.weblayer.FindInPageCallback;
 import org.chromium.weblayer.FullscreenCallback;
@@ -43,6 +43,7 @@ import org.chromium.weblayer.NavigationController;
 import org.chromium.weblayer.NewTabCallback;
 import org.chromium.weblayer.NewTabType;
 import org.chromium.weblayer.Profile;
+import org.chromium.weblayer.SiteSettingsActivity;
 import org.chromium.weblayer.Tab;
 import org.chromium.weblayer.TabCallback;
 import org.chromium.weblayer.TabListCallback;
@@ -57,6 +58,8 @@ import java.util.List;
  * Activity for managing the Demo Shell.
  */
 public class WebLayerShellActivity extends FragmentActivity {
+    private static final String PROFILE_NAME = "DefaultProfile";
+
     private static class ContextMenuCreator
             implements View.OnCreateContextMenuListener, MenuItem.OnMenuItemClickListener {
         private static final int MENU_ID_COPY_LINK_URI = 1;
@@ -122,7 +125,6 @@ public class WebLayerShellActivity extends FragmentActivity {
     private ImageButton mMenuButton;
     private ViewSwitcher mUrlViewContainer;
     private EditText mEditUrlView;
-    // private View mNonEditUrlView;
     private ProgressBar mLoadProgressBar;
     private View mMainView;
     private int mMainViewId;
@@ -130,6 +132,7 @@ public class WebLayerShellActivity extends FragmentActivity {
     private TabListCallback mTabListCallback;
     private List<Tab> mPreviousTabList = new ArrayList<>();
     private Runnable mExitFullscreenRunnable;
+    private View mBottomView;
 
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
@@ -168,6 +171,8 @@ public class WebLayerShellActivity extends FragmentActivity {
         mMenuButton.setOnClickListener(v -> {
             PopupMenu popup = new PopupMenu(WebLayerShellActivity.this, v);
             popup.getMenuInflater().inflate(R.menu.app_menu, popup.getMenu());
+            MenuItem bottomMenuItem = popup.getMenu().findItem(R.id.toggle_bottom_view_id);
+            bottomMenuItem.setChecked(mBottomView != null);
             popup.setOnMenuItemClickListener(item -> {
                 if (item.getItemId() == R.id.reload_menu_id) {
                     mBrowser.getActiveTab().getNavigationController().reload();
@@ -185,6 +190,24 @@ public class WebLayerShellActivity extends FragmentActivity {
 
                 if (item.getItemId() == R.id.find_end_menu_id) {
                     mBrowser.getActiveTab().getFindInPageController().setFindInPageCallback(null);
+                    return true;
+                }
+
+                if (item.getItemId() == R.id.toggle_bottom_view_id) {
+                    if (mBottomView == null) {
+                        mBottomView =
+                                LayoutInflater.from(this).inflate(R.layout.bottom_controls, null);
+                    } else {
+                        mBottomView = null;
+                    }
+                    mBrowser.setBottomView(mBottomView);
+                    return true;
+                }
+
+                if (item.getItemId() == R.id.site_settings_menu_id) {
+                    Intent intent =
+                            SiteSettingsActivity.createIntentForCategoryList(this, PROFILE_NAME);
+                    IntentUtils.safeStartActivity(this, intent);
                     return true;
                 }
 
@@ -239,12 +262,23 @@ public class WebLayerShellActivity extends FragmentActivity {
             public void onActiveTabChanged(Tab activeTab) {
                 mUrlViewContainer.setDisplayedChild(NONEDITABLE_URL_TEXT_VIEW);
             }
+            @Override
+            public void onTabRemoved(Tab tab) {
+                closeTab(tab);
+            }
         };
         mBrowser.registerTabListCallback(mTabListCallback);
         View nonEditUrlView = mBrowser.getUrlBarController().createUrlBarView(
-                UrlBarOptions.builder().setTextSizeSP(DEFAULT_TEXT_SIZE).build());
-        nonEditUrlView.setOnClickListener(
-                v -> { mUrlViewContainer.setDisplayedChild(EDITABLE_URL_TEXT_VIEW); });
+                UrlBarOptions.builder()
+                        .setTextSizeSP(DEFAULT_TEXT_SIZE)
+                        .setTextColor(android.R.color.black)
+                        .setIconColor(android.R.color.black)
+                        .build());
+        nonEditUrlView.setOnClickListener(v -> {
+            mEditUrlView.setText("");
+            mUrlViewContainer.setDisplayedChild(EDITABLE_URL_TEXT_VIEW);
+            mEditUrlView.requestFocus();
+        });
         mUrlViewContainer.removeViewAt(NONEDITABLE_URL_TEXT_VIEW);
         mUrlViewContainer.addView(nonEditUrlView, NONEDITABLE_URL_TEXT_VIEW);
         mUrlViewContainer.setDisplayedChild(NONEDITABLE_URL_TEXT_VIEW);
@@ -282,10 +316,10 @@ public class WebLayerShellActivity extends FragmentActivity {
                 mPreviousTabList.add(mBrowser.getActiveTab());
                 mBrowser.setActiveTab(newTab);
             }
-
             @Override
             public void onCloseTab() {
-                closeTab(tab);
+                // This callback is deprecated and no longer sent.
+                assert false;
             }
         });
         tab.setFullscreenCallback(new FullscreenCallback() {
@@ -337,9 +371,19 @@ public class WebLayerShellActivity extends FragmentActivity {
 
             @Override
             public void showContextMenu(ContextMenuParams params) {
-                View weblayerView = getSupportFragmentManager().getFragments().get(0).getView();
-                weblayerView.setOnCreateContextMenuListener(new ContextMenuCreator(params));
-                weblayerView.showContextMenu();
+                View webLayerView = getSupportFragmentManager().getFragments().get(0).getView();
+                webLayerView.setOnCreateContextMenuListener(new ContextMenuCreator(params));
+                webLayerView.showContextMenu();
+            }
+
+            @Override
+            public void bringTabToFront() {
+                tab.getBrowser().setActiveTab(tab);
+
+                Context context = WebLayerShellActivity.this;
+                Intent intent = new Intent(context, WebLayerShellActivity.class);
+                intent.setAction(Intent.ACTION_MAIN);
+                context.getApplicationContext().startActivity(intent);
             }
         });
         tab.getNavigationController().registerNavigationCallback(new NavigationCallback() {
@@ -354,19 +398,6 @@ public class WebLayerShellActivity extends FragmentActivity {
                 mLoadProgressBar.setProgress((int) Math.round(100 * progress));
             }
         });
-        mProfile.setDownloadCallback(new DownloadCallback() {
-            @Override
-            public boolean onInterceptDownload(Uri uri, String userAgent, String contentDisposition,
-                    String mimetype, long contentLength) {
-                return false;
-            }
-
-            @Override
-            public void allowDownload(Uri uri, String requestMethod, Uri requestInitiator,
-                    ValueCallback<Boolean> callback) {
-                callback.onReceiveValue(true);
-            }
-        });
         tab.setErrorPageCallback(new ErrorPageCallback() {
             @Override
             public boolean onBackToSafety() {
@@ -378,10 +409,9 @@ public class WebLayerShellActivity extends FragmentActivity {
 
     private void closeTab(Tab tab) {
         mPreviousTabList.remove(tab);
-        if (mBrowser.getActiveTab() == tab && !mPreviousTabList.isEmpty()) {
+        if (mBrowser.getActiveTab() == null && !mPreviousTabList.isEmpty()) {
             mBrowser.setActiveTab(mPreviousTabList.remove(mPreviousTabList.size() - 1));
         }
-        mBrowser.destroyTab(tab);
     }
 
     private Fragment getOrCreateBrowserFragment(Bundle savedInstanceState) {
@@ -397,8 +427,7 @@ public class WebLayerShellActivity extends FragmentActivity {
             }
         }
 
-        String profileName = "DefaultProfile";
-        Fragment fragment = WebLayer.createBrowserFragment(profileName);
+        Fragment fragment = WebLayer.createBrowserFragment(PROFILE_NAME);
         FragmentTransaction transaction = fragmentManager.beginTransaction();
         transaction.add(mMainViewId, fragment);
 

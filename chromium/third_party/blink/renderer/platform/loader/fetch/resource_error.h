@@ -30,8 +30,9 @@
 #include <iosfwd>
 #include "base/optional.h"
 #include "net/dns/public/resolve_error_info.h"
-#include "services/network/public/cpp/blocked_by_response_reason.h"
 #include "services/network/public/cpp/cors/cors_error_status.h"
+#include "services/network/public/mojom/blocked_by_response_reason.mojom-blink.h"
+#include "services/network/public/mojom/trust_tokens.mojom-blink.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
@@ -79,6 +80,13 @@ class PLATFORM_EXPORT ResourceError final {
   const String& LocalizedDescription() const { return localized_description_; }
 
   bool IsCancellation() const;
+
+  // If the error was due to a Trust Tokens cache hit, the purpose of this
+  // request was to update some state in the network stack (with a response from
+  // the server), but that this state was already present, so there was no need
+  // to send the request.
+  bool IsTrustTokenCacheHit() const;
+
   bool IsAccessCheck() const { return is_access_check_; }
   bool HasCopyInCache() const { return has_copy_in_cache_; }
   bool IsTimeout() const;
@@ -92,7 +100,12 @@ class PLATFORM_EXPORT ResourceError final {
     return cors_error_status_;
   }
 
-  operator WebURLError() const;
+  network::mojom::blink::TrustTokenOperationStatus TrustTokenOperationError()
+      const {
+    return trust_token_operation_error_;
+  }
+
+  explicit operator WebURLError() const;
 
   static bool Compare(const ResourceError&, const ResourceError&);
 
@@ -109,7 +122,13 @@ class PLATFORM_EXPORT ResourceError final {
   bool blocked_by_subresource_filter_ = false;
   base::Optional<network::CorsErrorStatus> cors_error_status_;
 
-  base::Optional<network::BlockedByResponseReason> blocked_by_response_reason_;
+  base::Optional<network::mojom::BlockedByResponseReason>
+      blocked_by_response_reason_;
+
+  // Refer to the member comment in WebURLError.
+  network::mojom::blink::TrustTokenOperationStatus
+      trust_token_operation_error_ =
+          network::mojom::blink::TrustTokenOperationStatus::kOk;
 };
 
 inline bool operator==(const ResourceError& a, const ResourceError& b) {

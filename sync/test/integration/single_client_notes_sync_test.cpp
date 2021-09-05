@@ -12,6 +12,7 @@
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 #include "components/sync/test/fake_server/entity_builder_factory.h"
+#include "content/public/test/browser_test.h"
 #include "notes/notes_model.h"
 #include "notes/note_node.h"
 #include "sync/test/fake_server/notes_entity_builder.h"

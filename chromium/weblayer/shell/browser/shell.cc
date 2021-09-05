@@ -144,7 +144,8 @@ bool Shell::InterceptDownload(const GURL& url,
   return false;
 }
 
-void Shell::AllowDownload(const GURL& url,
+void Shell::AllowDownload(Tab* tab,
+                          const GURL& url,
                           const std::string& request_method,
                           base::Optional<url::Origin> request_initiator,
                           AllowDownloadCallback callback) {
@@ -157,7 +158,7 @@ gfx::Size Shell::AdjustWindowSize(const gfx::Size& initial_size) {
   return GetShellDefaultSize();
 }
 
-Shell* Shell::CreateNewWindow(weblayer::Profile* web_profile,
+Shell* Shell::CreateNewWindow(Profile* web_profile,
                               const GURL& url,
                               const gfx::Size& initial_size) {
 #if defined(OS_ANDROID)

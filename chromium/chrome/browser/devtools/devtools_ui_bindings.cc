@@ -101,6 +101,8 @@ static const char kDevToolsActionTakenHistogram[] = "DevTools.ActionTaken";
 static const char kDevToolsPanelShownHistogram[] = "DevTools.PanelShown";
 static const char kDevToolsKeyboardShortcutFiredHistogram[] =
     "DevTools.KeyboardShortcutFired";
+static const char kDevToolsIssuesPanelOpenedFromHistogram[] =
+    "DevTools.IssuesPanelOpenedFrom";
 
 static const char kRemotePageActionInspect[] = "inspect";
 static const char kRemotePageActionReload[] = "reload";
@@ -447,8 +449,8 @@ class DevToolsUIBindings::NetworkResourceLoader
     loader_->SetOnResponseStartedCallback(base::BindOnce(
         &NetworkResourceLoader::OnResponseStarted, base::Unretained(this)));
     timer_.Start(FROM_HERE, delay,
-                 base::BindRepeating(&NetworkResourceLoader::DownloadAsStream,
-                                     base::Unretained(this)));
+                 base::BindOnce(&NetworkResourceLoader::DownloadAsStream,
+                                base::Unretained(this)));
   }
 
  private:
@@ -1239,6 +1241,8 @@ void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
   else if (name == kDevToolsPanelShownHistogram)
     UMA_HISTOGRAM_EXACT_LINEAR(name, sample, boundary_value);
   else if (name == kDevToolsKeyboardShortcutFiredHistogram)
+    UMA_HISTOGRAM_EXACT_LINEAR(name, sample, boundary_value);
+  else if (name == kDevToolsIssuesPanelOpenedFromHistogram)
     UMA_HISTOGRAM_EXACT_LINEAR(name, sample, boundary_value);
   else
     frontend_host_->BadMessageRecieved();

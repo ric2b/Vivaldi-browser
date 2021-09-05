@@ -15,8 +15,6 @@ jumbo_component("services") {
     "gpu_mojo_media_client.h",
     "interface_factory_impl.cc",
     "interface_factory_impl.h",
-    "media_interface_provider.cc",
-    "media_interface_provider.h",
     "media_metrics_provider.cc",
     "media_metrics_provider.h",
     "media_mojo_export.h",
@@ -111,6 +109,10 @@ jumbo_component("services") {
     ]
   }
 
+  if (is_fuchsia) {
+    deps += [ "//media/fuchsia/metrics" ]
+  }
+
   if (enable_media_drm_storage) {
     sources += [
       "mojo_media_drm_storage.cc",
@@ -133,19 +135,6 @@ jumbo_component("services") {
       "//media/cdm:cdm_api",
       "//media/cdm:cdm_paths",
     ]
-
-    if (enable_cdm_proxy) {
-      sources += [
-        "mojo_cdm_proxy.cc",
-        "mojo_cdm_proxy.h",
-        "mojo_cdm_proxy_service.cc",
-        "mojo_cdm_proxy_service.h",
-      ]
-      deps += [
-        # Needed by test_mojo_media_client.cc to create ClearKeyCdmProxy.
-        "//media/cdm/library_cdm/clear_key_cdm:clear_key_cdm_proxy",
-      ]
-    }
 
     # TODO(xhwang): Ideally media should not worry about sandbox. Find a way to
     # remove this dependency.
@@ -201,10 +190,6 @@ source_set("unit_tests") {
       "mojo_cdm_file_io_unittest.cc",
       "mojo_cdm_helper_unittest.cc",
     ]
-
-    if (enable_cdm_proxy) {
-      sources += [ "mojo_cdm_proxy_unittest.cc" ]
-    }
 
     deps += [ "//media/cdm:cdm_api" ]
   }

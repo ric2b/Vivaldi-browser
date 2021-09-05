@@ -115,7 +115,8 @@ class POLICY_EXPORT CloudPolicyClient {
     // Called when the Service Account Identity is set on a policy data object
     // after a policy fetch. |service_account_email()| will return the new
     // account's email.
-    virtual void OnServiceAccountChanged(CloudPolicyClient* client) {}
+    virtual void OnServiceAccountSet(CloudPolicyClient* client,
+                                     const std::string& account_email) {}
   };
 
   struct POLICY_EXPORT RegistrationParameters {
@@ -141,26 +142,34 @@ class POLICY_EXPORT CloudPolicyClient {
   };
 
   // If non-empty, |machine_id|, |machine_model|, |brand_code|,
-  // |ethernet_mac_address|, |dock_mac_address| and |manufacture_date| are
-  // passed to the server verbatim. As these reveal machine identity, they must
-  // only be used where this is appropriate (i.e. device policy, but not user
-  // policy). |service| and |signing_service| are weak pointers and it's the
-  // caller's responsibility to keep them valid for the lifetime of
-  // CloudPolicyClient. The |signing_service| is used to sign sensitive
-  // requests. |device_dm_token_callback| is used to retrieve device DMToken for
-  // affiliated users. Could be null if it's not possible to use
+  // |attested_device_id|, |ethernet_mac_address|, |dock_mac_address| and
+  // |manufacture_date| are passed to the server verbatim. As these reveal
+  // machine identity, they must only be used where this is appropriate (i.e.
+  // device policy, but not user policy). |service| and |signing_service| are
+  // weak pointers and it's the caller's responsibility to keep them valid for
+  // the lifetime of CloudPolicyClient. The |signing_service| is used to sign
+  // sensitive requests. |device_dm_token_callback| is used to retrieve device
+  // DMToken for affiliated users. Could be null if it's not possible to use
   // device DMToken for user policy fetches.
   CloudPolicyClient(
       const std::string& machine_id,
       const std::string& machine_model,
       const std::string& brand_code,
+      const std::string& attested_device_id,
       const std::string& ethernet_mac_address,
       const std::string& dock_mac_address,
       const std::string& manufacture_date,
+      SigningService* signing_service,
       DeviceManagementService* service,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      SigningService* signing_service,
       DeviceDMTokenCallback device_dm_token_callback);
+  // A simpler constructor for those that do not need any of the identification
+  // strings of the full constructor or the signing service.
+  CloudPolicyClient(
+      DeviceManagementService* service,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      DeviceDMTokenCallback device_dm_token_callback);
+
   virtual ~CloudPolicyClient();
 
   // Sets the DMToken, thereby establishing a registration with the server. A
@@ -230,10 +239,16 @@ class POLICY_EXPORT CloudPolicyClient {
 
   // Requests OAuth2 auth codes for the device robot account. The client being
   // registered is a prerequisite to this operation and this call will CHECK if
-  // the client is not in registered state.
+  // the client is not in registered state. |oauth_scopes| is the scopes for
+  // which the robot auth codes will be valid, and |device_type| should match
+  // the type of the robot account associated with this request.
   // The |callback| will be called when the operation completes.
-  virtual void FetchRobotAuthCodes(std::unique_ptr<DMAuth> auth,
-                                   RobotAuthCodeCallback callback);
+  virtual void FetchRobotAuthCodes(
+      std::unique_ptr<DMAuth> auth,
+      enterprise_management::DeviceServiceApiAccessRequest::DeviceType
+          device_type,
+      const std::string& oauth_scopes,
+      RobotAuthCodeCallback callback);
 
   // Sends an unregistration request to the server.
   virtual void Unregister();
@@ -337,6 +352,7 @@ class POLICY_EXPORT CloudPolicyClient {
   virtual void ClientCertProvisioningStartCsr(
       const std::string& cert_scope,
       const std::string& cert_profile_id,
+      const std::string& cert_profile_version,
       const std::string& public_key,
       ClientCertProvisioningStartCsrCallback callback);
 
@@ -352,6 +368,7 @@ class POLICY_EXPORT CloudPolicyClient {
   virtual void ClientCertProvisioningFinishCsr(
       const std::string& cert_scope,
       const std::string& cert_profile_id,
+      const std::string& cert_profile_version,
       const std::string& public_key,
       const std::string& va_challenge_response,
       const std::string& signature,
@@ -366,6 +383,7 @@ class POLICY_EXPORT CloudPolicyClient {
   virtual void ClientCertProvisioningDownloadCert(
       const std::string& cert_scope,
       const std::string& cert_profile_id,
+      const std::string& cert_profile_version,
       const std::string& public_key,
       ClientCertProvisioningDownloadCertCallback callback);
 
@@ -382,6 +400,7 @@ class POLICY_EXPORT CloudPolicyClient {
   const std::string& machine_id() const { return machine_id_; }
   const std::string& machine_model() const { return machine_model_; }
   const std::string& brand_code() const { return brand_code_; }
+  const std::string& attested_device_id() const { return attested_device_id_; }
   const std::string& ethernet_mac_address() const {
     return ethernet_mac_address_;
   }
@@ -399,13 +418,7 @@ class POLICY_EXPORT CloudPolicyClient {
     public_key_version_valid_ = true;
   }
 
-  void clear_public_key_version() {
-    public_key_version_valid_ = false;
-  }
-
-  const std::string& service_account_email() const {
-    return service_account_email_;
-  }
+  void clear_public_key_version() { public_key_version_valid_ = false; }
 
   // FetchPolicy() calls will request this policy type.
   // If |settings_entity_id| is empty then it won't be set in the
@@ -446,9 +459,7 @@ class POLICY_EXPORT CloudPolicyClient {
   // policies haven't gone through verification, so their contents cannot be
   // trusted. Use CloudPolicyStore::policy() and CloudPolicyStore::policy_map()
   // instead for making policy decisions.
-  const ResponseMap& responses() const {
-    return responses_;
-  }
+  const ResponseMap& responses() const { return responses_; }
 
   // Returns the policy response for the (|policy_type|, |settings_entity_id|)
   // pair if found in |responses()|. Otherwise returns nullptr.
@@ -456,9 +467,7 @@ class POLICY_EXPORT CloudPolicyClient {
       const std::string& policy_type,
       const std::string& settings_entity_id) const;
 
-  DeviceManagementStatus status() const {
-    return status_;
-  }
+  DeviceManagementStatus status() const { return status_; }
 
   // Returns the invalidation version that was used for the last FetchPolicy.
   // Observers can call this method from their OnPolicyFetched method to
@@ -610,12 +619,13 @@ class POLICY_EXPORT CloudPolicyClient {
   void NotifyPolicyFetched();
   void NotifyRegistrationStateChanged();
   void NotifyClientError();
-  void NotifyServiceAccountChanged();
+  void NotifyServiceAccountSet(const std::string& account_email);
 
   // Data necessary for constructing policy requests.
   const std::string machine_id_;
   const std::string machine_model_;
   const std::string brand_code_;
+  const std::string attested_device_id_;
   const std::string ethernet_mac_address_;
   const std::string dock_mac_address_;
   const std::string manufacture_date_;
@@ -644,11 +654,11 @@ class POLICY_EXPORT CloudPolicyClient {
   // The invalidation version used for the most recent fetch operation.
   int64_t fetched_invalidation_version_ = 0;
 
-  // Used for issuing requests to the cloud.
-  DeviceManagementService* service_ = nullptr;
-
   // Used for signing requests.
   SigningService* signing_service_ = nullptr;
+
+  // Used for issuing requests to the cloud.
+  DeviceManagementService* service_ = nullptr;
 
   // Only one outstanding policy fetch is allowed, so this is tracked in
   // its own member variable.
@@ -700,9 +710,6 @@ class POLICY_EXPORT CloudPolicyClient {
   // during re-registration, which gets triggered by a failed policy fetch with
   // error |DM_STATUS_SERVICE_DEVICE_NOT_FOUND|.
   std::string reregistration_dm_token_;
-
-  // The Service Account email that was set on the last policy fetch.
-  std::string service_account_email_;
 
   // Used to create tasks which run delayed on the UI thread.
   base::WeakPtrFactory<CloudPolicyClient> weak_ptr_factory_{this};

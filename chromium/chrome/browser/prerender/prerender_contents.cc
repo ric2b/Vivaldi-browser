@@ -109,19 +109,6 @@ class PrerenderContents::WebContentsDelegateImpl
     std::move(callback).Run(false);
   }
 
-  bool IsWebContentsCreationOverridden(
-      content::SiteInstance* source_site_instance,
-      content::mojom::WindowContainerType window_container_type,
-      const GURL& opener_url,
-      const std::string& frame_name,
-      const GURL& target_url) override {
-    // Since we don't want to permit child windows that would have a
-    // window.opener property, terminate prerendering.
-    prerender_contents_->Destroy(FINAL_STATUS_CREATE_NEW_WINDOW);
-    // Cancel the popup.
-    return true;
-  }
-
   bool OnGoToEntryOffset(int offset) override {
     // This isn't allowed because the history merge operation
     // does not work if there are renderer issued challenges.
@@ -129,15 +116,6 @@ class PrerenderContents::WebContentsDelegateImpl
     // since render-issued offset navigations are not guaranteed,
     // but indicates that the page cares about the history.
     return false;
-  }
-
-  void RegisterProtocolHandler(WebContents* web_contents,
-                               const std::string& protocol,
-                               const GURL& url,
-                               bool user_gesture) override {
-    // TODO(mmenke): Consider supporting this if it is a common case during
-    // prerenders.
-    prerender_contents_->Destroy(FINAL_STATUS_REGISTER_PROTOCOL_HANDLER);
   }
 
   gfx::Size GetSizeForNewRenderView(WebContents* web_contents) override {
@@ -275,10 +253,6 @@ void PrerenderContents::StartPrerendering(
       this, content::NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED,
       content::Source<WebContents>(prerender_contents_.get()));
 
-  // Reset UA override.
-  prerender_contents_.get()->SetUserAgentOverride(blink::UserAgentOverride(),
-                                                  false);
-
   content::NavigationController::LoadURLParams load_url_params(
       prerender_url_);
   load_url_params.referrer = referrer_;
@@ -292,8 +266,6 @@ void PrerenderContents::StartPrerendering(
     load_url_params.transition_type =
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_GENERATED);
   }
-  load_url_params.override_user_agent =
-      content::NavigationController::UA_OVERRIDE_FALSE;
   prerender_contents_.get()->GetController().LoadURLWithParams(load_url_params);
 }
 
@@ -673,7 +645,6 @@ void PrerenderContents::PrepareForUse() {
 
 void PrerenderContents::CancelPrerenderForUnsupportedScheme(const GURL& url) {
   Destroy(FINAL_STATUS_UNSUPPORTED_SCHEME);
-  ReportUnsupportedPrerenderScheme(url);
 }
 
 void PrerenderContents::AddPrerenderCancelerReceiver(

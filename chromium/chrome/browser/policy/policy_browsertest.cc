@@ -60,12 +60,15 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/apps/app_service/app_launch_params.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/test/session_manager_state_waiter.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/extensions/api/chrome_extensions_api_client.h"
@@ -148,7 +151,6 @@
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/gpu_data_manager.h"
-#include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_observer.h"
@@ -168,6 +170,7 @@
 #include "content/public/common/network_service_util.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/mock_notification_observer.h"
@@ -238,7 +241,6 @@
 #if !defined(OS_MACOSX)
 #include "base/compiler_specific.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
-#include "chrome/browser/apps/launch_service/launch_service.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/app_window/native_app_window.h"
@@ -1161,7 +1163,8 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, AllowedDomainsForApps) {
   content::URLLoaderInterceptor interceptor(base::BindLambdaForTesting(
       [&](content::URLLoaderInterceptor::RequestParams* params) -> bool {
         base::AutoLock auto_lock(lock);
-        urls_requested[params->url_request.url] = params->url_request.headers;
+        urls_requested[params->url_request.url] =
+            params->url_request.cors_exempt_headers;
         return false;
       }));
 
@@ -1208,7 +1211,13 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, AllowedDomainsForApps) {
   }
 }
 
-IN_PROC_BROWSER_TEST_F(PolicyTest, Disable3DAPIs) {
+// This test is flaky on Windows 10: https://crbug.com/1069558
+#if defined(OS_WIN)
+#define MAYBE_Disable3DAPIs DISABLED_Disable3DAPIs
+#else
+#define MAYBE_Disable3DAPIs Disable3DAPIs
+#endif
+IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_Disable3DAPIs) {
   // This test assumes Gpu access.
   if (!content::GpuDataManager::GetInstance()->HardwareAccelerationEnabled())
     return;
@@ -1971,8 +1980,9 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, FullscreenAllowedApp) {
   // Launch an app that tries to open a fullscreen window.
   TestAddAppWindowObserver add_window_observer(
       extensions::AppWindowRegistry::Get(browser()->profile()));
-  apps::LaunchService::Get(browser()->profile())
-      ->OpenApplication(apps::AppLaunchParams(
+  apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+      ->BrowserAppLauncher()
+      .LaunchAppWithParams(apps::AppLaunchParams(
           extension->id(), apps::mojom::LaunchContainer::kLaunchContainerNone,
           WindowOpenDisposition::NEW_WINDOW,
           apps::mojom::AppLaunchSource::kSourceTest));
@@ -3196,57 +3206,6 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, JavascriptBlacklistable) {
   EXPECT_EQ(JSIncrementerFetch(contents), 3);
 }
 
-#if defined(OS_WIN)
-
-class ForceNetworkInProcessTest
-    : public InProcessBrowserTest,
-      public ::testing::WithParamInterface<
-          /*policy::key::kForceNetworkInProcess=*/bool> {
- public:
-  // InProcessBrowserTest implementation:
-  void SetUp() override {
-    EXPECT_CALL(policy_provider_, IsInitializationComplete(testing::_))
-        .WillRepeatedly(testing::Return(true));
-    policy::PolicyMap values;
-    values.Set(policy::key::kForceNetworkInProcess,
-               policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_MACHINE,
-               policy::POLICY_SOURCE_CLOUD,
-               std::make_unique<base::Value>(GetParam()), nullptr);
-    policy_provider_.UpdateChromePolicy(values);
-    policy::BrowserPolicyConnector::SetPolicyProviderForTesting(
-        &policy_provider_);
-
-    InProcessBrowserTest::SetUp();
-  }
-
- private:
-  policy::MockConfigurationPolicyProvider policy_provider_;
-};
-
-IN_PROC_BROWSER_TEST_P(ForceNetworkInProcessTest, IsRespected) {
-  bool expected_in_process = GetParam();
-
-  // When run with --enable-features=NetworkServiceInProcess, the Network
-  // Service will always be in process. This configuration is used on some
-  // bots - see https://crbug.com/1002752.
-  expected_in_process |=
-      base::FeatureList::IsEnabled(features::kNetworkServiceInProcess);
-
-  ASSERT_EQ(expected_in_process, content::IsInProcessNetworkService());
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    Enabled,
-    ForceNetworkInProcessTest,
-    ::testing::Values(/*policy::key::kForceNetworkInProcess=*/true));
-
-INSTANTIATE_TEST_SUITE_P(
-    Disabled,
-    ForceNetworkInProcessTest,
-    ::testing::Values(/*policy::key::kForceNetworkInProcess=*/false));
-
-#endif  // defined(OS_WIN)
-
 #if !defined(OS_ANDROID)
 
 // The possibilities for a boolean policy.
@@ -3674,14 +3633,9 @@ IN_PROC_BROWSER_TEST_P(AudioSandboxEnabledTest, IsRespected) {
   base::Optional<bool> enable_sandbox_via_policy = GetParam();
   bool is_sandbox_enabled_by_default = base::FeatureList::IsEnabled(
       service_manager::features::kAudioServiceSandbox);
-  bool is_apm_enabled_by_default =
-      base::FeatureList::IsEnabled(features::kWebRtcApmInAudioService);
 
   ASSERT_EQ(enable_sandbox_via_policy.value_or(is_sandbox_enabled_by_default),
             service_manager::IsAudioSandboxEnabled());
-  ASSERT_EQ(
-      is_apm_enabled_by_default && service_manager::IsAudioSandboxEnabled(),
-      media::IsWebRtcApmInAudioServiceEnabled());
 }
 
 INSTANTIATE_TEST_SUITE_P(

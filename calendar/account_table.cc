@@ -36,41 +36,28 @@ bool AccountTable::CreateAccountTable() {
       "id INTEGER PRIMARY KEY AUTOINCREMENT,"
       "name LONGVARCHAR,"
       "url LONGVARCHAR,"
+      "username LONGVARCHAR,"
       "type INTEGER,"
+      "interval INTEGER DEFAULT 0,"
       "created INTEGER,"
       "last_modified INTEGER"
       ")");
 
   bool res = GetDB().Execute(sql.c_str());
-  if (res) {
-    return CreateDefaultAccount();
-  }
 
   return res;
 }
 
-bool AccountTable::CreateDefaultAccount() {
+AccountID AccountTable::CreateDefaultAccount() {
   if (DoesLocalAccountExist())
     return false;
 
   AccountRow row;
   row.name = l10n_util::GetStringUTF16(IDS_DEFAULT_CALENDAR_ACCOUNT_NAME);
-  row.type = 1;
-  AccountID id = CreateAccount(row);
-  if (id) {
-    if (!GetDB().DoesColumnExist("calendar", "account_id")) {
-      if (!GetDB().Execute("ALTER TABLE calendar "
-                           "ADD COLUMN account_id INTEGER"))
-        return false;
-    }
-
-    sql::Statement update_chain(GetDB().GetCachedStatement(
-        SQL_FROM_HERE, "UPDATE calendar SET account_id=?"));
-    update_chain.BindInt64(0, id);
-    if (!update_chain.Run())
-      return false;
-  }
-  return true;
+  row.account_type = ACCOUNT_TYPE_LOCAL;
+  row.interval = 0;
+  row.username = base::UTF8ToUTF16("");
+  return CreateAccount(row);
 }
 
 // static
@@ -86,13 +73,15 @@ AccountID AccountTable::CreateAccount(AccountRow row) {
   sql::Statement statement(
       GetDB().GetCachedStatement(SQL_FROM_HERE,
                                  "INSERT INTO accounts "
-                                 "(name, url, type, "
+                                 "(name, url, username, type, interval, "
                                  "created, last_modified) "
-                                 "VALUES (?, ?, ?, ?, ?)"));
+                                 "VALUES (?, ?, ?, ?, ?, ?, ?)"));
   int column_index = 0;
   statement.BindString16(column_index++, row.name);
   statement.BindString(column_index++, GURLToDatabaseURL(row.url));
-  statement.BindInt(column_index++, row.type);
+  statement.BindString16(column_index++, row.username);
+  statement.BindInt(column_index++, row.account_type);
+  statement.BindInt(column_index++, row.interval);
 
   statement.BindInt64(column_index++, base::Time().Now().ToInternalValue());
   statement.BindInt64(column_index++, base::Time().Now().ToInternalValue());
@@ -105,10 +94,10 @@ AccountID AccountTable::CreateAccount(AccountRow row) {
 
 bool AccountTable::GetAllAccounts(AccountRows* accounts) {
   accounts->clear();
-  sql::Statement s(
-      GetDB().GetCachedStatement(SQL_FROM_HERE,
-                                 "SELECT id, name, url, "
-                                 "created, last_modified FROM accounts"));
+  sql::Statement s(GetDB().GetCachedStatement(
+      SQL_FROM_HERE,
+      "SELECT id, name, url, username, type, interval, "
+      "created, last_modified FROM accounts"));
   while (s.Step()) {
     AccountRow account;
     FillAccountRow(s, &account);
@@ -121,10 +110,13 @@ bool AccountTable::GetAllAccounts(AccountRows* accounts) {
 bool AccountTable::UpdateAccountRow(const AccountRow& account) {
   sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
                                                       "UPDATE accounts SET \
-        name=?, url=? WHERE id=?"));
+        name=?, url=?, type=?, username=?, interval=? WHERE id=?"));
   int column_index = 0;
   statement.BindString16(column_index++, account.name);
   statement.BindString(column_index++, GURLToDatabaseURL(account.url));
+  statement.BindInt64(column_index++, account.account_type);
+  statement.BindString16(column_index++, account.username);
+  statement.BindInt64(column_index++, account.interval);
   statement.BindInt64(column_index, account.id);
 
   return statement.Run();
@@ -132,7 +124,7 @@ bool AccountTable::UpdateAccountRow(const AccountRow& account) {
 
 bool AccountTable::DeleteAccount(AccountID calendar_id) {
   sql::Statement statement(GetDB().GetCachedStatement(
-      SQL_FROM_HERE, "DELETE from calendar WHERE id=?"));
+      SQL_FROM_HERE, "DELETE from accounts WHERE id=?"));
   statement.BindInt64(0, calendar_id);
 
   return statement.Run();
@@ -158,20 +150,54 @@ void AccountTable::FillAccountRow(sql::Statement& statement,
   AccountID id = statement.ColumnInt64(column_index++);
   base::string16 name = statement.ColumnString16(column_index++);
   std::string url = statement.ColumnString(column_index++);
+  base::string16 username = statement.ColumnString16(column_index++);
+  int type = statement.ColumnInt(column_index++);
+  int interval = statement.ColumnInt(column_index++);
 
   account->id = id;
   account->name = name;
   account->url = GURL(url);
+  account->username = username;
+  account->account_type = type;
+  account->interval = interval;
 }
 
 bool AccountTable::DoesLocalAccountExist() {
   sql::Statement statement(GetDB().GetUniqueStatement(
-      "select count(*) from accounts where type = 1"));
+      "select count(*) from accounts where type = 0"));
 
   if (!statement.Step())
     return false;
 
   return statement.ColumnInt(0) > 0;
+}
+
+// Updates to version 7. Adds column username and interval to account table
+bool AccountTable::MigrateCalendarToVersion7() {
+  if (!GetDB().DoesTableExist("accounts")) {
+    NOTREACHED() << "accounts table should exist before migration";
+    return false;
+  }
+
+  if (!GetDB().DoesColumnExist("accounts", "username")) {
+    if (!GetDB().Execute("ALTER TABLE accounts "
+                         "ADD COLUMN username LONGVARCHAR"))
+      return false;
+  }
+
+  if (!GetDB().DoesColumnExist("accounts", "interval")) {
+    if (!GetDB().Execute("ALTER TABLE accounts "
+                         "ADD COLUMN interval INTEGER DEFAULT 0"))
+      return false;
+  }
+
+  if (!GetDB().DoesColumnExist("calendar", "account_id")) {
+    if (!GetDB().Execute("ALTER TABLE calendar "
+                         "ADD COLUMN account_id INTEGER"))
+      return false;
+  }
+
+  return true;
 }
 
 }  // namespace calendar

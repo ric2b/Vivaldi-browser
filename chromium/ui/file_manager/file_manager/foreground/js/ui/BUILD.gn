@@ -123,9 +123,14 @@ js_library("banners") {
 }
 
 js_library("breadcrumb") {
+  deps = [ "//ui/webui/resources/cr_elements/cr_action_menu:cr_action_menu" ]
+}
+
+js_unittest("breadcrumb_unittest") {
   deps = [
-    "//ui/webui/resources/cr_elements/cr_action_menu:cr_action_menu",
+    ":breadcrumb",
     "//ui/webui/resources/js:assert",
+    "//ui/webui/resources/js:webui_resource_test",
   ]
 }
 
@@ -234,6 +239,7 @@ js_unittest("file_list_selection_model_unittest") {
 
 js_library("file_manager_dialog_base") {
   deps = [
+    "//ui/file_manager/file_manager/common/js:util",
     "//ui/webui/resources/js:cr",
     "//ui/webui/resources/js/cr:ui",
     "//ui/webui/resources/js/cr/ui:dialogs",
@@ -277,6 +283,7 @@ js_library("file_manager_ui") {
     ":suggest_apps_dialog",
     "//ui/file_manager/file_manager/common/js:util",
     "//ui/file_manager/file_manager/foreground/elements:files_message",
+    "//ui/file_manager/file_manager/foreground/elements:files_spinner",
     "//ui/file_manager/file_manager/foreground/elements:files_toast",
     "//ui/file_manager/file_manager/foreground/elements:files_toggle_ripple",
     "//ui/file_manager/file_manager/foreground/elements:files_tooltip",
@@ -408,6 +415,7 @@ js_library("list_container") {
   deps = [
     ":file_grid",
     ":file_table",
+    "//ui/file_manager/file_manager/common/js:util",
     "//ui/webui/resources/js/cr/ui:list_item",
   ]
 }
@@ -506,6 +514,7 @@ js_library("suggest_apps_dialog") {
 js_test_gen_html("js_test_gen_html") {
   deps = [
     ":actions_submenu_unittest",
+    ":breadcrumb_unittest",
     ":directory_tree_unittest",
     ":file_list_selection_model_unittest",
     ":file_manager_dialog_base_unittest",

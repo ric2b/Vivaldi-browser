@@ -129,21 +129,16 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void SetTooltipText(const base::string16& tooltip_text) override;
   void TransformPointToRootSurface(gfx::PointF* point) override;
   gfx::Rect GetBoundsInRootWindow() override;
-  void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
-                              InputEventAckState ack_result) override;
-  InputEventAckState FilterInputEvent(
+  void ProcessAckedTouchEvent(
+      const TouchEventWithLatencyInfo& touch,
+      blink::mojom::InputEventResultState ack_result) override;
+  blink::mojom::InputEventResultState FilterInputEvent(
       const blink::WebInputEvent& input_event) override;
   void GestureEventAck(const blink::WebGestureEvent& event,
-                       InputEventAckState ack_result) override;
-  void ChildDidAckGestureEvent(const blink::WebGestureEvent& event,
-                               InputEventAckState ack_result) override;
-  bool OnUnconsumedKeyboardEventAck(
-      const NativeWebKeyboardEventWithLatencyInfo& event) override;
-  void FallbackCursorModeLockCursor(bool left,
-                                    bool right,
-                                    bool up,
-                                    bool down) override;
-  void FallbackCursorModeSetCursorVisibility(bool visible) override;
+                       blink::mojom::InputEventResultState ack_result) override;
+  void ChildDidAckGestureEvent(
+      const blink::WebGestureEvent& event,
+      blink::mojom::InputEventResultState ack_result) override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
       BrowserAccessibilityDelegate* delegate,
       bool for_root_frame) override;
@@ -210,8 +205,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnAnimate(base::TimeTicks begin_frame_time) override;
   void OnActivityStopped() override;
   void OnActivityStarted() override;
-  void OnCursorVisibilityChanged(bool visible) override;
-  void OnFallbackCursorModeToggled(bool is_on) override;
 
   // StylusTextSelectorClient implementation.
   void OnStylusSelectBegin(float x0, float y0, float x1, float y1) override;
@@ -518,8 +511,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool observing_root_window_;
 
   bool controls_initialized_ = false;
-
-  bool fallback_cursor_mode_enabled_;
 
   float prev_top_shown_pix_;
   float prev_top_controls_translate_;

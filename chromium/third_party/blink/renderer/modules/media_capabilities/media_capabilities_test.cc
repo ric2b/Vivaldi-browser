@@ -28,10 +28,9 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_tester.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_capabilities_info.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_configuration.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_decoding_configuration.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
-#include "third_party/blink/renderer/modules/media_capabilities/media_capabilities_info.h"
-#include "third_party/blink/renderer/modules/media_capabilities/media_configuration.h"
-#include "third_party/blink/renderer/modules/media_capabilities/media_decoding_configuration.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_view.h"
@@ -59,7 +58,7 @@ class MockPerfHistoryService
     receiver_.Bind(
         mojo::PendingReceiver<media::mojom::blink::VideoDecodePerfHistory>(
             std::move(handle)));
-    receiver_.set_disconnect_handler(base::BindRepeating(
+    receiver_.set_disconnect_handler(base::BindOnce(
         &MockPerfHistoryService::OnConnectionError, base::Unretained(this)));
   }
 
@@ -81,9 +80,9 @@ class MockLearningTaskControllerService
                    media::learning::mojom::blink::LearningTaskController>
                        pending_receiver) {
     receiver_.Bind(std::move(pending_receiver));
-    receiver_.set_disconnect_handler(base::BindRepeating(
-        &MockLearningTaskControllerService::OnConnectionError,
-        base::Unretained(this)));
+    receiver_.set_disconnect_handler(
+        base::BindOnce(&MockLearningTaskControllerService::OnConnectionError,
+                       base::Unretained(this)));
   }
 
   void OnConnectionError() { receiver_.reset(); }
@@ -126,7 +125,7 @@ class FakeMediaMetricsProvider
     receiver_.Bind(
         mojo::PendingReceiver<media::mojom::blink::MediaMetricsProvider>(
             std::move(handle)));
-    receiver_.set_disconnect_handler(base::BindRepeating(
+    receiver_.set_disconnect_handler(base::BindOnce(
         &FakeMediaMetricsProvider::OnConnectionError, base::Unretained(this)));
   }
 
@@ -158,6 +157,11 @@ class FakeMediaMetricsProvider
       nnr_service_->BindRequest(std::move(pending_receiver));
       return;
     }
+    FAIL();
+  }
+  void AcquirePlaybackEventsRecorder(
+      mojo::PendingReceiver<media::mojom::blink::PlaybackEventsRecorder>
+          receiver) override {
     FAIL();
   }
   void Initialize(bool is_mse,
@@ -242,31 +246,36 @@ class MediaCapabilitiesTestContext {
     fake_metrics_provider_ = std::make_unique<FakeMediaMetricsProvider>(
         bad_window_service_.get(), nnr_service_.get());
 
-    CHECK(
-        v8_scope_.GetDocument().GetBrowserInterfaceBroker().SetBinderForTesting(
-            media::mojom::blink::MediaMetricsProvider::Name_,
-            base::BindRepeating(
-                &FakeMediaMetricsProvider::BindRequest,
-                base::Unretained(fake_metrics_provider_.get()))));
+    CHECK(v8_scope_.GetExecutionContext()
+              ->GetBrowserInterfaceBroker()
+              .SetBinderForTesting(
+                  media::mojom::blink::MediaMetricsProvider::Name_,
+                  base::BindRepeating(
+                      &FakeMediaMetricsProvider::BindRequest,
+                      base::Unretained(fake_metrics_provider_.get()))));
 
-    CHECK(
-        v8_scope_.GetDocument().GetBrowserInterfaceBroker().SetBinderForTesting(
-            media::mojom::blink::VideoDecodePerfHistory::Name_,
-            base::BindRepeating(
-                &MockPerfHistoryService::BindRequest,
-                base::Unretained(perf_history_service_.get()))));
+    CHECK(v8_scope_.GetExecutionContext()
+              ->GetBrowserInterfaceBroker()
+              .SetBinderForTesting(
+                  media::mojom::blink::VideoDecodePerfHistory::Name_,
+                  base::BindRepeating(
+                      &MockPerfHistoryService::BindRequest,
+                      base::Unretained(perf_history_service_.get()))));
 
-    media_capabilities_ = MakeGarbageCollected<MediaCapabilities>();
+    media_capabilities_ = MakeGarbageCollected<MediaCapabilities>(
+        v8_scope_.GetExecutionContext());
   }
 
   ~MediaCapabilitiesTestContext() {
-    CHECK(
-        v8_scope_.GetDocument().GetBrowserInterfaceBroker().SetBinderForTesting(
-            media::mojom::blink::MediaMetricsProvider::Name_, {}));
+    CHECK(v8_scope_.GetExecutionContext()
+              ->GetBrowserInterfaceBroker()
+              .SetBinderForTesting(
+                  media::mojom::blink::MediaMetricsProvider::Name_, {}));
 
-    CHECK(
-        v8_scope_.GetDocument().GetBrowserInterfaceBroker().SetBinderForTesting(
-            media::mojom::blink::VideoDecodePerfHistory::Name_, {}));
+    CHECK(v8_scope_.GetExecutionContext()
+              ->GetBrowserInterfaceBroker()
+              .SetBinderForTesting(
+                  media::mojom::blink::VideoDecodePerfHistory::Name_, {}));
   }
 
   ExceptionState& GetExceptionState() { return v8_scope_.GetExceptionState(); }

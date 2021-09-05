@@ -9,6 +9,7 @@
 #include "base/json/json_writer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromecast/base/version.h"
+#include "chromecast/browser/cast_web_contents.h"
 #include "chromecast/browser/webview/proto/webview.pb.h"
 #include "chromecast/browser/webview/webview_navigation_throttle.h"
 #include "content/public/browser/browser_context.h"
@@ -120,14 +121,6 @@ void WebContentController::ProcessRequest(
 
     case webview::WebviewRequest::kClearCache:
       HandleClearCache();
-      break;
-
-    case webview::WebviewRequest::kUpdateSettings:
-      if (request.has_update_settings()) {
-        HandleUpdateSettings(request.update_settings());
-      } else {
-        client_->OnError("update_settings() not supplied");
-      }
       break;
 
     case webview::WebviewRequest::kGetTitle:
@@ -398,28 +391,6 @@ void WebContentController::HandleGetTitle(int64_t id) {
   client_->EnqueueSend(std::move(response));
 }
 
-void WebContentController::HandleUpdateSettings(
-    const webview::UpdateSettingsRequest& request) {
-  content::WebContents* contents = GetWebContents();
-  content::WebPreferences prefs =
-      contents->GetRenderViewHost()->GetWebkitPreferences();
-  prefs.javascript_enabled = request.javascript_enabled();
-  contents->GetRenderViewHost()->UpdateWebkitPreferences(prefs);
-
-  has_navigation_delegate_ = request.has_navigation_delegate();
-
-  // Given that cast_shell enables devtools unconditionally there isn't
-  // anything that needs to be done for |request.debugging_enabled()|. Though,
-  // as a note, remote debugging is always on.
-
-  if (request.has_user_agent() &&
-      request.user_agent().type_case() == webview::UserAgent::kValue) {
-    contents->SetUserAgentOverride(
-        blink::UserAgentOverride::UserAgentOnly(request.user_agent().value()),
-        true);
-  }
-}
-
 void WebContentController::HandleSetAutoMediaPlaybackPolicy(
     const webview::SetAutoMediaPlaybackPolicyRequest& request) {
   content::WebContents* contents = GetWebContents();
@@ -556,15 +527,16 @@ void WebContentController::AckTouchEvent(content::RenderWidgetHostView* rwhv,
   }
 }
 
-void WebContentController::OnInputEventAck(content::InputEventAckSource source,
-                                           content::InputEventAckState state,
-                                           const blink::WebInputEvent& e) {
+void WebContentController::OnInputEventAck(
+    blink::mojom::InputEventResultSource source,
+    blink::mojom::InputEventResultState state,
+    const blink::WebInputEvent& e) {
   if (!blink::WebInputEvent::IsTouchEventType(e.GetType()))
     return;
   const uint32_t id =
       static_cast<const blink::WebTouchEvent&>(e).unique_touch_event_id;
   ui::EventResult result =
-      state == content::InputEventAckState::INPUT_EVENT_ACK_STATE_CONSUMED
+      state == blink::mojom::InputEventResultState::kConsumed
           ? ui::ER_HANDLED
           : ui::ER_UNHANDLED;
   const auto it = find_if(touch_queue_.begin(), touch_queue_.end(),

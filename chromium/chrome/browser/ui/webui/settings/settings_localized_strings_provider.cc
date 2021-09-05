@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/i18n/message_formatter.h"
 #include "base/i18n/number_formatting.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/obsolete_system/obsolete_system.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
@@ -27,8 +29,10 @@
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/browser/ui/webui/management_ui.h"
 #include "chrome/browser/ui/webui/policy_indicator_localized_strings_provider.h"
+#include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
 #include "chrome/browser/ui/webui/settings/shared_settings_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/webui_util.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
@@ -57,11 +61,13 @@
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/signin/public/base/signin_buildflags.h"
+#include "components/strings/grit/components_chromium_strings.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_service_utils.h"
 #include "components/sync/driver/sync_user_settings.h"
+#include "components/version_info/version_info.h"
 #include "components/zoom/page_zoom_constants.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -80,7 +86,6 @@
 
 #if defined(OS_CHROMEOS)
 #include "ash/public/cpp/ash_switches.h"
-#include "base/system/sys_info.h"
 #include "chrome/browser/chromeos/account_manager/account_manager_util.h"
 #include "chrome/browser/chromeos/assistant/assistant_util.h"
 #include "chrome/browser/chromeos/kerberos/kerberos_credentials_manager.h"
@@ -115,16 +120,6 @@
 #endif
 namespace settings {
 namespace {
-
-#if defined(OS_CHROMEOS)
-// Generates a Google Help URL which includes a "board type" parameter. Some
-// help pages need to be adjusted depending on the type of CrOS device that is
-// accessing the page.
-base::string16 GetHelpUrlWithBoard(const std::string& original_url) {
-  return base::ASCIIToUTF16(original_url +
-                            "&b=" + base::SysInfo::GetLsbReleaseBoard());
-}
-#endif
 
 void AddCommonStrings(content::WebUIDataSource* html_source, Profile* profile) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
@@ -256,6 +251,45 @@ void AddAboutStrings(content::WebUIDataSource* html_source, Profile* profile) {
       ui::SubstituteChromeOSDeviceType(IDS_SETTINGS_UPGRADE_UP_TO_DATE));
 #else
       l10n_util::GetStringUTF16(IDS_SETTINGS_UPGRADE_UP_TO_DATE));
+#endif
+
+  html_source->AddString(
+      "aboutBrowserVersion",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION,
+          base::UTF8ToUTF16(version_info::GetVersionNumber()),
+          l10n_util::GetStringUTF16(version_info::IsOfficialBuild()
+                                        ? IDS_VERSION_UI_OFFICIAL
+                                        : IDS_VERSION_UI_UNOFFICIAL),
+          base::UTF8ToUTF16(chrome::GetChannelName()),
+          l10n_util::GetStringUTF16(sizeof(void*) == 8
+                                        ? IDS_VERSION_UI_64BIT
+                                        : IDS_VERSION_UI_32BIT)));
+  html_source->AddString(
+      "aboutProductCopyright",
+      base::i18n::MessageFormatter::FormatWithNumberedArgs(
+          l10n_util::GetStringUTF16(IDS_ABOUT_VERSION_COPYRIGHT),
+          base::Time::Now()));
+
+  base::string16 license = l10n_util::GetStringFUTF16(
+      IDS_VERSION_UI_LICENSE, base::ASCIIToUTF16(chrome::kChromiumProjectURL),
+      base::ASCIIToUTF16(chrome::kChromeUICreditsURL));
+  html_source->AddString("aboutProductLicense", license);
+
+  html_source->AddBoolean("aboutObsoleteNowOrSoon",
+                          ObsoleteSystem::IsObsoleteNowOrSoon());
+  html_source->AddBoolean("aboutObsoleteEndOfTheLine",
+                          ObsoleteSystem::IsObsoleteNowOrSoon() &&
+                              ObsoleteSystem::IsEndOfTheLine());
+  html_source->AddString("aboutObsoleteSystem",
+                         ObsoleteSystem::LocalizedObsoleteString());
+  html_source->AddString("aboutObsoleteSystemURL",
+                         ObsoleteSystem::GetLinkURL());
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  html_source->AddString("aboutTermsURL", chrome::kChromeUITermsURL);
+  html_source->AddLocalizedString("aboutProductTos",
+                                  IDS_ABOUT_TERMS_OF_SERVICE);
 #endif
 }
 
@@ -473,11 +507,11 @@ void AddChromeCleanupStrings(content::WebUIDataSource* html_source) {
   // partner. The logo is added directly to the DOM, rather than as an <img>
   // src, to make sure that screen readers can find accessibility tags inside
   // the SVG.
-  const std::string powered_by_element =
-      base::StrCat({"<span id='powered-by-logo'>",
-                    ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
-                        IDR_CHROME_CLEANUP_PARTNER),
-                    "</span>"});
+  const std::string powered_by_element = base::StrCat(
+      {"<span id='powered-by-logo'>",
+       ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
+           IDR_CHROME_CLEANUP_PARTNER),
+       "</span>"});
   const base::string16 powered_by_html =
       l10n_util::GetStringFUTF16(IDS_SETTINGS_RESET_CLEANUP_FOOTER_POWERED_BY,
                                  base::UTF8ToUTF16(powered_by_element));
@@ -524,7 +558,7 @@ void AddIncompatibleApplicationsStrings(content::WebUIDataSource* html_source) {
 }
 #endif  // defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
-void AddResetStrings(content::WebUIDataSource* html_source) {
+void AddResetStrings(content::WebUIDataSource* html_source, Profile* profile) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
 #if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
     {"resetPageTitle", IDS_SETTINGS_RESET_AND_CLEANUP},
@@ -549,6 +583,10 @@ void AddResetStrings(content::WebUIDataSource* html_source) {
 #endif
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+
+  html_source->AddBoolean(
+      "showResetProfileBanner",
+      ResetSettingsHandler::ShouldShowResetProfileBanner(profile));
 
   html_source->AddString("resetPageLearnMoreUrl",
                          chrome::kResetProfileSettingsLearnMoreURL);
@@ -735,6 +773,18 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
       {"checkPasswordsCanceled", IDS_SETTINGS_CHECK_PASSWORDS_CANCELED},
       {"checkedPasswords", IDS_SETTINGS_CHECKED_PASSWORDS},
       {"checkPasswordsDescription", IDS_SETTINGS_CHECK_PASSWORDS_DESCRIPTION},
+      {"checkPasswordsErrorOffline",
+       IDS_SETTINGS_CHECK_PASSWORDS_ERROR_OFFLINE},
+      {"checkPasswordsErrorSignedOut",
+       IDS_SETTINGS_CHECK_PASSWORDS_ERROR_SIGNED_OUT},
+      {"checkPasswordsErrorNoPasswords",
+       IDS_SETTINGS_CHECK_PASSWORDS_ERROR_NO_PASSWORDS},
+      {"checkPasswordsErrorQuota",
+       IDS_SETTINGS_CHECK_PASSWORDS_ERROR_QUOTA_LIMIT},
+      {"checkPasswordsErrorGeneric",
+       IDS_SETTINGS_CHECK_PASSWORDS_ERROR_GENERIC},
+      {"noCompromisedCredentials",
+       IDS_SETTINGS_NO_COMPROMISED_CREDENTIALS_LABEL},
       {"checkPasswordsAgain", IDS_SETTINGS_CHECK_PASSWORDS_AGAIN},
       {"checkPasswordsAgainAfterError",
        IDS_SETTINGS_CHECK_PASSWORDS_AGAIN_AFTER_ERROR},
@@ -765,6 +815,12 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_COMPROMISED_EDIT_PASSWORD_SITE},
       {"editCompromisedPasswordApp",
        IDS_SETTINGS_COMPROMISED_EDIT_PASSWORD_APP},
+      {"alreadyChangedPasswordLink",
+       IDS_SETTINGS_COMPROMISED_ALREADY_CHANGED_PASSWORD},
+      {"editDisclaimerTitle",
+       IDS_SETTINGS_COMPROMISED_EDIT_DISCLAIMER_TITLE},
+      {"editDisclaimerDescription",
+       IDS_SETTINGS_COMPROMISED_EDIT_DISCLAIMER_DESCRIPTION},
       {"creditCards", IDS_AUTOFILL_PAYMENT_METHODS},
       {"noPaymentMethodsFound", IDS_SETTINGS_PAYMENT_METHODS_NONE},
       {"googlePayments", IDS_SETTINGS_GOOGLE_PAYMENTS},
@@ -840,6 +896,10 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_PASSWORDS_OPT_OUT_ACCOUNT_STORAGE_LABEL},
       {"undoRemovePassword", IDS_SETTINGS_PASSWORD_UNDO},
       {"passwordDeleted", IDS_SETTINGS_PASSWORD_DELETED_PASSWORD},
+      {"passwordDeletedFromDevice",
+       IDS_SETTINGS_PASSWORD_DELETED_PASSWORD_FROM_DEVICE},
+      {"passwordDeletedFromAccount",
+       IDS_SETTINGS_PASSWORD_DELETED_PASSWORD_FROM_ACCOUNT},
       {"passwordRowMoreActionsButton", IDS_SETTINGS_PASSWORD_ROW_MORE_ACTIONS},
       {"passwordRowFederatedMoreActionsButton",
        IDS_SETTINGS_PASSWORD_ROW_FEDERATED_MORE_ACTIONS},
@@ -859,33 +919,6 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
       {"savedToThisDeviceOnly",
        IDS_SETTINGS_PAYMENTS_SAVED_TO_THIS_DEVICE_ONLY}};
 
-  const base::string16 short_product_name =
-      l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_NAME);
-  html_source->AddString(
-      "checkPasswordsErrorOffline",
-      l10n_util::GetStringFUTF16(IDS_SETTINGS_CHECK_PASSWORDS_ERROR_OFFLINE,
-                                 short_product_name));
-  html_source->AddString(
-      "checkPasswordsErrorSignedOut",
-      l10n_util::GetStringFUTF16(IDS_SETTINGS_CHECK_PASSWORDS_ERROR_SIGNED_OUT,
-                                 short_product_name));
-  html_source->AddString(
-      "checkPasswordsErrorNoPasswords",
-      l10n_util::GetStringFUTF16(
-          IDS_SETTINGS_CHECK_PASSWORDS_ERROR_NO_PASSWORDS, short_product_name));
-  html_source->AddString(
-      "checkPasswordsErrorQuota",
-      l10n_util::GetStringFUTF16(IDS_SETTINGS_CHECK_PASSWORDS_ERROR_QUOTA_LIMIT,
-                                 short_product_name));
-  html_source->AddString(
-      "checkPasswordsErrorGeneric",
-      l10n_util::GetStringFUTF16(IDS_SETTINGS_CHECK_PASSWORDS_ERROR_GENERIC,
-                                 short_product_name));
-  html_source->AddString(
-      "noCompromisedCredentials",
-      l10n_util::GetStringFUTF16(IDS_SETTINGS_NO_COMPROMISED_CREDENTIALS_LABEL,
-                                 short_product_name));
-
   GURL google_password_manager_url = GetGooglePasswordManagerURL(
       password_manager::ManagePasswordsReferrer::kChromeSettings);
 
@@ -898,7 +931,6 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
       "checkPasswordsErrorQuotaGoogleAccount",
       l10n_util::GetStringFUTF16(
           IDS_SETTINGS_CHECK_PASSWORDS_ERROR_QUOTA_LIMIT_GOOGLE_ACCOUNT,
-          short_product_name,
           base::UTF8ToUTF16(
               password_manager::GetPasswordCheckupURL(
                   password_manager::PasswordCheckupReferrer::kPasswordCheck)
@@ -1042,6 +1074,7 @@ void AddPeopleStrings(content::WebUIDataSource* html_source, Profile* profile) {
   // Manage profile strings:
 #if !defined(OS_CHROMEOS)
     {"showShortcutLabel", IDS_SETTINGS_PROFILE_SHORTCUT_TOGGLE_LABEL},
+    {"nameInputLabel", IDS_SETTINGS_PROFILE_NAME_INPUT_LABEL},
 #endif
     {"deleteProfileWarningExpandA11yLabel",
      IDS_SETTINGS_SYNC_DISCONNECT_EXPAND_ACCESSIBILITY_LABEL},
@@ -1110,8 +1143,6 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
       {"permissionsPageDescription", IDS_SETTINGS_PERMISSIONS_DESCRIPTION},
       {"securityPageTitle", IDS_SETTINGS_SECURITY},
       {"securityPageDescription", IDS_SETTINGS_SECURITY_DESCRIPTION},
-      {"securityPageAdvancedSectionLabel",
-       IDS_SETTINGS_SECURITY_ADVANCED_SECTION_LABEL},
       {"advancedProtectionProgramTitle",
        IDS_SETTINGS_ADVANCED_PROTECTION_PROGRAM},
       {"advancedProtectionProgramDesc",
@@ -1180,7 +1211,7 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_SAFEBROWSING_DISABLE_DIALOG_TITLE},
       {"safeBrowsingDisableDialogDesc",
        IDS_SETTINGS_SAFEBROWSING_DISABLE_DIALOG_DESC},
-      {"safeBrowsingDisableDialogConfrim",
+      {"safeBrowsingDisableDialogConfirm",
        IDS_SETTINGS_SAFEBROWSING_DISABLE_DIALOG_CONFIRM},
       {"safeBrowsingEnableProtection",
        IDS_SETTINGS_SAFEBROWSING_ENABLEPROTECTION},
@@ -1237,6 +1268,8 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
       {"safetyCheckParentButton", IDS_SETTINGS_SAFETY_CHECK_PARENT_BUTTON},
       {"safetyCheckParentButtonAriaLabel",
        IDS_SETTINGS_SAFETY_CHECK_PARENT_BUTTON_ARIA_LABEL},
+      {"safetyCheckParentButtonAriaLabelReload",
+       IDS_SETTINGS_CHECK_PASSWORDS_AGAIN},
       {"safetyCheckIconRunningAriaLabel",
        IDS_SETTINGS_SAFETY_CHECK_ICON_RUNNING_ARIA_LABEL},
       {"safetyCheckIconSafeAriaLabel",
@@ -1245,20 +1278,19 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_SAFETY_CHECK_ICON_INFO_ARIA_LABEL},
       {"safetyCheckIconWarningAriaLabel",
        IDS_SETTINGS_SAFETY_CHECK_ICON_WARNING_ARIA_LABEL},
+      {"safetyCheckReview", IDS_SETTINGS_SAFETY_CHECK_REVIEW},
       {"safetyCheckUpdatesPrimaryLabel",
        IDS_SETTINGS_SAFETY_CHECK_UPDATES_PRIMARY_LABEL},
       {"safetyCheckUpdatesButtonAriaLabel",
        IDS_UPDATE_RECOMMENDED_DIALOG_TITLE},
-      {"safetyCheckPasswordsButton",
-       IDS_SETTINGS_SAFETY_CHECK_PASSWORDS_BUTTON},
+      {"safetyCheckPasswordsButtonAriaLabel",
+       IDS_SETTINGS_SAFETY_CHECK_PASSWORDS_BUTTON_ARIA_LABEL},
       {"safetyCheckSafeBrowsingButton",
        IDS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_BUTTON},
       {"safetyCheckSafeBrowsingButtonAriaLabel",
        IDS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_BUTTON_ARIA_LABEL},
       {"safetyCheckExtensionsPrimaryLabel",
        IDS_SETTINGS_SAFETY_CHECK_EXTENSIONS_PRIMARY_LABEL},
-      {"safetyCheckExtensionsButton",
-       IDS_SETTINGS_SAFETY_CHECK_EXTENSIONS_BUTTON},
       {"safetyCheckExtensionsButtonAriaLabel",
        IDS_SETTINGS_SAFETY_CHECK_EXTENSIONS_BUTTON_ARIA_LABEL},
   };
@@ -1277,17 +1309,13 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
       "doNotTrackDialogMessage",
       l10n_util::GetStringFUTF16(
           IDS_SETTINGS_ENABLE_DO_NOT_TRACK_DIALOG_TEXT,
-#if defined(OS_CHROMEOS)
-          GetHelpUrlWithBoard(chrome::kDoNotTrackLearnMoreURL)));
-#else
           base::ASCIIToUTF16(chrome::kDoNotTrackLearnMoreURL)));
-#endif
   html_source->AddString(
       "exceptionsLearnMoreURL",
       base::ASCIIToUTF16(chrome::kContentSettingsExceptionsLearnMoreURL));
   html_source->AddBoolean(
       "installedAppsInCbd",
-      base::FeatureList::IsEnabled(features::kStoragePressureUI));
+      base::FeatureList::IsEnabled(features::kInstalledAppsInCbd));
   html_source->AddBoolean(
       "driveSuggestAvailable",
       base::FeatureList::IsEnabled(omnibox::kDocumentProvider));
@@ -1821,6 +1849,12 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"siteSettingsVrAskRecommended",
      IDS_SETTINGS_SITE_SETTINGS_VR_ASK_RECOMMENDED},
     {"siteSettingsVrBlock", IDS_SETTINGS_SITE_SETTINGS_VR_BLOCK},
+    {"siteSettingsWindowPlacement",
+     IDS_SETTINGS_SITE_SETTINGS_WINDOW_PLACEMENT},
+    {"siteSettingsWindowPlacementAsk",
+     IDS_SETTINGS_SITE_SETTINGS_WINDOW_PLACEMENT_ASK},
+    {"siteSettingsWindowPlacementBlock",
+     IDS_SETTINGS_SITE_SETTINGS_WINDOW_PLACEMENT_BLOCK},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
 
@@ -2045,9 +2079,9 @@ void AddSecurityKeysStrings(content::WebUIDataSource* html_source) {
 
 }  // namespace
 
-void AddBrowserLocalizedStrings(content::WebUIDataSource* html_source,
-                                Profile* profile,
-                                content::WebContents* web_contents) {
+void AddLocalizedStrings(content::WebUIDataSource* html_source,
+                         Profile* profile,
+                         content::WebContents* web_contents) {
   AddA11yStrings(html_source);
   AddAboutStrings(html_source, profile);
   AddAutofillStrings(html_source, profile, web_contents);
@@ -2066,7 +2100,7 @@ void AddBrowserLocalizedStrings(content::WebUIDataSource* html_source,
   AddPeopleStrings(html_source, profile);
   AddPrintingStrings(html_source);
   AddPrivacyStrings(html_source, profile);
-  AddResetStrings(html_source);
+  AddResetStrings(html_source, profile);
   AddSearchEnginesStrings(html_source);
   AddSearchInSettingsStrings(html_source);
   AddSearchStrings(html_source);

@@ -184,6 +184,8 @@ struct ASH_PUBLIC_EXPORT LocaleItem {
   LocaleItem& operator=(const LocaleItem& other);
   LocaleItem& operator=(LocaleItem&& other);
 
+  bool operator==(const LocaleItem& other) const;
+
   // Language code of the locale.
   std::string language_code;
 
@@ -204,8 +206,9 @@ struct ASH_PUBLIC_EXPORT PublicAccountInfo {
   PublicAccountInfo& operator=(const PublicAccountInfo& other);
   PublicAccountInfo& operator=(PublicAccountInfo&& other);
 
-  // The domain name displayed in the login screen UI.
-  base::Optional<std::string> enterprise_domain;
+  // The domain name displayed in the login screen UI for device-level
+  // management.
+  base::Optional<std::string> device_enterprise_domain;
 
   // A list of available user locales.
   std::vector<LocaleItem> available_locales;
@@ -268,6 +271,14 @@ struct ASH_PUBLIC_EXPORT LoginUserInfo {
 
   // Show pin pad for password for this user or not.
   bool show_pin_pad_for_password = false;
+
+  // True if the display password button should be visible on the login/lock
+  // screen for this user.
+  bool show_display_password_button = false;
+
+  // The domain name displayed in the login screen UI for user-level
+  // management. This is only set if the relevant user is managed.
+  base::Optional<std::string> user_enterprise_domain;
 
   // Contains the public account information if user type is PUBLIC_ACCOUNT.
   base::Optional<PublicAccountInfo> public_account_info;

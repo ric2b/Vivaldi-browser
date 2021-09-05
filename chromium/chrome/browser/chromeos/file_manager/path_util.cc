@@ -10,7 +10,7 @@
 #include "base/barrier_closure.h"
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
@@ -25,6 +25,9 @@
 #include "chrome/browser/chromeos/fileapi/external_file_url_util.h"
 #include "chrome/browser/chromeos/fileapi/file_system_backend.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/smb_client/smb_service.h"
+#include "chrome/browser/chromeos/smb_client/smb_service_factory.h"
+#include "chrome/browser/chromeos/smb_client/smbfs_share.h"
 #include "chrome/browser/download/download_dir_util.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -411,7 +414,7 @@ bool ConvertPathToArcUrl(const base::FilePath& path, GURL* arc_url_out) {
   }
 
   bool force_external = false;
-  // Force external URL for DriveFS and Crostini.
+  // Force external URL for DriveFS, Crostini and smbfs.
   drive::DriveIntegrationService* integration_service =
       drive::util::GetIntegrationServiceByProfile(primary_profile);
   if ((integration_service &&
@@ -420,6 +423,16 @@ bool ConvertPathToArcUrl(const base::FilePath& path, GURL* arc_url_out) {
       GetCrostiniMountDirectory(primary_profile)
           .AppendRelativePath(path, &relative_path)) {
     force_external = true;
+  }
+
+  chromeos::smb_client::SmbService* smb_service =
+      chromeos::smb_client::SmbServiceFactory::Get(primary_profile);
+  if (smb_service) {
+    chromeos::smb_client::SmbFsShare* share =
+        smb_service->GetSmbFsShareForPath(path);
+    if (share && share->mount_path().AppendRelativePath(path, &relative_path)) {
+      force_external = true;
+    }
   }
 
   // Convert paths under /special or other paths forced to use external URL.
@@ -474,7 +487,7 @@ void ConvertToContentUrls(
                                                       &file_path);
       if (documents_provider_root) {
         documents_provider_root->ResolveToContentUrl(
-            file_path, base::BindRepeating(single_content_url_callback, index));
+            file_path, base::BindOnce(single_content_url_callback, index));
         continue;
       }
     }

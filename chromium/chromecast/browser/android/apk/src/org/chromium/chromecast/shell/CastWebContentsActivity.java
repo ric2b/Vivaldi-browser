@@ -5,6 +5,7 @@
 package org.chromium.chromecast.shell;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
@@ -20,6 +21,7 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import org.chromium.base.Log;
 import org.chromium.base.annotations.RemovableInRelease;
@@ -29,6 +31,7 @@ import org.chromium.chromecast.base.Controller;
 import org.chromium.chromecast.base.Observable;
 import org.chromium.chromecast.base.Observers;
 import org.chromium.chromecast.base.Unit;
+import org.chromium.content_public.browser.WebContents;
 
 /**
  * Activity for displaying a WebContents in CastShell.
@@ -42,6 +45,34 @@ import org.chromium.chromecast.base.Unit;
 public class CastWebContentsActivity extends Activity {
     private static final String TAG = "CastWebActivity";
     private static final boolean DEBUG = true;
+
+    // JavaScript to execute on WebContents when the back key is pressed.
+    // This will return a value that indicates whether or not the default
+    // Android behavior for the back key should be disabled or not.
+    private static final String BACK_PRESSED_JAVASCRIPT = "{"
+            + "  let getActiveElement = function() {"
+            + "    let activeElement = document.activeElement;"
+            + "    while (activeElement && activeElement.shadowRoot && activeElement.shadowRoot.activeElement) {"
+            + "      activeElement = activeElement.shadowRoot.activeElement;"
+            + "    }"
+            + "    return activeElement;"
+            + "  };"
+            + "  let backPressEvent = new KeyboardEvent("
+            + "     \"keydown\", {"
+            + "      bubbles: true,"
+            + "      key: \"BrowserBack\","
+            + "      cancelable: true,"
+            + "      composed: true"
+            + "     }"
+            + "  );"
+            + "  let activeElement = getActiveElement();"
+            + "  if (activeElement) {"
+            + "    activeElement.dispatchEvent(backPressEvent);"
+            + "  } else {"
+            + "    document.dispatchEvent(backPressEvent);"
+            + "  }"
+            + "  backPressEvent.defaultPrevented;"
+            + "};";
 
     // Tracks whether this Activity is between onCreate() and onDestroy().
     private final Controller<Unit> mCreatedState = new Controller<>();
@@ -127,17 +158,6 @@ public class CastWebContentsActivity extends Activity {
                     audioManager.releaseStreamMuteIfNecessary(AudioManager.STREAM_MUSIC);
                 }));
 
-        final Observable<CastAudioFocusRequest> audioFocusRequestState = mCreatedState.map(x
-                -> new CastAudioFocusRequest.Builder()
-                           .setFocusGain(AudioManager.AUDIOFOCUS_GAIN)
-                           .build());
-
-        mAudioManagerState.subscribe((CastAudioManager audioManager) -> {
-            return audioManager.requestAudioFocusWhen(audioFocusRequestState)
-                    .filter(state -> state == CastAudioManager.AudioFocusLoss.NORMAL)
-                    .subscribe(Observers.onEnter(x -> mIsFinishingState.set("Lost audio focus.")));
-        });
-
         // Handle each new Intent.
         Controller<CastWebContentsSurfaceHelper.StartParams> startParamsState = new Controller<>();
         mGotIntentState.and(Observable.not(mIsFinishingState))
@@ -155,6 +175,20 @@ public class CastWebContentsActivity extends Activity {
             mSurfaceHelperState.reset();
             finish();
         }));
+
+        mStartedState.subscribe(x -> {
+            Context ctx = getApplicationContext();
+            Intent intent = getIntent();
+            String instanceId = CastWebContentsIntentUtils.getSessionId(intent.getExtras());
+            Intent visible = CastWebContentsIntentUtils.onVisibilityChange(
+                    instanceId, CastWebContentsIntentUtils.VISIBITY_TYPE_FULL_SCREEN);
+            LocalBroadcastManager.getInstance(ctx).sendBroadcastSync(visible);
+            return () -> {
+                Intent hidden = CastWebContentsIntentUtils.onVisibilityChange(
+                        instanceId, CastWebContentsIntentUtils.VISIBITY_TYPE_HIDDEN);
+                LocalBroadcastManager.getInstance(ctx).sendBroadcastSync(hidden);
+            };
+        });
 
         // If a new Intent arrives after finishing, start a new Activity instead of recycling this.
         gotIntentAfterFinishingState.subscribe(Observers.onEnter((Intent intent) -> {
@@ -216,8 +250,23 @@ public class CastWebContentsActivity extends Activity {
     @Override
     protected void onDestroy() {
         if (DEBUG) Log.d(TAG, "onDestroy");
+
         mCreatedState.reset();
         super.onDestroy();
+    }
+
+    @Override
+    public void onBackPressed() {
+        WebContents webContents = CastWebContentsIntentUtils.getWebContents(getIntent());
+        if (webContents == null) {
+            super.onBackPressed();
+            return;
+        }
+        webContents.evaluateJavaScript(BACK_PRESSED_JAVASCRIPT, defaultPrevented -> {
+            if (!"true".equals(defaultPrevented)) {
+                super.onBackPressed();
+            }
+        });
     }
 
     @Override

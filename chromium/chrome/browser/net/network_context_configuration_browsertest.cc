@@ -57,6 +57,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/network_service_util.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/simple_url_loader_test_helper.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -567,8 +568,8 @@ class NetworkContextConfigurationBrowserTest
     request->site_for_cookies = net::SiteForCookies::FromOrigin(origin);
 
     request->trusted_params = network::ResourceRequest::TrustedParams();
-    request->trusted_params->network_isolation_key =
-        net::NetworkIsolationKey(origin, origin);
+    request->trusted_params->isolation_info =
+        net::IsolationInfo::CreateForInternalRequest(origin);
 
     content::SimpleURLLoaderTestHelper simple_loader_helper;
     std::unique_ptr<network::SimpleURLLoader> simple_loader =
@@ -802,8 +803,8 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
   url::Origin origin = url::Origin::Create(GURL(chrome::kChromeUIPrintURL));
   request->site_for_cookies = net::SiteForCookies::FromOrigin(origin);
   request->trusted_params = network::ResourceRequest::TrustedParams();
-  request->trusted_params->network_isolation_key =
-      net::NetworkIsolationKey(origin, origin);
+  request->trusted_params->isolation_info =
+      net::IsolationInfo::CreateForInternalRequest(origin);
   content::SimpleURLLoaderTestHelper simple_loader_helper;
   std::unique_ptr<network::SimpleURLLoader> simple_loader =
       network::SimpleURLLoader::Create(std::move(request),
@@ -869,8 +870,8 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
 
   // This request will show up as cross-site because the chrome-extension URL
   // won't match the test_server domain (127.0.0.1), but because we set
-  // |attach_same_site_cookies| to true for extension-initiated requests, this
-  // will actually be able to get the cookie.
+  // |force_ignore_site_for_cookies| to true for extension-initiated requests,
+  // this will actually be able to get the cookie.
   GURL url = test_server.GetURL("/echocookieheader");
   std::string script = R"((url => {
     var xhr = new XMLHttpRequest();
@@ -926,8 +927,10 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest, Cache) {
       std::make_unique<network::ResourceRequest>();
   request->url = request_url;
   request->trusted_params = network::ResourceRequest::TrustedParams();
-  request->trusted_params->network_isolation_key =
-      net::NetworkIsolationKey(request_origin, request_origin);
+  request->trusted_params->isolation_info =
+      net::IsolationInfo::CreateForInternalRequest(request_origin);
+  request->site_for_cookies =
+      request->trusted_params->isolation_info.site_for_cookies();
 
   content::SimpleURLLoaderTestHelper simple_loader_helper;
   std::unique_ptr<network::SimpleURLLoader> simple_loader =
@@ -950,8 +953,10 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest, Cache) {
       std::make_unique<network::ResourceRequest>();
   request2->url = request_url;
   request2->trusted_params = network::ResourceRequest::TrustedParams();
-  request2->trusted_params->network_isolation_key =
-      net::NetworkIsolationKey(request_origin, request_origin);
+  request2->trusted_params->isolation_info =
+      net::IsolationInfo::CreateForInternalRequest(request_origin);
+  request2->site_for_cookies =
+      request2->trusted_params->isolation_info.site_for_cookies();
 
   content::SimpleURLLoaderTestHelper simple_loader_helper2;
   std::unique_ptr<network::SimpleURLLoader> simple_loader2 =
@@ -1039,8 +1044,10 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest, PRE_DiskCache) {
       std::make_unique<network::ResourceRequest>();
   request->url = test_url;
   request->trusted_params = network::ResourceRequest::TrustedParams();
-  request->trusted_params->network_isolation_key =
-      net::NetworkIsolationKey(test_origin, test_origin);
+  request->trusted_params->isolation_info =
+      net::IsolationInfo::CreateForInternalRequest(test_origin);
+  request->site_for_cookies =
+      request->trusted_params->isolation_info.site_for_cookies();
 
   content::SimpleURLLoaderTestHelper simple_loader_helper;
   std::unique_ptr<network::SimpleURLLoader> simple_loader =
@@ -1057,9 +1064,7 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest, PRE_DiskCache) {
   // Write the URL and expected response to a file.
   std::string file_data =
       test_url.spec() + "\n" + *simple_loader_helper.response_body();
-  ASSERT_EQ(
-      static_cast<int>(file_data.length()),
-      base::WriteFile(save_url_file_path, file_data.data(), file_data.size()));
+  ASSERT_TRUE(base::WriteFile(save_url_file_path, file_data));
 
   EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
 }
@@ -1097,8 +1102,10 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest, DiskCache) {
       std::make_unique<network::ResourceRequest>();
   request->url = test_url;
   request->trusted_params = network::ResourceRequest::TrustedParams();
-  request->trusted_params->network_isolation_key =
-      net::NetworkIsolationKey(test_origin, test_origin);
+  request->trusted_params->isolation_info =
+      net::IsolationInfo::CreateForInternalRequest(test_origin);
+  request->site_for_cookies =
+      request->trusted_params->isolation_info.site_for_cookies();
 
   content::SimpleURLLoaderTestHelper simple_loader_helper;
   request->load_flags = net::LOAD_ONLY_FROM_CACHE;
@@ -1232,9 +1239,7 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest, PRE_Hsts) {
   base::FilePath save_url_file_path = browser()->profile()->GetPath().Append(
       FILE_PATH_LITERAL("url_for_test.txt"));
   std::string file_data = start_url.spec();
-  ASSERT_EQ(
-      static_cast<int>(file_data.length()),
-      base::WriteFile(save_url_file_path, file_data.data(), file_data.size()));
+  ASSERT_TRUE(base::WriteFile(save_url_file_path, file_data));
 }
 
 // Checks if the HSTS information from the last test is still available after a
@@ -1570,8 +1575,20 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
   // The preference is expected to be reset in incognito mode.
   if (is_incognito()) {
     EXPECT_FALSE(GetPrefService()->GetBoolean(prefs::kBlockThirdPartyCookies));
+    EXPECT_EQ(
+        static_cast<int>(content_settings::CookieControlsMode::kIncognitoOnly),
+        GetPrefService()->GetInteger(prefs::kCookieControlsMode));
     return;
   }
+
+  // For regular sessions, the kBlockThirdpartyCookies preference gets migrated
+  // to kCookieControlsMode. Reset it so it doesn't interfere with the test.
+  EXPECT_EQ(
+      static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty),
+      GetPrefService()->GetInteger(prefs::kCookieControlsMode));
+  GetPrefService()->SetInteger(
+      prefs::kCookieControlsMode,
+      static_cast<int>(content_settings::CookieControlsMode::kIncognitoOnly));
 
   // The kBlockThirdPartyCookies pref should carry over to the next session.
   EXPECT_TRUE(GetPrefService()->GetBoolean(prefs::kBlockThirdPartyCookies));
@@ -1792,9 +1809,7 @@ class NetworkContextConfigurationFilePacBrowserTest
         temp_dir_.GetPath().AppendASCII(kPacFileName);
 
     std::string pac_script = GetPacScript();
-    ASSERT_EQ(
-        static_cast<int>(pac_script.size()),
-        base::WriteFile(pac_file_path, pac_script.c_str(), pac_script.size()));
+    ASSERT_TRUE(base::WriteFile(pac_file_path, pac_script));
 
     command_line->AppendSwitchASCII(
         switches::kProxyPacUrl, net::FilePathToFileURL(pac_file_path).spec());

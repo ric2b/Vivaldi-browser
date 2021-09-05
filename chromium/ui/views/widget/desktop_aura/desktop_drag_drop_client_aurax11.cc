@@ -18,23 +18,23 @@
 #include "ui/aura/client/drag_drop_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
-#include "ui/base/dragdrop/os_exchange_data_provider_aurax11.h"
+#include "ui/base/dragdrop/os_exchange_data_provider_x11.h"
 #include "ui/base/layout.h"
-#include "ui/base/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/x/selection_utils.h"
 #include "ui/base/x/x11_drag_context.h"
 #include "ui/base/x/x11_util.h"
+#include "ui/base/x/x11_whole_screen_move_loop.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/x/x11.h"
+#include "ui/platform_window/x11/x11_topmost_window_finder.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/widget/desktop_aura/desktop_native_cursor_manager.h"
-#include "ui/views/widget/desktop_aura/x11_topmost_window_finder.h"
-#include "ui/views/widget/desktop_aura/x11_whole_screen_move_loop.h"
 #include "ui/views/widget/widget.h"
 
 using aura::client::DragDropDelegate;
@@ -171,8 +171,11 @@ int DesktopDragDropClientAuraX11::StartDragAndDrop(
   // Windows has a specific method, DoDragDrop(), which performs the entire
   // drag. We have to emulate this, so we spin off a nested runloop which will
   // track all cursor movement and reroute events to a specific handler.
-  move_loop_->RunMoveLoop(source_window, cursor_manager_->GetInitializedCursor(
-                                             ui::mojom::CursorType::kGrabbing));
+  move_loop_->RunMoveLoop(
+      !source_window->HasCapture(),
+      source_window->GetHost()->last_cursor().platform(),
+      cursor_manager_->GetInitializedCursor(ui::mojom::CursorType::kGrabbing)
+          .platform());
 
   if (alive) {
     auto resulting_operation = negotiated_operation();
@@ -248,9 +251,9 @@ void DesktopDragDropClientAuraX11::OnMoveLoopEnded() {
   XDragDropClient::HandleMoveLoopEnded();
 }
 
-std::unique_ptr<X11MoveLoop> DesktopDragDropClientAuraX11::CreateMoveLoop(
+std::unique_ptr<ui::X11MoveLoop> DesktopDragDropClientAuraX11::CreateMoveLoop(
     X11MoveLoopDelegate* delegate) {
-  return base::WrapUnique(new X11WholeScreenMoveLoop(this));
+  return base::WrapUnique(new ui::X11WholeScreenMoveLoop(this));
 }
 
 void DesktopDragDropClientAuraX11::DragTranslate(
@@ -280,7 +283,7 @@ void DesktopDragDropClientAuraX11::DragTranslate(
 
   DCHECK(target_current_context());
   *data = std::make_unique<OSExchangeData>(
-      std::make_unique<ui::OSExchangeDataProviderAuraX11>(
+      std::make_unique<ui::OSExchangeDataProviderX11>(
           xwindow(), target_current_context()->fetched_targets()));
   gfx::Point location = root_location;
   aura::Window::ConvertPointToTarget(root_window_, target_window_, &location);
@@ -326,7 +329,7 @@ void DesktopDragDropClientAuraX11::NotifyDragLeave() {
 
 std::unique_ptr<ui::XTopmostWindowFinder>
 DesktopDragDropClientAuraX11::CreateWindowFinder() {
-  return std::make_unique<X11TopmostWindowFinder>();
+  return std::make_unique<ui::X11TopmostWindowFinder>();
 }
 
 int DesktopDragDropClientAuraX11::UpdateDrag(const gfx::Point& screen_point) {
@@ -362,7 +365,8 @@ void DesktopDragDropClientAuraX11::UpdateCursor(
       cursor_type = ui::mojom::CursorType::kDndLink;
       break;
   }
-  move_loop_->UpdateCursor(cursor_manager_->GetInitializedCursor(cursor_type));
+  move_loop_->UpdateCursor(
+      cursor_manager_->GetInitializedCursor(cursor_type).platform());
 }
 
 void DesktopDragDropClientAuraX11::OnBeginForeignDrag(XID window) {
@@ -394,7 +398,7 @@ int DesktopDragDropClientAuraX11::PerformDrop() {
         aura::client::GetDragDropDelegate(target_window_);
     if (delegate) {
       auto data(std::make_unique<ui::OSExchangeData>(
-          std::make_unique<ui::OSExchangeDataProviderAuraX11>(
+          std::make_unique<ui::OSExchangeDataProviderX11>(
               xwindow(), target_current_context()->fetched_targets())));
 
       ui::DropTargetEvent drop_event(

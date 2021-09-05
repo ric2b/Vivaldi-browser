@@ -23,6 +23,7 @@
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/cors_exempt_headers.h"
 #include "content/public/browser/login_delegate.h"
+#include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_process_host.h"
@@ -115,22 +116,26 @@ std::string GetShellLanguage() {
 blink::UserAgentMetadata GetShellUserAgentMetadata() {
   blink::UserAgentMetadata metadata;
 
-  metadata.brand = "content_shell";
+  metadata.brand_version_list.emplace_back("content_shell",
+                                           CONTENT_SHELL_MAJOR_VERSION);
   metadata.full_version = CONTENT_SHELL_VERSION;
-  metadata.major_version = CONTENT_SHELL_MAJOR_VERSION;
-  metadata.platform = BuildOSCpuInfo(false);
+  metadata.platform = BuildOSCpuInfo(IncludeAndroidBuildNumber::Exclude,
+                                     IncludeAndroidModel::Exclude);
   metadata.architecture = BuildCpuInfo();
   metadata.model = BuildModelInfo();
 
   return metadata;
 }
 
+// static
+bool ShellContentBrowserClient::allow_any_cors_exempt_header_for_browser_ =
+    false;
+
 ShellContentBrowserClient* ShellContentBrowserClient::Get() {
   return g_browser_client;
 }
 
-ShellContentBrowserClient::ShellContentBrowserClient()
-    : shell_browser_main_parts_(nullptr) {
+ShellContentBrowserClient::ShellContentBrowserClient() {
   DCHECK(!g_browser_client);
   g_browser_client = this;
 }
@@ -269,6 +274,16 @@ ShellContentBrowserClient::GetDevToolsManagerDelegate() {
   return new ShellDevToolsManagerDelegate(browser_context());
 }
 
+void ShellContentBrowserClient::ExposeInterfacesToRenderer(
+    service_manager::BinderRegistry* registry,
+    blink::AssociatedInterfaceRegistry* associated_registry,
+    RenderProcessHost* render_process_host) {
+  if (expose_interfaces_to_renderer_callback_) {
+    expose_interfaces_to_renderer_callback_.Run(registry, associated_registry,
+                                                render_process_host);
+  }
+}
+
 mojo::Remote<::media::mojom::MediaService>
 ShellContentBrowserClient::RunSecondaryMediaService() {
   mojo::Remote<::media::mojom::MediaService> remote;
@@ -282,6 +297,14 @@ ShellContentBrowserClient::RunSecondaryMediaService() {
   return remote;
 }
 
+void ShellContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
+    RenderFrameHost* render_frame_host,
+    mojo::BinderMapWithContext<RenderFrameHost*>* map) {
+  if (register_browser_interface_binders_for_frame_callback_)
+    register_browser_interface_binders_for_frame_callback_.Run(
+        render_frame_host, map);
+}
+
 void ShellContentBrowserClient::OpenURL(
     SiteInstance* site_instance,
     const OpenURLParams& params,
@@ -290,6 +313,15 @@ void ShellContentBrowserClient::OpenURL(
       Shell::CreateNewWindow(site_instance->GetBrowserContext(), params.url,
                              nullptr, gfx::Size())
           ->web_contents());
+}
+
+std::vector<std::unique_ptr<NavigationThrottle>>
+ShellContentBrowserClient::CreateThrottlesForNavigation(
+    NavigationHandle* navigation_handle) {
+  std::vector<std::unique_ptr<NavigationThrottle>> empty_throttles;
+  if (create_throttles_for_navigation_callback_)
+    return create_throttles_for_navigation_callback_.Run(navigation_handle);
+  return empty_throttles;
 }
 
 std::unique_ptr<LoginDelegate> ShellContentBrowserClient::CreateLoginDelegate(
@@ -349,17 +381,14 @@ void ShellContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
 }
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
-mojo::Remote<network::mojom::NetworkContext>
-ShellContentBrowserClient::CreateNetworkContext(
+void ShellContentBrowserClient::ConfigureNetworkContextParams(
     BrowserContext* context,
     bool in_memory,
-    const base::FilePath& relative_partition_path) {
-  network::mojom::NetworkContextParamsPtr context_params =
-      CreateNetworkContextParams(context);
-  mojo::Remote<network::mojom::NetworkContext> network_context;
-  GetNetworkService()->CreateNetworkContext(
-      network_context.BindNewPipeAndPassReceiver(), std::move(context_params));
-  return network_context;
+    const base::FilePath& relative_partition_path,
+    network::mojom::NetworkContextParams* network_context_params,
+    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
+  ConfigureNetworkContextParamsForShell(context, network_context_params,
+                                        cert_verifier_creation_params);
 }
 
 std::vector<base::FilePath>
@@ -376,14 +405,20 @@ ShellBrowserContext*
   return shell_browser_main_parts_->off_the_record_browser_context();
 }
 
-network::mojom::NetworkContextParamsPtr
-ShellContentBrowserClient::CreateNetworkContextParams(BrowserContext* context) {
-  network::mojom::NetworkContextParamsPtr context_params =
-      network::mojom::NetworkContextParams::New();
-  UpdateCorsExemptHeader(context_params.get());
+void ShellContentBrowserClient::ConfigureNetworkContextParamsForShell(
+    BrowserContext* context,
+    network::mojom::NetworkContextParams* context_params,
+    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
+  UpdateCorsExemptHeader(context_params);
+  context_params->allow_any_cors_exempt_header_for_browser =
+      allow_any_cors_exempt_header_for_browser_;
   context_params->user_agent = GetUserAgent();
   context_params->accept_language = GetAcceptLangs(context);
-  return context_params;
+  auto exempt_header =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          "cors_exempt_header_list");
+  if (!exempt_header.empty())
+    context_params->cors_exempt_header_list.push_back(exempt_header);
 }
 
 }  // namespace content

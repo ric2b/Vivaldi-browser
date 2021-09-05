@@ -8,7 +8,9 @@
 #include <set>
 #include <string>
 
+#include "base/callback.h"
 #include "base/optional.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/core/proto/webprotect.pb.h"
 
 namespace base {
@@ -67,6 +69,9 @@ class EventReportValidator {
                                 const std::set<std::string>* expected_mimetypes,
                                 int expected_content_size);
 
+  // Closure to run once all expected events are validated.
+  void SetDoneClosure(base::RepeatingClosure closure);
+
  private:
   void ValidateReport(base::Value* report);
   void ValidateMimeType(base::Value* value);
@@ -97,7 +102,30 @@ class EventReportValidator {
   base::Optional<bool> clicked_through_ = base::nullopt;
   base::Optional<int> content_size_ = base::nullopt;
   const std::set<std::string>* mimetypes_ = nullptr;
+
+  base::RepeatingClosure done_closure_;
 };
+
+// Helper functions that set matching connector policies values from legacy
+// policy values.
+void SetDlpPolicyForConnectors(CheckContentComplianceValues state);
+void SetMalwarePolicyForConnectors(SendFilesForMalwareCheckValues state);
+void SetDelayDeliveryUntilVerdictPolicyForConnectors(
+    DelayDeliveryUntilVerdictValues state);
+void SetAllowPasswordProtectedFilesPolicyForConnectors(
+    AllowPasswordProtectedFilesValues state);
+void SetBlockUnsupportedFileTypesPolicyForConnectors(
+    BlockUnsupportedFiletypesValues state);
+void SetBlockLargeFileTransferPolicyForConnectors(
+    BlockLargeFileTransferValues state);
+void AddUrlsToCheckComplianceOfDownloadsForConnectors(
+    const std::vector<std::string>& urls);
+void AddUrlsToNotCheckComplianceOfUploadsForConnectors(
+    const std::vector<std::string>& urls);
+void AddUrlsToCheckForMalwareOfUploadsForConnectors(
+    const std::vector<std::string>& urls);
+void AddUrlsToNotCheckForMalwareOfDownloadsForConnectors(
+    const std::vector<std::string>& urls);
 
 }  // namespace safe_browsing
 

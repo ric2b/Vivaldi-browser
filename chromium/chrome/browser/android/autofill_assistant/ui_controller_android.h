@@ -73,7 +73,12 @@ class UiControllerAndroid : public ControllerObserver {
   void Detach();
 
   // Returns true if the UI is attached to a delegate.
-  bool IsAttached() { return ui_delegate_; }
+  bool IsAttached() { return ui_delegate_ != nullptr; }
+
+  // Returns whether the UI is currently attached to the given delegate or not.
+  bool IsAttachedTo(UiDelegate* ui_delegate) {
+    return ui_delegate_ == ui_delegate;
+  }
 
   // Have the UI react as if a close or cancel button was pressed.
   //
@@ -114,7 +119,6 @@ class UiControllerAndroid : public ControllerObserver {
 
   // Called by AssistantOverlayDelegate:
   void OnUnexpectedTaps();
-  void UpdateTouchableArea();
   void OnUserInteractionInsideTouchableArea();
 
   // Called by AssistantHeaderDelegate:
@@ -180,6 +184,8 @@ class UiControllerAndroid : public ControllerObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jcaller,
       jboolean visible);
+  bool OnBackButtonClicked(JNIEnv* env,
+                           const base::android::JavaParamRef<jobject>& jcaller);
   void SetVisible(JNIEnv* env,
                   const base::android::JavaParamRef<jobject>& jcaller,
                   jboolean visible);
@@ -209,7 +215,6 @@ class UiControllerAndroid : public ControllerObserver {
   base::android::ScopedJavaLocalRef<jobject> GetGenericUiModel();
 
   void SetOverlayState(OverlayState state);
-  void AllowShowingSoftKeyboard(bool enabled);
   void ShowContentAndExpandBottomSheet();
   void SetSpinPoodle(bool enabled);
   std::string GetDebugContext();

@@ -84,6 +84,7 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "services/service_manager/embedder/descriptors.h"
+#include "third_party/blink/public/common/features.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gl/gl_switches.h"
@@ -134,6 +135,10 @@
 #include "chromecast/media/service/video_geometry_setter_service.h"
 #endif  // BUILDFLAG(ENABLE_CAST_RENDERER)
 
+#if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
+#include "device/bluetooth/cast/bluetooth_adapter_cast.h"
+#endif
+
 namespace chromecast {
 namespace shell {
 
@@ -158,12 +163,14 @@ CastContentBrowserClient::CastContentBrowserClient(
 #endif
   });
 
-#if defined(OS_ANDROID)
   cast_feature_list_creator_->SetExtraDisableFeatures({
+      // TODO(juke): Reenable this after solving casting issue on LAN.
+      blink::features::kMixedContentAutoupgrade,
+#if defined(OS_ANDROID)
       ::media::kAudioFocusLossSuspendMediaSession,
       ::media::kRequestSystemAudioFocus,
-  });
 #endif
+  });
 }
 
 CastContentBrowserClient::~CastContentBrowserClient() {
@@ -281,7 +288,7 @@ bool CastContentBrowserClient::OverridesAudioManager() {
 }
 
 std::unique_ptr<::media::CdmFactory> CastContentBrowserClient::CreateCdmFactory(
-    service_manager::mojom::InterfaceProvider* host_interfaces) {
+    ::media::mojom::FrameInterfaceFactory* frame_interfaces) {
   return std::make_unique<media::CastCdmFactory>(GetMediaTaskRunner(),
                                                  media_resource_tracker());
 }
@@ -292,7 +299,7 @@ media::MediaCapsImpl* CastContentBrowserClient::media_caps() {
 }
 
 #if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
-base::WeakPtr<device::BluetoothAdapterCast>
+scoped_refptr<device::BluetoothAdapterCast>
 CastContentBrowserClient::CreateBluetoothAdapter() {
   NOTREACHED() << "Bluetooth Adapter is not supported!";
   return nullptr;
@@ -880,13 +887,15 @@ void CastContentBrowserClient::OnNetworkServiceCreated(
   cast_network_contexts_->OnNetworkServiceCreated(network_service);
 }
 
-mojo::Remote<network::mojom::NetworkContext>
-CastContentBrowserClient::CreateNetworkContext(
+void CastContentBrowserClient::ConfigureNetworkContextParams(
     content::BrowserContext* context,
     bool in_memory,
-    const base::FilePath& relative_partition_path) {
-  return cast_network_contexts_->CreateNetworkContext(context, in_memory,
-                                                      relative_partition_path);
+    const base::FilePath& relative_partition_path,
+    network::mojom::NetworkContextParams* network_context_params,
+    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
+  return cast_network_contexts_->ConfigureNetworkContextParams(
+      context, in_memory, relative_partition_path, network_context_params,
+      cert_verifier_creation_params);
 }
 
 bool CastContentBrowserClient::DoesSiteRequireDedicatedProcess(
@@ -927,7 +936,7 @@ void CastContentBrowserClient::BindMediaRenderer(
       std::make_unique<media::CastRenderer>(
           GetCmaBackendFactory(), std::move(media_task_runner),
           GetVideoModeSwitcher(), GetVideoResolutionPolicy(),
-          base::UnguessableToken::Create(), nullptr /* host_interfaces */),
+          base::UnguessableToken::Create(), nullptr /* frame_interfaces */),
       std::move(receiver));
 }
 

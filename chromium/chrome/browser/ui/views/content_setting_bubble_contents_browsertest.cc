@@ -14,6 +14,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/permissions/test/permission_request_observer.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 
 class ContentSettingBubbleContentsBrowserTest : public InProcessBrowserTest {
@@ -33,8 +34,9 @@ class ContentSettingBubbleContentsBrowserTest : public InProcessBrowserTest {
   }
 };
 
+// Flaky: https://crbug.com/1073516
 IN_PROC_BROWSER_TEST_F(ContentSettingBubbleContentsBrowserTest,
-                       HidesAtWebContentsClose) {
+                       DISABLED_HidesAtWebContentsClose) {
   // Create a second tab, so closing the test tab doesn't close the browser.
   chrome::NewTab(browser());
 

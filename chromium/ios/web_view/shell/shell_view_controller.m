@@ -21,12 +21,13 @@ NSString* const kWebViewShellAddressFieldAccessibilityLabel = @"Address field";
 NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
     @"WebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier";
 
-@interface ShellViewController ()<CWVDownloadTaskDelegate,
-                                  CWVNavigationDelegate,
-                                  CWVUIDelegate,
-                                  CWVScriptCommandHandler,
-                                  CWVSyncControllerDelegate,
-                                  UITextFieldDelegate>
+@interface ShellViewController () <CWVDownloadTaskDelegate,
+                                   CWVNavigationDelegate,
+                                   CWVUIDelegate,
+                                   CWVScriptCommandHandler,
+                                   CWVSyncControllerDelegate,
+                                   UIScrollViewDelegate,
+                                   UITextFieldDelegate>
 // Header containing navigation buttons and |field|.
 @property(nonatomic, strong) UIView* headerBackgroundView;
 // Header containing navigation buttons and |field|.
@@ -268,6 +269,14 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
   self.webView = [self createWebViewWithConfiguration:configuration];
 }
 
+- (void)applicationFinishedRestoringState {
+  [super applicationFinishedRestoringState];
+
+  // The scroll view is reset on state restoration. So the delegate must be
+  // reassigned.
+  self.webView.scrollView.delegate = self;
+}
+
 - (UIStatusBarStyle)preferredStatusBarStyle {
   return UIStatusBarStyleLightContent;
 }
@@ -373,22 +382,6 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
     NSString* message = [descriptions componentsJoinedByString:@"\n\n"];
     UIAlertController* alertController =
         [self actionSheetWithTitle:@"Credit cards" message:message];
-    for (CWVCreditCard* creditCard in creditCards) {
-      // Cards from Google Play can only be deleted on the Google Pay website.
-      if (creditCard.fromGooglePay) {
-        continue;
-      }
-      NSString* title =
-          [NSString stringWithFormat:@"Delete %@",
-                                     @([creditCards indexOfObject:creditCard])];
-      UIAlertAction* action =
-          [UIAlertAction actionWithTitle:title
-                                   style:UIAlertActionStyleDefault
-                                 handler:^(UIAlertAction* action) {
-                                   [dataManager deleteCreditCard:creditCard];
-                                 }];
-      [alertController addAction:action];
-    }
     __weak ShellViewController* weakSelf = self;
     [alertController
         addAction:[UIAlertAction
@@ -454,6 +447,7 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
 
   CWVSyncController* syncController = _webView.configuration.syncController;
   CWVIdentity* currentIdentity = syncController.currentIdentity;
+  __weak ShellViewController* weakSelf = self;
   if (currentIdentity) {
     NSString* title = [NSString
         stringWithFormat:@"Stop syncing for %@", currentIdentity.email];
@@ -465,7 +459,6 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
                                 [syncController stopSyncAndClearIdentity];
                               }]];
 
-    __weak ShellViewController* weakSelf = self;
     if (syncController.passphraseNeeded) {
       [alertController
           addAction:[UIAlertAction
@@ -475,24 +468,6 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
                                   [weakSelf showPassphraseUnlockAlert];
                                 }]];
     } else {
-      [alertController
-          addAction:[UIAlertAction actionWithTitle:@"Show autofill data"
-                                             style:UIAlertActionStyleDefault
-                                           handler:^(UIAlertAction* action) {
-                                             [weakSelf showAddressData];
-                                           }]];
-      [alertController
-          addAction:[UIAlertAction actionWithTitle:@"Show credit card data"
-                                             style:UIAlertActionStyleDefault
-                                           handler:^(UIAlertAction* action) {
-                                             [weakSelf showCreditCardData];
-                                           }]];
-      [alertController
-          addAction:[UIAlertAction actionWithTitle:@"Show password data"
-                                             style:UIAlertActionStyleDefault
-                                           handler:^(UIAlertAction* action) {
-                                             [weakSelf showPasswordData];
-                                           }]];
     }
   } else {
     for (CWVIdentity* identity in [_authService identities]) {
@@ -519,7 +494,24 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
                                                .usesSyncAndWalletSandbox ^= YES;
                                          }]];
   }
-
+  [alertController
+      addAction:[UIAlertAction actionWithTitle:@"Show autofill data"
+                                         style:UIAlertActionStyleDefault
+                                       handler:^(UIAlertAction* action) {
+                                         [weakSelf showAddressData];
+                                       }]];
+  [alertController
+      addAction:[UIAlertAction actionWithTitle:@"Show credit card data"
+                                         style:UIAlertActionStyleDefault
+                                       handler:^(UIAlertAction* action) {
+                                         [weakSelf showCreditCardData];
+                                       }]];
+  [alertController
+      addAction:[UIAlertAction actionWithTitle:@"Show password data"
+                                         style:UIAlertActionStyleDefault
+                                       handler:^(UIAlertAction* action) {
+                                         [weakSelf showPasswordData];
+                                       }]];
   [alertController
       addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                          style:UIAlertActionStyleCancel
@@ -632,6 +624,13 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
                                          [weakSelf resetTranslateSettings];
                                        }]];
 
+  [alertController
+      addAction:[UIAlertAction actionWithTitle:@"Request translation offer"
+                                         style:UIAlertActionStyleDefault
+                                       handler:^(UIAlertAction* action) {
+                                         [weakSelf requestTranslationOffer];
+                                       }]];
+
   // Shows sync menu.
   [alertController
       addAction:[UIAlertAction actionWithTitle:@"Sync menu"
@@ -656,6 +655,11 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
   CWVWebViewConfiguration* configuration =
       [CWVWebViewConfiguration defaultConfiguration];
   [configuration.preferences resetTranslationSettings];
+}
+
+- (void)requestTranslationOffer {
+  BOOL offered = [_webView.translationController requestTranslationOffer];
+  NSLog(@"Manual translation was offered: %d", offered);
 }
 
 - (void)toggleIncognito {
@@ -683,6 +687,7 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
   webView.translationController.delegate = _translationDelegate;
   _autofillDelegate = [[ShellAutofillDelegate alloc] init];
   webView.autofillController.delegate = _autofillDelegate;
+  webView.scrollView.delegate = self;
 
   // Constraints.
   webView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -737,16 +742,17 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
 }
 
 - (BOOL)textFieldShouldReturn:(UITextField*)field {
-  NSString* enteredText = field.text;
-  if (![enteredText hasPrefix:@"http"]) {
+  NSURL* URL = [NSURL URLWithString:field.text];
+  if (URL.scheme.length == 0) {
+    NSString* enteredText = field.text;
     enteredText =
         [enteredText stringByAddingPercentEncodingWithAllowedCharacters:
                          [NSCharacterSet URLQueryAllowedCharacterSet]];
     enteredText = [NSString
         stringWithFormat:@"https://www.google.com/search?q=%@", enteredText];
+    URL = [NSURL URLWithString:enteredText];
   }
-  NSURLRequest* request =
-      [NSURLRequest requestWithURL:[NSURL URLWithString:enteredText]];
+  NSURLRequest* request = [NSURLRequest requestWithURL:URL];
   [_webView loadRequest:request];
   [field resignFirstResponder];
   [self updateToolbar];
@@ -1122,6 +1128,12 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
 }
 
 - (void)syncControllerDidStopSync:(CWVSyncController*)syncController {
+  NSLog(@"%@", NSStringFromSelector(_cmd));
+}
+
+#pragma mark UIScrollViewDelegate
+
+- (void)scrollViewWillBeginDragging:(UIScrollView*)scrollView {
   NSLog(@"%@", NSStringFromSelector(_cmd));
 }
 

@@ -33,7 +33,6 @@ import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.ChildAccountStatus;
-import org.chromium.components.signin.ChromeSigninController;
 
 import java.util.Collections;
 import java.util.List;
@@ -96,7 +95,7 @@ public abstract class FirstRunFlowSequencer  {
 
     @VisibleForTesting
     protected boolean isSignedIn() {
-        return ChromeSigninController.get().isSignedIn();
+        return IdentityServicesProvider.get().getIdentityManager().hasPrimaryAccount();
     }
 
     @VisibleForTesting

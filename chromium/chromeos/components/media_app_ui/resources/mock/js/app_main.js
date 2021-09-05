@@ -12,7 +12,7 @@
  * Helper that returns UI that can serve as an effective mock of a fragment of
  * the real app, after loading a provided Blob URL.
  *
- * @typedef{function(string): Promise<!HTMLElement>}}
+ * @typedef{function(string, string): Promise<!HTMLElement>}}
  */
 let ModuleHandler;
 
@@ -29,9 +29,10 @@ const createVideoChild = async (blobSrc) => {
 };
 
 /** @type{ModuleHandler} */
-const createImgChild = async (blobSrc) => {
+const createImgChild = async (blobSrc, altText) => {
   const img = /** @type{!HTMLImageElement} */ (document.createElement('img'));
   img.src = blobSrc;
+  img.alt = altText;
   await img.decode();
   return img;
 };
@@ -52,19 +53,12 @@ class BacklightApp extends HTMLElement {
   async loadFiles(files) {
     const file = files.item(0);
     const isVideo = file.mimeType.match('^video/');
-    // TODO(b/152832337): Remove this check when always using real image files
-    // in tests. Image with size < 0 can't reliably be decoded. Don't apply the
-    // size check to videos so MediaAppUIBrowserTest.CanFullscreenVideo doesn't
-    // fail.
-    if (file.size > 0 || isVideo) {
-      const factory = isVideo ? createVideoChild : createImgChild;
-      // Note the mock app will just leak this Blob URL.
-      const child = await factory(URL.createObjectURL(file.blob));
-
-      // Simulate an app that shows one image at a time.
-      this.replaceChild(child, this.currentMedia);
-      this.currentMedia = child;
-    }
+    const factory = isVideo ? createVideoChild : createImgChild;
+    // Note the mock app will just leak this Blob URL.
+    const child = await factory(URL.createObjectURL(file.blob), file.name);
+    // Simulate an app that shows one image at a time.
+    this.replaceChild(child, this.currentMedia);
+    this.currentMedia = child;
   }
 
   /** @override */
@@ -74,6 +68,33 @@ window.customElements.define('backlight-app', BacklightApp);
 
 class VideoContainer extends HTMLElement {}
 window.customElements.define('backlight-video-container', VideoContainer);
+
+// Add error handlers similar to go/error-collector to test crash reporting in
+// the mock app. The handlers in go/error-collector are compiled-in and have
+// more sophisticated message extraction, with fewer assumptions.
+
+/** @suppress{reportUnknownTypes,missingProperties} */
+function sendCrashReport(params) {
+  chrome.crashReportPrivate.reportError(params, () => {});
+}
+self.addEventListener('error', (event) => {
+  const errorEvent = /** @type {ErrorEvent} */ (event);
+  sendCrashReport({
+    message: /** @type {Error} */ (errorEvent.error).message,
+    url: window.location.href,
+    product: 'ChromeOS_MediaAppMock',
+    lineNumber: errorEvent.lineno,
+    columnNumber: errorEvent.colno
+  });
+});
+self.addEventListener('unhandledrejection', (event) => {
+  const rejectionEvent = /** @type {{reason: Error}} */ (event);
+  sendCrashReport({
+    message: rejectionEvent.reason.message,
+    url: window.location.href,
+    product: 'ChromeOS_MediaAppMock',
+  });
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   // The "real" app first loads translations for populating strings in the app

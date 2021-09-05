@@ -17,7 +17,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
-#include "chrome/common/search.mojom.h"
+#include "chrome/common/search/omnibox.mojom.h"
+#include "chrome/common/search/search.mojom.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/renderer/searchbox/searchbox_extension.h"
 #include "components/favicon_base/favicon_types.h"
@@ -206,9 +207,9 @@ SearchBox::SearchBox(content::RenderFrame* render_frame)
       most_visited_items_cache_(kMaxInstantMostVisitedItemCacheSize),
       has_received_most_visited_(false) {
   // Connect to the embedded search interface in the browser.
-  mojo::AssociatedRemote<chrome::mojom::EmbeddedSearchConnector> connector;
+  mojo::AssociatedRemote<search::mojom::EmbeddedSearchConnector> connector;
   render_frame->GetRemoteAssociatedInterfaces()->GetInterface(&connector);
-  mojo::PendingAssociatedRemote<chrome::mojom::EmbeddedSearchClient>
+  mojo::PendingAssociatedRemote<search::mojom::EmbeddedSearchClient>
       embedded_search_client;
   receiver_.Bind(embedded_search_client.InitWithNewEndpointAndPassReceiver(),
                  render_frame->GetTaskRunner(
@@ -482,6 +483,11 @@ void SearchBox::OpenAutocompleteMatch(uint8_t line,
       alt_key, ctrl_key, meta_key, shift_key);
 }
 
+void SearchBox::ToggleSuggestionGroupIdVisibility(int32_t suggestion_group_id) {
+  embedded_search_service_->ToggleSuggestionGroupIdVisibility(
+      suggestion_group_id);
+}
+
 void SearchBox::SetPageSequenceNumber(int page_seq_no) {
   page_seq_no_ = page_seq_no;
 }
@@ -538,7 +544,7 @@ void SearchBox::DeleteCustomLinkResult(bool success) {
 }
 
 void SearchBox::AutocompleteResultChanged(
-    chrome::mojom::AutocompleteResultPtr result) {
+    search::mojom::AutocompleteResultPtr result) {
   if (can_run_js_in_renderframe_) {
     SearchBoxExtension::DispatchAutocompleteResultChanged(
         render_frame()->GetWebFrame(), std::move(result));

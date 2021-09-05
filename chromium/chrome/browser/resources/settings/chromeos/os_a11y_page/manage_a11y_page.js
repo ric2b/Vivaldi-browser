@@ -98,12 +98,31 @@ Polymer({
       },
     },
 
-    showExperimentalSwitchAccess_: {
+    allowExperimentalSwitchAccess_: {
       type: Boolean,
       value() {
         return loadTimeData.getBoolean(
             'showExperimentalAccessibilitySwitchAccess');
       },
+    },
+
+    /**
+     * Whether the user is in kiosk mode.
+     * @private
+     */
+    isKioskModeActive_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('isKioskModeActive');
+      }
+    },
+
+    /** @private */
+    shouldShowExperimentalSwitchAccess_: {
+      type: Boolean,
+      computed: 'computeShouldShowExperimentalSwitchAccess_(' +
+          'allowExperimentalSwitchAccess_,' +
+          'isKioskModeActive_)',
     },
 
     /**
@@ -167,7 +186,7 @@ Polymer({
   },
 
   observers: [
-    'pointersChanged_(hasMouse_, hasTouchpad_)',
+    'pointersChanged_(hasMouse_, hasTouchpad_, isKioskModeActive_)',
   ],
 
   /** settings.RouteOriginBehavior override */
@@ -192,6 +211,9 @@ Polymer({
         'initial-data-ready', this.onManageAllyPageReady_.bind(this));
     chrome.send('manageA11yPageReady');
 
+    this.addWebUIListener(
+        'tablet-mode-changed', this.onTabletModeChanged_.bind(this));
+
     const r = settings.routes;
     this.addFocusConfig_(r.MANAGE_TTS_SETTINGS, '#ttsSubpageButton');
     this.addFocusConfig_(r.MANAGE_CAPTION_SETTINGS, '#captionsSubpageButton');
@@ -207,8 +229,9 @@ Polymer({
    * @param {boolean} hasTouchpad
    * @private
    */
-  pointersChanged_(hasMouse, hasTouchpad) {
-    this.$.pointerSubpageButton.hidden = !hasMouse && !hasTouchpad;
+  pointersChanged_(hasMouse, hasTouchpad, isKioskModeActive) {
+    this.$.pointerSubpageButton.hidden =
+        (!hasMouse && !hasTouchpad) || isKioskModeActive;
   },
 
   /**
@@ -361,15 +384,46 @@ Polymer({
   },
 
   /**
+   * Called when tablet mode is changed. Handles updating the visibility of the
+   * shelf navigation buttons setting.
+   * @param {boolean} tabletModeEnabled Whether tablet mode is enabled.
+   * @private
+   */
+  onTabletModeChanged_(tabletModeEnabled) {
+    this.showShelfNavigationButtonsSettings_ = tabletModeEnabled &&
+        loadTimeData.getBoolean('showTabletModeShelfNavigationButtonsSettings');
+  },
+
+  /**
    * Handles updating the visibility of the shelf navigation buttons setting
    * and updating whether startupSoundEnabled is checked.
    * @param {boolean} startup_sound_enabled Whether startup sound is enabled.
-   * @param {boolean} tablet_mode_supported Whether tablet mode is supported.
+   * @param {boolean} tabletModeEnabled Whether tablet mode is enabled.
    * @private
    */
-  onManageAllyPageReady_(startup_sound_enabled, tablet_mode_supported) {
+  onManageAllyPageReady_(startup_sound_enabled, tabletModeEnabled) {
     this.$.startupSoundEnabled.checked = startup_sound_enabled;
-    this.showShelfNavigationButtonsSettings_ = tablet_mode_supported &&
-        loadTimeData.getBoolean('showTabletModeShelfNavigationButtonsSettings');
+    this.showShelfNavigationButtonsSettings_ = tabletModeEnabled &&
+        loadTimeData.getBoolean(
+            'showTabletModeShelfNavigationButtonsSettings') &&
+        !this.isKioskModeActive_;
+  },
+  /*
+   * Whether additional features link should be shown.
+   * @param {boolean} isKiosk
+   * @param {boolean} isGuest
+   * @return {boolean}
+   * @private
+   */
+  shouldShowAdditionalFeaturesLink_(isKiosk, isGuest) {
+    return !isKiosk && !isGuest;
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeShouldShowExperimentalSwitchAccess_() {
+    return this.allowExperimentalSwitchAccess_ && !this.isKioskModeActive_;
   },
 });

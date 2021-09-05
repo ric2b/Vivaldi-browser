@@ -24,7 +24,9 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
-#include "chrome/browser/apps/launch_service/launch_service.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/component_loader.h"
@@ -43,10 +45,8 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/extension_message_bubble_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_shortcut.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/web_application_info.h"
 #include "components/crx_file/crx_verifier.h"
 #include "components/sync/model/string_ordinal.h"
 #include "components/version_info/version_info.h"
@@ -436,7 +436,9 @@ const Extension* ExtensionBrowserTest::LoadAndLaunchApp(
                                WindowOpenDisposition::NEW_WINDOW,
                                AppLaunchSource::kSourceTest);
   params.command_line = *base::CommandLine::ForCurrentProcess();
-  apps::LaunchService::Get(profile())->OpenApplication(params);
+  apps::AppServiceProxyFactory::GetForProfile(profile())
+      ->BrowserAppLauncher()
+      .LaunchAppWithParams(params);
   app_loaded_observer.Wait();
 
   return app;
@@ -513,11 +515,6 @@ const Extension* ExtensionBrowserTest::UpdateExtensionWaitForIdle(
   return InstallOrUpdateExtension(id, path, INSTALL_UI_TYPE_NONE,
                                   expected_change, Manifest::INTERNAL,
                                   browser(), Extension::NO_FLAGS, false, false);
-}
-
-const Extension* ExtensionBrowserTest::InstallBookmarkApp(
-    WebApplicationInfo info) {
-  return browsertest_util::InstallBookmarkApp(profile(), std::move(info));
 }
 
 const Extension* ExtensionBrowserTest::InstallExtensionFromWebstore(

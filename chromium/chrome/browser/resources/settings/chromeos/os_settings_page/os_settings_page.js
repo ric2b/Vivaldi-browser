@@ -43,11 +43,9 @@ Polymer({
 
     showAndroidApps: Boolean,
 
-    showAppManagement: Boolean,
-
-    showApps: Boolean,
-
     showCrostini: Boolean,
+
+    showPluginVm: Boolean,
 
     showReset: Boolean,
 
@@ -264,21 +262,6 @@ Polymer({
    */
   androidAppsInfoUpdate_(info) {
     this.androidAppsInfo = info;
-  },
-
-  /**
-   * Returns true in case Android apps settings should be shown. It is not
-   * shown in case we don't have the Play Store app and settings app is not
-   * yet available.
-   * @return {boolean}
-   * @private
-   */
-  shouldShowAndroidAppsSection_() {
-    if (this.havePlayStoreApp ||
-        (this.androidAppsInfo && this.androidAppsInfo.settingsAppAvailable)) {
-      return true;
-    }
-    return false;
   },
 
   /** @private */
