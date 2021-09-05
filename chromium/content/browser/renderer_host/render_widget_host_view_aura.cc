@@ -45,7 +45,6 @@
 #include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
 #include "content/browser/renderer_host/ui_events_helper.h"
 #include "content/common/input_messages.h"
-#include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_view_host.h"
@@ -54,7 +53,6 @@
 #include "gpu/ipc/common/gpu_messages.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
-#include "third_party/blink/public/web/web_ime_text_span.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/aura/aura_window_properties.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
@@ -74,6 +72,7 @@
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/base/ime/mojom/text_input_state.mojom.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/dip_util.h"
@@ -116,8 +115,8 @@
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-#include "ui/base/ime/linux/text_edit_command_auralinux.h"
-#include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
+#include "ui/base/ime/linux/text_edit_command_auralinux.h"  // nogncheck
+#include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"  // nogncheck
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -139,72 +138,6 @@ using blink::WebGestureEvent;
 using blink::WebTouchEvent;
 
 namespace content {
-
-namespace {
-
-mojom::FrameInputHandler* GetFrameInputHandlerForFocusedFrame(
-    RenderWidgetHostImpl* host) {
-  if (!host || !host->delegate()) {
-    return nullptr;
-  }
-  RenderFrameHostImpl* render_frame_host =
-      host->delegate()->GetFocusedFrameFromFocusedDelegate();
-  if (!render_frame_host)
-    return nullptr;
-  return render_frame_host->GetFrameInputHandler();
-}
-
-}  // namespace
-
-#if defined(OS_WIN)
-
-// This class implements the ui::InputMethodKeyboardControllerObserver interface
-// which provides notifications about the on screen keyboard on Windows getting
-// displayed or hidden in response to taps on editable fields.
-// It provides functionality to request blink to scroll the input field if it
-// is obscured by the on screen keyboard.
-class WinScreenKeyboardObserver
-    : public ui::InputMethodKeyboardControllerObserver {
- public:
-  explicit WinScreenKeyboardObserver(RenderWidgetHostViewAura* host_view)
-      : host_view_(host_view) {
-    host_view_->SetInsets(gfx::Insets());
-    if (auto* input_method = host_view_->GetInputMethod())
-      input_method->GetInputMethodKeyboardController()->AddObserver(this);
-  }
-
-  ~WinScreenKeyboardObserver() override {
-    if (auto* input_method = host_view_->GetInputMethod())
-      input_method->GetInputMethodKeyboardController()->RemoveObserver(this);
-  }
-
-  // InputMethodKeyboardControllerObserver overrides.
-  void OnKeyboardVisible(const gfx::Rect& keyboard_rect) override {
-    // If the software input panel(SIP) is manually raised by the user, the flag
-    // should be set so we don't call TryShow API again.
-    host_view_->SetVirtualKeyboardRequested(true);
-    host_view_->SetInsets(gfx::Insets(
-        0, 0, keyboard_rect.IsEmpty() ? 0 : keyboard_rect.height(), 0));
-  }
-
-  void OnKeyboardHidden() override {
-    // If the software input panel(SIP) is manually closed by the user, the flag
-    // should be reset so we don't call TryHide API again. Also,
-    // next time user taps on an editable element after manually dismissing the
-    // keyboard, this flag is used to determine whether TryShow needs to be
-    // called or not. Calling TryShow/TryHide multiple times leads to SIP
-    // flickering.
-    host_view_->SetVirtualKeyboardRequested(false);
-    // Restore the viewport.
-    host_view_->SetInsets(gfx::Insets());
-  }
-
- private:
-  RenderWidgetHostViewAura* host_view_;
-
-  DISALLOW_COPY_AND_ASSIGN(WinScreenKeyboardObserver);
-};
-#endif  // defined(OS_WIN)
 
 // We need to watch for mouse events outside a Web Popup or its parent
 // and dismiss the popup for certain events.
@@ -370,7 +303,6 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(
 #if defined(OS_WIN)
       legacy_render_widget_host_HWND_(nullptr),
       legacy_window_destroyed_(false),
-      virtual_keyboard_requested_(false),
 #endif
       device_scale_factor_(0.0f),
       event_handler_(new RenderWidgetHostViewEventHandler(host(), this, this)),
@@ -653,7 +585,6 @@ void RenderWidgetHostViewAura::WasUnOccluded() {
     SetRecordContentToVisibleTimeRequest(
         base::TimeTicks::Now(),
         base::Optional<bool>() /* destination_is_loaded */,
-        base::Optional<bool>() /* destination_is_frozen */,
         false /* show_reason_tab_switching */,
         true /* show_reason_unoccluded */,
         false /* show_reason_bfcache_restore */);
@@ -883,6 +814,7 @@ void RenderWidgetHostViewAura::OnLegacyWindowDestroyed() {
   legacy_render_widget_host_HWND_ = nullptr;
   legacy_window_destroyed_ = true;
 }
+#endif
 
 gfx::NativeViewAccessible
 RenderWidgetHostViewAura::GetParentNativeViewAccessible() {
@@ -900,7 +832,6 @@ RenderWidgetHostViewAura::GetParentNativeViewAccessible() {
 
   return nullptr;
 }
-#endif
 
 void RenderWidgetHostViewAura::ResetFallbackToFirstNavigationSurface() {
   if (delegated_frame_host_)
@@ -1391,12 +1322,13 @@ bool RenderWidgetHostViewAura::GetTextRange(gfx::Range* range) const {
   if (!text_input_manager_ || !GetFocusedWidget())
     return false;
 
-  const TextInputState* state = text_input_manager_->GetTextInputState();
+  const ui::mojom::TextInputState* state =
+      text_input_manager_->GetTextInputState();
   if (!state)
     return false;
 
   range->set_start(0);
-  range->set_end(state->value.length());
+  range->set_end(state->value ? state->value->length() : 0);
   return true;
 }
 
@@ -1405,13 +1337,13 @@ bool RenderWidgetHostViewAura::GetCompositionTextRange(
   if (!text_input_manager_ || !GetFocusedWidget())
     return false;
 
-  const TextInputState* state = text_input_manager_->GetTextInputState();
+  const ui::mojom::TextInputState* state =
+      text_input_manager_->GetTextInputState();
   // Return false when there is no composition.
-  if (!state || state->composition_start == -1)
+  if (!state || !state->composition)
     return false;
 
-  range->set_start(state->composition_start);
-  range->set_end(state->composition_end);
+  *range = state->composition.value();
   return true;
 }
 
@@ -1420,22 +1352,19 @@ bool RenderWidgetHostViewAura::GetEditableSelectionRange(
   if (!text_input_manager_ || !GetFocusedWidget())
     return false;
 
-  const TextInputState* state = text_input_manager_->GetTextInputState();
+  const ui::mojom::TextInputState* state =
+      text_input_manager_->GetTextInputState();
   if (!state)
     return false;
 
-  range->set_start(state->selection_start);
-  range->set_end(state->selection_end);
+  *range = state->selection;
   return true;
 }
 
 bool RenderWidgetHostViewAura::SetEditableSelectionRange(
     const gfx::Range& range) {
   // TODO(crbug.com/915630): Write an unit test for this method.
-  RenderFrameHostImpl* rfh = GetFocusedFrame();
-  if (!rfh)
-    return false;
-  auto* input_handler = rfh->GetFrameInputHandler();
+  auto* input_handler = GetFrameWidgetInputHandlerForFocusedWidget();
   if (!input_handler)
     return false;
   input_handler->SetEditableSelectionOffsets(range.start(), range.end());
@@ -1454,7 +1383,8 @@ bool RenderWidgetHostViewAura::GetTextFromRange(
   if (!text_input_manager_ || !GetFocusedWidget())
     return false;
 
-  const TextInputState* state = text_input_manager_->GetTextInputState();
+  const ui::mojom::TextInputState* state =
+      text_input_manager_->GetTextInputState();
   if (!state)
     return false;
 
@@ -1465,11 +1395,15 @@ bool RenderWidgetHostViewAura::GetTextFromRange(
     text->clear();
     return false;
   }
+  if (!state->value) {
+    text->clear();
+    return true;
+  }
   if (text_range.EqualsIgnoringDirection(range)) {
     // Avoid calling substr whose performance is low.
-    *text = state->value;
+    *text = *state->value;
   } else {
-    *text = state->value.substr(range.GetMin(), range.length());
+    *text = state->value->substr(range.GetMin(), range.length());
   }
   return true;
 }
@@ -1491,7 +1425,7 @@ bool RenderWidgetHostViewAura::ChangeTextDirectionAndLayoutAlignment(
 
 void RenderWidgetHostViewAura::ExtendSelectionAndDelete(
     size_t before, size_t after) {
-  auto* input_handler = GetFrameInputHandlerForFocusedFrame(host());
+  auto* input_handler = GetFrameWidgetInputHandlerForFocusedWidget();
   if (!input_handler)
     return;
   input_handler->ExtendSelectionAndDelete(before, after);
@@ -1541,7 +1475,7 @@ bool RenderWidgetHostViewAura::ShouldDoLearning() {
 bool RenderWidgetHostViewAura::SetCompositionFromExistingText(
     const gfx::Range& range,
     const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) {
-  auto* input_handler = GetFrameInputHandlerForFocusedFrame(host());
+  auto* input_handler = GetFrameWidgetInputHandlerForFocusedWidget();
   if (!input_handler)
     return false;
   input_handler->SetCompositionFromExistingText(range.start(), range.end(),
@@ -1552,12 +1486,22 @@ bool RenderWidgetHostViewAura::SetCompositionFromExistingText(
 
 #endif
 
+#if defined(OS_CHROMEOS)
+// TODO(crbug.com/1091088) Implement setAutocorrectRange
+bool RenderWidgetHostViewAura::SetAutocorrectRange(
+    const base::string16& autocorrect_text,
+    const gfx::Range& range) {
+  return false;
+}
+#endif
+
 #if defined(OS_WIN)
 void RenderWidgetHostViewAura::GetActiveTextInputControlLayoutBounds(
     base::Optional<gfx::Rect>* control_bounds,
     base::Optional<gfx::Rect>* selection_bounds) {
   if (text_input_manager_) {
-    const TextInputState* state = text_input_manager_->GetTextInputState();
+    const ui::mojom::TextInputState* state =
+        text_input_manager_->GetTextInputState();
     if (state) {
       if (state->edit_context_control_bounds)
         *control_bounds =
@@ -1705,7 +1649,7 @@ void RenderWidgetHostViewAura::OnWindowDestroying(aura::Window* window) {
   // Make sure that the input method no longer references to this object before
   // this object is removed from the root window (i.e. this object loses access
   // to the input method).
-  DetachFromInputMethod();
+  DetachFromInputMethod(true);
 
   if (overscroll_controller_)
     overscroll_controller_->Reset();
@@ -1806,13 +1750,8 @@ void RenderWidgetHostViewAura::FocusedNodeChanged(
   has_composition_text_ = false;
 
 #if defined(OS_WIN)
-  bool dismiss_virtual_keyboard =
-      last_pointer_type_ == ui::EventPointerType::kTouch;
-  if (dismiss_virtual_keyboard && !editable && virtual_keyboard_requested_ &&
-      window_) {
-    virtual_keyboard_requested_ = false;
-    if (auto* controller = GetInputMethod()->GetInputMethodKeyboardController())
-      controller->DismissVirtualKeyboard();
+  if (window_ && virtual_keyboard_controller_win_) {
+    virtual_keyboard_controller_win_->FocusedNodeChanged(editable);
   }
 #elif defined(OS_FUCHSIA)
   if (!editable && window_) {
@@ -1895,7 +1834,7 @@ void RenderWidgetHostViewAura::OnWindowFocused(aura::Window* gained_focus,
   host()->SetActive(false);
   host()->LostFocus();
 
-  DetachFromInputMethod();
+  DetachFromInputMethod(false);
 
   // TODO(wjmaclean): Do we need to let TouchSelectionControllerClientAura
   // handle this, just in case it stomps on a new highlight in another view
@@ -2006,7 +1945,7 @@ RenderWidgetHostViewAura::~RenderWidgetHostViewAura() {
     // This call is usually no-op since |this| object is already removed from
     // the Aura root window and we don't have a way to get an input method
     // object associated with the window, but just in case.
-    DetachFromInputMethod();
+    DetachFromInputMethod(true);
   }
   if (popup_parent_host_view_) {
     DCHECK(!popup_parent_host_view_->popup_child_host_view_ ||
@@ -2199,6 +2138,30 @@ void RenderWidgetHostViewAura::Shutdown() {
   }
 }
 
+bool RenderWidgetHostViewAura::ShouldVirtualKeyboardOverlayContent() const {
+  RenderFrameHostImpl* frame = GetFocusedFrame();
+  if (!frame)
+    return false;
+
+  return frame->ShouldVirtualKeyboardOverlayContent();
+}
+
+void RenderWidgetHostViewAura::NotifyVirtualKeyboardOverlayRect(
+    const gfx::Rect& keyboard_rect) {
+  RenderFrameHostImpl* frame = GetFocusedFrame();
+  if (!frame)
+    return;
+  frame->NotifyVirtualKeyboardOverlayRect(keyboard_rect);
+}
+
+bool RenderWidgetHostViewAura::FocusedFrameHasStickyActivation() const {
+  RenderFrameHostImpl* frame = GetFocusedFrame();
+  if (!frame)
+    return false;
+
+  return frame->frame_tree_node()->HasStickyUserActivation();
+}
+
 TouchSelectionControllerClientManager*
 RenderWidgetHostViewAura::GetTouchSelectionControllerClientManager() {
   return selection_controller_client_.get();
@@ -2336,7 +2299,7 @@ void RenderWidgetHostViewAura::RemovingFromRootWindow() {
   if (cursor_client)
     cursor_client->RemoveObserver(this);
 
-  DetachFromInputMethod();
+  DetachFromInputMethod(true);
 
   window_->GetHost()->RemoveObserver(this);
   if (delegated_frame_host_)
@@ -2350,7 +2313,7 @@ void RenderWidgetHostViewAura::RemovingFromRootWindow() {
 #endif
 }
 
-void RenderWidgetHostViewAura::DetachFromInputMethod() {
+void RenderWidgetHostViewAura::DetachFromInputMethod(bool is_removed) {
   ui::InputMethod* input_method = GetInputMethod();
   if (input_method) {
     input_method->DetachTextInputClient(this);
@@ -2360,9 +2323,15 @@ void RenderWidgetHostViewAura::DetachFromInputMethod() {
   }
 
 #if defined(OS_WIN)
-  // Reset the keyboard observer because it attaches to the input method.
-  virtual_keyboard_requested_ = false;
-  keyboard_observer_.reset();
+  // If window is getting destroyed, then reset the VK controller, else,
+  // dismiss the VK and notify about the keyboard inset since window has lost
+  // focus.
+  if (virtual_keyboard_controller_win_) {
+    if (is_removed)
+      virtual_keyboard_controller_win_.reset();
+    else
+      virtual_keyboard_controller_win_->HideAndNotifyKeyboardInset();
+  }
 #endif  // defined(OS_WIN)
 }
 
@@ -2442,16 +2411,14 @@ void RenderWidgetHostViewAura::OnUpdateTextInputStateCalled(
   if (did_update_state)
     GetInputMethod()->OnTextInputTypeChanged(this);
 
-  const TextInputState* state = text_input_manager_->GetTextInputState();
+  const ui::mojom::TextInputState* state =
+      text_input_manager_->GetTextInputState();
   if (state && state->type != ui::TEXT_INPUT_TYPE_NONE &&
       state->mode != ui::TEXT_INPUT_MODE_NONE) {
     bool show_virtual_keyboard = true;
 #if defined(OS_FUCHSIA)
-    show_virtual_keyboard = last_pointer_type_ == ui::EventPointerType::kTouch;
-#elif defined(OS_WIN)
     show_virtual_keyboard =
-        last_pointer_type_ == ui::EventPointerType::kTouch ||
-        last_pointer_type_ == ui::EventPointerType::kPen;
+        GetLastPointerType() == ui::EventPointerType::kTouch;
 #endif
 
 #if !defined(OS_WIN)
@@ -2463,14 +2430,12 @@ void RenderWidgetHostViewAura::OnUpdateTextInputStateCalled(
 // TODO(crbug.com/1031786): Remove this once TSF fix for input pane policy
 // is serviced
 #elif defined(OS_WIN)
-    auto* controller = GetInputMethod()->GetInputMethodKeyboardController();
-    if (controller && state->show_ime_if_needed && host()->GetView() &&
-        host()->delegate()) {
-      if (show_virtual_keyboard && !virtual_keyboard_requested_) {
-        keyboard_observer_.reset(new WinScreenKeyboardObserver(this));
-        GetInputMethod()->ShowVirtualKeyboardIfEnabled();
-        virtual_keyboard_requested_ = keyboard_observer_.get();
+    if (GetInputMethod() && show_virtual_keyboard) {
+      if (!virtual_keyboard_controller_win_) {
+        virtual_keyboard_controller_win_.reset(
+            new VirtualKeyboardControllerWin(this, GetInputMethod()));
       }
+      virtual_keyboard_controller_win_->UpdateTextInputState(state);
     }
 #endif
     // Ensure that accessibility events are fired when the selection location
@@ -2572,11 +2537,7 @@ void RenderWidgetHostViewAura::SetPopupChild(
 
 void RenderWidgetHostViewAura::ScrollFocusedEditableNodeIntoRect(
     const gfx::Rect& node_rect) {
-  RenderFrameHostImpl* rfh = GetFocusedFrame();
-  if (!rfh)
-    return;
-
-  auto* input_handler = rfh->GetFrameInputHandler();
+  auto* input_handler = GetFrameWidgetInputHandlerForFocusedWidget();
   if (!input_handler)
     return;
   input_handler->ScrollFocusedEditableNodeIntoRect(node_rect);
@@ -2658,6 +2619,11 @@ void RenderWidgetHostViewAura::TransferTouches(
   env->gesture_recognizer()->TransferTouches(window(), touches);
 }
 
+void RenderWidgetHostViewAura::SetLastPointerType(
+    ui::EventPointerType last_pointer_type) {
+  last_pointer_type_ = last_pointer_type;
+}
+
 void RenderWidgetHostViewAura::InvalidateLocalSurfaceIdOnEviction() {
   window_->InvalidateLocalSurfaceId();
 }
@@ -2673,6 +2639,14 @@ void RenderWidgetHostViewAura::ProcessDisplayMetricsChanged() {
 void RenderWidgetHostViewAura::CancelActiveTouches() {
   aura::Env* env = aura::Env::GetInstance();
   env->gesture_recognizer()->CancelActiveTouches(window());
+}
+
+blink::mojom::FrameWidgetInputHandler*
+RenderWidgetHostViewAura::GetFrameWidgetInputHandlerForFocusedWidget() {
+  auto* focused_widget = GetFocusedWidget();
+  if (!focused_widget)
+    return nullptr;
+  return focused_widget->GetFrameWidgetInputHandler();
 }
 
 }  // namespace content

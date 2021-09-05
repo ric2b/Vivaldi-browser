@@ -536,7 +536,7 @@ HistoryPrivateMigrateOldTypedUrlFunction::Run() {
                 nullptr, 0, GURL(), history::RedirectList(),
                 HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
                     params->transition_type),
-                history::SOURCE_BROWSED, false);
+                history::SOURCE_BROWSED, false, /*publicly_routable=*/false);
 
   return RespondNow(NoArguments());
 }

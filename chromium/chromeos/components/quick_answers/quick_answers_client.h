@@ -89,7 +89,13 @@ class QuickAnswersClient : public ash::AssistantStateObserver,
   void OnQuickAnswerReceived(
       std::unique_ptr<QuickAnswer> quick_answer) override;
 
-  // Send a quick answer request. Virtual for testing.
+  // Send a quick answer request for preprocessing only.
+  void SendRequestForPreprocessing(
+      const QuickAnswersRequest& quick_answers_request);
+  // Fetch quick answers result from the server.
+  void FetchQuickAnswers(const QuickAnswersRequest& processed_request);
+  // Send a quick answer request. The request is preprocessed before fetching
+  // the result from the server. Virtual for testing.
   virtual void SendRequest(const QuickAnswersRequest& quick_answers_request);
 
   // User clicks on the Quick Answers result. Virtual for testing.
@@ -104,22 +110,33 @@ class QuickAnswersClient : public ash::AssistantStateObserver,
   static void SetIntentGeneratorFactoryForTesting(
       IntentGeneratorFactoryCallback* factory);
 
+  static bool IsQuickAnswersAllowedForLocale(const std::string& locale,
+                                             const std::string& runtime_locale);
+
  private:
   FRIEND_TEST_ALL_PREFIXES(QuickAnswersClientTest, SendRequest);
   FRIEND_TEST_ALL_PREFIXES(QuickAnswersClientTest,
                            NotSendRequestForUnknownIntent);
   FRIEND_TEST_ALL_PREFIXES(QuickAnswersClientTest, PreprocessDefinitionIntent);
   FRIEND_TEST_ALL_PREFIXES(QuickAnswersClientTest, PreprocessTranslationIntent);
+  FRIEND_TEST_ALL_PREFIXES(QuickAnswersClientTest,
+                           PreprocessUnitConversionIntent);
 
   // Creates a |ResultLoader| instance.
   std::unique_ptr<ResultLoader> CreateResultLoader(IntentType intent_type);
 
   // Creates an |IntentGenerator| instance.
   std::unique_ptr<IntentGenerator> CreateIntentGenerator(
-      const QuickAnswersRequest& request);
+      const QuickAnswersRequest& request,
+      bool skip_fetch);
 
   void NotifyEligibilityChanged();
+  // Preprocesses the |QuickAnswersRequest| and fetch quick answers result. Only
+  // preprocesses the request and skip fetching result if |skip_fetch| is true.
+  void SendRequestInternal(const QuickAnswersRequest& quick_answers_request,
+                           bool skip_fetch);
   void IntentGeneratorCallback(const QuickAnswersRequest& quick_answers_request,
+                               bool skip_fetch,
                                const std::string& intent_text,
                                IntentType intent_type);
   base::TimeDelta GetImpressionDuration() const;

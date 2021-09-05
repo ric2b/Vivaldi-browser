@@ -66,6 +66,7 @@ component("android") {
     "//skia",
     "//third_party/blink/public:blink_headers",
     "//ui/base",
+    "//ui/base/cursor:cursor_base",
     "//ui/base/cursor/mojom:cursor_type",
     "//ui/compositor",
     "//ui/display",
@@ -213,7 +214,9 @@ android_library("ui_utils_java") {
   deps = [
     "//base:base_java",
     "//components/payments/mojom:mojom_java",
-    "//third_party/android_deps:android_support_v7_appcompat_java",
+    "//third_party/android_deps:androidx_appcompat_appcompat_java",
+    "//third_party/android_deps:androidx_appcompat_appcompat_resources_java",
+    "//third_party/android_deps:androidx_core_core_java",
     "//third_party/blink/public/mojom:mojom_platform_java",
   ]
 }
@@ -317,6 +320,7 @@ android_library("ui_full_java") {
     "java/src/org/chromium/ui/resources/system/SystemResourceLoader.java",
     "java/src/org/chromium/ui/text/NoUnderlineClickableSpan.java",
     "java/src/org/chromium/ui/text/SpanApplier.java",
+    "java/src/org/chromium/ui/util/AccessibilityUtil.java",
     "java/src/org/chromium/ui/util/ColorUtils.java",
     "java/src/org/chromium/ui/util/TokenHolder.java",
     "java/src/org/chromium/ui/vr/VrModeObserver.java",
@@ -345,6 +349,7 @@ android_library("ui_full_java") {
     "//base:jni_java",
     "//third_party/android_deps:android_support_v7_appcompat_java",
     "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//third_party/android_deps:androidx_appcompat_appcompat_resources_java",
     "//third_party/android_deps:androidx_asynclayoutinflater_asynclayoutinflater_java",
     "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
     "//ui/base/cursor/mojom:cursor_type_java",
@@ -366,6 +371,7 @@ android_library("ui_java_test_support") {
     "javatests/src/org/chromium/ui/test/util/UiRestriction.java",
     "javatests/src/org/chromium/ui/test/util/UiRestrictionSkipCheck.java",
     "javatests/src/org/chromium/ui/test/util/modelutil/FakeViewProvider.java",
+    "junit/src/org/chromium/ui/base/TestActivity.java",
   ]
   deps = [
     ":ui_java",
@@ -378,19 +384,20 @@ android_library("ui_java_test_support") {
 }
 
 android_resources("ui_javatest_resources") {
-  custom_package = "org.chromium.test.ui"
+  testonly = true
   sources = [
     "junit/res/layout/inflated_view.xml",
     "junit/res/layout/layout_view_builder_test.xml",
     "junit/res/layout/main_view.xml",
   ]
+  android_manifest = "junit/AndroidManifest.xml"
 }
 
 junit_binary("ui_junit_tests") {
-  package_name = "org.chromium.test.ui"
   sources = [
     "junit/src/org/chromium/ui/AsyncViewProviderTest.java",
     "junit/src/org/chromium/ui/AsyncViewStubTest.java",
+    "junit/src/org/chromium/ui/base/ActivityAndroidPermissionDelegateTest.java",
     "junit/src/org/chromium/ui/base/ApplicationViewportInsetSupplierTest.java",
     "junit/src/org/chromium/ui/base/ClipboardTest.java",
     "junit/src/org/chromium/ui/base/EventOffsetHandlerTest.java",
@@ -425,7 +432,17 @@ junit_binary("ui_junit_tests") {
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
     "//base/test:test_support_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//third_party/android_deps:androidx_appcompat_appcompat_java",
+    "//third_party/android_deps:androidx_appcompat_appcompat_resources_java",
+    "//third_party/android_deps:androidx_asynclayoutinflater_asynclayoutinflater_java",
+    "//third_party/android_deps:androidx_test_core_java",
+    "//third_party/android_deps:androidx_test_ext_junit_java",
+    "//third_party/android_deps:androidx_test_runner_java",
+    "//third_party/hamcrest:hamcrest_java",
+    "//third_party/mockito:mockito_java",
   ]
+  android_manifest = "junit/AndroidManifest.xml"
 }
 
 test("ui_android_unittests") {
@@ -471,6 +488,7 @@ android_library("clipboard_java_test_support") {
   deps = [
     "//base:base_java",
     "//base:base_java_test_support",
+    "//base:jni_java",
   ]
 }
 

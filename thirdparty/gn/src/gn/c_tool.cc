@@ -21,6 +21,7 @@ CTool::CTool(const char* n)
     : Tool(n), depsformat_(DEPS_GCC), precompiled_header_type_(PCH_NONE) {
   CHECK(ValidateName(n));
   set_framework_switch("-framework ");
+  set_weak_framework_switch("-weak_framework ");
   set_framework_dir_switch("-F");
   set_lib_dir_switch("-L");
   set_lib_switch("-l");
@@ -184,6 +185,8 @@ bool CTool::InitTool(Scope* scope, Toolchain* toolchain, Err* err) {
 
   if (!ReadDepsFormat(scope, err) || !ReadPrecompiledHeaderType(scope, err) ||
       !ReadString(scope, "framework_switch", &framework_switch_, err) ||
+      !ReadString(scope, "weak_framework_switch", &weak_framework_switch_,
+                  err) ||
       !ReadString(scope, "framework_dir_switch", &framework_dir_switch_, err) ||
       !ReadString(scope, "lib_switch", &lib_switch_, err) ||
       !ReadString(scope, "lib_dir_switch", &lib_dir_switch_, err) ||

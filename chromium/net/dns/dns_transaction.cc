@@ -129,7 +129,7 @@ base::Value NetLogStartParams(const std::string& hostname, uint16_t qtype) {
 // matches. Logging is done in the socket and in the outer DnsTransaction.
 class DnsAttempt {
  public:
-  explicit DnsAttempt(int server_index)
+  explicit DnsAttempt(size_t server_index)
       : result_(ERR_FAILED), server_index_(server_index) {}
 
   virtual ~DnsAttempt() = default;
@@ -147,10 +147,9 @@ class DnsAttempt {
   // Returns the net log bound to the source of the socket.
   virtual const NetLogWithSource& GetSocketNetLog() const = 0;
 
-  // Returns the index of the destination server within DnsConfig::nameservers.
-  // If the server index is -1, indicates that no request was sent and that the
-  // attempt was resolved synchronously with failure.
-  int server_index() const { return server_index_; }
+  // Returns the index of the destination server within DnsConfig::nameservers
+  // (or DnsConfig::dns_over_https_servers for secure transactions).
+  size_t server_index() const { return server_index_; }
 
   // Returns a Value representing the received response, along with a reference
   // to the NetLog source source of the UDP socket used.  The request must have
@@ -180,7 +179,7 @@ class DnsAttempt {
   // Result of last operation.
   int result_;
 
-  const int server_index_;
+  const size_t server_index_;
 
   DISALLOW_COPY_AND_ASSIGN(DnsAttempt);
 };
@@ -570,7 +569,7 @@ class DnsHTTPAttempt : public DnsAttempt, public URLRequest::Delegate {
 };
 
 void ConstructDnsHTTPAttempt(DnsSession* session,
-                             int doh_server_index,
+                             size_t doh_server_index,
                              std::string hostname,
                              uint16_t qtype,
                              const OptRecordRdata* opt_rdata,
@@ -589,9 +588,7 @@ void ConstructDnsHTTPAttempt(DnsSession* session,
     query = attempts->at(0)->GetQuery()->CloneWithNewId(id);
   }
 
-  DCHECK_GE(doh_server_index, 0);
-  DCHECK_LT(doh_server_index,
-            (int)session->config().dns_over_https_servers.size());
+  DCHECK_LT(doh_server_index, session->config().dns_over_https_servers.size());
   const DnsOverHttpsServerConfig& doh_config =
       session->config().dns_over_https_servers[doh_server_index];
   GURL gurl_without_parameters(
@@ -922,7 +919,7 @@ class DnsOverHttpsProbeRunner : public DnsProbeRunner {
     base::WeakPtrFactory<ProbeStats> weak_factory{this};
   };
 
-  void ContinueProbe(int doh_server_index,
+  void ContinueProbe(size_t doh_server_index,
                      base::WeakPtr<ProbeStats> probe_stats,
                      bool network_change,
                      base::TimeTicks sequence_start_time) {
@@ -973,7 +970,7 @@ class DnsOverHttpsProbeRunner : public DnsProbeRunner {
   }
 
   void ProbeComplete(unsigned attempt_number,
-                     int doh_server_index,
+                     size_t doh_server_index,
                      base::WeakPtr<ProbeStats> probe_stats,
                      bool network_change,
                      base::TimeTicks sequence_start_time,
@@ -1187,7 +1184,14 @@ class DnsTransactionImpl : public DnsTransaction,
     net_log_.EndEventWithNetErrorCode(NetLogEventType::DNS_TRANSACTION,
                                       result.rv);
 
-    std::move(callback_).Run(this, result.rv, response);
+    base::Optional<std::string> doh_provider_id;
+    if (secure_ && result.attempt) {
+      size_t server_index = result.attempt->server_index();
+      doh_provider_id = GetDohProviderIdForHistogramFromDohConfig(
+          session_->config().dns_over_https_servers[server_index]);
+    }
+
+    std::move(callback_).Run(this, result.rv, response, doh_provider_id);
   }
 
   AttemptResult MakeAttempt() {
@@ -1406,7 +1410,7 @@ class DnsTransactionImpl : public DnsTransaction,
           if (result.attempt) {
             resolve_context_->RecordServerFailure(
                 result.attempt->server_index(), secure_ /* is_doh_server */,
-                session_.get());
+                result.rv, session_.get());
           }
           if (MoreAttemptsAllowed()) {
             result = MakeAttempt();
@@ -1424,14 +1428,20 @@ class DnsTransactionImpl : public DnsTransaction,
         default:
           // Server failure.
           DCHECK(result.attempt);
+
+          // If attempt is not the most recent attempt, means this error is for
+          // an attempt that already timed out and was treated as complete but
+          // allowed to continue attempting in parallel with new attempts (see
+          // the ERR_DNS_TIMED_OUT case above). As the failure was already
+          // recorded at timeout time and is no longer being waited on, ignore
+          // this failure.
           if (result.attempt != attempts_.back().get()) {
-            // This attempt already timed out. Ignore it.
-            DCHECK_GE(result.attempt->server_index(), 0);
-            resolve_context_->RecordServerFailure(
-                result.attempt->server_index(), secure_ /* is_doh_server */,
-                session_.get());
             return AttemptResult(ERR_IO_PENDING, nullptr);
           }
+
+          resolve_context_->RecordServerFailure(result.attempt->server_index(),
+                                                secure_ /* is_doh_server */,
+                                                result.rv, session_.get());
           if (!MoreAttemptsAllowed()) {
             return result;
           }

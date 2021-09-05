@@ -309,6 +309,8 @@ class TryChromeDialog::Context {
 
     static std::unique_ptr<TaskbarCalculator> Create(Location location);
 
+    ~TaskbarCalculator() override { CHECK(!IsInObserverList()); }
+
     // DialogCalculator:
     void AddBorderToContents(views::Widget* popup,
                              views::View* contents_view) override;
@@ -1001,6 +1003,7 @@ TryChromeDialog::TryChromeDialog(size_t group, Delegate* delegate)
 
 TryChromeDialog::~TryChromeDialog() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(my_sequence_checker_);
+  CHECK(!IsInObserverList());
 }
 
 void TryChromeDialog::ShowDialogAsync() {
@@ -1191,7 +1194,7 @@ void TryChromeDialog::OnContextInitialized() {
   layout->AddPaddingRow(views::GridLayout::kFixedSize,
                         kTextButtonPadding - kTryChromeBorderThickness);
 
-  popup_->SetContentsView(contents_view.release());
+  popup_->SetContentsView(std::move(contents_view));
 
   // Compute the preferred size after attaching the contents view to the popup,
   // as doing such causes the theme to propagate through the view hierarchy.

@@ -61,6 +61,8 @@ public class SearchEngineLogoUtils {
     static class Delegate {
         /** @see SearchEngineLogoUtils#isSearchEngineLogoEnabled */
         public boolean isSearchEngineLogoEnabled() {
+            // Vivaldi: Should always show dse icon.
+            if (ChromeApplication.isVivaldi()) return true;
             // Note: LocaleManager#needToCheckForSearchEnginePromo() checks several system features
             // which risk throwing a security exception. Catching that here to prevent it from
             // crashing the app.

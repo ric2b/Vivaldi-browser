@@ -7,6 +7,7 @@
 #include "base/check.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/image/image_skia.h"
@@ -46,7 +47,7 @@ View* WidgetDelegate::GetInitiallyFocusedView() {
   return nullptr;
 }
 
-BubbleDialogDelegateView* WidgetDelegate::AsBubbleDialogDelegate() {
+BubbleDialogDelegate* WidgetDelegate::AsBubbleDialogDelegate() {
   return nullptr;
 }
 
@@ -75,11 +76,12 @@ ui::ModalType WidgetDelegate::GetModalType() const {
 }
 
 ax::mojom::Role WidgetDelegate::GetAccessibleWindowRole() {
-  return ax::mojom::Role::kWindow;
+  return params_.accessible_role;
 }
 
 base::string16 WidgetDelegate::GetAccessibleWindowTitle() const {
-  return GetWindowTitle();
+  return params_.accessible_title.empty() ? GetWindowTitle()
+                                          : params_.accessible_title;
 }
 
 base::string16 WidgetDelegate::GetWindowTitle() const {
@@ -152,6 +154,19 @@ bool WidgetDelegate::ShouldRestoreWindowSize() const {
   return true;
 }
 
+void WidgetDelegate::WidgetInitializing(Widget* widget) {
+  widget_ = widget;
+  OnWidgetInitializing();
+}
+
+void WidgetDelegate::WidgetInitialized() {
+  OnWidgetInitialized();
+}
+
+void WidgetDelegate::WidgetDestroying() {
+  widget_ = nullptr;
+}
+
 void WidgetDelegate::WindowWillClose() {
   // TODO(ellyjones): For this and the other callback methods, establish whether
   // any other code calls these methods. If not, DCHECK here and below that
@@ -168,6 +183,14 @@ void WidgetDelegate::WindowClosing() {
 void WidgetDelegate::DeleteDelegate() {
   for (auto&& callback : delete_delegate_callbacks_)
     std::move(callback).Run();
+}
+
+Widget* WidgetDelegate::GetWidget() {
+  return widget_;
+}
+
+const Widget* WidgetDelegate::GetWidget() const {
+  return widget_;
 }
 
 View* WidgetDelegate::GetContentsView() {
@@ -204,6 +227,14 @@ bool WidgetDelegate::ShouldDescendIntoChildForEventHandling(
     gfx::NativeView child,
     const gfx::Point& location) {
   return true;
+}
+
+void WidgetDelegate::SetAccessibleRole(ax::mojom::Role role) {
+  params_.accessible_role = role;
+}
+
+void WidgetDelegate::SetAccessibleTitle(base::string16 title) {
+  params_.accessible_title = std::move(title);
 }
 
 void WidgetDelegate::SetCanMaximize(bool can_maximize) {
@@ -246,11 +277,21 @@ void WidgetDelegate::SetTitle(const base::string16& title) {
     GetWidget()->UpdateWindowTitle();
 }
 
+void WidgetDelegate::SetTitle(int title_message_id) {
+  SetTitle(l10n_util::GetStringUTF16(title_message_id));
+}
+
 #if defined(USE_AURA)
 void WidgetDelegate::SetCenterTitle(bool center_title) {
   params_.center_title = center_title;
 }
 #endif
+
+void WidgetDelegate::SetHasWindowSizeControls(bool has_controls) {
+  SetCanMaximize(has_controls);
+  SetCanMinimize(has_controls);
+  SetCanResize(has_controls);
+}
 
 void WidgetDelegate::RegisterWindowWillCloseCallback(
     base::OnceClosure callback) {

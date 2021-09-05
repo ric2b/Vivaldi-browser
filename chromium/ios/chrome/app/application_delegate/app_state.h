@@ -9,6 +9,8 @@
 
 @class AppState;
 @protocol BrowserLauncher;
+@class CommandDispatcher;
+@protocol ConnectionInformation;
 @class SceneState;
 @class MainApplicationDelegate;
 @class MemoryWarningHelper;
@@ -42,17 +44,22 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
     applicationDelegate:(MainApplicationDelegate*)applicationDelegate
     NS_DESIGNATED_INITIALIZER;
 
+// Dispatcher for app-level commands for multiwindow use cases.
+// Most features should use the browser-level dispatcher instead.
+@property(nonatomic, strong) CommandDispatcher* appCommandDispatcher;
+
 // YES if the user has ever interacted with the application. May be NO if the
 // application has been woken up by the system for background work.
 @property(nonatomic, readonly) BOOL userInteracted;
 
-// Current foreground active for the application, if any. Some scene's window
-// otherwise. For legacy use cases only, use scene windows instead.
-@property(nonatomic, readonly) UIWindow* window;
-
 // When multiwindow is unavailable, this is the only scene state. It is created
 // by the app delegate.
 @property(nonatomic, strong) SceneState* mainSceneState;
+
+// When a modal UI (that requires user to interact with it before any further
+// interaction with the app is allowed) is shown, this tracks the scene where it
+// is shown. When there is no blocking UI shown in any scene, this is nil.
+@property(nonatomic, strong) SceneState* sceneShowingBlockingUI;
 
 // Saves the launchOptions to be used from -newTabFromLaunchOptions. If the
 // application is in background, initialize the browser to basic. If not, launch
@@ -79,7 +86,9 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 // session boundaries include things like turning the screen off or getting a
 // phone call, not just switching apps.
 - (void)resumeSessionWithTabOpener:(id<TabOpening>)tabOpener
-                       tabSwitcher:(id<TabSwitching>)tabSwitcher;
+                       tabSwitcher:(id<TabSwitching>)tabSwitcher
+             connectionInformation:
+                 (id<ConnectionInformation>)connectionInformation;
 
 // Called when going into the background. iOS already broadcasts, so
 // stakeholders can register for it directly.

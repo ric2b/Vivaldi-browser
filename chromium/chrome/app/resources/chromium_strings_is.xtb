@@ -127,6 +127,7 @@ Sumir eiginleikar kunna að vera óaðgengilegir og breytingar á kjörstillingu
 <translation id="5903106910045431592"><ph name="PAGE_TITLE" /> – innskráning á net</translation>
 <translation id="5987687638152509985">Uppfærðu Chromium til að hefja samstillingu</translation>
 <translation id="6013050204643758987">Chromium OS á tilvist sína að þakka öðrum <ph name="BEGIN_LINK_CROS_OSS" />opnum hugbúnaði<ph name="END_LINK_CROS_OSS" />, rétt eins og <ph name="BEGIN_LINK_LINUX_OSS" />Linux (tilraunaútgáfa)<ph name="END_LINK_LINUX_OSS" />.</translation>
+<translation id="6039377483953237732">Útgáfa Chromium stýrikerfis</translation>
 <translation id="6055895534982063517">Ný útgáfa af Chromium er í boði, og hún er hraðari en nokkru sinni fyrr.</translation>
 <translation id="6063093106622310249">&amp;Opna í Chromium</translation>
 <translation id="6072279588547424923"><ph name="EXTENSION_NAME" /> hefur verið bætt við Chromium</translation>
@@ -224,8 +225,6 @@ Chromium getur ekki endurheimt stillingarnar þínar.</translation>
 <translation id="8586442755830160949">Höfundarréttur <ph name="YEAR" /> höfundar Chromium. Allur réttur áskilinn.</translation>
 <translation id="8619360774459241877">Ræsir Chromium...</translation>
 <translation id="8621669128220841554">Uppsetning mistókst vegna ótilgreindrar villu. Sæktu Chromium aftur.</translation>
-<translation id="8682540261359803721">Ef stilling sést ekki á þessari síðu skaltu athuga <ph name="LINK_BEGIN" />
-      stillingar Chromium vafrans<ph name="LINK_END" /></translation>
 <translation id="8697124171261953979">Það stýrir því einnig hvaða síða opnast þegar þú ræsir Chromium eða leitar í veffangastikunni.</translation>
 <translation id="8704119203788522458">Chromium er þitt</translation>
 <translation id="8796602469536043152">Chromium þarf leyfi til að nota myndavélina og hljóðnemann á þessu vefsvæði</translation>

@@ -97,6 +97,10 @@ void PaintTimingDetector::NotifyPaintFinished() {
   }
   if (callback_manager_->CountCallbacks() > 0)
     callback_manager_->RegisterPaintTimeCallbackForCombinedCallbacks();
+  LocalDOMWindow* window = frame_view_->GetFrame().DomWindow();
+  if (window) {
+    DOMWindowPerformance::performance(*window)->OnPaintFinished();
+  }
 }
 
 // static
@@ -239,11 +243,33 @@ PaintTimingDetector::GetLargestContentfulPaintCalculator() {
 
 bool PaintTimingDetector::NotifyIfChangedLargestImagePaint(
     base::TimeTicks image_paint_time,
-    uint64_t image_paint_size) {
+    uint64_t image_paint_size,
+    base::TimeTicks removed_image_paint_time,
+    uint64_t removed_image_paint_size) {
+  // The experimental version (where we look at largest seen so far, regardless
+  // of node removal) cannot change when the regular version does not change.
   if (!HasLargestImagePaintChanged(image_paint_time, image_paint_size))
     return false;
+
   largest_image_paint_time_ = image_paint_time;
   largest_image_paint_size_ = image_paint_size;
+  // Compute experimental LCP by using the largest size (smallest paint time in
+  // case of tie).
+  if (removed_image_paint_size < image_paint_size) {
+    experimental_largest_image_paint_time_ = image_paint_time;
+    experimental_largest_image_paint_size_ = image_paint_size;
+  } else if (removed_image_paint_size > image_paint_size) {
+    experimental_largest_image_paint_time_ = removed_image_paint_time;
+    experimental_largest_image_paint_size_ = removed_image_paint_size;
+  } else {
+    experimental_largest_image_paint_size_ = image_paint_size;
+    if (image_paint_time.is_null()) {
+      experimental_largest_image_paint_time_ = removed_image_paint_time;
+    } else {
+      experimental_largest_image_paint_time_ =
+          std::min(image_paint_time, removed_image_paint_time);
+    }
+  }
   DidChangePerformanceTiming();
   return true;
 }
@@ -251,10 +277,17 @@ bool PaintTimingDetector::NotifyIfChangedLargestImagePaint(
 bool PaintTimingDetector::NotifyIfChangedLargestTextPaint(
     base::TimeTicks text_paint_time,
     uint64_t text_paint_size) {
+  // The experimental version (where we look at largest seen so far, regardless
+  // of node removal) cannot change when the regular version does not change.
   if (!HasLargestTextPaintChanged(text_paint_time, text_paint_size))
     return false;
   largest_text_paint_time_ = text_paint_time;
   largest_text_paint_size_ = text_paint_size;
+  if (experimental_largest_text_paint_size_ < text_paint_size) {
+    DCHECK(!text_paint_time.is_null());
+    experimental_largest_text_paint_time_ = text_paint_time;
+    experimental_largest_text_paint_size_ = text_paint_size;
+  }
   DidChangePerformanceTiming();
   return true;
 }
@@ -399,7 +432,7 @@ ScopedPaintTimingDetectorBlockPaintHook::
                                          data_->property_tree_state_);
 }
 
-void PaintTimingDetector::Trace(Visitor* visitor) {
+void PaintTimingDetector::Trace(Visitor* visitor) const {
   visitor->Trace(text_paint_timing_detector_);
   visitor->Trace(image_paint_timing_detector_);
   visitor->Trace(frame_view_);
@@ -439,7 +472,7 @@ void PaintTimingCallbackManagerImpl::ReportPaintTime(
   frame_view_->GetPaintTimingDetector().UpdateLargestContentfulPaintCandidate();
 }
 
-void PaintTimingCallbackManagerImpl::Trace(Visitor* visitor) {
+void PaintTimingCallbackManagerImpl::Trace(Visitor* visitor) const {
   visitor->Trace(frame_view_);
   PaintTimingCallbackManager::Trace(visitor);
 }

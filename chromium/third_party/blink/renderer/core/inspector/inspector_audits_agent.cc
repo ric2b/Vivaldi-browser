@@ -66,7 +66,7 @@ bool EncodeAsImage(char* body,
 
 }  // namespace
 
-void InspectorAuditsAgent::Trace(Visitor* visitor) {
+void InspectorAuditsAgent::Trace(Visitor* visitor) const {
   visitor->Trace(network_agent_);
   visitor->Trace(inspector_issue_storage_);
   InspectorBaseAgent::Trace(visitor);
@@ -187,6 +187,8 @@ blink::protocol::String InspectorIssueCodeValue(
       return protocol::Audits::InspectorIssueCodeEnum::SameSiteCookieIssue;
     case mojom::blink::InspectorIssueCode::kMixedContentIssue:
       return protocol::Audits::InspectorIssueCodeEnum::MixedContentIssue;
+    case mojom::blink::InspectorIssueCode::kBlockedByResponseIssue:
+      return protocol::Audits::InspectorIssueCodeEnum::BlockedByResponseIssue;
   }
 }
 
@@ -194,11 +196,11 @@ protocol::String BuildCookieExclusionReason(
     mojom::blink::SameSiteCookieExclusionReason exclusion_reason) {
   switch (exclusion_reason) {
     case blink::mojom::blink::SameSiteCookieExclusionReason::
-        ExcludeSameSiteUnspecifiedTreatedAsLax:
+        kExcludeSameSiteUnspecifiedTreatedAsLax:
       return protocol::Audits::SameSiteCookieExclusionReasonEnum::
           ExcludeSameSiteUnspecifiedTreatedAsLax;
     case blink::mojom::blink::SameSiteCookieExclusionReason::
-        ExcludeSameSiteNoneInsecure:
+        kExcludeSameSiteNoneInsecure:
       return protocol::Audits::SameSiteCookieExclusionReasonEnum::
           ExcludeSameSiteNoneInsecure;
   }
@@ -220,35 +222,35 @@ protocol::String BuildCookieWarningReason(
     mojom::blink::SameSiteCookieWarningReason warning_reason) {
   switch (warning_reason) {
     case blink::mojom::blink::SameSiteCookieWarningReason::
-        WarnSameSiteUnspecifiedCrossSiteContext:
+        kWarnSameSiteUnspecifiedCrossSiteContext:
       return protocol::Audits::SameSiteCookieWarningReasonEnum::
           WarnSameSiteUnspecifiedCrossSiteContext;
     case blink::mojom::blink::SameSiteCookieWarningReason::
-        WarnSameSiteNoneInsecure:
+        kWarnSameSiteNoneInsecure:
       return protocol::Audits::SameSiteCookieWarningReasonEnum::
           WarnSameSiteNoneInsecure;
     case blink::mojom::blink::SameSiteCookieWarningReason::
-        WarnSameSiteUnspecifiedLaxAllowUnsafe:
+        kWarnSameSiteUnspecifiedLaxAllowUnsafe:
       return protocol::Audits::SameSiteCookieWarningReasonEnum::
           WarnSameSiteUnspecifiedLaxAllowUnsafe;
     case blink::mojom::blink::SameSiteCookieWarningReason::
-        WarnSameSiteStrictLaxDowngradeStrict:
+        kWarnSameSiteStrictLaxDowngradeStrict:
       return protocol::Audits::SameSiteCookieWarningReasonEnum::
           WarnSameSiteStrictLaxDowngradeStrict;
     case blink::mojom::blink::SameSiteCookieWarningReason::
-        WarnSameSiteStrictCrossDowngradeStrict:
+        kWarnSameSiteStrictCrossDowngradeStrict:
       return protocol::Audits::SameSiteCookieWarningReasonEnum::
           WarnSameSiteStrictCrossDowngradeStrict;
     case blink::mojom::blink::SameSiteCookieWarningReason::
-        WarnSameSiteStrictCrossDowngradeLax:
+        kWarnSameSiteStrictCrossDowngradeLax:
       return protocol::Audits::SameSiteCookieWarningReasonEnum::
           WarnSameSiteStrictCrossDowngradeLax;
     case blink::mojom::blink::SameSiteCookieWarningReason::
-        WarnSameSiteLaxCrossDowngradeStrict:
+        kWarnSameSiteLaxCrossDowngradeStrict:
       return protocol::Audits::SameSiteCookieWarningReasonEnum::
           WarnSameSiteLaxCrossDowngradeStrict;
     case blink::mojom::blink::SameSiteCookieWarningReason::
-        WarnSameSiteLaxCrossDowngradeLax:
+        kWarnSameSiteLaxCrossDowngradeLax:
       return protocol::Audits::SameSiteCookieWarningReasonEnum::
           WarnSameSiteLaxCrossDowngradeLax;
   }
@@ -267,9 +269,9 @@ std::unique_ptr<std::vector<blink::protocol::String>> BuildCookieWarningReasons(
 protocol::String BuildCookieOperation(
     mojom::blink::SameSiteCookieOperation operation) {
   switch (operation) {
-    case blink::mojom::blink::SameSiteCookieOperation::SetCookie:
+    case blink::mojom::blink::SameSiteCookieOperation::kSetCookie:
       return protocol::Audits::SameSiteCookieOperationEnum::SetCookie;
-    case blink::mojom::blink::SameSiteCookieOperation::ReadCookie:
+    case blink::mojom::blink::SameSiteCookieOperation::kReadCookie:
       return protocol::Audits::SameSiteCookieOperationEnum::ReadCookie;
   }
 }
@@ -277,14 +279,16 @@ protocol::String BuildCookieOperation(
 protocol::String BuildMixedContentResolutionStatus(
     mojom::blink::MixedContentResolutionStatus resolution_type) {
   switch (resolution_type) {
-    case blink::mojom::blink::MixedContentResolutionStatus::MixedContentBlocked:
+    case blink::mojom::blink::MixedContentResolutionStatus::
+        kMixedContentBlocked:
       return protocol::Audits::MixedContentResolutionStatusEnum::
           MixedContentBlocked;
     case blink::mojom::blink::MixedContentResolutionStatus::
-        MixedContentAutomaticallyUpgraded:
+        kMixedContentAutomaticallyUpgraded:
       return protocol::Audits::MixedContentResolutionStatusEnum::
           MixedContentAutomaticallyUpgraded;
-    case blink::mojom::blink::MixedContentResolutionStatus::MixedContentWarning:
+    case blink::mojom::blink::MixedContentResolutionStatus::
+        kMixedContentWarning:
       return protocol::Audits::MixedContentResolutionStatusEnum::
           MixedContentWarning;
   }
@@ -364,19 +368,41 @@ protocol::String BuildMixedContentResourceType(
   }
 }
 
+protocol::String BuildBlockedByResponseReason(
+    network::mojom::blink::BlockedByResponseReason reason) {
+  switch (reason) {
+    case network::mojom::blink::BlockedByResponseReason::
+        kCoepFrameResourceNeedsCoepHeader:
+      return protocol::Audits::BlockedByResponseReasonEnum::
+          CoepFrameResourceNeedsCoepHeader;
+    case network::mojom::blink::BlockedByResponseReason::
+        kCoopSandboxedIFrameCannotNavigateToCoopPage:
+      return protocol::Audits::BlockedByResponseReasonEnum::
+          CoopSandboxedIFrameCannotNavigateToCoopPage;
+    case network::mojom::blink::BlockedByResponseReason::kCorpNotSameOrigin:
+      return protocol::Audits::BlockedByResponseReasonEnum::CorpNotSameOrigin;
+    case network::mojom::blink::BlockedByResponseReason::
+        kCorpNotSameOriginAfterDefaultedToSameOriginByCoep:
+      return protocol::Audits::BlockedByResponseReasonEnum::
+          CorpNotSameOriginAfterDefaultedToSameOriginByCoep;
+    case network::mojom::blink::BlockedByResponseReason::kCorpNotSameSite:
+      return protocol::Audits::BlockedByResponseReasonEnum::CorpNotSameSite;
+  }
+}
+
 }  // namespace
 
 void InspectorAuditsAgent::InspectorIssueAdded(InspectorIssue* issue) {
   auto issueDetails = protocol::Audits::InspectorIssueDetails::create();
 
-  if (const auto* d = issue->Details()->sameSiteCookieIssueDetails.get()) {
+  if (const auto* d = issue->Details()->samesite_cookie_issue_details.get()) {
     auto sameSiteCookieDetails =
         std::move(protocol::Audits::SameSiteCookieIssueDetails::create()
                       .setCookie(BuildAffectedCookie(d->cookie))
                       .setCookieExclusionReasons(
-                          BuildCookieExclusionReasons(d->exclusionReason))
+                          BuildCookieExclusionReasons(d->exclusion_reason))
                       .setCookieWarningReasons(
-                          BuildCookieWarningReasons(d->warningReason))
+                          BuildCookieWarningReasons(d->warning_reason))
                       .setOperation(BuildCookieOperation(d->operation)));
 
     if (d->site_for_cookies) {
@@ -407,6 +433,20 @@ void InspectorAuditsAgent::InspectorIssueAdded(InspectorIssue* issue) {
       mixedContentDetails->setFrame(BuildAffectedFrame(d->frame));
     }
     issueDetails.setMixedContentIssueDetails(std::move(mixedContentDetails));
+  }
+
+  if (const auto* d =
+          issue->Details()->blocked_by_response_issue_details.get()) {
+    auto blockedByResponseDetails =
+        protocol::Audits::BlockedByResponseIssueDetails::create()
+            .setRequest(BuildAffectedRequest(d->request))
+            .setReason(BuildBlockedByResponseReason(d->reason))
+            .build();
+    if (d->frame) {
+      blockedByResponseDetails->setFrame(BuildAffectedFrame(d->frame));
+    }
+    issueDetails.setBlockedByResponseIssueDetails(
+        std::move(blockedByResponseDetails));
   }
 
   auto inspector_issue = protocol::Audits::InspectorIssue::create()

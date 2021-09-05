@@ -28,6 +28,7 @@
 #include "base/files/scoped_file.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
+#include "base/logging.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -738,11 +739,11 @@ TEST_F(FileUtilTest, MakeLongFilePathTest) {
   EXPECT_EQ(long_test_file, MakeLongFilePath(short_test_file));
 
   // MakeLongFilePath should return empty path if file does not exist.
-  EXPECT_TRUE(DeleteFile(short_test_file, false));
+  EXPECT_TRUE(DeleteFile(short_test_file));
   EXPECT_TRUE(MakeLongFilePath(short_test_file).empty());
 
   // MakeLongFilePath should return empty path if directory does not exist.
-  EXPECT_TRUE(DeleteFile(short_test_dir, false));
+  EXPECT_TRUE(DeleteFile(short_test_dir));
   EXPECT_TRUE(MakeLongFilePath(short_test_dir).empty());
 }
 
@@ -850,7 +851,7 @@ TEST_F(FileUtilTest, DeleteSymlinkToExistentFile) {
       << "Failed to create symlink.";
 
   // Delete the symbolic link.
-  EXPECT_TRUE(DeleteFile(file_link, false));
+  EXPECT_TRUE(DeleteFile(file_link));
 
   // Make sure original file is not deleted.
   EXPECT_FALSE(PathExists(file_link));
@@ -873,7 +874,7 @@ TEST_F(FileUtilTest, DeleteSymlinkToNonExistentFile) {
   EXPECT_FALSE(PathExists(file_link));
 
   // Delete the symbolic link.
-  EXPECT_TRUE(DeleteFile(file_link, false));
+  EXPECT_TRUE(DeleteFile(file_link));
 
   // Make sure the symbolic link is deleted.
   EXPECT_FALSE(IsLink(file_link));
@@ -941,7 +942,7 @@ TEST_F(FileUtilTest, ChangeFilePermissionsAndRead) {
   EXPECT_EQ(kDataSize, ReadFile(file_name, buffer, kDataSize));
 
   // Delete the file.
-  EXPECT_TRUE(DeleteFile(file_name, false));
+  EXPECT_TRUE(DeleteFile(file_name));
   EXPECT_FALSE(PathExists(file_name));
 }
 
@@ -981,7 +982,7 @@ TEST_F(FileUtilTest, ChangeFilePermissionsAndWrite) {
   EXPECT_TRUE(PathIsWritable(file_name));
 
   // Delete the file.
-  EXPECT_TRUE(DeleteFile(file_name, false));
+  EXPECT_TRUE(DeleteFile(file_name));
   EXPECT_FALSE(PathExists(file_name));
 }
 
@@ -1291,7 +1292,7 @@ TEST_F(FileUtilTest, CopyFileExecutablePermission) {
   expected_mode = 0600;
 #endif
   EXPECT_EQ(expected_mode, mode);
-  ASSERT_TRUE(DeleteFile(dst, false));
+  ASSERT_TRUE(DeleteFile(dst));
 
   ASSERT_TRUE(SetPosixFilePermissions(src, 0777));
   ASSERT_TRUE(GetPosixFilePermissions(src, &mode));
@@ -1309,7 +1310,7 @@ TEST_F(FileUtilTest, CopyFileExecutablePermission) {
   expected_mode = 0600;
 #endif
   EXPECT_EQ(expected_mode, mode);
-  ASSERT_TRUE(DeleteFile(dst, false));
+  ASSERT_TRUE(DeleteFile(dst));
 
   ASSERT_TRUE(SetPosixFilePermissions(src, 0400));
   ASSERT_TRUE(GetPosixFilePermissions(src, &mode));
@@ -1403,7 +1404,7 @@ TEST_F(FileUtilTest, DeleteNonExistent) {
       temp_dir_.GetPath().AppendASCII("bogus_file_dne.foobar");
   ASSERT_FALSE(PathExists(non_existent));
 
-  EXPECT_TRUE(DeleteFile(non_existent, false));
+  EXPECT_TRUE(DeleteFile(non_existent));
   ASSERT_FALSE(PathExists(non_existent));
   EXPECT_TRUE(DeleteFileRecursively(non_existent));
   ASSERT_FALSE(PathExists(non_existent));
@@ -1414,7 +1415,7 @@ TEST_F(FileUtilTest, DeleteNonExistentWithNonExistentParent) {
   non_existent = non_existent.AppendASCII("bogus_subdir");
   ASSERT_FALSE(PathExists(non_existent));
 
-  EXPECT_TRUE(DeleteFile(non_existent, false));
+  EXPECT_TRUE(DeleteFile(non_existent));
   ASSERT_FALSE(PathExists(non_existent));
   EXPECT_TRUE(DeleteFileRecursively(non_existent));
   ASSERT_FALSE(PathExists(non_existent));
@@ -1427,7 +1428,7 @@ TEST_F(FileUtilTest, DeleteFile) {
   ASSERT_TRUE(PathExists(file_name));
 
   // Make sure it's deleted
-  EXPECT_TRUE(DeleteFile(file_name, false));
+  EXPECT_TRUE(DeleteFile(file_name));
   EXPECT_FALSE(PathExists(file_name));
 
   // Test recursive case, create a new file
@@ -1461,7 +1462,7 @@ TEST_F(FileUtilTest, DeleteContentUri) {
   ASSERT_TRUE(PathExists(uri_path));
 
   // Try deleting the content URI.
-  EXPECT_TRUE(DeleteFile(uri_path, false));
+  EXPECT_TRUE(DeleteFile(uri_path));
   EXPECT_FALSE(PathExists(image_copy));
   EXPECT_FALSE(PathExists(uri_path));
 }
@@ -1487,7 +1488,7 @@ TEST_F(FileUtilTest, DeleteWildCard) {
   directory_contents = directory_contents.Append(FPL("*"));
 
   // Delete non-recursively and check that only the file is deleted
-  EXPECT_TRUE(DeleteFile(directory_contents, false));
+  EXPECT_TRUE(DeleteFile(directory_contents));
   EXPECT_FALSE(PathExists(file_name));
   EXPECT_TRUE(PathExists(subdir_path));
 
@@ -1510,7 +1511,7 @@ TEST_F(FileUtilTest, DeleteNonExistantWildCard) {
   directory_contents = directory_contents.Append(FPL("*"));
 
   // Delete non-recursively and check nothing got deleted
-  EXPECT_TRUE(DeleteFile(directory_contents, false));
+  EXPECT_TRUE(DeleteFile(directory_contents));
   EXPECT_TRUE(PathExists(subdir_path));
 
   // Delete recursively and check nothing got deleted
@@ -1540,11 +1541,11 @@ TEST_F(FileUtilTest, DeleteDirNonRecursive) {
   ASSERT_TRUE(PathExists(subdir_path2));
 
   // Delete non-recursively and check that the empty dir got deleted
-  EXPECT_TRUE(DeleteFile(subdir_path2, false));
+  EXPECT_TRUE(DeleteFile(subdir_path2));
   EXPECT_FALSE(PathExists(subdir_path2));
 
   // Delete non-recursively and check that nothing got deleted
-  EXPECT_FALSE(DeleteFile(test_subdir, false));
+  EXPECT_FALSE(DeleteFile(test_subdir));
   EXPECT_TRUE(PathExists(test_subdir));
   EXPECT_TRUE(PathExists(file_name));
   EXPECT_TRUE(PathExists(subdir_path1));
@@ -1631,6 +1632,41 @@ TEST_F(FileUtilTest, DeleteDirRecursiveWithOpenFile) {
   }
 #endif
 }
+
+#if defined(OS_LINUX)
+// This test will validate that files which would block when read result in a
+// failure on a call to ReadFileToStringNonBlocking. To accomplish this we will
+// use a named pipe because it appears as a file on disk and we can control how
+// much data is available to read. This allows us to simulate a file which would
+// block.
+TEST_F(FileUtilTest, TestNonBlockingFileReadLinux) {
+  FilePath fifo_path = temp_dir_.GetPath().Append(FPL("fifo"));
+  int res = mkfifo(fifo_path.MaybeAsASCII().c_str(),
+                   S_IWUSR | S_IRUSR | S_IWGRP | S_IWGRP);
+  ASSERT_NE(res, -1);
+
+  base::ScopedFD fd(open(fifo_path.MaybeAsASCII().c_str(), O_RDWR));
+  ASSERT_TRUE(fd.is_valid());
+
+  std::string result;
+  // We will try to read when nothing is available on the fifo, the output
+  // string will be unmodified and it will fail with EWOULDBLOCK.
+  ASSERT_FALSE(ReadFileToStringNonBlocking(fifo_path, &result));
+  EXPECT_EQ(errno, EWOULDBLOCK);
+  EXPECT_TRUE(result.empty());
+
+  // Make a single byte available to read on the FIFO.
+  ASSERT_EQ(write(fd.get(), "a", 1), 1);
+
+  // Now the key part of the test we will call ReadFromFileNonBlocking which
+  // should fail, errno will be EWOULDBLOCK and the output string will contain
+  // the single 'a' byte.
+  ASSERT_FALSE(ReadFileToStringNonBlocking(fifo_path, &result));
+  EXPECT_EQ(errno, EWOULDBLOCK);
+  ASSERT_EQ(result.size(), 1u);
+  EXPECT_EQ(result[0], 'a');
+}
+#endif  // defined(OS_LINUX)
 
 TEST_F(FileUtilTest, MoveFileNew) {
   // Create a file
@@ -2223,7 +2259,7 @@ TEST_F(FileUtilTest, CopyDirectoryExclFileOverDanglingSymlink) {
       dir_name_to.Append(FILE_PATH_LITERAL("Copy_Test_File.txt"));
   ASSERT_TRUE(CreateSymbolicLink(symlink_target, symlink_name_to));
   ASSERT_TRUE(PathExists(symlink_name_to));
-  ASSERT_TRUE(DeleteFile(symlink_target, false));
+  ASSERT_TRUE(DeleteFile(symlink_target));
 
   // Check that copying fails and that no file was created for the symlink's
   // referent.
@@ -2258,7 +2294,7 @@ TEST_F(FileUtilTest, CopyDirectoryExclDirectoryOverDanglingSymlink) {
       dir_name_to.Append(FILE_PATH_LITERAL("Copy_Test_File.txt"));
   ASSERT_TRUE(CreateSymbolicLink(symlink_target, symlink_name_to));
   ASSERT_TRUE(PathExists(symlink_name_to));
-  ASSERT_TRUE(DeleteFile(symlink_target, false));
+  ASSERT_TRUE(DeleteFile(symlink_target));
 
   // Check that copying fails and that no directory was created for the
   // symlink's referent.
@@ -2533,7 +2569,7 @@ TEST_F(FileUtilTest, OpenFileNoInheritance) {
       ASSERT_NO_FATAL_FAILURE(GetIsInheritable(file, &is_inheritable));
       EXPECT_FALSE(is_inheritable);
     }
-    ASSERT_TRUE(DeleteFile(file_path, false));
+    ASSERT_TRUE(DeleteFile(file_path));
   }
 }
 
@@ -2565,7 +2601,7 @@ TEST_F(FileUtilTest, CreateTemporaryFileTest) {
   for (int i = 0; i < 3; i++)
     EXPECT_FALSE(temp_files[i] == temp_files[(i+1)%3]);
   for (const auto& i : temp_files)
-    EXPECT_TRUE(DeleteFile(i, false));
+    EXPECT_TRUE(DeleteFile(i));
 }
 
 TEST_F(FileUtilTest, CreateAndOpenTemporaryStreamTest) {
@@ -2588,7 +2624,7 @@ TEST_F(FileUtilTest, CreateAndOpenTemporaryStreamTest) {
   // Close and delete.
   for (i = 0; i < 3; ++i) {
     fps[i].reset();
-    EXPECT_TRUE(DeleteFile(names[i], false));
+    EXPECT_TRUE(DeleteFile(names[i]));
   }
 }
 
@@ -2666,7 +2702,7 @@ TEST_F(FileUtilTest, CreateNewTempDirectoryTest) {
   FilePath temp_dir;
   ASSERT_TRUE(CreateNewTempDirectory(FilePath::StringType(), &temp_dir));
   EXPECT_TRUE(PathExists(temp_dir));
-  EXPECT_TRUE(DeleteFile(temp_dir, false));
+  EXPECT_TRUE(DeleteFile(temp_dir));
 }
 
 TEST_F(FileUtilTest, CreateNewTemporaryDirInDirTest) {
@@ -2676,7 +2712,7 @@ TEST_F(FileUtilTest, CreateNewTemporaryDirInDirTest) {
       &new_dir));
   EXPECT_TRUE(PathExists(new_dir));
   EXPECT_TRUE(temp_dir_.GetPath().IsParent(new_dir));
-  EXPECT_TRUE(DeleteFile(new_dir, false));
+  EXPECT_TRUE(DeleteFile(new_dir));
 }
 
 #if defined(OS_POSIX) || defined(OS_FUCHSIA)
@@ -2836,7 +2872,7 @@ TEST_F(FileUtilTest, DetectDirectoryTest) {
   CreateTextFile(test_path, L"test file");
   EXPECT_TRUE(PathExists(test_path));
   EXPECT_FALSE(DirectoryExists(test_path));
-  EXPECT_TRUE(DeleteFile(test_path, false));
+  EXPECT_TRUE(DeleteFile(test_path));
 
   EXPECT_TRUE(DeleteFileRecursively(test_root));
 }
@@ -3105,7 +3141,7 @@ TEST_F(FileUtilTest, ReadFileToString) {
   EXPECT_EQ(0u, data.length());
 
   // Delete test file.
-  EXPECT_TRUE(DeleteFile(file_path, false));
+  EXPECT_TRUE(DeleteFile(file_path));
 
   data = "temp";
   EXPECT_FALSE(ReadFileToString(file_path, &data));
@@ -4153,7 +4189,7 @@ TEST(FileUtilMultiThreadedTest, MAYBE_MultiThreadedTempFiles) {
 
     EXPECT_EQ(content, output_file_contents);
 
-    DeleteFile(output_filename, false);
+    DeleteFile(output_filename);
   });
 
   // Post tasks to each thread in a round-robin fashion to ensure as much

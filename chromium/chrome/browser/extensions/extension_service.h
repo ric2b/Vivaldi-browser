@@ -22,8 +22,8 @@
 #include "base/strings/string16.h"
 #include "chrome/browser/extensions/blacklist.h"
 #include "chrome/browser/extensions/extension_management.h"
-#include "chrome/browser/extensions/forced_extensions/installation_metrics.h"
-#include "chrome/browser/extensions/forced_extensions/installation_tracker.h"
+#include "chrome/browser/extensions/forced_extensions/force_installed_metrics.h"
+#include "chrome/browser/extensions/forced_extensions/force_installed_tracker.h"
 #include "chrome/browser/extensions/install_gate.h"
 #include "chrome/browser/extensions/pending_extension_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -156,9 +156,6 @@ class ExtensionServiceInterface
   // Remove the specified component extension.
   virtual void RemoveComponentExtension(const std::string& extension_id) = 0;
 
-  // Whether the extension service is ready.
-  virtual bool is_ready() = 0;
-
   // Whether a user is able to disable a given extension.
   virtual bool UserCanDisableInstalledExtension(
       const std::string& extension_id) = 0;
@@ -206,7 +203,6 @@ class ExtensionService : public ExtensionServiceInterface,
                                         bool install_immediately) override;
   void CheckManagementPolicy() override;
   void CheckForUpdatesSoon() override;
-  bool is_ready() override;
 
   // ExternalProvider::VisitorInterface implementation.
   // Exposed for testing.
@@ -398,8 +394,8 @@ class ExtensionService : public ExtensionServiceInterface,
     return external_install_manager_.get();
   }
 
-  InstallationTracker* forced_extensions_tracker() {
-    return &forced_extensions_tracker_;
+  ForceInstalledTracker* force_installed_tracker() {
+    return &force_installed_tracker_;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -447,6 +443,9 @@ class ExtensionService : public ExtensionServiceInterface,
  private:
   // Loads extensions specified via a command line flag/switch.
   void LoadExtensionsFromCommandLineFlag(const char* switch_name);
+#if defined(OS_CHROMEOS)
+  void LoadSigninProfileTestExtension(const std::string& path);
+#endif
 
   // content::NotificationObserver implementation:
   void Observe(int type,
@@ -697,10 +696,10 @@ class ExtensionService : public ExtensionServiceInterface,
   ExtensionRegistrar extension_registrar_;
 
   // Tracker of enterprise policy forced installation.
-  InstallationTracker forced_extensions_tracker_;
+  ForceInstalledTracker force_installed_tracker_;
 
   // Reports force-installed extension metrics to UMA.
-  InstallationMetrics forced_extensions_metrics_;
+  ForceInstalledMetrics force_installed_metrics_;
 
   ScopedObserver<ProfileManager, ProfileManagerObserver>
       profile_manager_observer_{this};
@@ -712,6 +711,7 @@ class ExtensionService : public ExtensionServiceInterface,
   FRIEND_TEST_ALL_PREFIXES(ExtensionServiceTest,
                            DestroyingProfileClearsExtensions);
   FRIEND_TEST_ALL_PREFIXES(ExtensionServiceTest, SetUnsetBlacklistInPrefs);
+  FRIEND_TEST_ALL_PREFIXES(ExtensionServiceTest, NoUnsetBlocklistInPrefs);
   FRIEND_TEST_ALL_PREFIXES(ExtensionServiceTest,
                            BlacklistedExtensionWillNotInstall);
   FRIEND_TEST_ALL_PREFIXES(ExtensionServiceTest,

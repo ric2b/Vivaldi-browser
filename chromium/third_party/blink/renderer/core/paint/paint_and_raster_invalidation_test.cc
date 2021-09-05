@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
+#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 namespace blink {
 
@@ -30,6 +31,9 @@ void SetUpHTML(PaintAndRasterInvalidationTest& test) {
       }
       .solid {
         background: blue;
+      }
+      .translucent {
+        background: rgba(0, 0, 255, 0.5);
       }
       .gradient {
         background-image: linear-gradient(blue, yellow);
@@ -382,6 +386,8 @@ TEST_P(PaintAndRasterInvalidationTest, CompositedLayoutViewGradientResize) {
 }
 
 TEST_P(PaintAndRasterInvalidationTest, NonCompositedLayoutViewResize) {
+  ScopedPreferNonCompositedScrollingForTest non_composited_scrolling(true);
+
   SetBodyInnerHTML(R"HTML(
     <style>
       body { margin: 0 }
@@ -458,6 +464,8 @@ TEST_P(PaintAndRasterInvalidationTest, FullInvalidationWithHTMLTransform) {
 }
 
 TEST_P(PaintAndRasterInvalidationTest, NonCompositedLayoutViewGradientResize) {
+  ScopedPreferNonCompositedScrollingForTest non_composited_scrolling(true);
+
   SetBodyInnerHTML(R"HTML(
     <style>
       body { margin: 0 }
@@ -640,7 +648,8 @@ TEST_P(PaintAndRasterInvalidationTest,
   SetUpHTML(*this);
   Element* target = GetDocument().getElementById("target");
   auto* object = target->GetLayoutObject();
-  target->setAttribute(html_names::kClassAttr, "solid local-attachment scroll");
+  target->setAttribute(html_names::kClassAttr,
+                       "translucent local-attachment scroll");
   target->setInnerHTML(
       "<div id=child style='width: 500px; height: 500px'></div>",
       ASSERT_NO_EXCEPTION);

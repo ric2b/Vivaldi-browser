@@ -146,7 +146,8 @@ enum DriveSyncErrorType {
   misc
 };
 
-// Result of task execution.
+// Result of task execution. If changing, update the strings used in
+// ui/file_manager/file_manager/foreground/js/file_tasks.js
 enum TaskResult {
   // The task execution succeeded and a new window/tab was opened.
   opened,
@@ -156,7 +157,11 @@ enum TaskResult {
   // The task execution failed.
   failed,
   // No URL is specified.
-  empty
+  empty,
+  // The task was a |plugin_vm| task, and the file was in a unshared directory
+  failed_plugin_vm_task_directory_not_shared,
+  // The task was a |plugin_vm| task, and the file was in an external drive.
+  failed_plugin_vm_task_external_drive
 };
 
 // Drive share type.
@@ -1099,23 +1104,23 @@ interface Functions {
   // Returns list of available providers.
   static void getProviders(GetProvidersCallback callback);
 
-  // Requests adding a new provided file system. If not possible, then an error
-  // via chrome.runtime.lastError is returned.
+  // Requests adding a new provided file system. On failure, sets
+  // $(ref:runtime.lastError).
   static void addProvidedFileSystem(DOMString provider_id,
                                     SimpleCallback callback);
 
-  // Requests configuring an existing volume. If not possible, then returns
-  // an error via chrome.runtime.lastError.
+  // Requests configuring an existing volume. On failure, sets
+  // $(ref:runtime.lastError).
   static void configureVolume(DOMString volumeId, SimpleCallback callback);
 
-  // Requests list of custom actions for the specified entries. If not possible,
-  // then an error via chrome.runtime.lastError is returned.
+  // Requests list of custom actions for the specified entries. On failure, sets
+  // $(ref:runtime.lastError).
   [nocompile]
   static void getCustomActions([instanceof=Entry] object[] entries,
                                GetCustomActionsCallback callback);
 
-  // Executes a custom action for a set of entries. If not possible, then an
-  // error via chrome.runtime.lastError is returned.
+  // Executes a custom action for a set of entries. On failure, sets
+  // $(ref:runtime.lastError).
   [nocompile]
   static void executeCustomAction([instanceof=Entry] object[] entries,
                                   DOMString actionId,
@@ -1181,7 +1186,7 @@ interface Functions {
   [nocompile]
   static void importCrostiniImage([instanceof=Entry] object entry);
 
-  // For a file in DriveFS, retrieves its thumbnail. If |cropToSquare| is true,
+  // For a given file entry, retrieves its thumbnail. If |cropToSquare| is true,
   // returns a thumbnail appropriate for file list or grid views; otherwise,
   // returns a thumbnail appropriate for quickview.
   [nocompile]

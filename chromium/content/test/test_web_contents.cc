@@ -15,6 +15,7 @@
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/navigator.h"
+#include "content/browser/portal/portal.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
@@ -228,7 +229,13 @@ void TestWebContents::SetTitle(const base::string16& title) {
 }
 
 void TestWebContents::SetMainFrameMimeType(const std::string& mime_type) {
-  WebContentsImpl::SetMainFrameMimeType(mime_type);
+  static_cast<RenderViewHostImpl*>(GetRenderViewHost())
+      ->SetContentsMimeType(mime_type);
+}
+
+const std::string& TestWebContents::GetContentsMimeType() {
+  return static_cast<RenderViewHostImpl*>(GetRenderViewHost())
+      ->contents_mime_type();
 }
 
 void TestWebContents::SetIsCurrentlyAudible(bool audible) {
@@ -262,15 +269,11 @@ bool TestWebContents::CrossProcessNavigationPending() {
 
 bool TestWebContents::CreateRenderViewForRenderManager(
     RenderViewHost* render_view_host,
-    int opener_frame_routing_id,
-    int proxy_routing_id,
-    const base::UnguessableToken& frame_token,
-    const base::UnguessableToken& devtools_frame_token,
-    const FrameReplicationState& replicated_frame_state) {
+    const base::Optional<base::UnguessableToken>& opener_frame_token,
+    int proxy_routing_id) {
   // This will go to a TestRenderViewHost.
   static_cast<RenderViewHostImpl*>(render_view_host)
-      ->CreateRenderView(opener_frame_routing_id, proxy_routing_id, frame_token,
-                         devtools_frame_token, replicated_frame_state, false);
+      ->CreateRenderView(opener_frame_token, proxy_routing_id, false);
   return true;
 }
 
@@ -389,14 +392,12 @@ RenderFrameHostDelegate* TestWebContents::CreateNewWindow(
 void TestWebContents::CreateNewWidget(
     int32_t render_process_id,
     int32_t route_id,
-    mojo::PendingRemote<mojom::Widget> widget,
     mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost> blink_widget_host,
     mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}
 
 void TestWebContents::CreateNewFullscreenWidget(
     int32_t render_process_id,
     int32_t route_id,
-    mojo::PendingRemote<mojom::Widget> widget,
     mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost> blink_widget_host,
     mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}
 
@@ -425,13 +426,6 @@ void TestWebContents::SaveFrameWithHeaders(
   suggested_filename_ = suggested_filename;
 }
 
-std::vector<mojo::Remote<blink::mojom::PauseSubresourceLoadingHandle>>
-TestWebContents::PauseSubresourceLoading() {
-  pause_subresource_loading_called_ = true;
-  return std::vector<
-      mojo::Remote<blink::mojom::PauseSubresourceLoadingHandle>>();
-}
-
 bool TestWebContents::GetPauseSubresourceLoadingCalled() {
   return pause_subresource_loading_called_;
 }
@@ -454,6 +448,24 @@ void TestWebContents::TestDecrementBluetoothConnectedDeviceCount() {
 
 base::UnguessableToken TestWebContents::GetAudioGroupId() {
   return audio_group_id_;
+}
+
+const base::UnguessableToken& TestWebContents::CreatePortal(
+    std::unique_ptr<WebContents> web_contents) {
+  auto portal =
+      std::make_unique<Portal>(GetMainFrame(), std::move(web_contents));
+  const base::UnguessableToken& token = portal->portal_token();
+  portal->CreateProxyAndAttachPortal();
+  GetMainFrame()->OnPortalCreatedForTesting(std::move(portal));
+  return token;
+}
+
+WebContents* TestWebContents::GetPortalContents(
+    const base::UnguessableToken& portal_token) {
+  Portal* portal = GetMainFrame()->FindPortalByToken(portal_token);
+  if (!portal)
+    return nullptr;
+  return portal->GetPortalContents();
 }
 
 }  // namespace content

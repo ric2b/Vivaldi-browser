@@ -177,19 +177,21 @@ void ImeAdapterAndroid::UpdateRenderProcessConnection(
   rwhva_ = new_rwhva;
 }
 
-void ImeAdapterAndroid::UpdateState(const TextInputState& state) {
+void ImeAdapterAndroid::UpdateState(const ui::mojom::TextInputState& state) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ime_adapter_.get(env);
   if (obj.is_null())
     return;
 
   ScopedJavaLocalRef<jstring> jstring_text =
-      ConvertUTF16ToJavaString(env, state.value);
+      ConvertUTF16ToJavaString(env, state.value.value_or(base::string16()));
   Java_ImeAdapterImpl_updateState(
       env, obj, static_cast<int>(state.type), state.flags, state.mode,
       static_cast<int>(state.action), state.show_ime_if_needed,
-      state.always_hide_ime, jstring_text, state.selection_start,
-      state.selection_end, state.composition_start, state.composition_end,
+      state.always_hide_ime, jstring_text, state.selection.start(),
+      state.selection.end(),
+      state.composition ? state.composition.value().start() : -1,
+      state.composition ? state.composition.value().end() : -1,
       state.reply_to_request);
 }
 
@@ -366,7 +368,7 @@ void ImeAdapterAndroid::SetEditableSelectionOffsets(
     const JavaParamRef<jobject>&,
     int start,
     int end) {
-  auto* input_handler = GetFocusedFrameInputHandler();
+  auto* input_handler = GetFocusedFrameWidgetInputHandler();
   if (!input_handler)
     return;
 
@@ -400,7 +402,7 @@ void ImeAdapterAndroid::SetComposingRegion(JNIEnv*,
                                            const JavaParamRef<jobject>&,
                                            int start,
                                            int end) {
-  auto* input_handler = GetFocusedFrameInputHandler();
+  auto* input_handler = GetFocusedFrameWidgetInputHandler();
   if (!input_handler)
     return;
 
@@ -418,7 +420,7 @@ void ImeAdapterAndroid::DeleteSurroundingText(JNIEnv*,
                                               const JavaParamRef<jobject>&,
                                               int before,
                                               int after) {
-  auto* input_handler = GetFocusedFrameInputHandler();
+  auto* input_handler = GetFocusedFrameWidgetInputHandler();
   if (!input_handler)
     return;
   input_handler->DeleteSurroundingText(before, after);
@@ -429,7 +431,7 @@ void ImeAdapterAndroid::DeleteSurroundingTextInCodePoints(
     const JavaParamRef<jobject>&,
     int before,
     int after) {
-  auto* input_handler = GetFocusedFrameInputHandler();
+  auto* input_handler = GetFocusedFrameWidgetInputHandler();
   if (!input_handler)
     return;
   input_handler->DeleteSurroundingTextInCodePoints(before, after);
@@ -480,11 +482,12 @@ RenderFrameHost* ImeAdapterAndroid::GetFocusedFrame() {
   return nullptr;
 }
 
-mojom::FrameInputHandler* ImeAdapterAndroid::GetFocusedFrameInputHandler() {
-  auto* focused_frame = static_cast<RenderFrameHostImpl*>(GetFocusedFrame());
-  if (!focused_frame)
+blink::mojom::FrameWidgetInputHandler*
+ImeAdapterAndroid::GetFocusedFrameWidgetInputHandler() {
+  RenderWidgetHostImpl* rwhi = GetFocusedWidget();
+  if (!rwhi)
     return nullptr;
-  return focused_frame->GetFrameInputHandler();
+  return rwhi->GetFrameWidgetInputHandler();
 }
 
 std::vector<ui::ImeTextSpan> ImeAdapterAndroid::GetImeTextSpansFromJava(

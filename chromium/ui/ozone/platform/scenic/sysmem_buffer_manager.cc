@@ -51,9 +51,13 @@ scoped_refptr<SysmemBufferCollection>
 SysmemBufferManager::ImportSysmemBufferCollection(
     VkDevice vk_device,
     gfx::SysmemBufferCollectionId id,
-    zx::channel token) {
+    zx::channel token,
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage,
+    bool force_protected) {
   auto result = base::MakeRefCounted<SysmemBufferCollection>(id);
-  if (!result->Initialize(allocator_.get(), vk_device, std::move(token))) {
+  if (!result->Initialize(allocator_.get(), vk_device, std::move(token), format,
+                          usage, force_protected)) {
     return nullptr;
   }
   RegisterCollection(result.get());

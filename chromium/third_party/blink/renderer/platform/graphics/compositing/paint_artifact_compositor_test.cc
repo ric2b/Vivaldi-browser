@@ -142,16 +142,14 @@ class PaintArtifactCompositorTest : public testing::Test,
   }
 
   using ViewportProperties = PaintArtifactCompositor::ViewportProperties;
-  using Settings = PaintArtifactCompositor::Settings;
 
   void Update(
       scoped_refptr<const PaintArtifact> artifact,
       const ViewportProperties& viewport_properties = ViewportProperties(),
-      const Settings& settings = Settings(),
       const WTF::Vector<const TransformPaintPropertyNode*>&
           scroll_translation_nodes = {}) {
     paint_artifact_compositor_->SetNeedsUpdate();
-    paint_artifact_compositor_->Update(artifact, viewport_properties, settings,
+    paint_artifact_compositor_->Update(artifact, viewport_properties,
                                        scroll_translation_nodes);
     layer_tree_->layer_tree_host()->LayoutAndUpdateLayers();
   }
@@ -3702,7 +3700,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipRespectOutputClip) {
 
   CompositorFilterOperations non_trivial_filter;
   non_trivial_filter.AppendBlurFilter(5);
-  auto e1 = CreateFilterEffect(e0(), non_trivial_filter, FloatPoint(),
+  auto e1 = CreateFilterEffect(e0(), non_trivial_filter,
                                CompositingReason::kActiveFilterAnimation);
 
   TestPaintArtifact artifact;
@@ -3870,8 +3868,15 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDelegateBackdropFilter) {
   auto t1 = Create2DTranslation(t0(), 10, 20);
   CompositorFilterOperations blur_filter;
   blur_filter.AppendBlurFilter(5);
-  auto e1 = CreateBackdropFilterEffect(e0(), *t1, c2.get(), blur_filter,
-                                       FloatPoint());
+  EffectPaintPropertyNode::State state;
+  state.local_transform_space = t1.get();
+  state.output_clip = c2.get();
+  state.backdrop_filter.AppendBlurFilter(5);
+  state.direct_compositing_reasons = CompositingReason::kBackdropFilter;
+  state.compositor_element_id = CompositorElementIdFromUniqueObjectId(
+      NewUniqueObjectId(), CompositorElementIdNamespace::kPrimary);
+  state.opacity = 0.5;
+  auto e1 = EffectPaintPropertyNode::Create(e0(), std::move(state));
 
   TestPaintArtifact artifact;
   artifact.Chunk(*t1, *c1, e0())
@@ -3894,9 +3899,10 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDelegateBackdropFilter) {
   const cc::Layer* clip_mask1 = LayerAt(2);
   const cc::Layer* content2 = LayerAt(3);
 
-  // Three synthesized layers, two of which are null because because they use
-  // fast rounded corners. One real synthesized layer is needed because the
-  // rounded clip and the backdrop filter are in different transform spaces.
+  // Three synthesized layers, two of which are null because they use fast
+  // rounded corners. One real synthesized layer is needed because the rounded
+  // clip and the backdrop filter are in different transform spaces.
+  ASSERT_EQ(3u, SynthesizedClipLayerCount());
   EXPECT_FALSE(SynthesizedClipLayerAt(0));
   EXPECT_EQ(clip_mask1, SynthesizedClipLayerAt(1));
   EXPECT_FALSE(SynthesizedClipLayerAt(2));
@@ -3916,6 +3922,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDelegateBackdropFilter) {
   EXPECT_EQ(c1_id, mask_isolation_0.clip_id);
   EXPECT_TRUE(mask_isolation_0.backdrop_filters.IsEmpty());
   EXPECT_TRUE(mask_isolation_0.is_fast_rounded_corner);
+  EXPECT_EQ(1.0f, mask_isolation_0.opacity);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
             mask_isolation_0.rounded_corner_bounds);
 
@@ -3928,6 +3935,7 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDelegateBackdropFilter) {
   int e1_id = content1->effect_tree_index();
   const cc::EffectNode& cc_e1 = *GetPropertyTrees().effect_tree.Node(e1_id);
   EXPECT_TRUE(cc_e1.backdrop_filters.IsEmpty());
+  EXPECT_EQ(1.0f, cc_e1.opacity);
   EXPECT_EQ(t1_id, cc_e1.transform_id);
   EXPECT_EQ(c2_id, cc_e1.clip_id);
   EXPECT_FALSE(cc_e1.backdrop_mask_element_id);
@@ -3941,6 +3949,8 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDelegateBackdropFilter) {
   EXPECT_EQ(c2_id, mask_isolation_1.clip_id);
   EXPECT_FALSE(mask_isolation_1.backdrop_filters.IsEmpty());
   EXPECT_FALSE(mask_isolation_1.is_fast_rounded_corner);
+  // Opacity should also be moved to mask_isolation_1.
+  EXPECT_EQ(0.5f, mask_isolation_1.opacity);
   EXPECT_EQ(gfx::RRectF(), mask_isolation_1.rounded_corner_bounds);
 
   EXPECT_EQ(t0_id, clip_mask1->transform_tree_index());
@@ -3967,8 +3977,80 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipDelegateBackdropFilter) {
   EXPECT_EQ(c1_id, mask_isolation_2.clip_id);
   EXPECT_TRUE(mask_isolation_2.backdrop_filters.IsEmpty());
   EXPECT_TRUE(mask_isolation_2.is_fast_rounded_corner);
+  EXPECT_EQ(1.0f, mask_isolation_2.opacity);
   EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
             mask_isolation_2.rounded_corner_bounds);
+}
+
+TEST_P(PaintArtifactCompositorTest, SynthesizedClipMultipleNonBackdropEffects) {
+  // This tests the case that multiple non-backdrop effects can share the
+  // synthesized mask.
+  FloatSize corner(5, 5);
+  FloatRoundedRect rrect(FloatRect(50, 50, 300, 200), corner, corner, corner,
+                         corner);
+  auto c1 = CreateClip(c0(), t0(), rrect);
+  auto c2 = CreateClip(*c1, t0(), FloatRoundedRect(60, 60, 200, 100));
+
+  auto e1 =
+      CreateOpacityEffect(e0(), t0(), c2.get(), 0.5, CompositingReason::kAll);
+  auto e2 =
+      CreateOpacityEffect(e0(), t0(), c1.get(), 0.75, CompositingReason::kAll);
+
+  TestPaintArtifact artifact;
+  artifact.Chunk(t0(), *c2, *e1)
+      .RectDrawing(IntRect(0, 0, 100, 100), Color::kBlack);
+  artifact.Chunk(t0(), *c1, *e2)
+      .RectDrawing(IntRect(0, 0, 100, 100), Color::kBlack);
+  artifact.Chunk(t0(), c0(), e0())
+      .RectDrawing(IntRect(0, 0, 100, 100), Color::kBlack);
+  Update(artifact.Build());
+
+  // Expectation in effect stack diagram:
+  //  content0  content1  content2
+  // [   e1   ][   e2   ]
+  // [  mask_isolation  ]
+  // [             e0             ]
+  // Three content layers.
+  ASSERT_EQ(3u, LayerCount());
+  const cc::Layer* content0 = LayerAt(0);
+  const cc::Layer* content1 = LayerAt(1);
+  const cc::Layer* content2 = LayerAt(2);
+
+  // One synthesized layer, which is null because it uses fast rounded corners.
+  ASSERT_EQ(1u, SynthesizedClipLayerCount());
+  EXPECT_FALSE(SynthesizedClipLayerAt(0));
+
+  int c2_id = content0->clip_tree_index();
+  const cc::ClipNode& cc_c2 = *GetPropertyTrees().clip_tree.Node(c2_id);
+  int e1_id = content0->effect_tree_index();
+  const cc::EffectNode& cc_e1 = *GetPropertyTrees().effect_tree.Node(e1_id);
+  int c1_id = content1->clip_tree_index();
+  const cc::ClipNode& cc_c1 = *GetPropertyTrees().clip_tree.Node(c1_id);
+  int e2_id = content1->effect_tree_index();
+  const cc::EffectNode& cc_e2 = *GetPropertyTrees().effect_tree.Node(e2_id);
+  int mask_isolation_id = cc_e1.parent_id;
+  const cc::EffectNode& mask_isolation =
+      *GetPropertyTrees().effect_tree.Node(mask_isolation_id);
+
+  EXPECT_EQ(c2_id, cc_e1.clip_id);
+  EXPECT_EQ(0.5f, cc_e1.opacity);
+  EXPECT_EQ(gfx::RectF(60, 60, 200, 100), cc_c2.clip);
+  ASSERT_EQ(c1_id, cc_c2.parent_id);
+
+  EXPECT_EQ(c1_id, cc_e2.clip_id);
+  EXPECT_EQ(mask_isolation_id, cc_e2.parent_id);
+  EXPECT_EQ(0.75f, cc_e2.opacity);
+  EXPECT_EQ(gfx::RectF(50, 50, 300, 200), cc_c1.clip);
+  ASSERT_EQ(c0_id, cc_c1.parent_id);
+
+  ASSERT_EQ(e0_id, mask_isolation.parent_id);
+  EXPECT_EQ(c1_id, mask_isolation.clip_id);
+  EXPECT_TRUE(mask_isolation.is_fast_rounded_corner);
+  EXPECT_EQ(gfx::RRectF(50, 50, 300, 200, 5),
+            mask_isolation.rounded_corner_bounds);
+
+  EXPECT_EQ(c0_id, content2->clip_tree_index());
+  EXPECT_EQ(e0_id, content2->effect_tree_index());
 }
 
 TEST_P(PaintArtifactCompositorTest, WillBeRemovedFromFrame) {
@@ -4395,9 +4477,9 @@ TEST_P(PaintArtifactCompositorTest, OpacityRenderSurfacesWithFilterChildren) {
   auto opacity = CreateOpacityEffect(e0(), 0.1f);
   CompositorFilterOperations filter;
   filter.AppendBlurFilter(5);
-  auto filter1 = CreateFilterEffect(*opacity, filter, FloatPoint(),
+  auto filter1 = CreateFilterEffect(*opacity, filter,
                                     CompositingReason::kActiveFilterAnimation);
-  auto filter2 = CreateFilterEffect(*opacity, filter, FloatPoint(),
+  auto filter2 = CreateFilterEffect(*opacity, filter,
                                     CompositingReason::kActiveFilterAnimation);
 
   IntRect r(150, 150, 100, 100);
@@ -4489,7 +4571,7 @@ TEST_P(PaintArtifactCompositorTest, OpacityRenderSurfacesWithBackdropChildren) {
   auto a = CreateOpacityEffect(*e, 0.5f);
   CompositorFilterOperations blur_filter;
   blur_filter.AppendBlurFilter(5);
-  auto bd = CreateBackdropFilterEffect(*a, blur_filter, FloatPoint());
+  auto bd = CreateBackdropFilterEffect(*a, blur_filter);
 
   TestPaintArtifact artifact;
   IntRect r(150, 150, 100, 100);
@@ -4620,7 +4702,7 @@ TEST_P(PaintArtifactCompositorTest,
 TEST_P(PaintArtifactCompositorTest, FilterCreatesRenderSurface) {
   CompositorFilterOperations filter;
   filter.AppendBlurFilter(5);
-  auto e1 = CreateFilterEffect(e0(), filter, FloatPoint(),
+  auto e1 = CreateFilterEffect(e0(), filter,
                                CompositingReason::kActiveFilterAnimation);
   Update(TestPaintArtifact()
              .Chunk(t0(), c0(), *e1)
@@ -4643,7 +4725,7 @@ TEST_P(PaintArtifactCompositorTest, FilterAnimationCreatesRenderSurface) {
 TEST_P(PaintArtifactCompositorTest, BackdropFilterCreatesRenderSurface) {
   CompositorFilterOperations filter;
   filter.AppendBlurFilter(5);
-  auto e1 = CreateBackdropFilterEffect(e0(), filter, FloatPoint());
+  auto e1 = CreateBackdropFilterEffect(e0(), filter);
   Update(TestPaintArtifact()
              .Chunk(t0(), c0(), *e1)
              .RectDrawing(IntRect(150, 150, 100, 100), Color::kWhite)
@@ -4959,8 +5041,7 @@ TEST_P(PaintArtifactCompositorTest, AddNonCompositedScrollNodes) {
   scroll_translation_nodes.push_back(scroll_translation.get());
 
   TestPaintArtifact artifact;
-  Update(artifact.Build(), ViewportProperties(), Settings(),
-         scroll_translation_nodes);
+  Update(artifact.Build(), ViewportProperties(), scroll_translation_nodes);
 
   auto& scroll_tree = GetPropertyTrees().scroll_tree;
   auto* scroll_node = scroll_tree.FindNodeFromElementId(scroll_element_id);

@@ -64,10 +64,12 @@
 <translation id="2522350507219695259">ਕੈਲੀਬਰੇਸ਼ਨ ਪੂਰਾ ਹੋ ਗਿਆ ਹੈ</translation>
 <translation id="252373100621549798">ਅਗਿਆਤ ਡਿਸਪਲੇ</translation>
 <translation id="2545651323591713692">ਸਨੂਜ਼ ਕਰੋ</translation>
+<translation id="2570734079541893434">ਸੈਟਿੰਗਾਂ ਦਾ ਪ੍ਰਬੰਧਨ ਕਰੋ</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{1 ਘੰ. ਵਿੱਚ}one{# ਘੰ. ਵਿੱਚ}other{# ਘੰ. ਵਿੱਚ}}</translation>
 <translation id="2583543531130364912">ਆਪਣੀ ਟੱਚਸਕ੍ਰੀਨ ਨੂੰ ਕੈਲੀਬਰੇਟ ਕਰੋ</translation>
 <translation id="2666092431469916601">ਟੌਪ</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" /> ਤੋਂ ਸਾਂਝਾ ਕੀਤਾ ਗਿਆ</translation>
+<translation id="271033894570825754">ਨਵਾਂ</translation>
 <translation id="2743387203779672305">ਕਲਿੱਪਬੋਰਡ 'ਤੇ ਕਾਪੀ ਕਰੋ</translation>
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">ਫੋਲਡਰ ਖੋਲ੍ਹੋ</translation>
@@ -135,6 +137,7 @@
 <translation id="5463830097259460683">ਇਮੋਜੀ ਅਤੇ ਚਿੰਨ੍ਹ</translation>
 <translation id="5476505524087279545">ਨਿਸ਼ਾਨ ਹਟਾਓ</translation>
 <translation id="547979256943495781">ਸ਼ੈਲਫ਼ ਸੱਜੇ ਪਾਸੇ</translation>
+<translation id="5528053674512161860">ਪੰਨਾ ਲੋਡ ਕਰਨਾ ਅਸਫਲ ਰਿਹਾ ਕਿਉਂਕਿ ਵਿਕਾਸਕਾਰ UI ਮਾਡਿਊਲ (dev_ui) ਸਥਾਪਤ ਨਹੀਂ ਹੈ</translation>
 <translation id="5574202486608032840"><ph name="IDS_SHORT_PRODUCT_OS_NAME" /> ਸਿਸਟਮ</translation>
 <translation id="5583640892426849032">ਬੈਕਸਪੇਸ</translation>
 <translation id="5613020302032141669">ਖੱਬਾ ਤੀਰ</translation>
@@ -152,10 +155,12 @@
 <translation id="6040143037577758943">ਬੰਦ ਕਰੋ</translation>
 <translation id="6119846243427417423">ਸਕਿਰਿਆ ਕਰੋ</translation>
 <translation id="6129953537138746214">ਸਪੇਸ</translation>
+<translation id="6134259848159370930">ਆਪਣਾ ਡੀਵਾਈਸ, ਐਪਾਂ, ਸੈਟਿੰਗਾਂ ਅਤੇ ਵੈੱਬ ਖੋਜੋ।</translation>
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
 <translation id="6156262341071374681">ਸਾਰੀਆਂ ਐਪਾਂ ਲਈ ਵਿਸਤਾਰ ਕਰੋ</translation>
 <translation id="6165508094623778733">ਹੋਰ ਜਾਣੋ</translation>
+<translation id="6166852626429024716">ਆਪਣਾ ਡੀਵਾਈਸ, ਐਪਾਂ, ਸੈਟਿੰਗਾਂ, ਵੈੱਬ ਖੋਜੋ...</translation>
 <translation id="6264365405983206840">&amp;ਸਾਰੇ ਚੁਣੋ</translation>
 <translation id="6351032674660237738">ਐਪ ਸੁਝਾਅ</translation>
 <translation id="6364916375976753737">ਖੱਬੇ ਪਾਸੇ ਸਕ੍ਰੌਲ ਕਰੋ</translation>
@@ -192,7 +197,6 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{1 ਮਿੰਟ ਬਾਕੀ}one{# ਮਿੰਟ ਬਾਕੀ}other{# ਮਿੰਟ ਬਾਕੀ}}</translation>
 <translation id="7319740667687257810">ਲਾਂਚਰ, ਨਾਮੁਕੰਮਲ ਦ੍ਰਿਸ਼</translation>
-<translation id="7352651011704765696">ਕੁਝ ਗ਼ਲਤ ਹੋਇਆ ਸੀ</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{1 ਮਿੰਟ ਪਹਿਲਾਂ}one{# ਮਿੰਟ ਪਹਿਲਾਂ}other{# ਮਿੰਟ ਪਹਿਲਾਂ}}</translation>
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{1 ਮਿੰਟ ਬਾਕੀ}one{# ਮਿੰਟ ਬਾਕੀ}other{# ਮਿੰਟ ਬਾਕੀ}}</translation>
@@ -205,6 +209,7 @@
 <translation id="7848989271541991537">ਪੰਨਾ <ph name="PAGE_NUMBER" />, ਕਤਾਰ <ph name="ROW_NUMBER" />, ਕਾਲਮ <ph name="COLUMN_NUMBER" /> 'ਤੇ ਲਿਜਾਇਆ ਗਿਆ।</translation>
 <translation id="7879499977785298635">ਬਲਾਕ ਨਾ ਕਰੋ</translation>
 <translation id="7907591526440419938">ਫਾਈਲ ਖੋਲ੍ਹੋ</translation>
+<translation id="7952747673138230804">Chrome OS ਪੜਚੋਲ ਕਰਨ ਲਈ ਨਵੀਂ ਸਮੱਗਰੀ ਦੇ ਸੁਝਾਅ ਦਿਖਾਉਂਦਾ ਹੈ। ਤੁਹਾਡੇ ਵੱਲੋਂ ਵਰਤੋਂ ਡਾਟੇ ਨੂੰ ਸਾਂਝਾ ਕਰਨ ਦੀ ਚੋਣ ਕੀਤੇ ਜਾਣ 'ਤੇ ਹੀ ਕੁਆਲਿਟੀ ਨੂੰ ਬਿਹਤਰ ਬਣਾਉਣ ਲਈ ਅੰਕੜੇ ਭੇਜੇ ਜਾਂਦੇ ਹਨ। <ph name="MANAGE_SETTINGS" /></translation>
 <translation id="7969046989155602842">ਆਦੇਸ਼</translation>
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{1 ਤੋਂ ਵੱਧ ਨਾ-ਪੜ੍ਹੀ ਹੋਈ ਸੂਚਨਾ}one{# ਤੋਂ ਵੱਧ ਨਾ-ਪੜ੍ਹੀ ਹੋਈ ਸੂਚਨਾ}other{# ਤੋਂ ਵੱਧ ਨਾ-ਪੜ੍ਹੀਆਂ ਹੋਈਆਂ ਸੂਚਨਾਵਾਂ}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{1 ਮਿੰ. ਵਿੱਚ}one{# ਮਿੰ. ਵਿੱਚ}other{# ਮਿੰ. ਵਿੱਚ}}</translation>
@@ -231,6 +236,7 @@
 <translation id="8602707065186045623"><ph name="SAVEAS_EXTENSION_TYPE" /> ਫਾਈਲ (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8649597172973390955">ਸ਼ੈਲਫ਼ ਹਮੇਸ਼ਾਂ ਦਿਖਾਈ ਜਾ ਰਹੀ ਹੈ</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> KB/s</translation>
+<translation id="8685326675965865247">ਆਪਣਾ ਡੀਵਾਈਸ, ਐਪਾਂ, ਸੈਟਿੰਗਾਂ ਅਤੇ ਵੈੱਬ ਖੋਜੋ। ਆਪਣੀਆਂ ਐਪਾਂ ਵਿੱਚ ਨੈਵੀਗੇਟ ਕਰਨ ਲਈ ਤੀਰ ਕੁੰਜੀਆਂ ਵਰਤੋ।</translation>
 <translation id="8725488761726303204">+<ph name="NUMBER" /> ਹੋਰ</translation>
 <translation id="8730621377337864115">ਹੋ ਗਿਆ</translation>
 <translation id="8772073294905169192">{HOURS,plural, =1{1 ਘੰਟਾ}one{# ਘੰਟਾ}other{# ਘੰਟੇ}}</translation>

@@ -99,8 +99,6 @@ class NativeAppWindowViews : public extensions::NativeAppWindow,
   void SaveWindowPlacement(const gfx::Rect& bounds,
                            ui::WindowShowState show_state) override;
   void DeleteDelegate() override;
-  views::Widget* GetWidget() override;
-  const views::Widget* GetWidget() const override;
   bool ShouldDescendIntoChildForEventHandling(
       gfx::NativeView child,
       const gfx::Point& location) override;
@@ -116,8 +114,6 @@ class NativeAppWindowViews : public extensions::NativeAppWindow,
                              content::RenderViewHost* new_host) override;
 
   // views::View:
-  void ViewHierarchyChanged(
-      const views::ViewHierarchyChangedDetails& details) override;
   gfx::Size GetMinimumSize() const override;
   gfx::Size GetMaximumSize() const override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;

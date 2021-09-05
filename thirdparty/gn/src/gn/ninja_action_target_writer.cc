@@ -72,9 +72,7 @@ void NinjaActionTargetWriter::Run() {
     }
     out_ << std::endl;
     if (target_->action_values().has_depfile()) {
-      out_ << "  depfile = ";
       WriteDepfile(SourceFile());
-      out_ << std::endl;
     }
     if (target_->action_values().pool().ptr) {
       out_ << "  pool = ";
@@ -203,9 +201,7 @@ void NinjaActionTargetWriter::WriteSourceRules(
         args_escape_options, out_);
 
     if (target_->action_values().has_depfile()) {
-      out_ << "  depfile = ";
       WriteDepfile(sources[i]);
-      out_ << std::endl;
     }
     if (target_->action_values().pool().ptr) {
       out_ << "  pool = ";
@@ -232,8 +228,18 @@ void NinjaActionTargetWriter::WriteOutputFilesForBuildLine(
 }
 
 void NinjaActionTargetWriter::WriteDepfile(const SourceFile& source) {
+  out_ << "  depfile = ";
   path_output_.WriteFile(
       out_,
       SubstitutionWriter::ApplyPatternToSourceAsOutputFile(
           target_, settings_, target_->action_values().depfile(), source));
+  out_ << std::endl;
+  // Using "deps = gcc" allows Ninja to read and store the depfile content in
+  // its internal database which improves performance, especially for large
+  // depfiles. The use of this feature with depfiles that contain multiple
+  // outputs require Ninja version 1.9.0 or newer.
+  if (settings_->build_settings()->ninja_required_version() >=
+      Version{1, 9, 0}) {
+    out_ << "  deps = gcc" << std::endl;
+  }
 }

@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(privat)</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Filbeskrivelser</translation>
-<translation id="1635033183663317347">Installeret af din tilsynsførende.</translation>
 <translation id="1682548588986054654">Nyt privat-vindue</translation>
 <translation id="1698122934742150150">Kun for den aktuelle inkognitosession</translation>
 <translation id="1706625117072057435">Zoomniveauer</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">Udvidelse: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> anmoder om at dele din skærm</translation>
 <translation id="3711931198657368127">Ind&amp;sæt, og gå til <ph name="URL" /></translation>
-<translation id="3725367690636977613">sider</translation>
 <translation id="3727187387656390258">Undersøg popup-vindue</translation>
 <translation id="3744111561329211289">Synkronisering i baggrunden</translation>
 <translation id="3760460896538743390">Undersøg &amp;baggrundsside</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Acceptér for gruppe</translation>
-<translation id="4091434297613116013">ark papir</translation>
 <translation id="4096508467498758490">Deaktiver udvidelser, der kører i udviklertilstand</translation>
 <translation id="4100839878934973028">Et andet program på din computer tilføjede en app, der kan ændre den måde, hvorpå Vivaldi fungerer.</translation>
 <translation id="4109898769411476438">Luk browser inden import</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Vis &amp;knapper</translation>
 <translation id="7311079019872751559">Adgang til plugin, der ikke er gemt i sandbox</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Der gik noget galt, da du prøvede at udskrive. Tjek din printer, og prøv igen.</translation>
 <translation id="7412226954991670867">GPU-hukommelse</translation>
 <translation id="7421925624202799674">&amp;Vis sidens kilde</translation>
@@ -433,7 +429,6 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8071432093239591881">Udskriv i billedformat</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Administrer udvidelser</translation>
-<translation id="8180239481735238521">side</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
          =1 {Download er i gang} other {Downloads er i gang}}</translation>
 <translation id="8230134520748321204">Vil du gemme adgangskoden til <ph name="ORIGIN" />?</translation>
@@ -466,7 +461,6 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8798099450830957504">Standard</translation>
 <translation id="8800004011501252845">Viser destinationer for</translation>
 <translation id="8808478386290700967">Webshop</translation>
-<translation id="8813811964357448561">papirark</translation>
 <translation id="8823514049557262177">Kopiér linkte&amp;kst</translation>
 <translation id="8823704566850948458">Foreslå adgangskode...</translation>
 <translation id="8859174528519900719">Underramme: <ph name="SUBFRAME_SITE" /></translation>

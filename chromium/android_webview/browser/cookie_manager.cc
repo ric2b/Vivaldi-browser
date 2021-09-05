@@ -39,6 +39,7 @@
 #include "content/public/browser/cookie_store_factory.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_constants.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/cookie_store.h"
@@ -223,10 +224,12 @@ void CookieManager::MigrateCookieStorePath() {
   base::FilePath old_cookie_store_path = GetPathInAppDirectory("Cookies");
   base::FilePath old_cookie_journal_path =
       GetPathInAppDirectory("Cookies-journal");
+  base::FilePath new_cookie_journal_path =
+      GetPathInAppDirectory("Default/Cookies-journal");
 
   if (base::PathExists(old_cookie_store_path)) {
     base::Move(old_cookie_store_path, cookie_store_path_);
-    base::Move(old_cookie_journal_path, cookie_store_path_);
+    base::Move(old_cookie_journal_path, new_cookie_journal_path);
   } else {
     // Some users got an incomplete version of this migration where the journal
     // was not moved. Delete the old journal if it exists, as we can't merge
@@ -476,7 +479,7 @@ void CookieManager::SetCookieHelper(const GURL& host,
   UMA_HISTOGRAM_ENUMERATION(
       "Android.WebView.CookieManager.SameSiteAttributeValue", samesite);
 
-  net::CanonicalCookie::CookieInclusionStatus status;
+  net::CookieInclusionStatus status;
   std::unique_ptr<net::CanonicalCookie> cc(
       net::CanonicalCookie::Create(new_host, value, base::Time::Now(),
                                    base::nullopt /* server_time */, &status));
@@ -547,9 +550,9 @@ void CookieManager::GetCookieListAsyncHelper(const GURL& host,
 void CookieManager::GetCookieListCompleted(
     base::OnceClosure complete,
     net::CookieList* result,
-    const net::CookieStatusList& value,
-    const net::CookieStatusList& excluded_cookies) {
-  *result = net::cookie_util::StripStatuses(value);
+    const net::CookieAccessResultList& value,
+    const net::CookieAccessResultList& excluded_cookies) {
+  *result = net::cookie_util::StripAccessResults(value);
   std::move(complete).Run();
 }
 

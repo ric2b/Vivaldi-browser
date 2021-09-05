@@ -178,6 +178,10 @@ void WorkerGlobalScope::Dispose() {
   WorkerOrWorkletGlobalScope::Dispose();
 }
 
+const base::UnguessableToken& WorkerGlobalScope::GetDevToolsToken() const {
+  return GetThread()->GetDevToolsWorkerToken();
+}
+
 void WorkerGlobalScope::ExceptionUnhandled(int exception_id) {
   ErrorEvent* event = pending_error_events_.Take(exception_id);
   DCHECK(event);
@@ -249,7 +253,8 @@ void WorkerGlobalScope::ImportScriptsInternal(const Vector<String>& urls,
       return;
     }
     if (!GetContentSecurityPolicy()->AllowScriptFromSource(
-            url, AtomicString(), IntegrityMetadataSet(), kNotParserInserted)) {
+            url, AtomicString(), IntegrityMetadataSet(), kNotParserInserted,
+            url, RedirectStatus::kNoRedirect)) {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kNetworkError,
           "The script at '" + url.ElidedString() + "' failed to load.");
@@ -569,7 +574,7 @@ TrustedTypePolicyFactory* WorkerGlobalScope::GetTrustedTypes() const {
   return trusted_types_.Get();
 }
 
-void WorkerGlobalScope::Trace(Visitor* visitor) {
+void WorkerGlobalScope::Trace(Visitor* visitor) const {
   visitor->Trace(location_);
   visitor->Trace(navigator_);
   visitor->Trace(pending_error_events_);

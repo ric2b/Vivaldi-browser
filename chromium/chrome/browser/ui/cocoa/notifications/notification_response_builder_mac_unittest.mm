@@ -43,6 +43,7 @@ class NotificationResponseBuilderMacTest : public testing::Test {
     [builder setNotificationId:@"notificationId"];
     [builder setProfileId:@"profileId"];
     [builder setIncognito:false];
+    [builder setCreatorPid:@1];
     [builder
         setNotificationType:[NSNumber numberWithInt:static_cast<int>(type)]];
     [builder
@@ -50,6 +51,22 @@ class NotificationResponseBuilderMacTest : public testing::Test {
     return builder;
   }
 };
+
+TEST_F(NotificationResponseBuilderMacTest, TestNoCreatorPid) {
+  base::scoped_nsobject<NotificationBuilder> builder =
+      NewTestBuilder(NotificationHandler::Type::WEB_PERSISTENT);
+  NSUserNotification* notification = [builder buildUserNotification];
+  base::scoped_nsobject<NSMutableDictionary> newUserInfo(
+      [[notification userInfo] mutableCopy]);
+  [newUserInfo
+      removeObjectForKey:notification_constants::kNotificationCreatorPid];
+  [notification setUserInfo:newUserInfo];
+  NSDictionary* response =
+      [NotificationResponseBuilder buildActivatedDictionary:notification];
+  NSNumber* creatorPid =
+      [response objectForKey:notification_constants::kNotificationCreatorPid];
+  EXPECT_TRUE([creatorPid isEqualToNumber:@0]);
+}
 
 TEST_F(NotificationResponseBuilderMacTest, TestNotificationClick) {
   base::scoped_nsobject<NotificationBuilder> builder =

@@ -73,20 +73,9 @@ class StaticBitmapImage;
 #define CANVAS2D_HIBERNATION_ENABLED 1
 #endif
 
-// TODO: Fix background rendering and remove this workaround. crbug.com/600386
-#define CANVAS2D_BACKGROUND_RENDER_SWITCH_TO_CPU 0
-
 class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
  public:
-  enum AccelerationMode {
-    kDisableAcceleration,
-    kEnableAcceleration,
-    kForceAccelerationForTesting,
-  };
-
-  Canvas2DLayerBridge(const IntSize&,
-                      AccelerationMode,
-                      const CanvasColorParams&);
+  Canvas2DLayerBridge(const IntSize&, RasterMode, const CanvasColorParams&);
 
   ~Canvas2DLayerBridge() override;
 
@@ -100,11 +89,11 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
   void FinalizeFrame();
   void SetIsInHiddenPage(bool);
   void SetIsBeingDisplayed(bool);
+  void SetFilterQuality(SkFilterQuality filter_quality);
   void DidDraw(const FloatRect&);
   void DoPaintInvalidation(const FloatRect& dirty_rect);
   cc::Layer* Layer();
   bool Restore();
-  void UpdateFilterQuality();
 
   // virtual for unit testing
   virtual void WillOverwriteCanvas();
@@ -131,7 +120,7 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
 
   bool HasRecordedDrawCommands() { return have_recorded_draw_commands_; }
 
-  scoped_refptr<StaticBitmapImage> NewImageSnapshot(AccelerationHint);
+  scoped_refptr<StaticBitmapImage> NewImageSnapshot();
 
   cc::TextureLayer* layer_for_testing() { return layer_.get(); }
 
@@ -164,8 +153,7 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
   void SetLoggerForTesting(std::unique_ptr<Logger> logger) {
     logger_ = std::move(logger);
   }
-  CanvasResourceProvider* GetOrCreateResourceProvider(
-      AccelerationHint = kPreferAcceleration);
+  CanvasResourceProvider* GetOrCreateResourceProvider();
   CanvasResourceProvider* ResourceProvider() const;
   void FlushRecording();
 
@@ -191,7 +179,8 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
   void SkipQueuedDrawCommands();
   void EnsureCleared();
 
-  bool ShouldAccelerate(AccelerationHint) const;
+  // Check if the Raster Mode is GPU and if the GPU context is not lost
+  bool ShouldAccelerate() const;
 
   sk_sp<SkImage> hibernation_image_;
   scoped_refptr<cc::TextureLayer> layer_;
@@ -201,7 +190,6 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
   bool have_recorded_draw_commands_;
   bool is_hidden_;
   bool is_being_displayed_;
-  bool software_rendering_while_hidden_;
   bool hibernation_scheduled_ = false;
   bool dont_use_idle_scheduling_for_testing_ = false;
   bool context_lost_ = false;
@@ -211,7 +199,7 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
   // WritePixels, the recording is now missing that information.
   bool last_record_tainted_by_write_pixels_ = false;
 
-  const AccelerationMode acceleration_mode_;
+  const RasterMode raster_mode_;
   const CanvasColorParams color_params_;
   const IntSize size_;
 

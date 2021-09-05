@@ -8,7 +8,6 @@
 #include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/chrome_screenshot_grabber.h"
@@ -65,6 +64,39 @@ void PolicyTest::SetUp() {
   InProcessBrowserTest::SetUp();
 }
 
+void PolicyTest::CheckURLIsBlockedInWebContents(
+    content::WebContents* web_contents,
+    const GURL& url) {
+  EXPECT_EQ(url, web_contents->GetURL());
+
+  base::string16 blocked_page_title;
+  if (url.has_host()) {
+    blocked_page_title = base::UTF8ToUTF16(url.host());
+  } else {
+    // Local file paths show the full URL.
+    blocked_page_title = base::UTF8ToUTF16(url.spec());
+  }
+  EXPECT_EQ(blocked_page_title, web_contents->GetTitle());
+
+  // Verify that the expected error page is being displayed.
+  bool result = false;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+      web_contents,
+      "var textContent = document.body.textContent;"
+      "var hasError = textContent.indexOf('ERR_BLOCKED_BY_ADMINISTRATOR') >= 0;"
+      "domAutomationController.send(hasError);",
+      &result));
+  EXPECT_TRUE(result);
+}
+
+void PolicyTest::CheckURLIsBlocked(Browser* browser, const std::string& spec) {
+  GURL url(spec);
+  ui_test_utils::NavigateToURL(browser, url);
+  content::WebContents* contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  PolicyTest::CheckURLIsBlockedInWebContents(contents, url);
+}
+
 void PolicyTest::SetUpInProcessBrowserTestFixture() {
   base::CommandLine::ForCurrentProcess()->AppendSwitch("noerrdialogs");
   EXPECT_CALL(provider_, IsInitializationComplete(_))
@@ -104,8 +136,8 @@ void PolicyTest::SetRequireCTForTesting(bool required) {
     return;
   }
 
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&net::TransportSecurityState::SetRequireCTForTesting,
                      required));
 }
@@ -118,8 +150,8 @@ class QuitMessageLoopAfterScreenshot
       : done_(std::move(done)) {}
   void OnScreenshotCompleted(ui::ScreenshotResult screenshot_result,
                              const base::FilePath& screenshot_path) override {
-    base::PostTaskAndReply(FROM_HERE, {BrowserThread::IO}, base::DoNothing(),
-                           std::move(done_));
+    content::GetIOThreadTaskRunner({})->PostTaskAndReply(
+        FROM_HERE, base::DoNothing(), std::move(done_));
   }
 
   ~QuitMessageLoopAfterScreenshot() override {}
@@ -243,12 +275,9 @@ void PolicyTest::CheckSafeSearch(Browser* browser,
 // static
 void PolicyTest::CheckYouTubeRestricted(
     int youtube_restrict_mode,
-    const std::map<GURL, net::HttpRequestHeaders>& urls_requested,
-    const GURL& url) {
-  auto iter = urls_requested.find(url);
-  ASSERT_TRUE(iter != urls_requested.end());
+    const net::HttpRequestHeaders& headers) {
   std::string header;
-  iter->second.GetHeader(safe_search_util::kYouTubeRestrictHeaderName, &header);
+  headers.GetHeader(safe_search_util::kYouTubeRestrictHeaderName, &header);
   if (youtube_restrict_mode == safe_search_util::YOUTUBE_RESTRICT_OFF) {
     EXPECT_TRUE(header.empty());
   } else if (youtube_restrict_mode ==
@@ -263,18 +292,15 @@ void PolicyTest::CheckYouTubeRestricted(
 // static
 void PolicyTest::CheckAllowedDomainsHeader(
     const std::string& allowed_domain,
-    const std::map<GURL, net::HttpRequestHeaders>& urls_requested,
-    const GURL& url) {
-  auto iter = urls_requested.find(url);
-  ASSERT_TRUE(iter != urls_requested.end());
+    const net::HttpRequestHeaders& headers) {
   if (allowed_domain.empty()) {
     EXPECT_TRUE(
-        !iter->second.HasHeader(safe_search_util::kGoogleAppsAllowedDomains));
+        !headers.HasHeader(safe_search_util::kGoogleAppsAllowedDomains));
     return;
   }
 
   std::string header;
-  iter->second.GetHeader(safe_search_util::kGoogleAppsAllowedDomains, &header);
+  headers.GetHeader(safe_search_util::kGoogleAppsAllowedDomains, &header);
   EXPECT_EQ(header, allowed_domain);
 }
 
@@ -350,6 +376,14 @@ void PolicyTest::SendInterstitialCommand(
   helper->GetBlockingPageForCurrentlyCommittedNavigationForTesting()
       ->CommandReceived(base::NumberToString(command));
   return;
+}
+
+void PolicyTest::FlushBlacklistPolicy() {
+  // Updates of the URLBlacklist are done on IO, after building the blacklist
+  // on the blocking pool, which is initiated from IO.
+  content::RunAllPendingInMessageLoop(BrowserThread::IO);
+  content::RunAllTasksUntilIdle();
+  content::RunAllPendingInMessageLoop(BrowserThread::IO);
 }
 
 }  // namespace policy

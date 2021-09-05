@@ -1,3 +1,7 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 _RECIPE_NAME_PREFIX = 'recipe:'
 
 def _recipe_for_package(cipd_package):
@@ -27,6 +31,10 @@ build_recipe(
 
 build_recipe(
     name = 'recipe:android/sdk_packager',
+)
+
+build_recipe(
+    name = 'recipe:binary_size_generator_tot',
 )
 
 build_recipe(

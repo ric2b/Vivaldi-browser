@@ -56,6 +56,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/constants/chromeos_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -69,8 +70,8 @@
 
 namespace ash {
 
-using chromeos::assistant::mojom::AssistantEntryPoint;
-using chromeos::assistant::mojom::AssistantExitPoint;
+using chromeos::assistant::AssistantEntryPoint;
+using chromeos::assistant::AssistantExitPoint;
 
 namespace {
 
@@ -123,6 +124,36 @@ void SetAssistantPrivacyInfoDismissed() {
   PrefService* prefs =
       Shell::Get()->session_controller()->GetLastActiveUserPrefService();
   prefs->SetBoolean(prefs::kAssistantPrivacyInfoDismissedInLauncher, true);
+}
+
+int GetSuggestedContentInfoShownCount() {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  return prefs->GetInteger(prefs::kSuggestedContentInfoShownInLauncher);
+}
+
+void SetSuggestedContentInfoShownCount(int count) {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  prefs->SetInteger(prefs::kSuggestedContentInfoShownInLauncher, count);
+}
+
+bool IsSuggestedContentInfoDismissed() {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  return prefs->GetBoolean(prefs::kSuggestedContentInfoDismissedInLauncher);
+}
+
+void SetSuggestedContentInfoDismissed() {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  prefs->SetBoolean(prefs::kSuggestedContentInfoDismissedInLauncher, true);
+}
+
+bool IsSuggestedContentEnabled() {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  return prefs->GetBoolean(chromeos::prefs::kSuggestedContentEnabled);
 }
 
 // Gets the MRU window shown over the applist when in tablet mode.
@@ -178,7 +209,7 @@ AppListControllerImpl::AppListControllerImpl()
   shell->window_tree_host_manager()->AddObserver(this);
   shell->mru_window_tracker()->AddObserver(this);
   AssistantController::Get()->AddObserver(this);
-  AssistantUiController::Get()->AddModelObserver(this);
+  AssistantUiController::Get()->GetModel()->AddObserver(this);
 }
 
 AppListControllerImpl::~AppListControllerImpl() {
@@ -201,6 +232,12 @@ void AppListControllerImpl::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(prefs::kAssistantPrivacyInfoShownInLauncher, 0);
   registry->RegisterBooleanPref(
       prefs::kAssistantPrivacyInfoDismissedInLauncher, false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+  registry->RegisterIntegerPref(
+      prefs::kSuggestedContentInfoShownInLauncher, 0,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kSuggestedContentInfoDismissedInLauncher, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 }
 
@@ -267,17 +304,6 @@ void AppListControllerImpl::SetStatus(AppListModelStatus status) {
 
 void AppListControllerImpl::SetSearchEngineIsGoogle(bool is_google) {
   search_model_.SetSearchEngineIsGoogle(is_google);
-}
-
-void AppListControllerImpl::SetSearchTabletAndClamshellAccessibleName(
-    const base::string16& tablet_accessible_name,
-    const base::string16& clamshell_accessible_name) {
-  search_model_.search_box()->SetTabletAndClamshellAccessibleName(
-      tablet_accessible_name, clamshell_accessible_name);
-}
-
-void AppListControllerImpl::SetSearchHintText(const base::string16& hint_text) {
-  search_model_.search_box()->SetHintText(hint_text);
 }
 
 void AppListControllerImpl::UpdateSearchBox(const base::string16& text,
@@ -1080,11 +1106,6 @@ void AppListControllerImpl::OpenSearchResult(const std::string& result_id,
       UMA_HISTOGRAM_COUNTS_100(kSearchQueryLengthInClamshell,
                                GetLastQueryLength());
     }
-
-    if (result->distance_from_origin() >= 0) {
-      UMA_HISTOGRAM_COUNTS_100(kSearchResultDistanceFromOrigin,
-                               result->distance_from_origin());
-    }
   }
 
   auto* notifier = GetNotifier();
@@ -1166,6 +1187,10 @@ void AppListControllerImpl::ViewShown(int64_t display_id) {
   keyboard_traversal_engaged_ = false;
 }
 
+bool AppListControllerImpl::AppListTargetVisibility() const {
+  return last_target_visible_;
+}
+
 void AppListControllerImpl::ViewClosing() {
   if (presenter_.GetView()->search_box_view()->is_search_box_active()) {
     // Close the virtual keyboard before the app list view is dismissed.
@@ -1184,13 +1209,6 @@ void AppListControllerImpl::ViewClosing() {
 
   if (Shell::Get()->home_screen_controller())
     Shell::Get()->home_screen_controller()->OnAppListViewClosing();
-}
-
-void AppListControllerImpl::ViewClosed() {
-  // Clear results to prevent initializing the next app list view with outdated
-  // results.
-  if (client_)
-    client_->StartSearch(base::string16());
 }
 
 const std::vector<SkColor>&
@@ -1331,6 +1349,16 @@ void AppListControllerImpl::NotifySearchResultsForLogging(
   }
 }
 
+void AppListControllerImpl::MaybeIncreasePrivacyInfoShownCounts() {
+  if (ShouldShowAssistantPrivacyInfo()) {
+    const int count = GetAssistantPrivacyInfoShownCount();
+    SetAssistantPrivacyInfoShownCount(count + 1);
+  } else if (ShouldShowSuggestedContentInfo()) {
+    const int count = GetSuggestedContentInfoShownCount();
+    SetSuggestedContentInfoShownCount(count + 1);
+  }
+}
+
 bool AppListControllerImpl::IsAssistantAllowedAndEnabled() const {
   if (!Shell::Get()->assistant_controller()->IsAssistantReady())
     return false;
@@ -1359,17 +1387,35 @@ bool AppListControllerImpl::ShouldShowAssistantPrivacyInfo() const {
   return count >= 0 && count <= kThresholdToShow;
 }
 
-void AppListControllerImpl::MaybeIncreaseAssistantPrivacyInfoShownCount() {
-  const bool should_show = ShouldShowAssistantPrivacyInfo();
-  if (should_show) {
-    const int count = GetAssistantPrivacyInfoShownCount();
-    SetAssistantPrivacyInfoShownCount(count + 1);
-  }
-}
-
 void AppListControllerImpl::MarkAssistantPrivacyInfoDismissed() {
   // User dismissed the privacy info view. Will not show the view again.
   SetAssistantPrivacyInfoDismissed();
+}
+
+bool AppListControllerImpl::ShouldShowSuggestedContentInfo() const {
+  if (!base::FeatureList::IsEnabled(
+          chromeos::features::kSuggestedContentToggle)) {
+    return false;
+  }
+
+  if (!IsSuggestedContentEnabled()) {
+    // Don't show if user has interacted with the setting already.
+    SetSuggestedContentInfoDismissed();
+    return false;
+  }
+
+  if (IsSuggestedContentInfoDismissed()) {
+    return false;
+  }
+
+  const int count = GetSuggestedContentInfoShownCount();
+  constexpr int kThresholdToShow = 3;
+  return count >= 0 && count <= kThresholdToShow;
+}
+
+void AppListControllerImpl::MarkSuggestedContentInfoDismissed() {
+  // User dismissed the privacy info view. Will not show the view again.
+  SetSuggestedContentInfoDismissed();
 }
 
 void AppListControllerImpl::OnStateTransitionAnimationCompleted(
@@ -1717,7 +1763,7 @@ void AppListControllerImpl::Shutdown() {
 
   Shell* shell = Shell::Get();
   AssistantController::Get()->RemoveObserver(this);
-  AssistantUiController::Get()->RemoveModelObserver(this);
+  AssistantUiController::Get()->GetModel()->RemoveObserver(this);
   shell->mru_window_tracker()->RemoveObserver(this);
   shell->window_tree_host_manager()->RemoveObserver(this);
   AssistantState::Get()->RemoveObserver(this);

@@ -9,7 +9,6 @@
 #include "base/metrics/ukm_source_id.h"
 #include "base/optional.h"
 #include "base/time/time.h"
-#include "components/page_load_metrics/browser/observers/largest_contentful_paint_handler.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 #include "net/http/http_response_info.h"
 #include "services/metrics/public/cpp/ukm_source.h"
@@ -81,8 +80,8 @@ class UkmPageLoadMetricsObserver
       content::RenderFrameHost* subframe_rfh,
       const page_load_metrics::mojom::PageLoadTiming& timing) override;
 
-  void OnDidFinishSubFrameNavigation(
-      content::NavigationHandle* navigation_handle) override;
+  void OnThroughputUpdate(const page_load_metrics::mojom::ThroughputUkmDataPtr&
+                              throughput_data) override;
 
   void OnCpuTimingUpdate(
       content::RenderFrameHost* subframe_rfh,
@@ -91,21 +90,34 @@ class UkmPageLoadMetricsObserver
   void OnLoadingBehaviorObserved(content::RenderFrameHost* rfh,
                                  int behavior_flags) override;
 
+  void DidActivatePortal(base::TimeTicks activation_time) override;
+
   // Whether the current page load is an Offline Preview. Must be called from
   // OnCommit. Virtual for testing.
   virtual bool IsOfflinePreview(content::WebContents* web_contents) const;
 
  private:
+  void RecordNavigationTimingMetrics();
+
   // Records page load timing related metrics available in PageLoadTiming, such
   // as first contentful paint.
   void RecordTimingMetrics(
       const page_load_metrics::mojom::PageLoadTiming& timing);
 
+  // Records page load internal timing metrics, which are used for debugging.
+  void RecordInternalTimingMetrics(
+      const page_load_metrics::ContentfulPaintTimingInfo&
+          all_frames_largest_contentful_paint,
+      const page_load_metrics::ContentfulPaintTimingInfo&
+          all_frames_experimental_largest_contentful_paint);
+
   // Records metrics based on the page load information exposed by the observer
   // delegate, as well as updating the URL. |app_background_time| should be set
   // to a timestamp if the app was backgrounded, otherwise it should be set to
-  // a null TimeTicks.
-  void RecordPageLoadMetrics(base::TimeTicks app_background_time);
+  // a null TimeTicks. |became_hidden| should be set when this method callback
+  // was caused by the page becoming backgrounded but not closed.
+  void RecordPageLoadMetrics(base::TimeTicks app_background_time,
+                             bool became_hidden);
 
   // Adds main resource timing metrics to |builder|.
   void ReportMainResourceTimingMetrics(
@@ -115,6 +127,9 @@ class UkmPageLoadMetricsObserver
   void ReportLayoutStability();
 
   void RecordInputTimingMetrics();
+
+  // Report throughput to Ukm.
+  void ReportThroughputUkm();
 
   // Captures the site engagement score for the committed URL and
   // returns the score rounded to the nearest 10.
@@ -167,6 +182,7 @@ class UkmPageLoadMetricsObserver
   base::TimeDelta total_foreground_cpu_time_;
 
   // Load timing metrics of the main frame resource request.
+  content::NavigationHandleTiming navigation_handle_timing_;
   base::Optional<net::LoadTimingInfo> main_frame_timing_;
 
   // PAGE_TRANSITION_LINK is the default PageTransition value.
@@ -196,6 +212,10 @@ class UkmPageLoadMetricsObserver
   // a different process.
   bool navigation_is_cross_process_ = false;
 
+  // True if this page was loaded in a portal and never activated. UKMs are
+  // not recorded for this page unless the portal is activated.
+  bool is_portal_ = false;
+
   // Difference between indices of the previous and current navigation entries
   // (i.e. item history for the current tab).
   // Typically -1/0/1 for back navigations / reloads / forward navigations.
@@ -213,8 +233,14 @@ class UkmPageLoadMetricsObserver
   // The connection info for the committed URL.
   base::Optional<net::HttpResponseInfo::ConnectionInfo> connection_info_;
 
-  page_load_metrics::LargestContentfulPaintHandler
-      largest_contentful_paint_handler_;
+  // The ukm source id for throughput, sent from the renderer.
+  ukm::SourceId throughput_source_id_ = ukm::kInvalidSourceId;
+  // Record the throughput. The key is in the range of [0, 100], which is all
+  // the possible values of throughput (percent). The value is how many times
+  // this throughput value has been reported so far.
+  base::flat_map<int8_t, int> aggregated_throughput_data_;
+  base::flat_map<int8_t, int> impl_throughput_data_;
+  base::flat_map<int8_t, int> main_throughput_data_;
 
   DISALLOW_COPY_AND_ASSIGN(UkmPageLoadMetricsObserver);
 };

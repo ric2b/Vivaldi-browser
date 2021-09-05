@@ -88,14 +88,20 @@ test("weblayer_browsertests") {
     "//components/autofill/core/browser",
     "//components/autofill/core/browser:test_support",
     "//components/autofill/core/common",
+    "//components/blocked_content",
     "//components/content_settings/core/browser",
+    "//components/network_session_configurator/common",
     "//components/network_time",
     "//components/page_load_metrics/browser:browser",
+    "//components/prefs",
     "//components/security_interstitials/content:security_interstitial_page",
     "//components/sessions:test_support",
+    "//components/site_isolation",
     "//components/strings",
     "//components/translate/content/browser",
     "//components/translate/content/browser:test_support",
+    "//components/ukm:ukm_test_helper",
+    "//components/user_prefs",
     "//components/variations",
     "//components/variations/net",
     "//content/public/browser",
@@ -113,10 +119,16 @@ test("weblayer_browsertests") {
     "../browser/cookie_manager_browsertest.cc",
     "../browser/download_browsertest.cc",
     "../browser/errorpage_browsertest.cc",
+    "../browser/js_communication/web_message_browsertest.cc",
     "../browser/navigation_browsertest.cc",
     "../browser/page_load_metrics_browsertest.cc",
+    "../browser/popup_blocker_browsertest.cc",
+    "../browser/prefetch_browsertest.cc",
+    "../browser/profile_browsertest.cc",
+    "../browser/site_isolation_browsertest.cc",
     "../browser/ssl_browsertest.cc",
     "../browser/translate_browsertest.cc",
+    "../browser/url_bar/url_bar_browsertest.cc",
     "../browser/weblayer_variations_http_browsertest.cc",
     "../browser/webui/webui_browsertest.cc",
     "browsertests_main.cc",
@@ -140,8 +152,11 @@ test("weblayer_browsertests") {
   if (is_android) {
     sources += [
       "../browser/safe_browsing/safe_browsing_browsertest.cc",
+      "../browser/ukm_browsertest.cc",
       "../browser/url_bar/page_info_browsertest.cc",
       "../shell/android/browsertests_apk/metrics_browsertest.cc",
+      "../shell/android/browsertests_apk/metrics_test_helper.cc",
+      "../shell/android/browsertests_apk/metrics_test_helper.h",
       "../shell/android/browsertests_apk/weblayer_browser_tests_jni_onload.cc",
     ]
     deps += [
@@ -151,6 +166,7 @@ test("weblayer_browsertests") {
       "//android_webview:generate_aw_strings_grit",
       "//android_webview:locale_pak_assets",
       "//android_webview:pak_file_assets",
+      "//components/infobars/core",
       "//components/metrics",
       "//components/page_info",
       "//components/page_info/android",
@@ -167,7 +183,6 @@ test("weblayer_browsertests") {
       "//ui/android:android",
       "//ui/touch_selection:touch_selection",
       "//weblayer:locale_pak_assets",
-      "//weblayer/browser/safe_browsing:safe_browsing",
 
       # Needed for WebLayerImpl.
       "//weblayer/browser/java",
@@ -180,7 +195,7 @@ test("weblayer_browsertests") {
         "${target_gen_dir}/weblayer_browsertests_manifest/AndroidManifest.xml"
     android_manifest_dep = ":weblayer_browsertests_manifest"
     use_default_launcher = false
-    shared_resources = true
+    app_as_shared_lib = true
     product_config_java_packages = [ weblayer_product_config_java_package ]
   } else {
     sources += [
@@ -189,7 +204,6 @@ test("weblayer_browsertests") {
       # integration tests.
       "../browser/persistence/browser_persister_browsertest.cc",
       "../browser/persistence/minimal_browser_persister_browsertest.cc",
-      "../browser/url_bar/url_bar_browsertest.cc",
     ]
   }
 }
@@ -200,13 +214,20 @@ source_set("run_all_unittests") {
   public_deps = [
     "//base/test:test_support",
     "//content/test:test_support",
+    "//weblayer:weblayer_lib_base",
   ]
 }
 
 test("weblayer_unittests") {
   deps = [
     ":run_all_unittests",
-    "//weblayer:weblayer_lib_base",
+    "//components/site_isolation",
   ]
-  sources = [ "../browser/profile_disk_operations_unittests.cc" ]
+  if (is_android) {
+    deps += [ ":weblayer_test_assets" ]
+  }
+  sources = [
+    "../browser/profile_disk_operations_unittests.cc",
+    "../browser/site_isolation_policy_unittest.cc",
+  ]
 }

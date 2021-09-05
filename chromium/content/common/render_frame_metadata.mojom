@@ -36,6 +36,11 @@ struct RenderFrameMetadata {
   // are the same).
   bool is_mobile_optimized;
 
+  // Flag used to notify the browser process to start or stop forwarding points
+  // to viz for use in a delegated ink trail. True the entire time points should
+  // be forwarded, and forwarding stops as soon as it is false again.
+  bool has_delegated_ink_metadata;
+
   // The device scale factor used to generate CompositorFrame.
   float device_scale_factor;
 
@@ -98,11 +103,18 @@ struct RenderFrameMetadata {
 // which a fully populated RenderFrameMetadata object (above) is delivered to
 // the RenderFrameMetadataObserverClient.
 interface RenderFrameMetadataObserver {
-  // When |enabled| is set to true, this will send RenderFrameMetadata to
-  // the RenderFrameMetadataObserverClient for any frame in which the root
-  // scroll changes. Used only on Android for accessibility cases.
+  // When |enabled| is set to true this notifies the client of any change to the
+  // root scroll offset. The client is notified in two ways:
+  // . OnRenderFrameMetadataChanged(), is sent if the client would normally be
+  //   notified of the frame (for example, the viewport changed).
+  // . OnRootScrollOffsetChanged() if the client is not notified of the frame
+  //   change, but the root scroll offset has changed. In other words, if this
+  //   is sent, *only* the root-scroll-offset has changed and the client is not
+  //   sent a OnRenderFrameMetadataChanged() for the frame.
+  // Used on Android for acessibility and GestureListenerManager.
   [EnableIf=is_android]
-  ReportAllRootScrollsForAccessibility(bool enabled);
+  ReportAllRootScrolls(bool enabled);
+
   // When |enabled| is set to true, this will send RenderFrameMetadata to
   // the RenderFrameMetadataObserverClient for all frames. Only used for
   // tests.
@@ -113,11 +125,16 @@ interface RenderFrameMetadataObserver {
 // RenderFrameMetadata. It can be notified of all frame submissions, via
 // RenderFrameMetadataObserver::ReportAllFrameSubmissionsForTesting, or of
 // additional frames with root scroll offset changes via
-// RenderFrameMetadataObserver::ReportAllRootScrollsForAccessibility.
+// RenderFrameMetadataObserver::ReportAllRootScrolls.
 interface RenderFrameMetadataObserverClient {
   // Notified when RenderFrameMetadata has changed.
   OnRenderFrameMetadataChanged(uint32 frame_token, RenderFrameMetadata metadata);
 
   // Notified on all frame submissions.
   OnFrameSubmissionForTesting(uint32 frame_token);
+
+  // Only called if ReportAllRootScrolls(true) has been called. See
+  // ReportAllRootScrolls() for details.
+  [EnableIf=is_android]
+  OnRootScrollOffsetChanged(gfx.mojom.Vector2dF root_scroll_offset);
 };

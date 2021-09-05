@@ -447,7 +447,7 @@ String InspectorAnimationAgent::CreateCSSId(blink::Animation& animation) {
         css_agent_->FindEffectiveDeclaration(*property, styles);
     // Ignore inline styles.
     if (!style || !style->ParentStyleSheet() || !style->parentRule() ||
-        style->parentRule()->type() != CSSRule::kStyleRule)
+        style->parentRule()->GetType() != CSSRule::kStyleRule)
       continue;
     digestor.UpdateUtf8(property->GetPropertyNameString());
     digestor.UpdateUtf8(css_agent_->StyleSheetId(style->ParentStyleSheet()));
@@ -527,7 +527,7 @@ double InspectorAnimationAgent::NormalizedStartTime(
   return std::round(time_ms * 1000) / 1000;
 }
 
-void InspectorAnimationAgent::Trace(Visitor* visitor) {
+void InspectorAnimationAgent::Trace(Visitor* visitor) const {
   visitor->Trace(inspected_frames_);
   visitor->Trace(css_agent_);
   visitor->Trace(id_to_animation_);

@@ -39,8 +39,6 @@
 <translation id="1873233029667955273">Google Chrome није подразумевани прегледач</translation>
 <translation id="1874309113135274312">Google Chrome бета (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome је застарео</translation>
-<translation id="1900795423379050516">Ако се подешавање не приказује на овој страници, потражите га у <ph name="LINK_BEGIN" />
-      подешавањима Chrome прегледача<ph name="LINK_END" /></translation>
 <translation id="1919130412786645364">Дозволи пријављивање у Chrome</translation>
 <translation id="2063848847527508675">Треба да рестартујете Chrome OS да бисте применили ажурирање.</translation>
 <translation id="2094919256425865063">Желите ли ипак да затворите Chrome?</translation>
@@ -116,6 +114,7 @@
 <translation id="4251615635259297716">Желите ли да повежете Chrome податке са овим налогом?</translation>
 <translation id="4281844954008187215">Услови коришћења услуге</translation>
 <translation id="4293420128516039005">Пријавите се да бисте синхронизовали и персонализовали Chrome на свим уређајима</translation>
+<translation id="4325083532956419387">Верзија Chrome ОС-а</translation>
 <translation id="4328355335528187361">Програмерска верзија Google Chrome-а (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome ОС</translation>
 <translation id="4335235004908507846">Chrome може да вас штити од упада у податке, неисправних додатака и других проблема</translation>

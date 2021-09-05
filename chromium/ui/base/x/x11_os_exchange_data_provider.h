@@ -33,7 +33,8 @@ class COMPONENT_EXPORT(UI_BASE_X) XOSExchangeDataProvider
  public:
   // |x_window| is the window the cursor is over, and |selection| is the set of
   // data being offered.
-  XOSExchangeDataProvider(XID x_window, const SelectionFormatMap& selection);
+  XOSExchangeDataProvider(x11::Window x_window,
+                          const SelectionFormatMap& selection);
 
   // Creates a Provider for sending drag information. This creates its own,
   // hidden X11 window to own send data.
@@ -50,7 +51,7 @@ class COMPONENT_EXPORT(UI_BASE_X) XOSExchangeDataProvider
 
   // Retrieves a list of types we're offering. Noop if we haven't taken the
   // selection.
-  void RetrieveTargets(std::vector<Atom>* targets) const;
+  void RetrieveTargets(std::vector<x11::Atom>* targets) const;
 
   // Makes a copy of the format map currently being offered.
   SelectionFormatMap GetFormatMap() const;
@@ -97,7 +98,7 @@ class COMPONENT_EXPORT(UI_BASE_X) XOSExchangeDataProvider
   using PickleData = std::map<ClipboardFormatType, base::Pickle>;
 
   bool own_window() const { return own_window_; }
-  XID x_window() const { return x_window_; }
+  x11::Window x_window() const { return x_window_; }
   const SelectionFormatMap& format_map() const { return format_map_; }
   void set_format_map(const SelectionFormatMap& format_map) {
     format_map_ = format_map;
@@ -112,10 +113,10 @@ class COMPONENT_EXPORT(UI_BASE_X) XOSExchangeDataProvider
   bool GetPlainTextURL(GURL* url) const;
 
   // Returns the targets in |format_map_|.
-  std::vector<Atom> GetTargets() const;
+  std::vector<x11::Atom> GetTargets() const;
 
   // Inserts data into the format map.
-  void InsertData(Atom format,
+  void InsertData(x11::Atom format,
                   const scoped_refptr<base::RefCountedMemory>& data);
 
  private:
@@ -124,8 +125,8 @@ class COMPONENT_EXPORT(UI_BASE_X) XOSExchangeDataProvider
   gfx::Vector2d drag_image_offset_;
 
   // Our X11 state.
-  Display* x_display_;
-  XID x_root_window_;
+  x11::Connection* connection_;
+  x11::Window x_root_window_;
 
   // In X11, because the IPC parts of drag operations are implemented by
   // XSelection, we require an x11 window to receive drag messages on. The
@@ -135,7 +136,7 @@ class COMPONENT_EXPORT(UI_BASE_X) XOSExchangeDataProvider
   // our own xwindow just to receive events on it.
   const bool own_window_;
 
-  XID x_window_;
+  x11::Window x_window_;
 
   // A representation of data. This is either passed to us from the other
   // process, or built up through a sequence of Set*() calls. It can be passed

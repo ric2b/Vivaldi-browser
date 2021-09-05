@@ -42,10 +42,6 @@ class DisplayConfigurator;
 class DisplayManager;
 }  // namespace display
 
-namespace exo {
-class FileHelper;
-}  // namespace exo
-
 namespace gfx {
 class Insets;
 class Point;
@@ -103,6 +99,7 @@ class CrosDisplayConfig;
 class DesksController;
 class DetachableBaseHandler;
 class DetachableBaseNotificationController;
+class DisplayAlignmentController;
 class DisplayColorManager;
 class DisplayConfigurationController;
 class DisplayConfigurationObserver;
@@ -169,7 +166,6 @@ class ShelfWindowWatcher;
 class ShellDelegate;
 struct ShellInitParams;
 class ShellObserver;
-class ShellState;
 class ShutdownControllerImpl;
 class SmsObserver;
 class SnapController;
@@ -187,10 +183,10 @@ class TrayBluetoothHelper;
 class VideoActivityNotifier;
 class VideoDetector;
 class WallpaperControllerImpl;
-class WaylandServerController;
 class WindowCycleController;
 class WindowPositioner;
 class WindowTreeHostManager;
+class ArcInputMethodBoundsTracker;
 
 enum class LoginStatus;
 
@@ -238,10 +234,14 @@ class ASH_EXPORT Shell : public SessionObserver,
   // has a launcher.
   static aura::Window* GetPrimaryRootWindow();
 
+  // Sets the root window that newly created windows should be added to.
+  static void SetRootWindowForNewWindows(aura::Window* root);
+
   // Returns the root window that newly created windows should be added to.
-  // Value can be temporarily overridden using ScopedRootWindowForNewWindows.
-  // NOTE: this returns the root, newly created window should be added to the
-  // appropriate container in the returned window.
+  // Value can be temporarily overridden using
+  // display::ScopedDisplayForNewWindows. NOTE: this returns the root, newly
+  // created window should be added to the appropriate container in the returned
+  // window.
   static aura::Window* GetRootWindowForNewWindows();
 
   // Returns all root windows.
@@ -260,9 +260,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   // Returns true if a system-modal dialog window is currently open.
   static bool IsSystemModalWindowOpen();
 
-  // If necessary, initializes the Wayland server.
-  void InitWaylandServer(std::unique_ptr<exo::FileHelper> file_helper);
-  void DestroyWaylandServer();
+  // Track/Untrack InputMethod bounds.
+  void TrackInputMethodBounds(ArcInputMethodBoundsTracker* tracker);
+  void UntrackTrackInputMethodBounds(ArcInputMethodBoundsTracker* tracker);
 
   // Creates a default views::NonClientFrameView for use by windows in the
   // Ash environment.
@@ -341,6 +341,10 @@ class ASH_EXPORT Shell : public SessionObserver,
   DisplayPrefs* display_prefs() { return display_prefs_.get(); }
   DisplayConfigurationController* display_configuration_controller() {
     return display_configuration_controller_.get();
+  }
+
+  DisplayAlignmentController* display_alignment_controller() {
+    return display_alignment_controller_.get();
   }
 
   display::DisplayConfigurator* display_configurator();
@@ -468,7 +472,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   ShelfConfig* shelf_config() { return shelf_config_.get(); }
   ShelfController* shelf_controller() { return shelf_controller_.get(); }
   ShellDelegate* shell_delegate() { return shell_delegate_.get(); }
-  ShellState* shell_state() { return shell_state_.get(); }
   ShutdownControllerImpl* shutdown_controller() {
     return shutdown_controller_.get();
   }
@@ -535,6 +538,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   void DoInitialWorkspaceAnimation();
 
   void SetLargeCursorSizeInDip(int large_cursor_size_in_dip);
+
+  // Sets a custom color for the cursor.
+  void SetCursorColor(SkColor cursor_color);
 
   // Updates cursor compositing on/off. Native cursor is disabled when cursor
   // compositing is enabled, and vice versa.
@@ -683,7 +689,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<ShelfController> shelf_controller_;
   std::unique_ptr<ShelfWindowWatcher> shelf_window_watcher_;
   std::unique_ptr<ShellDelegate> shell_delegate_;
-  std::unique_ptr<ShellState> shell_state_;
   std::unique_ptr<ShutdownControllerImpl> shutdown_controller_;
   std::unique_ptr<SystemNotificationController> system_notification_controller_;
   std::unique_ptr<SystemTrayModel> system_tray_model_;
@@ -705,7 +710,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<LockStateController> lock_state_controller_;
   std::unique_ptr<ui::UserActivityDetector> user_activity_detector_;
   std::unique_ptr<VideoDetector> video_detector_;
-  std::unique_ptr<WaylandServerController> wayland_server_controller_;
   std::unique_ptr<WindowTreeHostManager> window_tree_host_manager_;
   std::unique_ptr<PersistentWindowController> persistent_window_controller_;
   std::unique_ptr<HighContrastController> high_contrast_controller_;
@@ -759,6 +763,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<BluetoothPowerController> bluetooth_power_controller_;
   std::unique_ptr<TrayBluetoothHelper> tray_bluetooth_helper_;
   std::unique_ptr<KeyboardControllerImpl> keyboard_controller_;
+  std::unique_ptr<DisplayAlignmentController> display_alignment_controller_;
   std::unique_ptr<DisplayColorManager> display_color_manager_;
   std::unique_ptr<DisplayErrorObserver> display_error_observer_;
   std::unique_ptr<ProjectingObserver> projecting_observer_;

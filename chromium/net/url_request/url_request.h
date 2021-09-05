@@ -11,8 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "base/debug/leak_tracker.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
@@ -542,7 +540,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // Returns whether secure DNS should be disabled for the request.
   bool disable_secure_dns() { return disable_secure_dns_; }
 
-  void set_maybe_sent_cookies(CookieStatusList cookies);
+  void set_maybe_sent_cookies(CookieAccessResultList cookies);
   void set_maybe_stored_cookies(CookieAndLineStatusList cookies);
 
   // These lists contain a list of cookies that are associated with the given
@@ -556,7 +554,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // and only contain the cookies relevant to the most recent roundtrip.
 
   // Populated while the http request is being built.
-  const CookieStatusList& maybe_sent_cookies() const {
+  const CookieAccessResultList& maybe_sent_cookies() const {
     return maybe_sent_cookies_;
   }
   // Populated after the response headers are received.
@@ -724,6 +722,20 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   }
   bool upgrade_if_insecure() const { return upgrade_if_insecure_; }
 
+  // By default, client certs will be sent (provided via
+  // Delegate::OnCertificateRequested) when cookies are disabled
+  // (LOAD_DO_NOT_SEND_COOKIES / LOAD_DO_NOT_SAVE_COOKIES). As described at
+  // https://crbug.com/775438, this is not the desired behavior. When
+  // |send_client_certs| is set to false, this will suppress the
+  // Delegate::OnCertificateRequested callback when cookies/credentials are also
+  // suppressed. This method has no effect if credentials are enabled (cookies
+  // saved and sent).
+  // TODO(https://crbug.com/775438): Remove this when the underlying
+  // issue is fixed.
+  void set_send_client_certs(bool send_client_certs) {
+    send_client_certs_ = send_client_certs;
+  }
+
   base::WeakPtr<URLRequest> GetWeakPtr();
 
  protected:
@@ -815,7 +827,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // These functions delegate to |network_delegate_| if it is not NULL.
   // If |network_delegate_| is NULL, cookies can be used unless
   // SetDefaultCookiePolicyToBlock() has been called.
-  bool CanGetCookies(const CookieList& cookie_list) const;
+  bool CanGetCookies() const;
   bool CanSetCookie(const net::CanonicalCookie& cookie,
                     CookieOptions* options) const;
   PrivacyMode DeterminePrivacyMode() const;
@@ -865,7 +877,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   PrivacyMode privacy_mode_;
   bool disable_secure_dns_;
 
-  CookieStatusList maybe_sent_cookies_;
+  CookieAccessResultList maybe_sent_cookies_;
   CookieAndLineStatusList maybe_stored_cookies_;
 
 #if BUILDFLAG(ENABLE_REPORTING)
@@ -928,8 +940,6 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   std::string blocked_by_;
   bool use_blocked_by_as_load_param_;
 
-  base::debug::LeakTracker<URLRequest> leak_tracker_;
-
   // Safe-guard to ensure that we do not send multiple "I am completed"
   // messages to network delegate.
   // TODO(battre): Remove this. http://crbug.com/89049
@@ -958,6 +968,8 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   ResponseHeadersCallback response_headers_callback_;
 
   bool upgrade_if_insecure_;
+
+  bool send_client_certs_ = true;
 
   THREAD_CHECKER(thread_checker_);
 

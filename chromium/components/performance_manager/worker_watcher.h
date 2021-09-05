@@ -8,11 +8,12 @@
 #include <memory>
 #include <string>
 
+#include "base/check_op.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
+#include "base/sequence_checker.h"
 #include "content/public/browser/dedicated_worker_id.h"
 #include "content/public/browser/dedicated_worker_service.h"
 #include "content/public/browser/global_routing_id.h"
@@ -49,11 +50,11 @@ class WorkerWatcher : public content::DedicatedWorkerService::Observer,
   void TearDown();
 
   // content::DedicatedWorkerService::Observer:
-  void OnWorkerStarted(
+  void OnWorkerCreated(
       content::DedicatedWorkerId dedicated_worker_id,
       int worker_process_id,
       content::GlobalFrameRoutingId ancestor_render_frame_host_id) override;
-  void OnBeforeWorkerTerminated(
+  void OnBeforeWorkerDestroyed(
       content::DedicatedWorkerId dedicated_worker_id,
       content::GlobalFrameRoutingId ancestor_render_frame_host_id) override;
   void OnFinalResponseURLDetermined(
@@ -61,10 +62,10 @@ class WorkerWatcher : public content::DedicatedWorkerService::Observer,
       const GURL& url) override;
 
   // content::SharedWorkerService::Observer:
-  void OnWorkerStarted(content::SharedWorkerId shared_worker_id,
+  void OnWorkerCreated(content::SharedWorkerId shared_worker_id,
                        int worker_process_id,
                        const base::UnguessableToken& dev_tools_token) override;
-  void OnBeforeWorkerTerminated(
+  void OnBeforeWorkerDestroyed(
       content::SharedWorkerId shared_worker_id) override;
   void OnFinalResponseURLDetermined(content::SharedWorkerId shared_worker_id,
                                     const GURL& url) override;
@@ -84,10 +85,9 @@ class WorkerWatcher : public content::DedicatedWorkerService::Observer,
  private:
   friend class WorkerWatcherTest;
 
-  void AddClientFrame(
-      WorkerNodeImpl* worker_node,
-      content::GlobalFrameRoutingId client_render_frame_host_id);
-  void RemoveClientFrame(
+  void ConnectClient(WorkerNodeImpl* worker_node,
+                     content::GlobalFrameRoutingId client_render_frame_host_id);
+  void DisconnectClient(
       WorkerNodeImpl* worker_node,
       content::GlobalFrameRoutingId client_render_frame_host_id);
 
@@ -95,6 +95,8 @@ class WorkerWatcher : public content::DedicatedWorkerService::Observer,
       content::GlobalFrameRoutingId render_frame_host_id,
       FrameNodeImpl* frame_node);
 
+  // Inserts/removes |child_worker_node| into the set of child workers of a
+  // frame. Returns true if this is the first child added to that frame.
   bool AddChildWorker(content::GlobalFrameRoutingId render_frame_host_id,
                       WorkerNodeImpl* child_worker_node);
   bool RemoveChildWorker(content::GlobalFrameRoutingId render_frame_host_id,
@@ -105,6 +107,8 @@ class WorkerWatcher : public content::DedicatedWorkerService::Observer,
       content::DedicatedWorkerId dedicated_worker_id);
   WorkerNodeImpl* GetSharedWorkerNode(content::SharedWorkerId shared_worker_id);
   WorkerNodeImpl* GetServiceWorkerNode(int64_t version_id);
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // The ID of the BrowserContext who owns the shared worker service.
   const std::string browser_context_id_;

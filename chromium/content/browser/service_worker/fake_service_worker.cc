@@ -36,6 +36,10 @@ void FakeServiceWorker::RunUntilInitializeGlobalScope() {
   loop.Run();
 }
 
+void FakeServiceWorker::FlushForTesting() {
+  receiver_.FlushForTesting();
+}
+
 void FakeServiceWorker::InitializeGlobalScope(
     mojo::PendingAssociatedRemote<blink::mojom::ServiceWorkerHost>
         service_worker_host,
@@ -128,8 +132,11 @@ void FakeServiceWorker::DispatchFetchEventForMainResource(
   response->response_type = network::mojom::FetchResponseType::kDefault;
   mojo::Remote<blink::mojom::ServiceWorkerFetchResponseCallback>
       response_callback(std::move(pending_response_callback));
-  response_callback->OnResponse(
-      std::move(response), blink::mojom::ServiceWorkerFetchEventTiming::New());
+  auto timing = blink::mojom::ServiceWorkerFetchEventTiming::New();
+  auto now = base::TimeTicks::Now();
+  timing->respond_with_settled_time = now;
+  timing->dispatch_event_time = now;
+  response_callback->OnResponse(std::move(response), std::move(timing));
   std::move(callback).Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED);
 }
 

@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
+
 #include <string>
 #include <tuple>
 
@@ -26,6 +28,7 @@
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
@@ -67,15 +70,19 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   MOCK_METHOD1(PromptUserToSavePasswordPtr, void(PasswordFormManagerForUI*));
   MOCK_METHOD3(PromptUserToChooseCredentialsPtr,
                bool(const std::vector<autofill::PasswordForm*>& local_forms,
-                    const GURL& origin,
+                    const url::Origin& origin,
                     const CredentialsCallback& callback));
   MOCK_METHOD3(PasswordWasAutofilled,
                void(const std::vector<const autofill::PasswordForm*>&,
-                    const GURL&,
+                    const url::Origin&,
                     const std::vector<const autofill::PasswordForm*>*));
+  MOCK_CONST_METHOD0(GetAutofillAssistantMode, AutofillAssistantMode());
 
-  explicit MockPasswordManagerClient(PasswordStore* store)
-      : store_(store), password_manager_(this) {
+  explicit MockPasswordManagerClient(PasswordStore* profile_store,
+                                     PasswordStore* account_store)
+      : profile_store_(profile_store),
+        account_store_(account_store),
+        password_manager_(this) {
     prefs_ = std::make_unique<TestingPrefServiceSimple>();
     prefs_->registry()->RegisterBooleanPref(prefs::kCredentialsEnableAutosignin,
                                             true);
@@ -103,7 +110,12 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
     NotifyUserCouldBeAutoSignedInPtr(form.get());
   }
 
-  PasswordStore* GetProfilePasswordStore() const override { return store_; }
+  PasswordStore* GetProfilePasswordStore() const override {
+    return profile_store_;
+  }
+  PasswordStore* GetAccountPasswordStore() const override {
+    return account_store_;
+  }
 
   PrefService* GetPrefs() const override { return prefs_.get(); }
 
@@ -111,13 +123,13 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
     return &password_manager_;
   }
 
-  const GURL& GetLastCommittedEntryURL() const override {
-    return last_committed_url_;
+  url::Origin GetLastCommittedOrigin() const override {
+    return url::Origin::Create(last_committed_url_);
   }
 
   bool PromptUserToChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-      const GURL& origin,
+      const url::Origin& origin,
       const CredentialsCallback& callback) override {
     EXPECT_FALSE(local_forms.empty());
     const autofill::PasswordForm* form = local_forms[0].get();
@@ -136,7 +148,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
 
   void NotifyUserAutoSignin(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-      const GURL& origin) override {
+      const url::Origin& origin) override {
     EXPECT_FALSE(local_forms.empty());
     NotifyUserAutoSigninPtr();
   }
@@ -158,7 +170,8 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
 
  private:
   std::unique_ptr<TestingPrefServiceSimple> prefs_;
-  PasswordStore* store_;
+  PasswordStore* profile_store_;
+  PasswordStore* account_store_;
   std::unique_ptr<PasswordFormManagerForUI> manager_;
   PasswordManager password_manager_;
   GURL last_committed_url_{kTestWebOrigin};
@@ -191,14 +204,19 @@ GURL HttpURLFromHttps(const GURL& https_url) {
 
 class CredentialManagerImplTest : public testing::Test {
  public:
-  CredentialManagerImplTest() {}
+  CredentialManagerImplTest() = default;
 
   void SetUp() override {
     store_ = new TestPasswordStore;
-    store_->Init(nullptr);
-    client_.reset(
-        new testing::NiceMock<MockPasswordManagerClient>(store_.get()));
-    cm_service_impl_.reset(new CredentialManagerImpl(client_.get()));
+    store_->Init(/*prefs=*/nullptr);
+    if (base::FeatureList::IsEnabled(
+            features::kEnablePasswordsAccountStorage)) {
+      account_store_ = new TestPasswordStore;
+      ASSERT_TRUE(account_store_->Init(/*prefs=*/nullptr));
+    }
+    client_ = std::make_unique<testing::NiceMock<MockPasswordManagerClient>>(
+        store_.get(), account_store_.get());
+    cm_service_impl_ = std::make_unique<CredentialManagerImpl>(client_.get());
     ON_CALL(*client_, IsSavingAndFillingEnabled(_))
         .WillByDefault(testing::Return(true));
     ON_CALL(*client_, IsFillingEnabled(_)).WillByDefault(testing::Return(true));
@@ -208,15 +226,15 @@ class CredentialManagerImplTest : public testing::Test {
     form_.display_name = base::ASCIIToUTF16("Display Name");
     form_.icon_url = GURL("https://example.com/icon.png");
     form_.password_value = base::ASCIIToUTF16("Password");
-    form_.origin = client_->GetLastCommittedEntryURL();
-    form_.signon_realm = form_.origin.GetOrigin().spec();
+    form_.url = client_->GetLastCommittedOrigin().GetURL();
+    form_.signon_realm = form_.url.GetOrigin().spec();
     form_.scheme = autofill::PasswordForm::Scheme::kHtml;
     form_.skip_zero_click = false;
 
     affiliated_form1_.username_value = base::ASCIIToUTF16("Affiliated 1");
     affiliated_form1_.display_name = base::ASCIIToUTF16("Display Name");
     affiliated_form1_.password_value = base::ASCIIToUTF16("Password");
-    affiliated_form1_.origin = GURL();
+    affiliated_form1_.url = GURL();
     affiliated_form1_.signon_realm = kTestAndroidRealm1;
     affiliated_form1_.scheme = autofill::PasswordForm::Scheme::kHtml;
     affiliated_form1_.skip_zero_click = false;
@@ -224,7 +242,7 @@ class CredentialManagerImplTest : public testing::Test {
     affiliated_form2_.username_value = base::ASCIIToUTF16("Affiliated 2");
     affiliated_form2_.display_name = base::ASCIIToUTF16("Display Name");
     affiliated_form2_.password_value = base::ASCIIToUTF16("Password");
-    affiliated_form2_.origin = GURL();
+    affiliated_form2_.url = GURL();
     affiliated_form2_.signon_realm = kTestAndroidRealm2;
     affiliated_form2_.scheme = autofill::PasswordForm::Scheme::kHtml;
     affiliated_form2_.skip_zero_click = false;
@@ -232,26 +250,24 @@ class CredentialManagerImplTest : public testing::Test {
     origin_path_form_.username_value = base::ASCIIToUTF16("Username 2");
     origin_path_form_.display_name = base::ASCIIToUTF16("Display Name 2");
     origin_path_form_.password_value = base::ASCIIToUTF16("Password 2");
-    origin_path_form_.origin = GURL("https://example.com/path");
-    origin_path_form_.signon_realm =
-        origin_path_form_.origin.GetOrigin().spec();
+    origin_path_form_.url = GURL("https://example.com/path");
+    origin_path_form_.signon_realm = origin_path_form_.url.GetOrigin().spec();
     origin_path_form_.scheme = autofill::PasswordForm::Scheme::kHtml;
     origin_path_form_.skip_zero_click = false;
 
     subdomain_form_.username_value = base::ASCIIToUTF16("Username 2");
     subdomain_form_.display_name = base::ASCIIToUTF16("Display Name 2");
     subdomain_form_.password_value = base::ASCIIToUTF16("Password 2");
-    subdomain_form_.origin = GURL("https://subdomain.example.com/path");
-    subdomain_form_.signon_realm = subdomain_form_.origin.GetOrigin().spec();
+    subdomain_form_.url = GURL("https://subdomain.example.com/path");
+    subdomain_form_.signon_realm = subdomain_form_.url.GetOrigin().spec();
     subdomain_form_.scheme = autofill::PasswordForm::Scheme::kHtml;
     subdomain_form_.skip_zero_click = false;
 
     cross_origin_form_.username_value = base::ASCIIToUTF16("Username");
     cross_origin_form_.display_name = base::ASCIIToUTF16("Display Name");
     cross_origin_form_.password_value = base::ASCIIToUTF16("Password");
-    cross_origin_form_.origin = GURL("https://example.net/");
-    cross_origin_form_.signon_realm =
-        cross_origin_form_.origin.GetOrigin().spec();
+    cross_origin_form_.url = GURL("https://example.net/");
+    cross_origin_form_.signon_realm = cross_origin_form_.url.GetOrigin().spec();
     cross_origin_form_.scheme = autofill::PasswordForm::Scheme::kHtml;
     cross_origin_form_.skip_zero_click = false;
 
@@ -262,6 +278,9 @@ class CredentialManagerImplTest : public testing::Test {
   void TearDown() override {
     cm_service_impl_.reset();
 
+    if (account_store_) {
+      account_store_->ShutdownOnUIThread();
+    }
     store_->ShutdownOnUIThread();
 
     // It's needed to cleanup the password store asynchronously.
@@ -357,6 +376,7 @@ class CredentialManagerImplTest : public testing::Test {
   autofill::PasswordForm subdomain_form_;
   autofill::PasswordForm cross_origin_form_;
   scoped_refptr<TestPasswordStore> store_;
+  scoped_refptr<TestPasswordStore> account_store_;
   std::unique_ptr<testing::NiceMock<MockPasswordManagerClient>> client_;
   std::unique_ptr<CredentialManagerImpl> cm_service_impl_;
 };
@@ -400,7 +420,7 @@ TEST_F(CredentialManagerImplTest, CredentialManagerOnStore) {
   EXPECT_EQ(form_.username_value, new_form.username_value);
   EXPECT_EQ(form_.display_name, new_form.display_name);
   EXPECT_EQ(form_.password_value, new_form.password_value);
-  EXPECT_EQ(form_.origin, new_form.origin);
+  EXPECT_EQ(form_.url, new_form.url);
   EXPECT_EQ(form_.signon_realm, new_form.signon_realm);
   EXPECT_TRUE(new_form.federation_origin.opaque());
   EXPECT_EQ(form_.icon_url, new_form.icon_url);
@@ -431,7 +451,7 @@ TEST_F(CredentialManagerImplTest, CredentialManagerOnStoreFederated) {
   EXPECT_EQ(form_.username_value, new_form.username_value);
   EXPECT_EQ(form_.display_name, new_form.display_name);
   EXPECT_EQ(form_.password_value, new_form.password_value);
-  EXPECT_EQ(form_.origin, new_form.origin);
+  EXPECT_EQ(form_.url, new_form.url);
   EXPECT_EQ(form_.signon_realm, new_form.signon_realm);
   EXPECT_EQ(form_.federation_origin, new_form.federation_origin);
   EXPECT_EQ(form_.icon_url, new_form.icon_url);
@@ -658,7 +678,7 @@ TEST_F(CredentialManagerImplTest, CredentialManagerGetOverwriteZeroClick) {
   form_.skip_zero_click = true;
   form_.username_element = base::ASCIIToUTF16("username-element");
   form_.password_element = base::ASCIIToUTF16("password-element");
-  form_.origin = GURL("https://example.com/old_form.html");
+  form_.url = GURL("https://example.com/old_form.html");
   store_->AddLogin(form_);
   RunAllPendingTasks();
 
@@ -686,7 +706,7 @@ TEST_F(CredentialManagerImplTest, CredentialManagerGetOverwriteZeroClick) {
 TEST_F(CredentialManagerImplTest,
        CredentialManagerSignInWithSavingDisabledForCurrentPage) {
   CredentialInfo info(form_, CredentialType::CREDENTIAL_TYPE_PASSWORD);
-  EXPECT_CALL(*client_, IsSavingAndFillingEnabled(form_.origin))
+  EXPECT_CALL(*client_, IsSavingAndFillingEnabled(form_.url))
       .WillRepeatedly(testing::Return(false));
   EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_))
       .Times(testing::Exactly(0));
@@ -917,7 +937,7 @@ TEST_F(CredentialManagerImplTest,
   federated.federation_origin =
       url::Origin::Create(GURL("https://google.com/"));
   federated.signon_realm =
-      "federation://" + federated.origin.host() + "/google.com";
+      "federation://" + federated.url.host() + "/google.com";
   store_->AddLogin(federated);
 
   EXPECT_CALL(*client_,
@@ -932,7 +952,7 @@ TEST_F(CredentialManagerImplTest,
   CredentialManagerError error;
   base::Optional<CredentialInfo> credential;
   std::vector<GURL> federations;
-  federations.push_back(GURL("https://google.com/"));
+  federations.emplace_back("https://google.com/");
   CallGet(CredentialMediationRequirement::kOptional, true, federations,
           base::BindOnce(&GetCredentialCallback, &called, &error, &credential));
 
@@ -1022,7 +1042,7 @@ TEST_F(CredentialManagerImplTest,
   client_->set_first_run_seen(true);
 
   std::vector<GURL> federations;
-  federations.push_back(GURL("https://example.com/"));
+  federations.emplace_back("https://example.com/");
 
   EXPECT_CALL(*client_, NotifyUserCouldBeAutoSignedInPtr(_)).Times(0);
 
@@ -1039,7 +1059,7 @@ TEST_F(CredentialManagerImplTest,
   client_->set_first_run_seen(true);
 
   std::vector<GURL> federations;
-  federations.push_back(GURL("https://not-example.com/"));
+  federations.emplace_back("https://not-example.com/");
 
   EXPECT_CALL(*client_, NotifyUserCouldBeAutoSignedInPtr(_)).Times(0);
 
@@ -1099,7 +1119,7 @@ TEST_F(CredentialManagerImplTest,
       std::make_unique<MockAffiliatedMatchHelper>());
 
   std::vector<GURL> federations;
-  federations.push_back(GURL("https://example.com/"));
+  federations.emplace_back("https://example.com/");
 
   std::vector<std::string> affiliated_realms;
   affiliated_realms.push_back(kTestAndroidRealm1);
@@ -1123,7 +1143,7 @@ TEST_F(CredentialManagerImplTest,
       std::make_unique<MockAffiliatedMatchHelper>());
 
   std::vector<GURL> federations;
-  federations.push_back(GURL("https://not-example.com/"));
+  federations.emplace_back("https://not-example.com/");
 
   std::vector<std::string> affiliated_realms;
   affiliated_realms.push_back(kTestAndroidRealm1);
@@ -1332,6 +1352,21 @@ TEST_F(CredentialManagerImplTest, IncognitoZeroClickRequestCredential) {
                        federations, CredentialType::CREDENTIAL_TYPE_EMPTY);
 }
 
+TEST_F(CredentialManagerImplTest, AutofillAssistantZeroClickRequestCredential) {
+  store_->AddLogin(form_);
+
+  std::vector<GURL> federations;
+  EXPECT_CALL(*client_, PromptUserToChooseCredentialsPtr)
+      .Times(testing::Exactly(0));
+  EXPECT_CALL(*client_, NotifyUserAutoSigninPtr()).Times(testing::Exactly(0));
+  EXPECT_CALL(*client_, IsIncognito()).WillRepeatedly(testing::Return(false));
+  EXPECT_CALL(*client_, GetAutofillAssistantMode())
+      .WillRepeatedly(testing::Return(AutofillAssistantMode::kRunning));
+
+  ExpectCredentialType(CredentialMediationRequirement::kOptional, true,
+                       federations, CredentialType::CREDENTIAL_TYPE_EMPTY);
+}
+
 TEST_F(CredentialManagerImplTest, ZeroClickWithAffiliatedFormInPasswordStore) {
   // Insert the affiliated form into the store, and mock out the association
   // with the current origin. As it's the only form matching the origin, it
@@ -1392,8 +1427,8 @@ TEST_F(CredentialManagerImplTest,
   static_cast<MockAffiliatedMatchHelper*>(store_->affiliated_match_helper())
       ->ExpectCallToGetAffiliatedAndroidRealms(digest, affiliated_realms);
 
-  digest.origin = HttpURLFromHttps(digest.origin);
-  digest.signon_realm = digest.origin.spec();
+  digest.url = HttpURLFromHttps(digest.url);
+  digest.signon_realm = digest.url.spec();
   // The second call happens for HTTP as the migration is triggered.
   static_cast<MockAffiliatedMatchHelper*>(store_->affiliated_match_helper())
       ->ExpectCallToGetAffiliatedAndroidRealms(digest, affiliated_realms);
@@ -1436,7 +1471,7 @@ TEST_F(CredentialManagerImplTest, ZeroClickWithPSLCredential) {
 TEST_F(CredentialManagerImplTest, ZeroClickWithPSLAndNormalCredentials) {
   form_.password_value.clear();
   form_.federation_origin = url::Origin::Create(GURL("https://google.com/"));
-  form_.signon_realm = "federation://" + form_.origin.host() + "/google.com";
+  form_.signon_realm = "federation://" + form_.url.host() + "/google.com";
   form_.skip_zero_click = false;
   store_->AddLogin(form_);
   store_->AddLogin(subdomain_form_);
@@ -1450,8 +1485,8 @@ TEST_F(CredentialManagerImplTest, ZeroClickWithPSLAndNormalCredentials) {
 TEST_F(CredentialManagerImplTest, ZeroClickAfterMigratingHttpCredential) {
   // There is an http credential saved. It should be migrated and used for auto
   // sign-in.
-  form_.origin = HttpURLFromHttps(form_.origin);
-  form_.signon_realm = form_.origin.GetOrigin().spec();
+  form_.url = HttpURLFromHttps(form_.url);
+  form_.signon_realm = form_.url.GetOrigin().spec();
   // That is the default value for old credentials.
   form_.skip_zero_click = true;
   store_->AddLogin(form_);
@@ -1496,7 +1531,7 @@ TEST_F(CredentialManagerImplTest, MediationRequiredPreventsAutoSignIn) {
 TEST_F(CredentialManagerImplTest, GetSynthesizedFormForOrigin) {
   PasswordStore::FormDigest synthesized =
       cm_service_impl_->GetSynthesizedFormForOrigin();
-  EXPECT_EQ(kTestWebOrigin, synthesized.origin.spec());
+  EXPECT_EQ(kTestWebOrigin, synthesized.url.spec());
   EXPECT_EQ(kTestWebOrigin, synthesized.signon_realm);
   EXPECT_EQ(autofill::PasswordForm::Scheme::kHtml, synthesized.scheme);
 }
@@ -1504,8 +1539,8 @@ TEST_F(CredentialManagerImplTest, GetSynthesizedFormForOrigin) {
 TEST_F(CredentialManagerImplTest, GetBlacklistedPasswordCredential) {
   autofill::PasswordForm blacklisted;
   blacklisted.blacklisted_by_user = true;
-  blacklisted.origin = form_.origin;
-  blacklisted.signon_realm = blacklisted.origin.spec();
+  blacklisted.url = form_.url;
+  blacklisted.signon_realm = blacklisted.url.spec();
   // Deliberately use a wrong format with a non-empty username to simulate a
   // leak. See https://crbug.com/817754.
   blacklisted.username_value = base::ASCIIToUTF16("Username");
@@ -1537,7 +1572,7 @@ TEST_F(CredentialManagerImplTest, BlacklistPasswordCredential) {
   autofill::PasswordForm blacklisted;
   TestPasswordStore::PasswordMap passwords = store_->stored_passwords();
   blacklisted.blacklisted_by_user = true;
-  blacklisted.origin = form_.origin;
+  blacklisted.url = form_.url;
   blacklisted.signon_realm = form_.signon_realm;
   blacklisted.date_created = passwords[form_.signon_realm][0].date_created;
   EXPECT_THAT(passwords[form_.signon_realm],
@@ -1563,11 +1598,11 @@ TEST_F(CredentialManagerImplTest, BlacklistFederatedCredential) {
 
   // Verify that the site is blacklisted.
   TestPasswordStore::PasswordMap passwords = store_->stored_passwords();
-  ASSERT_TRUE(passwords.count(form_.origin.spec()));
+  ASSERT_TRUE(passwords.count(form_.url.spec()));
   autofill::PasswordForm blacklisted;
   blacklisted.blacklisted_by_user = true;
-  blacklisted.origin = form_.origin;
-  blacklisted.signon_realm = blacklisted.origin.spec();
+  blacklisted.url = form_.url;
+  blacklisted.signon_realm = blacklisted.url.spec();
   blacklisted.date_created =
       passwords[blacklisted.signon_realm][0].date_created;
   EXPECT_THAT(passwords[blacklisted.signon_realm],
@@ -1577,8 +1612,8 @@ TEST_F(CredentialManagerImplTest, BlacklistFederatedCredential) {
 TEST_F(CredentialManagerImplTest, RespectBlacklistingPasswordCredential) {
   autofill::PasswordForm blacklisted;
   blacklisted.blacklisted_by_user = true;
-  blacklisted.origin = form_.origin;
-  blacklisted.signon_realm = blacklisted.origin.spec();
+  blacklisted.url = form_.url;
+  blacklisted.signon_realm = blacklisted.url.spec();
   store_->AddLogin(blacklisted);
 
   CredentialInfo info(form_, CredentialType::CREDENTIAL_TYPE_PASSWORD);
@@ -1595,8 +1630,8 @@ TEST_F(CredentialManagerImplTest, RespectBlacklistingPasswordCredential) {
 TEST_F(CredentialManagerImplTest, RespectBlacklistingFederatedCredential) {
   autofill::PasswordForm blacklisted;
   blacklisted.blacklisted_by_user = true;
-  blacklisted.origin = form_.origin;
-  blacklisted.signon_realm = blacklisted.origin.spec();
+  blacklisted.url = form_.url;
+  blacklisted.signon_realm = blacklisted.url.spec();
   store_->AddLogin(blacklisted);
 
   form_.federation_origin = url::Origin::Create(GURL("https://example.com/"));
@@ -1619,7 +1654,7 @@ TEST_F(CredentialManagerImplTest,
   federated.federation_origin =
       url::Origin::Create(GURL("https://google.com/"));
   federated.signon_realm =
-      "federation://" + federated.origin.host() + "/google.com";
+      "federation://" + federated.url.host() + "/google.com";
   store_->AddLogin(federated);
 
   form_.username_value = base::ASCIIToUTF16("username_value");
@@ -1635,7 +1670,7 @@ TEST_F(CredentialManagerImplTest,
   CredentialManagerError error;
   base::Optional<CredentialInfo> credential;
   std::vector<GURL> federations;
-  federations.push_back(GURL("https://google.com/"));
+  federations.emplace_back("https://google.com/");
 
   CallGet(CredentialMediationRequirement::kSilent, true, federations,
           base::BindOnce(&GetCredentialCallback, &called, &error, &credential));
@@ -1671,7 +1706,7 @@ TEST_F(CredentialManagerImplTest, StorePasswordCredentialStartsLeakDetection) {
 
   auto check_instance = std::make_unique<MockLeakDetectionCheck>();
   EXPECT_CALL(*check_instance,
-              Start(form_.origin, form_.username_value, form_.password_value));
+              Start(form_.url, form_.username_value, form_.password_value));
   EXPECT_CALL(*weak_factory, TryCreateLeakCheck)
       .WillOnce(testing::Return(testing::ByMove(std::move(check_instance))));
   CallStore({form_, CredentialType::CREDENTIAL_TYPE_PASSWORD},

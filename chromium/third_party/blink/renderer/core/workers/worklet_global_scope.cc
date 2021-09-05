@@ -191,6 +191,13 @@ WorkerThread* WorkletGlobalScope::GetThread() const {
   return worker_thread_;
 }
 
+const base::UnguessableToken& WorkletGlobalScope::GetDevToolsToken() const {
+  if (IsMainThreadWorkletGlobalScope()) {
+    return frame_->GetDevToolsFrameToken();
+  }
+  return GetThread()->GetDevToolsWorkerToken();
+}
+
 CoreProbeSink* WorkletGlobalScope::GetProbeSink() {
   if (IsMainThreadWorkletGlobalScope())
     return probe::ToCoreProbeSink(frame_);
@@ -275,7 +282,7 @@ void WorkletGlobalScope::BindContentSecurityPolicyToExecutionContext() {
   GetContentSecurityPolicy()->SetupSelf(*document_security_origin_);
 }
 
-void WorkletGlobalScope::Trace(Visitor* visitor) {
+void WorkletGlobalScope::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
   WorkerOrWorkletGlobalScope::Trace(visitor);
 }

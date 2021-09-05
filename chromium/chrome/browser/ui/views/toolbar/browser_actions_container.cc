@@ -118,6 +118,7 @@ BrowserActionsContainer::~BrowserActionsContainer() {
   toolbar_actions_bar_->DeleteActions();
   // All views should be removed as part of ToolbarActionsBar::DeleteActions().
   DCHECK(toolbar_action_views_.empty());
+  CHECK(!IsInObserverList());
 }
 
 std::string BrowserActionsContainer::GetIdAt(size_t index) const {
@@ -329,7 +330,7 @@ void BrowserActionsContainer::ShowToolbarActionBubble(
   active_bubble_ = bubble;
   views::BubbleDialogDelegateView::CreateBubble(bubble);
   bubble->GetWidget()->AddObserver(this);
-  bubble->Show();
+  bubble->GetWidget()->Show();
 }
 
 bool BrowserActionsContainer::CloseOverflowMenuIfOpen() {

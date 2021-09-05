@@ -55,6 +55,18 @@
              name="speakTextUnderMouse" aria-labelledby="speakMouseTextLabel">
   </div>
 
+  <div class="option" id="usePitchChangesOption">
+    <label id="usePitchChangesLabel" class="i18n"
+          msgid="options_use_pitch_changes_checkbox_label" hidden>
+    </label>
+    <label>
+      Use pitch changes
+    </label>
+    <input id="usePitchChanges" type="checkbox"
+             class="checkbox pref" name="usePitchChanges"
+             aria-labelledby="usePitchChangesLabel">
+  </div>
+
   <div class="option" id="capitalStrategyOption">
     <label id="capitalStrategyLabel" class="i18n"
           msgid="options_capital_strategy_select_label">
@@ -146,6 +158,17 @@
     <input id="languageSwitching" type="checkbox"
              class="checkbox pref" name="languageSwitching"
              aria-labelledby="voiceSwitchingLabel">
+  </div>
+
+  <div class="option">
+    <label>
+      <cr-link-row id="openTtsSettings"
+          using-slotted-label external embedded>
+        <span slot="label" class="i18n" msgid="show_tts_settings"></span>
+        <span slot="sub-label" class="i18n sub-description"
+            msgid="options_show_tts_settings"></span>
+      </cr-link-row>
+    </label>
   </div>
 
   <div id="richTextIndicationOption">

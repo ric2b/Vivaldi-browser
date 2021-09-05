@@ -107,7 +107,6 @@ namespace content {
 class AudioRendererMixerManager;
 class CategorizedWorkerPool;
 class GpuVideoAcceleratorFactoriesImpl;
-class LowMemoryModeController;
 class RenderThreadObserver;
 class RendererBlinkPlatformImpl;
 class ResourceDispatcher;
@@ -273,10 +272,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   blink::WebVideoCaptureImplManager* video_capture_impl_manager() const {
     return vc_manager_.get();
-  }
-
-  LowMemoryModeController* low_memory_mode_controller() const {
-    return low_memory_mode_controller_.get();
   }
 
   mojom::RenderMessageFilter* render_message_filter();
@@ -452,8 +447,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   bool IsMainThread();
 
-  void RecordPurgeMemory(RendererMemoryMetrics before);
-
   void Init();
   void InitializeCompositorThread();
   void InitializeWebKit(mojo::BinderMap* binders);
@@ -468,7 +461,7 @@ class CONTENT_EXPORT RenderThreadImpl
   void CreateFrameProxy(
       int32_t routing_id,
       int32_t render_view_routing_id,
-      int32_t opener_routing_id,
+      const base::Optional<base::UnguessableToken>& opener_frame_token,
       int32_t parent_routing_id,
       const FrameReplicationState& replicated_state,
       const base::UnguessableToken& frame_token,
@@ -483,6 +476,7 @@ class CONTENT_EXPORT RenderThreadImpl
   void SetWebKitSharedTimersSuspended(bool suspend) override;
   void SetUserAgent(const std::string& user_agent) override;
   void SetUserAgentMetadata(const blink::UserAgentMetadata& metadata) override;
+  void SetCorsExemptHeaderList(const std::vector<std::string>& list) override;
   void UpdateScrollbarTheme(
       mojom::UpdateScrollbarThemeParamsPtr params) override;
   void OnSystemColorsChanged(int32_t aqua_color_variant,
@@ -495,11 +489,11 @@ class CONTENT_EXPORT RenderThreadImpl
                        mojom::RenderProcessVisibleState visible_state) override;
   void SetSchedulerKeepActive(bool keep_active) override;
   void SetIsLockedToSite() override;
-  void EnableV8LowMemoryMode() override;
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
   void WriteClangProfilingProfile(
       WriteClangProfilingProfileCallback callback) override;
 #endif
+  void SetIsCrossOriginIsolated(bool value) override;
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
 
@@ -607,10 +601,6 @@ class CONTENT_EXPORT RenderThreadImpl
   HistogramCustomizer histogram_customizer_;
 
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
-
-  // Created in response to EnableV8LowMemoryMode(), this manages V8's
-  // memory saving mode.
-  std::unique_ptr<LowMemoryModeController> low_memory_mode_controller_;
 
   std::unique_ptr<viz::Gpu> gpu_;
 

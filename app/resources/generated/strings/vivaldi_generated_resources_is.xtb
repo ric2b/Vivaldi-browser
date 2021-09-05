@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(hulin)</translation>
 <translation id="1620510694547887537">Myndavél</translation>
 <translation id="1627276047960621195">Skráalýsingar</translation>
-<translation id="1635033183663317347">Sett up af forræðismanni.</translation>
 <translation id="1682548588986054654">Nýr einkagluggi</translation>
 <translation id="1698122934742150150">Einungis núverandi einkaseta</translation>
 <translation id="1706625117072057435">Stækkunarstig</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">Viðbót: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> biður þig um að deila skjánum</translation>
 <translation id="3711931198657368127">Lí&amp;ma og heimsækja <ph name="URL" /></translation>
-<translation id="3725367690636977613">síður</translation>
 <translation id="3727187387656390258">Rannsaka sprettiglugga</translation>
 <translation id="3744111561329211289">Bakgrunns samstilling</translation>
 <translation id="3760460896538743390">Rannsaka &amp;bakgrunnssíðu</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Samþykkja fyrir hópinn</translation>
-<translation id="4091434297613116013">blaðsíður</translation>
 <translation id="4096508467498758490">Gera viðbætur í þróunarfasa óvirkar</translation>
 <translation id="4100839878934973028">Annað forrit á tölvunni þinni bætti við appi sem gæti breytt virkni Vivaldi.</translation>
 <translation id="4109898769411476438">Lokaðu vafra áður en þú flytur inn (gögn)</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /><ph name="VERTICAL_DPI" />punktar á tommu</translation>
 <translation id="7309257895202129721">Sýna &amp;stjórntæki</translation>
 <translation id="7311079019872751559">Viðbót hefur aðgang út fyrir sandkassa vafrans</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Mistókst að prenta. Athugið prentara og reynið aftur.</translation>
 <translation id="7412226954991670867">GPU mynni</translation>
 <translation id="7421925624202799674">&amp;Sýna frumgögn síðu</translation>
@@ -433,7 +429,6 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="8071432093239591881">Prenta sem mynd</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />kB</translation>
 <translation id="8137559199583651773">Vinna með viðbætur</translation>
-<translation id="8180239481735238521">síða</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Niðurhal í gangi} other {Niðurhöl í gangi}}</translation>
 <translation id="8230134520748321204">Vista lykilorð fyrir <ph name="ORIGIN" />?</translation>
@@ -466,7 +461,6 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="8798099450830957504">Sjálfgefið</translation>
 <translation id="8800004011501252845">Sýni áfangastaði fyrir</translation>
 <translation id="8808478386290700967">Vefverslun</translation>
-<translation id="8813811964357448561">blaðsíða</translation>
 <translation id="8823514049557262177">Afrita hlekk te&amp;xta</translation>
 <translation id="8823704566850948458">Stinga upp á lykilorði...</translation>
 <translation id="8859174528519900719">Undirgluggi: <ph name="SUBFRAME_SITE" /></translation>

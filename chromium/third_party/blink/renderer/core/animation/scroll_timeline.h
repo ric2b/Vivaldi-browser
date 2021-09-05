@@ -97,6 +97,8 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
   virtual void Invalidate();
 
   CompositorAnimationTimeline* EnsureCompositorTimeline() override;
+  void UpdateCompositorTimeline() override;
+
   // TODO(crbug.com/896249): These methods are temporary and currently required
   // to support worklet animations. Once worklet animations become animations
   // these methods will not be longer needed. They are used to keep track of
@@ -105,7 +107,10 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
   void WorkletAnimationAttached();
   void WorkletAnimationDetached();
 
-  void Trace(Visitor*) override;
+  void AnimationAttached(Animation*) override;
+  void AnimationDetached(Animation*) override;
+
+  void Trace(Visitor*) const override;
 
   static bool HasActiveScrollTimeline(Node* node);
   // Invalidates scroll timelines with a given scroller node.
@@ -130,7 +135,8 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
   // element-based values it computes the corresponding length value that maps
   // to the particular element intersection. See
   // |ScrollTimelineOffset::ResolveOffset()| for more details.
-  void ResolveScrollOffsets(double* start_offset, double* end_offset) const;
+  std::tuple<base::Optional<double>, base::Optional<double>>
+  ResolveScrollOffsets() const;
 
   struct TimelineState {
     TimelinePhase phase;
@@ -149,6 +155,10 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
 
   TimelineState ComputeTimelineState() const;
 
+  // Use time_check true to request next service if time has changed.
+  // false - regardless of time change.
+  void ScheduleNextServiceInternal(bool time_check);
+
   // Use |scroll_source_| only to implement the web-exposed API but use
   // resolved_scroll_source_ to actually access the scroll related properties.
   Member<Element> scroll_source_;
@@ -164,6 +174,12 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
 
   // Snapshotted value produced by the last SnapshotState call.
   TimelineState timeline_state_snapshotted_;
+
+  // The only purpose of scroll_animations_ is keeping strong references to
+  // attached animations. This is required to keep attached animations alive
+  // as long as the timeline is alive. Scroll timeline is alive as long as its
+  // scroller is alive.
+  HeapHashSet<Member<Animation>> scroll_animations_;
 };
 
 template <>

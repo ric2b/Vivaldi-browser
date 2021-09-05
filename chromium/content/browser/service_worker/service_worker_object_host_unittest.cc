@@ -229,7 +229,7 @@ TEST_F(ServiceWorkerObjectHostTest, OnVersionStateChanged) {
   SetUpRegistration(scope, script_url);
   registration_->SetInstallingVersion(version_);
 
-  ServiceWorkerRemoteProviderEndpoint remote_endpoint;
+  ServiceWorkerRemoteContainerEndpoint remote_endpoint;
   base::WeakPtr<ServiceWorkerContainerHost> container_host =
       CreateContainerHostForWindow(
           helper_->mock_render_process_id(), true /* is_parent_frame_secure */,
@@ -282,7 +282,7 @@ TEST_F(ServiceWorkerObjectHostTest,
   // execution context (e.g., self.registration.active inside the active
   // worker and self.serviceWorker).
   ServiceWorkerContainerHost* container_host =
-      version_->provider_host()->container_host();
+      version_->worker_host()->container_host();
   blink::mojom::ServiceWorkerObjectInfoPtr info =
       container_host->GetOrCreateServiceWorkerObjectHost(version_)
           ->CreateCompleteObjectInfoToSend();
@@ -379,7 +379,7 @@ TEST_F(ServiceWorkerObjectHostTest, DispatchExtendableMessageEvent_FromClient) {
       WebContentsTester::CreateTestWebContents(helper_->browser_context(),
                                                nullptr));
   RenderFrameHost* frame_host = web_contents->GetMainFrame();
-  ServiceWorkerRemoteProviderEndpoint remote_endpoint;
+  ServiceWorkerRemoteContainerEndpoint remote_endpoint;
   base::WeakPtr<ServiceWorkerContainerHost> container_host =
       CreateContainerHostForWindow(
           frame_host->GetProcess()->GetID(), true /* is_parent_frame_secure */,
@@ -436,7 +436,7 @@ TEST_F(ServiceWorkerObjectHostTest, OnConnectionError) {
   // Set up the case where the last reference to the version is owned by the
   // service worker object host.
   ServiceWorkerContainerHost* container_host =
-      version_->provider_host()->container_host();
+      version_->worker_host()->container_host();
   ServiceWorkerVersion* version_rawptr = version_.get();
   version_ = nullptr;
   ASSERT_TRUE(version_rawptr->HasOneRef());

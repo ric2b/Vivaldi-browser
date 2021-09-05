@@ -11,6 +11,7 @@
 #include "base/time/time.h"
 #include "cc/input/browser_controls_state.h"
 #include "cc/metrics/frame_sequence_tracker_collection.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
@@ -101,6 +102,9 @@ class LayerTreeHostClient {
   virtual void WillUpdateLayers() = 0;
   virtual void DidUpdateLayers() = 0;
 
+  virtual void DidObserveFirstScrollDelay(
+      base::TimeDelta first_scroll_delay,
+      base::TimeTicks first_scroll_timestamp) = 0;
   // Notification that the proxy started or stopped deferring main frame updates
   virtual void OnDeferMainFrameUpdatesChanged(bool) = 0;
 
@@ -169,6 +173,12 @@ class LayerTreeHostClient {
   // RecordEndOfFrameMetrics.
   virtual std::unique_ptr<BeginMainFrameMetrics> GetBeginMainFrameMetrics() = 0;
   virtual void NotifyThroughputTrackerResults(CustomTrackerResults results) = 0;
+  // LayerTreeHost calls this when there is new throughput data. The client send
+  // the data to the browser process who will aggregate them and report to UKM.
+  virtual void SubmitThroughputData(ukm::SourceId source_id,
+                                    int aggregated_percent,
+                                    int impl_percent,
+                                    base::Optional<int> main_percent) = 0;
 
  protected:
   virtual ~LayerTreeHostClient() = default;

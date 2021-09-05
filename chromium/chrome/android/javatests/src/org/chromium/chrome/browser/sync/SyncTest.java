@@ -5,28 +5,25 @@
 package org.chromium.chrome.browser.sync;
 
 import android.accounts.Account;
-import android.app.Activity;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.LargeTest;
+
+import androidx.test.filters.LargeTest;
 
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.ActivityState;
-import org.chromium.base.ApplicationStatus;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninHelper;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.signin.MockChangeEventChecker;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
-import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -41,23 +38,6 @@ public class SyncTest {
     public SyncTestRule mSyncTestRule = new SyncTestRule();
 
     private static final String TAG = "SyncTest";
-
-    @Test
-    @LargeTest
-    @Feature({"Sync"})
-    public void testFlushDirectoryDoesntBreakSync() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
-        final Activity activity = mSyncTestRule.getActivity();
-
-        InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
-            @Override
-            public void run() {
-                ApplicationStatus.onStateChangeForTesting(activity, ActivityState.PAUSED);
-            }
-        });
-
-        // TODO(pvalenzuela): When available, check that sync is still functional.
-    }
 
     @Test
     @LargeTest
@@ -81,7 +61,9 @@ public class SyncTest {
         mSyncTestRule.setUpAccountAndSignInForTesting();
         CriteriaHelper.pollUiThread(
                 ()
-                        -> IdentityServicesProvider.get().getIdentityManager().hasPrimaryAccount(),
+                        -> IdentityServicesProvider.get()
+                                   .getIdentityManager(Profile.getLastUsedRegularProfile())
+                                   .hasPrimaryAccount(),
                 "Timed out checking that hasPrimaryAccount() == true", SyncTestUtil.TIMEOUT_MS,
                 SyncTestUtil.INTERVAL_MS);
 
@@ -92,7 +74,9 @@ public class SyncTest {
         Assert.assertFalse(SyncTestUtil.isSyncRequested());
         CriteriaHelper.pollUiThread(
                 ()
-                        -> !IdentityServicesProvider.get().getIdentityManager().hasPrimaryAccount(),
+                        -> !IdentityServicesProvider.get()
+                                    .getIdentityManager(Profile.getLastUsedRegularProfile())
+                                    .hasPrimaryAccount(),
                 "Timed out checking that hasPrimaryAccount() == false", SyncTestUtil.TIMEOUT_MS,
                 SyncTestUtil.INTERVAL_MS);
     }

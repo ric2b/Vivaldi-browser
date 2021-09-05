@@ -142,6 +142,23 @@ TEST_F(LayoutNGTextTest, SetTextWithOffsetDeleteCollapseWhiteSpaceEnd) {
             GetItemsAsString(*text.GetLayoutObject()));
 }
 
+// web_tests/external/wpt/editing/run/delete.html?993-993
+// web_tests/external/wpt/editing/run/forwarddelete.html?1193-1193
+TEST_F(LayoutNGTextTest, SetTextWithOffsetDeleteNbspInPreWrap) {
+  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
+    return;
+
+  InsertStyleElement("#target { white-space:pre-wrap; }");
+  SetBodyInnerHTML(u"<p id=target>&nbsp; abc</p>");
+  Text& text = To<Text>(*GetElementById("target")->firstChild());
+  text.deleteData(0, 1, ASSERT_NO_EXCEPTION);
+
+  EXPECT_EQ(
+      "*{' ', ShapeResult=0+1}\n"
+      "*{'abc', ShapeResult=2+3}\n",
+      GetItemsAsString(*text.GetLayoutObject()));
+}
+
 TEST_F(LayoutNGTextTest, SetTextWithOffsetDeleteRTL) {
   if (!RuntimeEnabledFeatures::LayoutNGEnabled())
     return;
@@ -171,6 +188,38 @@ TEST_F(LayoutNGTextTest, SetTextWithOffsetDeleteRTL2) {
       "*{'xy', ShapeResult=1+2}\n"
       "*{')', ShapeResult=3+1}\n"
       "*{'5', ShapeResult=4+1}\n",
+      GetItemsAsString(*text.GetLayoutObject()));
+}
+
+// editing/deleting/delete_ws_fixup.html
+TEST_F(LayoutNGTextTest, SetTextWithOffsetDeleteThenNonCollapse) {
+  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
+    return;
+
+  SetBodyInnerHTML(u"<div id=target>abc def<b> </b>ghi</div>");
+  Text& text = To<Text>(*GetElementById("target")->firstChild());
+  text.deleteData(4, 3, ASSERT_NO_EXCEPTION);  // remove "def"
+
+  EXPECT_EQ(
+      "*{'abc ', ShapeResult=0+4}\n"
+      "{''}\n"
+      "{'ghi', ShapeResult=4+3}\n",
+      GetItemsAsString(*text.GetLayoutObject()));
+}
+
+// editing/deleting/delete_ws_fixup.html
+TEST_F(LayoutNGTextTest, SetTextWithOffsetDeleteThenNonCollapse2) {
+  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
+    return;
+
+  SetBodyInnerHTML(u"<div id=target>abc def<b> X </b>ghi</div>");
+  Text& text = To<Text>(*GetElementById("target")->firstChild());
+  text.deleteData(4, 3, ASSERT_NO_EXCEPTION);  // remove "def"
+
+  EXPECT_EQ(
+      "*{'abc ', ShapeResult=0+4}\n"
+      "{'X ', ShapeResult=4+2}\n"
+      "{'ghi', ShapeResult=6+3}\n",
       GetItemsAsString(*text.GetLayoutObject()));
 }
 

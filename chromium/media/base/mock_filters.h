@@ -114,6 +114,7 @@ class MockPipeline : public Pipeline {
   MOCK_CONST_METHOD0(GetVolume, float());
   MOCK_METHOD1(SetVolume, void(float));
   MOCK_METHOD1(SetLatencyHint, void(base::Optional<base::TimeDelta>));
+  MOCK_METHOD1(SetPreservesPitch, void(bool));
 
   // TODO(sandersd): These should probably have setters too.
   MOCK_CONST_METHOD0(GetMediaTime, base::TimeDelta());
@@ -357,6 +358,7 @@ class MockAudioRenderer : public AudioRenderer {
   MOCK_METHOD1(SetVolume, void(float volume));
   MOCK_METHOD1(SetLatencyHint,
                void(base::Optional<base::TimeDelta> latency_hint));
+  MOCK_METHOD1(SetPreservesPitch, void(bool));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockAudioRenderer);
@@ -378,7 +380,8 @@ class MockRenderer : public Renderer {
                     RendererClient* client,
                     PipelineStatusCallback& init_cb));
   MOCK_METHOD1(SetLatencyHint, void(base::Optional<base::TimeDelta>));
-  void Flush(base::OnceClosure flush_cb) { OnFlush(flush_cb); }
+  MOCK_METHOD1(SetPreservesPitch, void(bool));
+  void Flush(base::OnceClosure flush_cb) override { OnFlush(flush_cb); }
   MOCK_METHOD1(OnFlush, void(base::OnceClosure& flush_cb));
   MOCK_METHOD1(StartPlayingFrom, void(base::TimeDelta timestamp));
   MOCK_METHOD1(SetPlaybackRate, void(double playback_rate));
@@ -576,7 +579,6 @@ class MockCdmSessionPromise : public NewSessionCdmPromise {
 class MockCdm : public ContentDecryptionModule {
  public:
   MockCdm(const std::string& key_system,
-          const url::Origin& security_origin,
           const SessionMessageCB& session_message_cb,
           const SessionClosedCB& session_closed_cb,
           const SessionKeysChangeCB& session_keys_change_cb,
@@ -647,7 +649,6 @@ class MockCdmFactory : public CdmFactory {
   // created CDM is passed to |cdm_created_cb|, a copy is kept (and available
   // using Cdm()). If |key_system| is empty, no CDM will be created.
   void Create(const std::string& key_system,
-              const url::Origin& security_origin,
               const CdmConfig& cdm_config,
               const SessionMessageCB& session_message_cb,
               const SessionClosedCB& session_closed_cb,

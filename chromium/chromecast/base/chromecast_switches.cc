@@ -5,6 +5,7 @@
 #include "chromecast/base/chromecast_switches.h"
 
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 
 namespace switches {
@@ -202,6 +203,10 @@ extern const char kCastMemoryPressureModerateFraction[] =
 // to the default renderer within content_renderer. Does not change the behavior
 // of the media service.
 const char kDisableMojoRenderer[] = "disable-mojo-renderer";
+
+// System info file path. Default is an empty string, which
+// means that dummy info will be used.
+const char kSysInfoFilePath[] = "sys-info-file-path";
 
 }  // namespace switches
 

@@ -43,7 +43,8 @@ class TouchEventX11 : public ui::TouchEvent {
 };
 
 Event::Properties GetEventPropertiesFromXEvent(EventType type,
-                                               const XEvent& xev) {
+                                               const x11::Event& x11_event) {
+  const XEvent& xev = x11_event.xlib_event();
   using Values = std::vector<uint8_t>;
   Event::Properties properties;
   if (type == ET_KEY_PRESSED || type == ET_KEY_RELEASED) {
@@ -75,66 +76,74 @@ Event::Properties GetEventPropertiesFromXEvent(EventType type,
 }
 
 std::unique_ptr<KeyEvent> CreateKeyEvent(EventType event_type,
-                                         const XEvent& xev) {
+                                         const x11::Event& x11_event) {
+  const XEvent& xev = x11_event.xlib_event();
   KeyboardCode key_code = KeyboardCodeFromXKeyEvent(&xev);
-  int event_flags = EventFlagsFromXEvent(xev);
+  int event_flags = EventFlagsFromXEvent(x11_event);
 
   // In Ozone builds, keep DomCode/DomKey unset, so they are extracted lazily
   // in KeyEvent::ApplyLayout() which makes it possible for CrOS/Linux, for
   // example, to support host system keyboard layouts.
 #if defined(USE_OZONE)
   auto event = std::make_unique<KeyEvent>(event_type, key_code, event_flags,
-                                          EventTimeFromXEvent(xev));
+                                          EventTimeFromXEvent(x11_event));
 #else
   auto event = std::make_unique<KeyEvent>(
       event_type, key_code, CodeFromXEvent(&xev), event_flags,
-      GetDomKeyFromXEvent(&xev), EventTimeFromXEvent(xev));
+      GetDomKeyFromXEvent(&xev), EventTimeFromXEvent(x11_event));
 #endif
 
   DCHECK(event);
-  event->SetProperties(GetEventPropertiesFromXEvent(event_type, xev));
+  event->SetProperties(GetEventPropertiesFromXEvent(event_type, x11_event));
   event->InitializeNative();
   return event;
 }
 
-void SetEventSourceDeviceId(MouseEvent* event, const XEvent& xev) {
+void SetEventSourceDeviceId(MouseEvent* event, const x11::Event& x11_event) {
+  const XEvent& xev = x11_event.xlib_event();
   DCHECK(event);
-  if (xev.type == GenericEvent) {
+  if (xev.type == x11::GeGenericEvent::opcode) {
     XIDeviceEvent* xiev = static_cast<XIDeviceEvent*>(xev.xcookie.data);
     event->set_source_device_id(xiev->sourceid);
   }
 }
 
 std::unique_ptr<MouseEvent> CreateMouseEvent(EventType type,
-                                             const XEvent& xev) {
+                                             const x11::Event& x11_event) {
+  const XEvent& xev = x11_event.xlib_event();
   // Ignore EventNotify and LeaveNotify events from children of |xwindow_|.
   // NativeViewGLSurfaceGLX adds a child to |xwindow_|.
   // https://crbug.com/792322
-  bool enter_or_leave = xev.type == EnterNotify || xev.type == LeaveNotify;
+  bool enter_or_leave = xev.type == x11::CrossingEvent::EnterNotify ||
+                        xev.type == x11::CrossingEvent::LeaveNotify;
   if (enter_or_leave && xev.xcrossing.detail == NotifyInferior)
     return nullptr;
 
   PointerDetails details{EventPointerType::kMouse};
   auto event = std::make_unique<MouseEvent>(
-      type, EventLocationFromXEvent(xev), EventSystemLocationFromXEvent(xev),
-      EventTimeFromXEvent(xev), EventFlagsFromXEvent(xev),
-      GetChangedMouseButtonFlagsFromXEvent(xev), details);
+      type, EventLocationFromXEvent(x11_event),
+      EventSystemLocationFromXEvent(x11_event), EventTimeFromXEvent(x11_event),
+      EventFlagsFromXEvent(x11_event),
+      GetChangedMouseButtonFlagsFromXEvent(x11_event), details);
 
   DCHECK(event);
-  SetEventSourceDeviceId(event.get(), xev);
-  event->SetProperties(GetEventPropertiesFromXEvent(type, xev));
+  SetEventSourceDeviceId(event.get(), x11_event);
+  event->SetProperties(GetEventPropertiesFromXEvent(type, x11_event));
   event->InitializeNative();
   return event;
 }
 
-std::unique_ptr<MouseWheelEvent> CreateMouseWheelEvent(const XEvent& xev) {
-  int button_flags = (xev.type == GenericEvent)
-                         ? GetChangedMouseButtonFlagsFromXEvent(xev)
+std::unique_ptr<MouseWheelEvent> CreateMouseWheelEvent(
+    const x11::Event& x11_event) {
+  const XEvent& xev = x11_event.xlib_event();
+  int button_flags = (xev.type == x11::GeGenericEvent::opcode)
+                         ? GetChangedMouseButtonFlagsFromXEvent(x11_event)
                          : 0;
   auto event = std::make_unique<MouseWheelEvent>(
-      GetMouseWheelOffsetFromXEvent(xev), EventLocationFromXEvent(xev),
-      EventSystemLocationFromXEvent(xev), EventTimeFromXEvent(xev),
-      EventFlagsFromXEvent(xev), button_flags);
+      GetMouseWheelOffsetFromXEvent(x11_event),
+      EventLocationFromXEvent(x11_event),
+      EventSystemLocationFromXEvent(x11_event), EventTimeFromXEvent(x11_event),
+      EventFlagsFromXEvent(x11_event), button_flags);
 
   DCHECK(event);
   event->InitializeNative();
@@ -142,7 +151,7 @@ std::unique_ptr<MouseWheelEvent> CreateMouseWheelEvent(const XEvent& xev) {
 }
 
 std::unique_ptr<TouchEvent> CreateTouchEvent(EventType type,
-                                             const XEvent& xev) {
+                                             const x11::Event& xev) {
   auto event = std::make_unique<TouchEventX11>(
       type, EventLocationFromXEvent(xev), EventTimeFromXEvent(xev),
       GetTouchPointerDetailsFromXEvent(xev));
@@ -156,7 +165,7 @@ std::unique_ptr<TouchEvent> CreateTouchEvent(EventType type,
 }
 
 std::unique_ptr<ScrollEvent> CreateScrollEvent(EventType type,
-                                               const XEvent& xev) {
+                                               const x11::Event& xev) {
   float x_offset, y_offset, x_offset_ordinal, y_offset_ordinal;
   int finger_count = 0;
 
@@ -182,7 +191,7 @@ std::unique_ptr<ScrollEvent> CreateScrollEvent(EventType type,
 }
 
 // Translates XI2 XEvent into a ui::Event.
-std::unique_ptr<ui::Event> TranslateFromXI2Event(const XEvent& xev,
+std::unique_ptr<ui::Event> TranslateFromXI2Event(const x11::Event& xev,
                                                  EventType event_type) {
   switch (event_type) {
     case ET_KEY_PRESSED:
@@ -214,18 +223,18 @@ std::unique_ptr<ui::Event> TranslateFromXI2Event(const XEvent& xev,
   return nullptr;
 }
 
-std::unique_ptr<Event> TranslateFromXEvent(const XEvent& xev) {
+std::unique_ptr<Event> TranslateFromXEvent(const x11::Event& xev) {
   EventType event_type = EventTypeFromXEvent(xev);
-  switch (xev.type) {
-    case LeaveNotify:
-    case EnterNotify:
-    case MotionNotify:
+  switch (xev.xlib_event().type) {
+    case x11::CrossingEvent::LeaveNotify:
+    case x11::CrossingEvent::EnterNotify:
+    case x11::MotionNotifyEvent::opcode:
       return CreateMouseEvent(event_type, xev);
-    case KeyPress:
-    case KeyRelease:
+    case x11::KeyEvent::Press:
+    case x11::KeyEvent::Release:
       return CreateKeyEvent(event_type, xev);
-    case ButtonPress:
-    case ButtonRelease: {
+    case x11::ButtonEvent::Press:
+    case x11::ButtonEvent::Release: {
       switch (event_type) {
         case ET_MOUSEWHEEL:
           return CreateMouseWheelEvent(xev);
@@ -241,7 +250,7 @@ std::unique_ptr<Event> TranslateFromXEvent(const XEvent& xev) {
       }
       break;
     }
-    case GenericEvent:
+    case x11::GeGenericEvent::opcode:
       return TranslateFromXI2Event(xev, event_type);
   }
   return nullptr;
@@ -250,7 +259,7 @@ std::unique_ptr<Event> TranslateFromXEvent(const XEvent& xev) {
 }  // namespace
 
 // Translates a XEvent into a ui::Event.
-std::unique_ptr<Event> BuildEventFromXEvent(const XEvent& xev) {
+std::unique_ptr<Event> BuildEventFromXEvent(const x11::Event& xev) {
   auto event = TranslateFromXEvent(xev);
   if (event)
     ui::ComputeEventLatencyOS(event.get());
@@ -258,7 +267,7 @@ std::unique_ptr<Event> BuildEventFromXEvent(const XEvent& xev) {
 }
 
 // Convenience function that translates XEvent into ui::KeyEvent
-std::unique_ptr<KeyEvent> BuildKeyEventFromXEvent(const XEvent& xev) {
+std::unique_ptr<KeyEvent> BuildKeyEventFromXEvent(const x11::Event& xev) {
   auto event = BuildEventFromXEvent(xev);
   if (!event || !event->IsKeyEvent())
     return nullptr;
@@ -266,7 +275,7 @@ std::unique_ptr<KeyEvent> BuildKeyEventFromXEvent(const XEvent& xev) {
 }
 
 // Convenience function that translates XEvent into ui::MouseEvent
-std::unique_ptr<MouseEvent> BuildMouseEventFromXEvent(const XEvent& xev) {
+std::unique_ptr<MouseEvent> BuildMouseEventFromXEvent(const x11::Event& xev) {
   auto event = BuildEventFromXEvent(xev);
   if (!event || !event->IsMouseEvent())
     return nullptr;
@@ -274,7 +283,7 @@ std::unique_ptr<MouseEvent> BuildMouseEventFromXEvent(const XEvent& xev) {
 }
 
 // Convenience function that translates XEvent into ui::TouchEvent
-std::unique_ptr<TouchEvent> BuildTouchEventFromXEvent(const XEvent& xev) {
+std::unique_ptr<TouchEvent> BuildTouchEventFromXEvent(const x11::Event& xev) {
   auto event = BuildEventFromXEvent(xev);
   if (!event || !event->IsTouchEvent())
     return nullptr;
@@ -283,7 +292,7 @@ std::unique_ptr<TouchEvent> BuildTouchEventFromXEvent(const XEvent& xev) {
 
 // Convenience function that translates XEvent into ui::MouseWheelEvent
 std::unique_ptr<MouseWheelEvent> BuildMouseWheelEventFromXEvent(
-    const XEvent& xev) {
+    const x11::Event& xev) {
   auto event = BuildEventFromXEvent(xev);
   if (!event || !event->IsMouseWheelEvent())
     return nullptr;

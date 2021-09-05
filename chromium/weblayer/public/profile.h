@@ -5,8 +5,12 @@
 #ifndef WEBLAYER_PUBLIC_PROFILE_H_
 #define WEBLAYER_PUBLIC_PROFILE_H_
 
-#include <algorithm>
+#include <memory>
 #include <string>
+
+#include "base/callback_forward.h"
+#include "base/containers/flat_set.h"
+#include "base/time/time.h"
 
 namespace base {
 class FilePath;
@@ -23,8 +27,12 @@ enum class BrowsingDataType {
   CACHE = 1,
 };
 
+// Used for setting/getting profile related settings.
 enum class SettingType {
   BASIC_SAFE_BROWSING_ENABLED = 0,
+  UKM_ENABLED = 1,
+  EXTENDED_REPORTING_SAFE_BROWSING_ENABLED = 2,
+  REAL_TIME_SAFE_BROWSING_ENABLED = 3,
 };
 
 class Profile {
@@ -61,11 +69,35 @@ class Profile {
   // Gets the cookie manager for this profile.
   virtual CookieManager* GetCookieManager() = 0;
 
+  // Asynchronously fetches the set of known Browser persistence-ids. See
+  // Browser::PersistenceInfo for more details on persistence-ids.
+  virtual void GetBrowserPersistenceIds(
+      base::OnceCallback<void(base::flat_set<std::string>)> callback) = 0;
+
+  // Asynchronously removes the storage associated with the set of
+  // Browser persistence-ids. This ignores ids actively in use. |done_callback|
+  // is run with the result of the operation (on the main thread). A value of
+  // true means all files were removed. A value of false indicates at least one
+  // of the files could not be removed.
+  virtual void RemoveBrowserPersistenceStorage(
+      base::OnceCallback<void(bool)> done_callback,
+      base::flat_set<std::string> ids) = 0;
+
   // Set the boolean value of the given setting type.
   virtual void SetBooleanSetting(SettingType type, bool value) = 0;
 
   // Get the boolean value of the given setting type.
   virtual bool GetBooleanSetting(SettingType type) = 0;
+
+  // For cross-origin navigations, the implementation may leverage a separate OS
+  // process for stronger isolation. If an embedder knows that a cross-origin
+  // navigation is likely starting soon, they can call this method as a hint to
+  // the implementation to start a fresh OS process. A subsequent navigation may
+  // use this preinitialized process, improving performance. It is safe to call
+  // this multiple times or when it is not certain that the spare renderer will
+  // be used, although calling this too eagerly may reduce performance as
+  // unnecessary processes are created.
+  virtual void PrepareForPossibleCrossOriginNavigation() = 0;
 };
 
 }  // namespace weblayer

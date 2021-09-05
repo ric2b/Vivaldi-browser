@@ -38,7 +38,7 @@ class TestCompositorHostX11 : public TestCompositorHost {
 
   ui::Compositor compositor_;
 
-  XID window_;
+  x11::Window window_;
 
   std::unique_ptr<XScopedEventSelector> window_events_;
   viz::ParentLocalSurfaceIdAllocator allocator_;
@@ -56,30 +56,26 @@ TestCompositorHostX11::TestCompositorHostX11(
                   base::ThreadTaskRunnerHandle::Get(),
                   false /* enable_pixel_canvas */) {}
 
-TestCompositorHostX11::~TestCompositorHostX11() {}
+TestCompositorHostX11::~TestCompositorHostX11() = default;
 
 void TestCompositorHostX11::Show() {
   XDisplay* display = gfx::GetXDisplay();
   XSetWindowAttributes swa;
   swa.override_redirect = x11::True;
-  window_ = XCreateWindow(
+  window_ = static_cast<x11::Window>(XCreateWindow(
       display, XRootWindow(display, DefaultScreen(display)),  // parent
       bounds_.x(), bounds_.y(), bounds_.width(), bounds_.height(),
-      0,               // border width
-      CopyFromParent,  // depth
-      InputOutput,
-      CopyFromParent,  // visual
-      CWOverrideRedirect, &swa);
-  window_events_.reset(
-      new XScopedEventSelector(window_, StructureNotifyMask | ExposureMask));
-  XMapWindow(display, window_);
-
-  while (1) {
-    XEvent event;
-    XNextEvent(display, &event);
-    if (event.type == MapNotify && event.xmap.window == window_)
-      break;
-  }
+      0,                                                   // border width
+      static_cast<int>(x11::WindowClass::CopyFromParent),  // depth
+      static_cast<int>(x11::WindowClass::InputOutput),
+      nullptr,  // visual
+      CWOverrideRedirect, &swa));
+  window_events_ =
+      std::make_unique<XScopedEventSelector>(window_, ExposureMask);
+  XMapWindow(display, static_cast<uint32_t>(window_));
+  // Since this window is override-redirect, syncing is sufficient
+  // to ensure the map is complete.
+  XSync(display, x11::False);
   allocator_.GenerateId();
   compositor_.SetAcceleratedWidget(window_);
   compositor_.SetScaleAndSize(1.0f, bounds_.size(),

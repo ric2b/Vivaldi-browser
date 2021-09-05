@@ -13,6 +13,7 @@
 
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/win/windows_version.h"
 
 namespace media {

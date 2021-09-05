@@ -49,7 +49,6 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabAssociatedApp;
 import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
 import org.chromium.chrome.browser.tab.TabCreationState;
-import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.ChromeTabCreator;
@@ -544,7 +543,7 @@ public class VrShell extends GvrLayout
         // Reparent all existing tabs.
         for (TabModel model : mActivity.getTabModelSelector().getModels()) {
             for (int i = 0; i < model.getCount(); ++i) {
-                ((TabImpl) model.getTabAt(i)).updateAttachment(window, null);
+                model.getTabAt(i).updateAttachment(window, null);
             }
         }
     }
@@ -785,6 +784,12 @@ public class VrShell extends GvrLayout
         if (mNativeVrShell != 0) VrShellJni.get().onPause(mNativeVrShell, VrShell.this);
     }
 
+    public void destroyWindowAndroid() {
+        reparentAllTabs(mActivity.getWindowAndroid());
+        mCompositorView.onExitVr(mActivity.getWindowAndroid());
+        mContentVrWindowAndroid.destroy();
+    }
+
     @Override
     public void shutdown() {
         if (mVrBrowsingEnabled) {
@@ -822,6 +827,7 @@ public class VrShell extends GvrLayout
         mContentVirtualDisplay.destroy();
 
         mCompositorView.onExitVr(mActivity.getWindowAndroid());
+        mContentVrWindowAndroid.destroy();
 
         if (mActivity.getToolbarManager() != null) {
             mActivity.getToolbarManager().setProgressBarEnabled(true);
@@ -1042,18 +1048,12 @@ public class VrShell extends GvrLayout
         if (showExitPromptBeforeDoff) {
             VrShellJni.get().requestToExitVr(mNativeVrShell, VrShell.this, reason);
         } else {
-            VrShellJni.get().logUnsupportedModeUserMetric(mNativeVrShell, VrShell.this, reason);
             mDelegate.onExitVrRequestResult(true);
         }
     }
 
     @CalledByNative
-    private void onExitVrRequestResult(@UiUnsupportedMode int reason, boolean shouldExit) {
-        if (shouldExit) {
-            if (mNativeVrShell != 0) {
-                VrShellJni.get().logUnsupportedModeUserMetric(mNativeVrShell, VrShell.this, reason);
-            }
-        }
+    private void onExitVrRequestResult(boolean shouldExit) {
         mDelegate.onExitVrRequestResult(shouldExit);
     }
 
@@ -1375,8 +1375,6 @@ public class VrShell extends GvrLayout
         void setHistoryButtonsEnabled(
                 long nativeVrShell, VrShell caller, boolean canGoBack, boolean canGoForward);
         void requestToExitVr(long nativeVrShell, VrShell caller, @UiUnsupportedMode int reason);
-        void logUnsupportedModeUserMetric(
-                long nativeVrShell, VrShell caller, @UiUnsupportedMode int mode);
         void showSoftInput(long nativeVrShell, VrShell caller, boolean show);
         void updateWebInputIndices(long nativeVrShell, VrShell caller, int selectionStart,
                 int selectionEnd, int compositionStart, int compositionEnd);

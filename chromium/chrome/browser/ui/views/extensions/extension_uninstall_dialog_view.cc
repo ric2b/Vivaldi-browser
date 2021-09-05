@@ -83,7 +83,7 @@ class ExtensionUninstallDialogDelegateView
 
   // Called when the ExtensionUninstallDialog has been destroyed to make sure
   // we invalidate pointers.
-  void DialogDestroyed() { dialog_ = NULL; }
+  void DialogDestroyed() { dialog_ = nullptr; }
 
  private:
   // views::View:
@@ -93,7 +93,9 @@ class ExtensionUninstallDialogDelegateView
   gfx::Size CalculatePreferredSize() const override;
 
   // views::WidgetDelegate:
-  ui::ModalType GetModalType() const override { return ui::MODAL_TYPE_WINDOW; }
+  ui::ModalType GetModalType() const override {
+    return is_bubble_ ? ui::MODAL_TYPE_NONE : ui::MODAL_TYPE_WINDOW;
+  }
   base::string16 GetWindowTitle() const override;
   gfx::ImageSkia GetWindowIcon() override { return image_; }
   bool ShouldShowWindowIcon() const override { return true; }

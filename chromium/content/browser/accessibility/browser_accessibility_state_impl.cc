@@ -11,7 +11,6 @@
 #include "base/debug/crash_logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -89,8 +88,8 @@ BrowserAccessibilityStateImpl::BrowserAccessibilityStateImpl()
       base::TimeDelta::FromSeconds(ACCESSIBILITY_HISTOGRAM_DELAY_SECS));
 
   // Other things must be done on the UI thread (e.g. to access PrefService).
-  base::PostDelayedTask(
-      FROM_HERE, {BrowserThread::UI},
+  GetUIThreadTaskRunner({})->PostDelayedTask(
+      FROM_HERE,
       base::BindOnce(&BrowserAccessibilityStateImpl::UpdateHistogramsOnUIThread,
                      this),
       base::TimeDelta::FromSeconds(ACCESSIBILITY_HISTOGRAM_DELAY_SECS));
@@ -178,8 +177,9 @@ void BrowserAccessibilityStateImpl::UpdateHistogramsOnUIThread() {
 #if defined(OS_WIN)
   UMA_HISTOGRAM_ENUMERATION(
       "Accessibility.WinHighContrastTheme",
-      ui::NativeTheme::GetInstanceForNativeUi()->GetHighContrastColorScheme(),
-      ui::NativeTheme::HighContrastColorScheme::kMaxValue);
+      ui::NativeTheme::GetInstanceForNativeUi()
+          ->GetPlatformHighContrastColorScheme(),
+      ui::NativeTheme::PlatformHighContrastColorScheme::kMaxValue);
 #endif
 }
 

@@ -66,12 +66,14 @@
 <translation id="4582480609585453144">Opna lenkja i bakgrunnsfane</translation>
 <translation id="4636708767492582204">Send som e-post</translation>
 <translation id="4677434526832593569">Dyr 8</translation>
+<translation id="474217410105706308">Slå av lyden for fana</translation>
 <translation id="4881695831933465202">Opna</translation>
 <translation id="5014281392052865061">Importerte snøggval</translation>
 <translation id="5092656712000637858">Legg sida til nettpanelet</translation>
 <translation id="5177818338935286353">Monster 7</translation>
 <translation id="5213743983876949565">Dyr 1</translation>
 <translation id="5238244642230426581">Importerte bokmerke</translation>
+<translation id="527605719918376753">Slå av lyden for fana</translation>
 <translation id="5305569355661722298">Stadfest vindaugslukkinga</translation>
 <translation id="5388358297987318779">Opna bildet</translation>
 <translation id="5416008465899576639">Ei ny utgåve av Vivaldi er tilgjengeleg.</translation>
@@ -87,6 +89,7 @@
 <translation id="6229528619562190452">Klikk her for å oppdatera Vivaldi.</translation>
 <translation id="6234173136417926046">Bruk bildet som startsidebakgrunn</translation>
 <translation id="630690498669249215">Opera bokmerke-fil</translation>
+<translation id="6339818817272922368">Lokalkonto</translation>
 <translation id="6438786710866753178">Landskap 4</translation>
 <translation id="6477028720702061455">Vel Opera-profilmappa som skal importerast</translation>
 <translation id="6510706699590490869">&amp;Oppdater Vivaldi</translation>
@@ -101,6 +104,7 @@
 <translation id="7496505986576158197">Vivaldi er gjort mogleg gjennom openkjeldeprosjektet <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> og andre <ph name="BEGIN_LINK_OSS" />openkjeldeprogram<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Ignorer oppdateringa</translation>
 <translation id="7724603315864178912">Klipp</translation>
+<translation id="7793738202466490491">Legg til som kalenderhending</translation>
 <translation id="7865983598101744945">Stadfest lukking</translation>
 <translation id="7957213167373139414">Kalenderen min</translation>
 <translation id="8027581147000338959">Opna i eit nytt vindauge</translation>
@@ -110,6 +114,7 @@
 <translation id="8331671104904436324">Opna i bakgrunnsfane</translation>
 <translation id="8373293945112511707">Landskap 1</translation>
 <translation id="8427094907586191051">Landskap 17</translation>
+<translation id="8446668873108041390">Køyring av JavaScript gjennom AppleScript er slått av. Under Innstillingar &gt; Personvern &gt; Apple-hendingar er det ei innstilling for å tillata JavaScript frå Apple-hendingar.</translation>
 <translation id="8539196077526389150">Landskap 13</translation>
 <translation id="8624587806981488221">Last &amp;bildet på nytt</translation>
 <translation id="864444594187862076">Opera utgåve 15+ (utviklar)</translation>

@@ -284,6 +284,12 @@ bool BrowserAccessibilityManager::CanFireEvents() const {
   return true;
 }
 
+BrowserAccessibility* BrowserAccessibilityManager::RetargetForEvents(
+    BrowserAccessibility* node,
+    RetargetEventType type) const {
+  return node;
+}
+
 void BrowserAccessibilityManager::FireFocusEvent(BrowserAccessibility* node) {
   if (g_focus_change_callback_for_testing.Get())
     g_focus_change_callback_for_testing.Get().Run();
@@ -324,7 +330,8 @@ BrowserAccessibility* BrowserAccessibilityManager::GetParentNodeFromParentTree()
   ui::AXTreeID parent_tree_id = GetParentTreeID();
   BrowserAccessibilityManager* parent_manager =
       BrowserAccessibilityManager::FromID(parent_tree_id);
-  return parent ? parent_manager->GetFromAXNode(parent) : nullptr;
+  return parent && parent_manager ? parent_manager->GetFromAXNode(parent)
+                                  : nullptr;
 }
 
 BrowserAccessibility* BrowserAccessibilityManager::GetPopupRoot() const {
@@ -438,6 +445,8 @@ bool BrowserAccessibilityManager::OnAccessibilityEvents(
     if (!connected_to_parent_tree_node_) {
       parent->OnDataChanged();
       parent->UpdatePlatformAttributes();
+      parent = RetargetForEvents(parent,
+                                 RetargetEventType::RetargetEventTypeGenerated);
       FireGeneratedEvent(ui::AXEventGenerator::Event::CHILDREN_CHANGED, parent);
       connected_to_parent_tree_node_ = true;
     }
@@ -463,6 +472,11 @@ bool BrowserAccessibilityManager::OnAccessibilityEvents(
   // Fire any events related to changes to the tree.
   for (const auto& targeted_event : event_generator()) {
     BrowserAccessibility* event_target = GetFromAXNode(targeted_event.node);
+    if (!event_target)
+      continue;
+
+    event_target = RetargetForEvents(
+        event_target, RetargetEventType::RetargetEventTypeGenerated);
     if (!event_target || !event_target->CanFireEvents())
       continue;
 
@@ -479,13 +493,20 @@ bool BrowserAccessibilityManager::OnAccessibilityEvents(
   for (const ui::AXEvent& event : details.events) {
     // Fire the native event.
     BrowserAccessibility* event_target = GetFromID(event.id);
-    if (!event_target || !event_target->CanFireEvents())
+    if (!event_target)
+      continue;
+    RetargetEventType type =
+        event.event_type == ax::mojom::Event::kHover
+            ? RetargetEventType::RetargetEventTypeBlinkHover
+            : RetargetEventType::RetargetEventTypeBlinkGeneral;
+    BrowserAccessibility* retargeted = RetargetForEvents(event_target, type);
+    if (!retargeted || !retargeted->CanFireEvents())
       continue;
 
     if (root_manager && event.event_type == ax::mojom::Event::kHover)
       root_manager->CacheHitTestResult(event_target);
 
-    FireBlinkEvent(event.event_type, event_target);
+    FireBlinkEvent(event.event_type, retargeted);
   }
 
   if (received_load_complete_event) {
@@ -896,11 +917,7 @@ void BrowserAccessibilityManager::HitTest(const gfx::Point& frame_point) const {
   if (!delegate_)
     return;
 
-  ui::AXActionData action_data;
-  action_data.action = ax::mojom::Action::kHitTest;
-  action_data.target_point = frame_point;
-  action_data.hit_test_event_to_fire = ax::mojom::Event::kHover;
-  delegate_->AccessibilityPerformAction(action_data);
+  delegate_->AccessibilityHitTest(frame_point, ax::mojom::Event::kHover, 0, {});
 }
 
 gfx::Rect BrowserAccessibilityManager::GetViewBoundsInScreenCoordinates()
@@ -1560,7 +1577,8 @@ void BrowserAccessibilityManager::CacheHitTestResult(
 }
 
 void BrowserAccessibilityManager::DidActivatePortal(
-    WebContents* predecessor_contents) {
+    WebContents* predecessor_contents,
+    base::TimeTicks activation_time) {
   if (GetTreeData().loaded) {
     FireGeneratedEvent(ui::AXEventGenerator::Event::PORTAL_ACTIVATED,
                        GetRoot());
@@ -1595,7 +1613,8 @@ void BrowserAccessibilityManager::CollectChangedNodesAndParentsForAtomicUpdate(
     if (!parent)
       continue;
 
-    if (ui::IsTextOrLineBreak(changed_node->data().role)) {
+    if (changed_node->IsText() &&
+        changed_node->data().role != ax::mojom::Role::kInlineTextBox) {
       BrowserAccessibility* parent_obj = GetFromAXNode(parent);
       if (parent_obj)
         nodes_needing_update->insert(parent_obj->GetAXPlatformNode());
@@ -1618,6 +1637,7 @@ void BrowserAccessibilityManager::CollectChangedNodesAndParentsForAtomicUpdate(
 
 bool BrowserAccessibilityManager::ShouldFireEventForNode(
     BrowserAccessibility* node) const {
+  node = RetargetForEvents(node, RetargetEventType::RetargetEventTypeGenerated);
   if (!node || !node->CanFireEvents())
     return false;
 

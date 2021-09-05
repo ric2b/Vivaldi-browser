@@ -4,8 +4,8 @@
 
 package org.chromium.chrome.browser.autofill_assistant;
 
-import static android.support.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.greaterThan;
@@ -15,7 +15,8 @@ import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUi
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilViewMatchesCondition;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Before;
@@ -26,9 +27,9 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.autofill_assistant.proto.ActionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ChipProto;
-import org.chromium.chrome.browser.autofill_assistant.proto.ElementReferenceProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.GeneratePasswordForFormFieldProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.SelectorProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SetFormFieldValueProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto.PresentationProto;
@@ -101,45 +102,45 @@ public class AutofillAssistantPasswordManagerIntegrationTest {
     @MediumTest
     public void testPasswordChangeFlow() throws Exception {
         ArrayList<ActionProto> list = new ArrayList<>();
-        list.add(
-                (ActionProto) ActionProto.newBuilder()
-                        .setSetFormValue(
-                                SetFormFieldValueProto.newBuilder()
-                                        .addValue(SetFormFieldValueProto.KeyPress.newBuilder()
-                                                          .setUseUsername(true))
-                                        .setElement(ElementReferenceProto.newBuilder().addSelectors(
-                                                "#username")))
-                        .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setSetFormValue(
+                                 SetFormFieldValueProto.newBuilder()
+                                         .addValue(SetFormFieldValueProto.KeyPress.newBuilder()
+                                                           .setUseUsername(true))
+                                         .setElement(SelectorProto.newBuilder().addFilters(
+                                                 SelectorProto.Filter.newBuilder().setCssSelector(
+                                                         "#username"))))
+                         .build());
         // TODO(crbug.com/1057608): Implement Android wrapper for PasswordStore to add a
         // step and
         // verification for current password filling.
-        list.add(
-                (ActionProto) ActionProto.newBuilder()
-                        .setGeneratePasswordForFormField(
-                                GeneratePasswordForFormFieldProto.newBuilder()
-                                        .setMemoryKey("memory-key")
-                                        .setElement(ElementReferenceProto.newBuilder().addSelectors(
-                                                "#new-password")))
-                        .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setGeneratePasswordForFormField(
+                                 GeneratePasswordForFormFieldProto.newBuilder()
+                                         .setMemoryKey("memory-key")
+                                         .setElement(SelectorProto.newBuilder().addFilters(
+                                                 SelectorProto.Filter.newBuilder().setCssSelector(
+                                                         "#new-password"))))
+                         .build());
 
-        list.add(
-                (ActionProto) ActionProto.newBuilder()
-                        .setSetFormValue(
-                                SetFormFieldValueProto.newBuilder()
-                                        .addValue(SetFormFieldValueProto.KeyPress.newBuilder()
-                                                          .setClientMemoryKey("memory-key"))
-                                        .setElement(ElementReferenceProto.newBuilder().addSelectors(
-                                                "#new-password")))
-                        .build());
-        list.add(
-                (ActionProto) ActionProto.newBuilder()
-                        .setSetFormValue(
-                                SetFormFieldValueProto.newBuilder()
-                                        .addValue(SetFormFieldValueProto.KeyPress.newBuilder()
-                                                          .setClientMemoryKey("memory-key"))
-                                        .setElement(ElementReferenceProto.newBuilder().addSelectors(
-                                                "#password-conf")))
-                        .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setSetFormValue(
+                                 SetFormFieldValueProto.newBuilder()
+                                         .addValue(SetFormFieldValueProto.KeyPress.newBuilder()
+                                                           .setClientMemoryKey("memory-key"))
+                                         .setElement(SelectorProto.newBuilder().addFilters(
+                                                 SelectorProto.Filter.newBuilder().setCssSelector(
+                                                         "#new-password"))))
+                         .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setSetFormValue(
+                                 SetFormFieldValueProto.newBuilder()
+                                         .addValue(SetFormFieldValueProto.KeyPress.newBuilder()
+                                                           .setClientMemoryKey("memory-key"))
+                                         .setElement(SelectorProto.newBuilder().addFilters(
+                                                 SelectorProto.Filter.newBuilder().setCssSelector(
+                                                         "#password-conf"))))
+                         .build());
 
         list.add((ActionProto) ActionProto.newBuilder()
                          .setPrompt(PromptProto.newBuilder().setMessage("Prompt").addChoices(

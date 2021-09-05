@@ -88,13 +88,38 @@ class RequestFilterProxyingURLLoaderFactory
                            OnHeadersReceivedCallback callback) override;
 
    private:
+    // The state of an InprogressRequest. Not really used, but we want it to
+    // make it easier to merge code changes form
+    // WebRequestProxyingURLLoaderFactory.
+    enum State {
+      kInProgress = 0,
+      kInProgressWithFinalResponseReceived,
+      kInvalid,  // This is an invalid state and must not be recorded.
+      kRedirectFollowedByAnotherInProgressRequest,
+      kRejectedByNetworkError,
+      kRejectedByNetworkErrorAfterReceivingFinalResponse,
+      kDetachedFromClient,
+      kDetachedFromClientAfterReceivingResponse,
+      kRejectedByOnBeforeRequest,
+      kRejectedByOnBeforeSendHeaders,
+      kRejectedByOnHeadersReceivedForFinalResponse,
+      kRejectedByOnHeadersReceivedForRedirect,
+      kRejectedByOnHeadersReceivedForAuth,
+      kRejectedByOnAuthRequired,
+      kCompleted,
+      kMaxValue = kCompleted,
+    };
+
     // These two methods combined form the implementation of Restart().
     void UpdateRequestInfo();
     void RestartInternal();
 
-    void ContinueToBeforeSendHeaders(int error_code);
-    void ContinueToSendHeaders(int error_code);
-    void ContinueToStartRequest(int error_code);
+    void ContinueToBeforeSendHeaders(State state_on_error, int error_code);
+    void ContinueToBeforeSendHeadersWithOk();
+    void ContinueToSendHeaders(State state_on_error, int error_code);
+    void ContinueToSendHeadersWithOk();
+    void ContinueToStartRequest(State state_on_error, int error_code);
+    void ContinueToStartRequestWithOk();
     void ContinueToHandleOverrideHeaders(int error_code);
     void ContinueToResponseStarted(int error_code);
     void ContinueToBeforeRedirect(const net::RedirectInfo& redirect_info,
@@ -103,7 +128,10 @@ class RequestFilterProxyingURLLoaderFactory
         net::CompletionOnceCallback continuation);
     void OnLoaderDisconnected(uint32_t custom_reason,
                               const std::string& description);
-    void OnRequestError(const network::URLLoaderCompletionStatus& status);
+    void OnRequestError(const network::URLLoaderCompletionStatus& status,
+                        State state);
+    void OnNetworkError(const network::URLLoaderCompletionStatus& status);
+    void OnClientDisconnected();
     bool IsRedirectSafe(const GURL& from_url,
                         const GURL& to_url,
                         bool is_navigation_request);
@@ -153,6 +181,7 @@ class RequestFilterProxyingURLLoaderFactory
     mojo::Receiver<network::mojom::TrustedHeaderClient> header_client_receiver_{
         this};
     mojo::Remote<network::mojom::TrustedHeaderClient> forwarding_header_client_;
+    bool is_header_client_receiver_paused_ = false;
 
     // If |has_any_extra_headers_listeners_| is set to false and a redirect is
     // in progress, this stores the parameters to FollowRedirect that came from
@@ -169,6 +198,7 @@ class RequestFilterProxyingURLLoaderFactory
       DISALLOW_COPY_AND_ASSIGN(FollowRedirectParams);
     };
     std::unique_ptr<FollowRedirectParams> pending_follow_redirect_params_;
+    State state_ = State::kInProgress;
 
     base::WeakPtrFactory<InProgressRequest> weak_factory_{this};
 

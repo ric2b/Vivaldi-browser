@@ -8,9 +8,7 @@
 #include <vector>
 
 #include "base/stl_util.h"
-#include "base/system/sys_info.h"
 #include "build/build_config.h"
-#include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/resource_sizes.h"
 #include "gpu/command_buffer/service/external_vk_image_gl_representation.h"
 #include "gpu/command_buffer/service/external_vk_image_skia_representation.h"
@@ -23,6 +21,7 @@
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_image.h"
 #include "gpu/vulkan/vulkan_util.h"
+#include "third_party/skia/include/gpu/GrBackendSemaphore.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gl/buildflags.h"
 #include "ui/gl/gl_context.h"
@@ -138,8 +137,19 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
 
   auto* device_queue = context_state->vk_context_provider()->GetDeviceQueue();
   VkFormat vk_format = ToVkFormat(format);
-  VkImageUsageFlags vk_usage =
-      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+  constexpr auto kUsageNeedsColorAttachment =
+      SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_RASTER |
+      SHARED_IMAGE_USAGE_OOP_RASTERIZATION | SHARED_IMAGE_USAGE_WEBGPU;
+  VkImageUsageFlags vk_usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+  if (usage & kUsageNeedsColorAttachment) {
+    vk_usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    if (format == viz::ETC1) {
+      DLOG(ERROR) << "ETC1 format cannot be used as color attachment.";
+      return nullptr;
+    }
+  }
+
   if (is_transfer_dst)
     vk_usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
@@ -155,10 +165,20 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
 
   auto* vulkan_implementation =
       context_state->vk_context_provider()->GetVulkanImplementation();
-  VkImageCreateFlags vk_flags =
-      vulkan_implementation->enforce_protected_memory()
-          ? VK_IMAGE_CREATE_PROTECTED_BIT
-          : 0;
+  VkImageCreateFlags vk_flags = 0;
+
+  // In protected mode mark the image as protected, except when the image needs
+  // GLES2, but not Raster usage. ANGLE currenctly doesn't support protected
+  // images. Some clients request GLES2 and Raster usage (e.g. see
+  // GpuMemoryBufferVideoFramePool). In that case still allocate protected
+  // image, which ensures that image can still usable, but it may not work in
+  // some scenarios (e.g. when the video frame is used in WebGL).
+  if (vulkan_implementation->enforce_protected_memory() &&
+      (!(usage & SHARED_IMAGE_USAGE_GLES2) ||
+       (usage & SHARED_IMAGE_USAGE_RASTER))) {
+    vk_flags |= VK_IMAGE_CREATE_PROTECTED_BIT;
+  }
+
   std::unique_ptr<VulkanImage> image;
   if (is_external) {
     image = VulkanImage::CreateWithExternalMemory(device_queue, size, vk_format,
@@ -176,7 +196,7 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
       color_space, usage, context_state, std::move(image), command_pool);
 
   if (!pixel_data.empty()) {
-    backing->WritePixels(
+    backing->WritePixelsWithCallback(
         pixel_data.size(), 0,
         base::BindOnce([](const void* data, size_t size,
                           void* buffer) { memcpy(buffer, data, size); },
@@ -228,73 +248,10 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::CreateFromGMB(
   }
 
   DCHECK_EQ(handle.type, gfx::SHARED_MEMORY_BUFFER);
-  if (!base::IsValueInRangeForNumericType<size_t>(handle.stride))
+
+  SharedMemoryRegionWrapper shared_memory_wrapper;
+  if (!shared_memory_wrapper.Initialize(handle, size, resource_format))
     return nullptr;
-
-  int32_t width_in_bytes = 0;
-  if (!viz::ResourceSizes::MaybeWidthInBytes(size.width(), resource_format,
-                                             &width_in_bytes)) {
-    DLOG(ERROR) << "ResourceSizes::MaybeWidthInBytes() failed.";
-    return nullptr;
-  }
-
-  if (handle.stride < width_in_bytes) {
-    DLOG(ERROR) << "Invalid GMB stride.";
-    return nullptr;
-  }
-
-  auto bits_per_pixel = viz::BitsPerPixel(resource_format);
-  switch (bits_per_pixel) {
-    case 64:
-    case 32:
-    case 16:
-      if (handle.stride % (bits_per_pixel / 8) != 0) {
-        DLOG(ERROR) << "Invalid GMB stride.";
-        return nullptr;
-      }
-      break;
-    case 8:
-    case 4:
-      break;
-    case 12:
-      // We are not supporting YVU420 and YUV_420_BIPLANAR format.
-    default:
-      NOTREACHED();
-      return nullptr;
-  }
-
-  if (!handle.region.IsValid()) {
-    DLOG(ERROR) << "Invalid GMB shared memory region.";
-    return nullptr;
-  }
-
-  base::CheckedNumeric<size_t> checked_size = handle.stride;
-  checked_size *= size.height();
-  if (!checked_size.IsValid()) {
-    DLOG(ERROR) << "Invalid GMB size.";
-    return nullptr;
-  }
-
-  // Minimize the amount of address space we use but make sure offset is a
-  // multiple of page size as required by MapAt().
-  size_t memory_offset =
-      handle.offset % base::SysInfo::VMAllocationGranularity();
-  size_t map_offset =
-      base::SysInfo::VMAllocationGranularity() *
-      (handle.offset / base::SysInfo::VMAllocationGranularity());
-  checked_size += memory_offset;
-  if (!checked_size.IsValid()) {
-    DLOG(ERROR) << "Invalid GMB size.";
-    return nullptr;
-  }
-
-  auto shared_memory_mapping = handle.region.MapAt(
-      static_cast<off_t>(map_offset), checked_size.ValueOrDie());
-
-  if (!shared_memory_mapping.IsValid()) {
-    DLOG(ERROR) << "Failed to map shared memory.";
-    return nullptr;
-  }
 
   auto backing = Create(context_state, command_pool, mailbox, resource_format,
                         size, color_space, usage, image_usage_cache,
@@ -302,8 +259,7 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::CreateFromGMB(
   if (!backing)
     return nullptr;
 
-  backing->InstallSharedMemory(std::move(shared_memory_mapping), handle.stride,
-                               memory_offset);
+  backing->InstallSharedMemory(std::move(shared_memory_wrapper));
   return backing;
 }
 
@@ -366,21 +322,36 @@ bool ExternalVkImageBacking::BeginAccess(
     bool readonly,
     std::vector<SemaphoreHandle>* semaphore_handles,
     bool is_gl) {
+  DLOG_IF(ERROR, gl_reads_in_progress_ != 0 && !is_gl)
+      << "Backing is being accessed by both GL and Vulkan.";
+  // Do not need do anything for the second and following GL read access.
+  if (is_gl && readonly && gl_reads_in_progress_) {
+    ++gl_reads_in_progress_;
+    return true;
+  }
+
   if (readonly && !reads_in_progress_) {
     UpdateContent(kInVkImage);
     if (texture_)
       UpdateContent(kInGLTexture);
   }
+
   if (!BeginAccessInternal(readonly, semaphore_handles))
     return false;
 
   if (!is_gl)
     return true;
 
+  if (readonly) {
+    DCHECK(!gl_reads_in_progress_);
+    gl_reads_in_progress_ = 1;
+  }
+
   if (use_separate_gl_texture())
     return true;
 
   DCHECK(need_synchronization());
+  DCHECK(is_gl);
 
   auto command_buffer = command_pool_->CreatePrimaryCommandBuffer();
   {
@@ -401,7 +372,7 @@ bool ExternalVkImageBacking::BeginAccess(
     uint32_t vulkan_queue_index = context_state_->vk_context_provider()
                                       ->GetDeviceQueue()
                                       ->GetVulkanQueueIndex();
-    // Transfer image queue faimily ownership to external, so the image can be
+    // Transfer image queue family ownership to external, so the image can be
     // used by GL.
     command_buffer->TransitionImageLayout(image_info.fImage, image_layout,
                                           image_layout, vulkan_queue_index,
@@ -422,9 +393,9 @@ bool ExternalVkImageBacking::BeginAccess(
   // TODO(penghuang): ask skia to do it for us to avoid this queue submission.
   command_buffer->Submit(wait_semaphores.size(), wait_semaphores.data(), 1,
                          &signal_semaphore);
-  auto end_access_semphore_handle =
+  auto end_access_semaphore_handle =
       vulkan_implementation()->GetSemaphoreHandle(device(), signal_semaphore);
-  semaphore_handles->push_back(std::move(end_access_semphore_handle));
+  semaphore_handles->push_back(std::move(end_access_semaphore_handle));
 
   auto* fence_helper =
       context_state_->vk_context_provider()->GetDeviceQueue()->GetFenceHelper();
@@ -440,7 +411,17 @@ bool ExternalVkImageBacking::BeginAccess(
 void ExternalVkImageBacking::EndAccess(bool readonly,
                                        SemaphoreHandle semaphore_handle,
                                        bool is_gl) {
+  if (is_gl && readonly) {
+    DCHECK(gl_reads_in_progress_);
+    if (--gl_reads_in_progress_ > 0) {
+      DCHECK(!semaphore_handle.is_valid());
+      return;
+    }
+  }
+
+  // Only transite image layout and queue back when it is the last gl access.
   if (is_gl && !use_separate_gl_texture()) {
+    DCHECK(semaphore_handle.is_valid());
     auto command_buffer = command_pool_->CreatePrimaryCommandBuffer();
     {
       ScopedSingleUseCommandBufferRecorder recorder(*command_buffer);
@@ -629,10 +610,10 @@ ExternalVkImageBacking::ProduceGLTexture(SharedImageManager* manager,
     texture_ = new gles2::Texture(texture_service_id);
     texture_->SetLightweightRef();
     texture_->SetTarget(GL_TEXTURE_2D, 1);
-    texture_->sampler_state_.min_filter = GL_LINEAR;
-    texture_->sampler_state_.mag_filter = GL_LINEAR;
-    texture_->sampler_state_.wrap_t = GL_CLAMP_TO_EDGE;
-    texture_->sampler_state_.wrap_s = GL_CLAMP_TO_EDGE;
+    texture_->set_min_filter(GL_LINEAR);
+    texture_->set_mag_filter(GL_LINEAR);
+    texture_->set_wrap_t(GL_CLAMP_TO_EDGE);
+    texture_->set_wrap_s(GL_CLAMP_TO_EDGE);
     // If the backing is already cleared, no need to clear it again.
     gfx::Rect cleared_rect;
     if (IsCleared())
@@ -689,14 +670,10 @@ ExternalVkImageBacking::ProduceSkia(
 }
 
 void ExternalVkImageBacking::InstallSharedMemory(
-    base::WritableSharedMemoryMapping shared_memory_mapping,
-    size_t stride,
-    size_t memory_offset) {
-  DCHECK(!shared_memory_mapping_.IsValid());
-  DCHECK(shared_memory_mapping.IsValid());
-  shared_memory_mapping_ = std::move(shared_memory_mapping);
-  stride_ = stride;
-  memory_offset_ = memory_offset;
+    SharedMemoryRegionWrapper shared_memory_wrapper) {
+  DCHECK(!shared_memory_wrapper_.IsValid());
+  DCHECK(shared_memory_wrapper.IsValid());
+  shared_memory_wrapper_ = std::move(shared_memory_wrapper);
   Update(nullptr);
 }
 
@@ -713,18 +690,10 @@ void ExternalVkImageBacking::UpdateContent(uint32_t content_flags) {
 
   if (content_flags == kInVkImage) {
     if (latest_content_ & kInSharedMemory) {
-      if (!shared_memory_mapping_.IsValid())
+      if (!shared_memory_wrapper_.IsValid())
         return;
-      auto pixel_data =
-          shared_memory_mapping_.GetMemoryAsSpan<const uint8_t>().subspan(
-              memory_offset_);
-      if (!WritePixels(
-              pixel_data.size(), stride_,
-              base::BindOnce([](const void* data, size_t size,
-                                void* buffer) { memcpy(buffer, data, size); },
-                             pixel_data.data(), pixel_data.size()))) {
+      if (!WritePixels())
         return;
-      }
       latest_content_ |=
           use_separate_gl_texture() ? kInVkImage : kInVkImage | kInGLTexture;
       return;
@@ -748,9 +717,10 @@ void ExternalVkImageBacking::UpdateContent(uint32_t content_flags) {
   }
 }
 
-bool ExternalVkImageBacking::WritePixels(size_t data_size,
-                                         size_t stride,
-                                         FillBufferCallback callback) {
+bool ExternalVkImageBacking::WritePixelsWithCallback(
+    size_t data_size,
+    size_t stride,
+    FillBufferCallback callback) {
   DCHECK(stride == 0 || size().height() * stride <= data_size);
 
   VkBufferCreateInfo buffer_create_info = {
@@ -811,6 +781,8 @@ bool ExternalVkImageBacking::WritePixels(size_t data_size,
                                       size().width(), size().height());
   }
 
+  SetCleared();
+
   if (!need_synchronization()) {
     DCHECK(handles.empty());
     command_buffer->Submit(0, nullptr, 0, nullptr);
@@ -823,7 +795,6 @@ bool ExternalVkImageBacking::WritePixels(size_t data_size,
         std::move(command_buffer));
     fence_helper->EnqueueBufferCleanupForSubmittedWork(stage_buffer,
                                                        stage_allocation);
-
     return true;
   }
 
@@ -841,10 +812,11 @@ bool ExternalVkImageBacking::WritePixels(size_t data_size,
                          begin_access_semaphores.data(), 1,
                          &end_access_semaphore);
 
-  auto end_access_semphore_handle = vulkan_implementation()->GetSemaphoreHandle(
-      device(), end_access_semaphore);
+  auto end_access_semaphore_handle =
+      vulkan_implementation()->GetSemaphoreHandle(device(),
+                                                  end_access_semaphore);
   EndAccessInternal(false /* readonly */,
-                    std::move(end_access_semphore_handle));
+                    std::move(end_access_semaphore_handle));
 
   auto* fence_helper =
       context_state_->vk_context_provider()->GetDeviceQueue()->GetFenceHelper();
@@ -855,9 +827,68 @@ bool ExternalVkImageBacking::WritePixels(size_t data_size,
       begin_access_semaphores);
   fence_helper->EnqueueBufferCleanupForSubmittedWork(stage_buffer,
                                                      stage_allocation);
-
   return true;
 }
+
+bool ExternalVkImageBacking::WritePixels() {
+  std::vector<gpu::SemaphoreHandle> handles;
+  if (!BeginAccessInternal(false /* readonly */, &handles)) {
+    DLOG(ERROR) << "BeginAccess() failed.";
+    return false;
+  }
+
+  std::vector<GrBackendSemaphore> begin_access_semaphores;
+  begin_access_semaphores.reserve(handles.size() + 1);
+  for (auto& handle : handles) {
+    VkSemaphore semaphore = vulkan_implementation()->ImportSemaphoreHandle(
+        device(), std::move(handle));
+    begin_access_semaphores.emplace_back();
+    begin_access_semaphores.back().initVulkan(semaphore);
+  }
+
+  auto* gr_context = context_state_->gr_context();
+  gr_context->wait(begin_access_semaphores.size(),
+                   begin_access_semaphores.data());
+
+  auto info = SkImageInfo::Make(size().width(), size().height(),
+                                ResourceFormatToClosestSkColorType(
+                                    /*gpu_compositing=*/true, format()),
+                                kOpaque_SkAlphaType);
+  SkPixmap pixmap(info, shared_memory_wrapper_.GetMemory(),
+                  shared_memory_wrapper_.GetStride());
+
+  if (!gr_context->updateBackendTexture(backend_texture_, &pixmap,
+                                        /*levels=*/1, nullptr, nullptr)) {
+    DLOG(ERROR) << "updateBackendTexture() failed.";
+  }
+
+  if (!need_synchronization()) {
+    DCHECK(handles.empty());
+    EndAccessInternal(false /* readonly */, SemaphoreHandle());
+    return true;
+  }
+
+  VkSemaphore end_access_semaphore =
+      vulkan_implementation()->CreateExternalSemaphore(device());
+  GrBackendSemaphore end_access_backend_semaphore;
+  end_access_backend_semaphore.initVulkan(end_access_semaphore);
+
+  GrFlushInfo flush_info = {
+      .fNumSemaphores = 1,
+      .fSignalSemaphores = &end_access_backend_semaphore,
+  };
+
+  gr_context->flush(flush_info);
+  // Submit so the |end_access_semaphore| is ready for waiting.
+  gr_context->submit();
+
+  auto end_access_semaphore_handle =
+      vulkan_implementation()->GetSemaphoreHandle(device(),
+                                                  end_access_semaphore);
+  EndAccessInternal(false /* readonly */,
+                    std::move(end_access_semaphore_handle));
+  return true;
+}  // namespace gpu
 
 void ExternalVkImageBacking::CopyPixelsFromGLTextureToVkImage() {
   DCHECK(use_separate_gl_texture());
@@ -907,16 +938,16 @@ void ExternalVkImageBacking::CopyPixelsFromGLTextureToVkImage() {
   ScopedPixelStore pack_skip_rows(api, GL_PACK_SKIP_ROWS, 0);
   ScopedPixelStore pack_aligment(api, GL_PACK_ALIGNMENT, 1);
 
-  WritePixels(checked_size.ValueOrDie(), 0,
-              base::BindOnce(
-                  [](gl::GLApi* api, const gfx::Size& size, GLenum format,
-                     GLenum type, void* buffer) {
-                    api->glReadPixelsFn(0, 0, size.width(), size.height(),
-                                        format, type, buffer);
-                    DCHECK_EQ(api->glGetErrorFn(),
-                              static_cast<GLenum>(GL_NO_ERROR));
-                  },
-                  api, size(), gl_format, gl_type));
+  WritePixelsWithCallback(
+      checked_size.ValueOrDie(), 0,
+      base::BindOnce(
+          [](gl::GLApi* api, const gfx::Size& size, GLenum format, GLenum type,
+             void* buffer) {
+            api->glReadPixelsFn(0, 0, size.width(), size.height(), format, type,
+                                buffer);
+            DCHECK_EQ(api->glGetErrorFn(), static_cast<GLenum>(GL_NO_ERROR));
+          },
+          api, size(), gl_format, gl_type));
   api->glBindFramebufferEXTFn(GL_READ_FRAMEBUFFER, old_framebuffer);
   api->glDeleteFramebuffersEXTFn(1, &framebuffer);
 }
@@ -957,9 +988,7 @@ void ExternalVkImageBacking::CopyPixelsFromShmToGLTexture() {
   checked_size *= size().height();
   DCHECK(checked_size.IsValid());
 
-  auto pixel_data =
-      shared_memory_mapping_.GetMemoryAsSpan<const uint8_t>().subspan(
-          memory_offset_);
+  auto pixel_data = shared_memory_wrapper_.GetMemoryAsSpan();
   api->glTexSubImage2DFn(GL_TEXTURE_2D, 0, 0, 0, size().width(),
                          size().height(), gl_format, gl_type,
                          pixel_data.data());
@@ -1023,7 +1052,9 @@ void ExternalVkImageBacking::EndAccessInternal(
     is_write_in_progress_ = false;
   }
 
-  if (need_synchronization()) {
+  // synchronization is not needed if it is not the last gl access.
+  if (need_synchronization() && reads_in_progress_ == 0) {
+    DCHECK(!is_write_in_progress_);
     DCHECK(semaphore_handle.is_valid());
     if (readonly) {
       read_semaphore_handles_.push_back(std::move(semaphore_handle));
@@ -1032,8 +1063,6 @@ void ExternalVkImageBacking::EndAccessInternal(
       DCHECK(read_semaphore_handles_.empty());
       write_semaphore_handle_ = std::move(semaphore_handle);
     }
-  } else {
-    DCHECK(!semaphore_handle.is_valid());
   }
 }
 

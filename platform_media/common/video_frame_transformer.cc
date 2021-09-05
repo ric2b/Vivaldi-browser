@@ -11,6 +11,7 @@
 #include "platform_media/common/platform_media_pipeline_types.h"
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_frame.h"

@@ -26,31 +26,26 @@ import java.util.ArrayList;
  * QrCodeDialog is the main view for QR code sharing and scanning.
  */
 public class QrCodeDialog extends DialogFragment {
+    // Used to pass the URL in the bundle.
+    public static String URL_KEY = "url_key";
+
     private ArrayList<QrCodeDialogTab> mTabs;
-    private Context mContext;
     private TabLayoutPageListener mTabLayoutPageListener;
 
     /**
-     * The QrCodeDialog constructor.
+     * Create a new instance of {@link QrCodeDialog} and set the URL.
      */
-    public QrCodeDialog() {
-        mTabs = new ArrayList<QrCodeDialogTab>();
-    }
-
-    @Override
-    public void onAttach(Context context) {
-        super.onAttach(context);
-        mContext = context;
-
-        QrCodeShareCoordinator shareCoordinator = new QrCodeShareCoordinator(context);
-        QrCodeScanCoordinator scanCoordinator = new QrCodeScanCoordinator(context, this::dismiss);
-
-        mTabs.add(shareCoordinator);
-        mTabs.add(scanCoordinator);
+    static QrCodeDialog newInstance(String url) {
+        QrCodeDialog qrCodeDialog = new QrCodeDialog();
+        Bundle args = new Bundle();
+        args.putString(URL_KEY, url);
+        qrCodeDialog.setArguments(args);
+        return qrCodeDialog;
     }
 
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
+        initTabs();
         AlertDialog.Builder builder =
                 new AlertDialog.Builder(getActivity(), R.style.Theme_Chromium_Fullscreen);
         builder.setView(getDialogView());
@@ -62,6 +57,7 @@ public class QrCodeDialog extends DialogFragment {
         super.onResume();
         mTabLayoutPageListener.resumeSelectedTab();
     }
+
     @Override
     public void onPause() {
         super.onPause();
@@ -71,7 +67,6 @@ public class QrCodeDialog extends DialogFragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        mContext = null;
         for (QrCodeDialogTab tab : mTabs) {
             tab.onDestroy();
         }
@@ -79,10 +74,9 @@ public class QrCodeDialog extends DialogFragment {
     }
 
     private View getDialogView() {
-        View dialogView = (View) getActivity().getLayoutInflater().inflate(
+        View dialogView = getActivity().getLayoutInflater().inflate(
                 org.chromium.chrome.browser.share.R.layout.qrcode_dialog, null);
-        ChromeImageButton closeButton =
-                (ChromeImageButton) dialogView.findViewById(R.id.close_button);
+        ChromeImageButton closeButton = dialogView.findViewById(R.id.close_button);
         closeButton.setOnClickListener(v -> dismiss());
 
         // Setup page adapter and tab layout.
@@ -102,5 +96,17 @@ public class QrCodeDialog extends DialogFragment {
         viewPager.addOnPageChangeListener(mTabLayoutPageListener);
         tabLayout.addOnTabSelectedListener(new TabLayout.ViewPagerOnTabSelectedListener(viewPager));
         return dialogView;
+    }
+
+    private void initTabs() {
+        Context context = getActivity();
+
+        QrCodeShareCoordinator shareCoordinator = new QrCodeShareCoordinator(
+                context, this::dismiss, getArguments().getString(URL_KEY));
+        QrCodeScanCoordinator scanCoordinator = new QrCodeScanCoordinator(context, this::dismiss);
+
+        mTabs = new ArrayList<>();
+        mTabs.add(shareCoordinator);
+        mTabs.add(scanCoordinator);
     }
 }

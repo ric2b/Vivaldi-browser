@@ -87,7 +87,9 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
       const ComputedStyle* parent_style,
       const ComputedStyle* layout_parent_style);
 
-  scoped_refptr<const ComputedStyle> StyleForPage(int page_index);
+  scoped_refptr<const ComputedStyle> StyleForPage(
+      int page_index,
+      const AtomicString& page_name);
   scoped_refptr<const ComputedStyle> StyleForText(Text*);
 
   static scoped_refptr<ComputedStyle> StyleForViewport(Document&);
@@ -102,12 +104,16 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   // These methods will give back the set of rules that matched for a given
   // element (or a pseudo-element).
   enum CSSRuleFilter {
-    kUAAndUserCSSRules = 1 << 1,
-    kAuthorCSSRules = 1 << 2,
-    kEmptyCSSRules = 1 << 3,
-    kCrossOriginCSSRules = 1 << 4,
+    kUACSSRules = 1 << 1,
+    kUserCSSRules = 1 << 2,
+    kAuthorCSSRules = 1 << 3,
+    kEmptyCSSRules = 1 << 4,
+    kCrossOriginCSSRules = 1 << 5,
+    kUAAndUserCSSRules = kUACSSRules | kUserCSSRules,
     kAllButEmptyCSSRules =
         kUAAndUserCSSRules | kAuthorCSSRules | kCrossOriginCSSRules,
+    kAllButUACSSRules =
+        kUserCSSRules | kAuthorCSSRules | kEmptyCSSRules | kCrossOriginCSSRules,
     kAllCSSRules = kAllButEmptyCSSRules | kEmptyCSSRules,
   };
   RuleIndexList* CssRulesForElement(
@@ -132,11 +138,13 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
 
   static bool HasAuthorBackground(const StyleResolverState&);
 
+  static bool CanReuseBaseComputedStyle(const StyleResolverState& state);
+
   scoped_refptr<ComputedStyle> StyleForInterpolations(
       Element& target,
       ActiveInterpolationsMap& animations);
 
-  void Trace(Visitor*);
+  void Trace(Visitor*) const;
 
  private:
   void InitStyleAndApplyInheritance(Element& element,
@@ -153,14 +161,13 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
 
   void AddMatchedRulesToTracker(const ElementRuleCollector&);
 
-  void LoadPendingResources(StyleResolverState&);
-
   void CollectPseudoRulesForElement(const Element&,
                                     ElementRuleCollector&,
                                     PseudoId,
                                     unsigned rules_to_include);
   void MatchRuleSet(ElementRuleCollector&, RuleSet*);
   void MatchUARules(const Element&, ElementRuleCollector&);
+  void MatchUAPseudoElementRules(ElementRuleCollector&);
   void MatchUserRules(ElementRuleCollector&);
   // This matches `::part` selectors. It looks in ancestor scopes as far as
   // part mapping requires.
@@ -207,7 +214,8 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
     }
     bool EffectiveZoomChanged(const ComputedStyle&) const;
     bool FontChanged(const ComputedStyle&) const;
-    bool EffectiveZoomOrFontChanged(const ComputedStyle&) const;
+    bool InheritedVariablesChanged(const ComputedStyle&) const;
+    bool IsUsableAfterApplyInheritedOnly(const ComputedStyle&) const;
   };
 
   // These flags indicate whether an apply pass for a given CSSPropertyPriority
@@ -270,7 +278,6 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
                            const MatchResult& match_result,
                            bool apply_inherited_only,
                            NeedsApplyPass& needs_apply_pass);
-  void CascadeAndApplyForcedColors(StyleResolverState&, const MatchResult&);
 
   void CascadeAndApplyMatchedProperties(StyleResolverState&,
                                         StyleCascade& cascade);

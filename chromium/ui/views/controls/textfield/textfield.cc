@@ -65,8 +65,8 @@
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-#include "ui/base/ime/linux/text_edit_command_auralinux.h"
-#include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
+#include "ui/base/ime/linux/text_edit_command_auralinux.h"  // nogncheck
+#include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"  // nogncheck
 #endif
 
 #if defined(USE_X11)
@@ -330,6 +330,12 @@ Textfield::Textfield()
   AddAccelerator(ui::Accelerator(ui::VKEY_C, ui::EF_CONTROL_DOWN));
   AddAccelerator(ui::Accelerator(ui::VKEY_V, ui::EF_CONTROL_DOWN));
 #endif
+
+  // Sometimes there are additional ignored views, such as the View representing
+  // the cursor, inside the text field. These should always be ignored by
+  // accessibility since a plain text field should always be a leaf node in the
+  // accessibility trees of all the platforms we support.
+  GetViewAccessibility().OverrideIsLeaf(true);
 }
 
 Textfield::~Textfield() {
@@ -677,8 +683,10 @@ gfx::Size Textfield::GetMinimumSize() const {
 
 void Textfield::SetBorder(std::unique_ptr<Border> b) {
   use_focus_ring_ = false;
-  if (focus_ring_)
-    focus_ring_.reset();
+  if (focus_ring_) {
+    RemoveChildViewT(focus_ring_);
+    focus_ring_ = nullptr;
+  }
   View::SetBorder(std::move(b));
 }
 
@@ -1025,6 +1033,7 @@ void Textfield::OnDragDone() {
 
 void Textfield::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kTextField;
+
   if (label_ax_id_) {
     node_data->AddIntListAttribute(ax::mojom::IntListAttribute::kLabelledbyIds,
                                    {label_ax_id_});
@@ -1427,7 +1436,7 @@ bool Textfield::GetAcceleratorForCommandId(int command_id,
 void Textfield::ExecuteCommand(int command_id, int event_flags) {
   if (text_services_context_menu_ &&
       text_services_context_menu_->SupportsCommand(command_id)) {
-    text_services_context_menu_->ExecuteCommand(command_id);
+    text_services_context_menu_->ExecuteCommand(command_id, event_flags);
     return;
   }
 
@@ -1786,8 +1795,11 @@ ukm::SourceId Textfield::GetClientSourceForMetrics() const {
 }
 
 bool Textfield::ShouldDoLearning() {
-  // TODO(https://crbug.com/311180): Implement this method.
-  NOTIMPLEMENTED_LOG_ONCE();
+  if (should_do_learning_.has_value())
+    return should_do_learning_.value();
+
+  NOTIMPLEMENTED_LOG_ONCE() << "A Textfield does not support ShouldDoLearning";
+  DVLOG(1) << "This Textfield instance does not support ShouldDoLearning";
   return false;
 }
 
@@ -1803,6 +1815,14 @@ bool Textfield::SetCompositionFromExistingText(
   SchedulePaint();
   OnAfterUserAction();
   return true;
+}
+#endif
+
+#if defined(OS_CHROMEOS)
+bool Textfield::SetAutocorrectRange(const base::string16& autocorrect_text,
+                                    const gfx::Range& range) {
+  // TODO(crbug.com/1091088) Implement autocorrect range textfield handling.
+  return false;
 }
 #endif
 

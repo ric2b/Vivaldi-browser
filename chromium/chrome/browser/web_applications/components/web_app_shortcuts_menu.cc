@@ -4,7 +4,8 @@
 
 #include "chrome/browser/web_applications/components/web_app_shortcuts_menu.h"
 
-#include "base/logging.h"
+#include "base/check.h"
+#include "base/notreached.h"
 #include "build/build_config.h"
 
 namespace web_app {
@@ -15,10 +16,11 @@ bool ShouldRegisterShortcutsMenuWithOs() {
 }
 
 void RegisterShortcutsMenuWithOs(
-    const base::FilePath& shortcut_data_dir,
     const AppId& app_id,
     const base::FilePath& profile_path,
-    const std::vector<WebApplicationShortcutInfo>& shortcuts) {
+    const base::FilePath& shortcut_data_dir,
+    const std::vector<WebApplicationShortcutsMenuItemInfo>& shortcut_infos,
+    const ShortcutsMenuIconsBitmaps& shortcuts_menu_icons_bitmaps) {
   NOTIMPLEMENTED();
   DCHECK(ShouldRegisterShortcutsMenuWithOs());
 }

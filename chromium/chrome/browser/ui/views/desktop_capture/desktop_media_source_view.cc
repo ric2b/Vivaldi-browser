@@ -52,6 +52,7 @@ DesktopMediaSourceView::DesktopMediaSourceView(
   image_view_->set_can_process_events_within_subtree(false);
   SetFocusBehavior(FocusBehavior::ALWAYS);
   SetStyle(style_);
+  views::FocusRing::Install(this);
 }
 
 DesktopMediaSourceView::~DesktopMediaSourceView() {}
@@ -146,24 +147,11 @@ void DesktopMediaSourceView::OnFocus() {
 }
 
 bool DesktopMediaSourceView::OnMousePressed(const ui::MouseEvent& event) {
-  if (event.GetClickCount() == 1) {
-    RequestFocus();
-  } else if (event.GetClickCount() == 2) {
-    RequestFocus();
-    parent_->OnDoubleClick();
-  }
+  RequestFocus();
   return true;
 }
 
 void DesktopMediaSourceView::OnGestureEvent(ui::GestureEvent* event) {
-  if (event->type() == ui::ET_GESTURE_TAP &&
-      event->details().tap_count() == 2) {
-    RequestFocus();
-    parent_->OnDoubleClick();
-    event->SetHandled();
-    return;
-  }
-
   // Detect tap gesture using ET_GESTURE_TAP_DOWN so the view also gets focused
   // on the long tap (when the tap gesture starts).
   if (event->type() == ui::ET_GESTURE_TAP_DOWN) {

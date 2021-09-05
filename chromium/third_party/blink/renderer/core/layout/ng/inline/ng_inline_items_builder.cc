@@ -894,6 +894,7 @@ void NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::AppendAtomicInline(
   RestoreTrailingCollapsibleSpaceIfRemoved();
   Append(NGInlineItem::kAtomicInline, kObjectReplacementCharacter,
          layout_object);
+  has_ruby_ = has_ruby_ || layout_object->IsRubyRun();
 
   // When this atomic inline is inside of an inline box, the height of the
   // inline box can be different from the height of the atomic inline. Ensure
@@ -980,7 +981,7 @@ void NGInlineItemsBuilderTemplate<
 
   // Keep the item even if the length became zero. This is not needed for
   // the layout purposes, but needed to maintain LayoutObject states. See
-  // |AddEmptyTextItem()|.
+  // |AppendEmptyTextItem()|.
   item->SetEndOffset(item->EndOffset() - 1);
   item->SetEndCollapseType(NGInlineItem::kCollapsed);
 
@@ -1188,8 +1189,20 @@ void NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::ExitInline(
           break;
         }
         DCHECK_GT(i, current_box->item_index);
-        if (!item.IsEmptyItem())
-          break;
+        if (item.IsEmptyItem()) {
+          // float, abspos, collapsed space(<div>ab <span> </span>).
+          // See editing/caret/empty_inlines.html
+          // See also [1] for empty line box.
+          // [1] https://drafts.csswg.org/css2/visuren.html#phantom-line-box
+          continue;
+        }
+        if (item.IsCollapsibleSpaceOnly()) {
+          // Because we can't collapse trailing spaces until next node, we
+          // create box fragment for it: <div>ab<span> </span></div>
+          // See editing/selection/mixed-editability-10.html
+          continue;
+        }
+        break;
       }
     }
 
@@ -1226,6 +1239,11 @@ void NGInlineItemsBuilderTemplate<
   // |SegmentText()| will analyze the text and reset |is_bidi_enabled_| if it
   // doesn't contain any RTL characters.
   data->is_bidi_enabled_ = MayBeBidiEnabled();
+  // Note: Even if |IsEmptyInline()| is true, |text_| isn't empty, e.g. it
+  // holds U+FFFC(ORC) for float or abspos.
+  data->has_line_even_if_empty_ =
+      IsEmptyInline() && block_flow_->HasLineIfEmpty();
+  data->has_ruby_ = has_ruby_;
   data->is_empty_inline_ = IsEmptyInline();
   data->is_block_level_ = IsBlockLevel();
   data->changes_may_affect_earlier_lines_ = ChangesMayAffectEarlierLines();

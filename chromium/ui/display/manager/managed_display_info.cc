@@ -70,6 +70,11 @@ struct ManagedDisplayModeSorter {
   }
 };
 
+bool IsWithinEpsilon(float a, float b) {
+  constexpr float kEpsilon = 0.0001f;
+  return std::abs(a - b) < kEpsilon;
+}
+
 }  // namespace
 
 ManagedDisplayMode::ManagedDisplayMode() {}
@@ -104,6 +109,13 @@ ManagedDisplayMode::ManagedDisplayMode(const ManagedDisplayMode& other) =
 ManagedDisplayMode& ManagedDisplayMode::operator=(
     const ManagedDisplayMode& other) = default;
 
+bool ManagedDisplayMode::operator==(const ManagedDisplayMode& other) const {
+  return size_ == other.size_ && is_interlaced_ == other.is_interlaced_ &&
+         native_ == other.native_ &&
+         IsWithinEpsilon(refresh_rate_, other.refresh_rate_) &&
+         IsWithinEpsilon(device_scale_factor_, other.device_scale_factor_);
+}
+
 gfx::Size ManagedDisplayMode::GetSizeInDIP() const {
   gfx::SizeF size_dip(size_);
   size_dip.Scale(1.0f / device_scale_factor_);
@@ -114,9 +126,8 @@ bool ManagedDisplayMode::IsEquivalent(const ManagedDisplayMode& other) const {
   if (display::features::IsListAllDisplayModesEnabled())
     return *this == other;
 
-  const float kEpsilon = 0.0001f;
   return size_ == other.size_ &&
-         std::abs(device_scale_factor_ - other.device_scale_factor_) < kEpsilon;
+         IsWithinEpsilon(device_scale_factor_, other.device_scale_factor_);
 }
 
 std::string ManagedDisplayMode::ToString() const {
@@ -208,7 +219,7 @@ ManagedDisplayInfo ManagedDisplayInfo::CreateFromSpecWithID(
                               base::SPLIT_WANT_NONEMPTY);
     for (size_t i = 0; i < parts.size(); ++i) {
       gfx::Size size;
-      float refresh_rate = 0.0f;
+      float refresh_rate = 60.0f;
       bool is_interlaced = false;
 
       gfx::Rect mode_bounds;

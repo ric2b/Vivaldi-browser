@@ -56,6 +56,7 @@
 #include "services/network/public/mojom/network_change_manager.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/test/fake_test_cert_verifier_params_factory.h"
 #include "services/network/test/test_network_context_client.h"
 #include "services/network/test/test_network_service_client.h"
 #include "services/network/test/test_url_loader_client.h"
@@ -83,6 +84,10 @@ GURL AddQuery(const GURL& url,
 
 mojom::NetworkContextParamsPtr CreateContextParams() {
   mojom::NetworkContextParamsPtr params = mojom::NetworkContextParams::New();
+  // Use a dummy CertVerifier that always passes cert verification, since
+  // these unittests don't need to test CertVerifier behavior.
+  params->cert_verifier_params =
+      FakeTestCertVerifierParamsFactory::GetCertVerifierParams();
   // Use a fixed proxy config, to avoid dependencies on local network
   // configuration.
   params->initial_proxy_config = net::ProxyConfigWithAnnotation::CreateDirect();
@@ -616,31 +621,6 @@ TEST_F(NetworkServiceTest, DisableDohUpgradeProviders) {
 
 TEST_F(NetworkServiceTest, DohProbe) {
   mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  context_params->primary_network_context = true;
-  mojo::Remote<mojom::NetworkContext> network_context;
-  service()->CreateNetworkContext(network_context.BindNewPipeAndPassReceiver(),
-                                  std::move(context_params));
-
-  net::DnsConfig config;
-  config.nameservers.push_back(net::IPEndPoint());
-  config.dns_over_https_servers.emplace_back("example.com",
-                                             true /* use_post */);
-  auto dns_client = std::make_unique<net::MockDnsClient>(
-      std::move(config), net::MockDnsClientRuleList());
-  dns_client->set_ignore_system_config_changes(true);
-  net::MockDnsClient* dns_client_ptr = dns_client.get();
-  service()->host_resolver_manager()->SetDnsClientForTesting(
-      std::move(dns_client));
-
-  EXPECT_FALSE(dns_client_ptr->factory()->doh_probes_running());
-
-  task_environment()->FastForwardBy(NetworkService::kInitialDohProbeTimeout);
-  EXPECT_TRUE(dns_client_ptr->factory()->doh_probes_running());
-}
-
-TEST_F(NetworkServiceTest, DohProbe_NoPrimaryContext) {
-  mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  context_params->primary_network_context = false;
   mojo::Remote<mojom::NetworkContext> network_context;
   service()->CreateNetworkContext(network_context.BindNewPipeAndPassReceiver(),
                                   std::move(context_params));
@@ -663,8 +643,8 @@ TEST_F(NetworkServiceTest, DohProbe_NoPrimaryContext) {
 }
 
 TEST_F(NetworkServiceTest, DohProbe_MultipleContexts) {
+  service()->StopMetricsTimerForTesting();
   mojom::NetworkContextParamsPtr context_params1 = CreateContextParams();
-  context_params1->primary_network_context = true;
   mojo::Remote<mojom::NetworkContext> network_context1;
   service()->CreateNetworkContext(network_context1.BindNewPipeAndPassReceiver(),
                                   std::move(context_params1));
@@ -684,7 +664,6 @@ TEST_F(NetworkServiceTest, DohProbe_MultipleContexts) {
   ASSERT_TRUE(dns_client_ptr->factory()->doh_probes_running());
 
   mojom::NetworkContextParamsPtr context_params2 = CreateContextParams();
-  context_params2->primary_network_context = false;
   mojo::Remote<mojom::NetworkContext> network_context2;
   service()->CreateNetworkContext(network_context2.BindNewPipeAndPassReceiver(),
                                   std::move(context_params2));
@@ -714,7 +693,6 @@ TEST_F(NetworkServiceTest, DohProbe_ContextAddedBeforeTimeout) {
   EXPECT_FALSE(dns_client_ptr->factory()->doh_probes_running());
 
   mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  context_params->primary_network_context = true;
   mojo::Remote<mojom::NetworkContext> network_context;
   service()->CreateNetworkContext(network_context.BindNewPipeAndPassReceiver(),
                                   std::move(context_params));
@@ -726,6 +704,7 @@ TEST_F(NetworkServiceTest, DohProbe_ContextAddedBeforeTimeout) {
 }
 
 TEST_F(NetworkServiceTest, DohProbe_ContextAddedAfterTimeout) {
+  service()->StopMetricsTimerForTesting();
   net::DnsConfig config;
   config.nameservers.push_back(net::IPEndPoint());
   config.dns_over_https_servers.emplace_back("example.com",
@@ -743,7 +722,6 @@ TEST_F(NetworkServiceTest, DohProbe_ContextAddedAfterTimeout) {
   EXPECT_FALSE(dns_client_ptr->factory()->doh_probes_running());
 
   mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  context_params->primary_network_context = true;
   mojo::Remote<mojom::NetworkContext> network_context;
   service()->CreateNetworkContext(network_context.BindNewPipeAndPassReceiver(),
                                   std::move(context_params));
@@ -752,8 +730,8 @@ TEST_F(NetworkServiceTest, DohProbe_ContextAddedAfterTimeout) {
 }
 
 TEST_F(NetworkServiceTest, DohProbe_ContextRemovedBeforeTimeout) {
+  service()->StopMetricsTimerForTesting();
   mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  context_params->primary_network_context = true;
   mojo::Remote<mojom::NetworkContext> network_context;
   service()->CreateNetworkContext(network_context.BindNewPipeAndPassReceiver(),
                                   std::move(context_params));
@@ -780,8 +758,8 @@ TEST_F(NetworkServiceTest, DohProbe_ContextRemovedBeforeTimeout) {
 }
 
 TEST_F(NetworkServiceTest, DohProbe_ContextRemovedAfterTimeout) {
+  service()->StopMetricsTimerForTesting();
   mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  context_params->primary_network_context = true;
   mojo::Remote<mojom::NetworkContext> network_context;
   service()->CreateNetworkContext(network_context.BindNewPipeAndPassReceiver(),
                                   std::move(context_params));
@@ -931,6 +909,10 @@ class NetworkServiceTestWithService : public testing::Test {
   void CreateNetworkContext() {
     mojom::NetworkContextParamsPtr context_params =
         mojom::NetworkContextParams::New();
+    // Use a dummy CertVerifier that always passes cert verification, since
+    // these unittests don't need to test CertVerifier behavior.
+    context_params->cert_verifier_params =
+        FakeTestCertVerifierParamsFactory::GetCertVerifierParams();
     network_service_->CreateNetworkContext(
         network_context_.BindNewPipeAndPassReceiver(),
         std::move(context_params));
@@ -1257,292 +1239,6 @@ TEST_F(NetworkServiceTestWithService, SetsTrustTokenKeyCommitments) {
   EXPECT_TRUE(result.Equals(expectation));
 }
 
-// CRLSets are not supported on iOS and Android system verifiers.
-#if !defined(OS_IOS) && !defined(OS_ANDROID)
-
-// Verifies CRLSets take effect if configured on the service.
-TEST_F(NetworkServiceTestWithService, CRLSetIsApplied) {
-  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
-  test_server.AddDefaultHandlers(base::FilePath(kServicesTestData));
-  ASSERT_TRUE(test_server.Start());
-
-  CreateNetworkContext();
-
-  uint32_t options = mojom::kURLLoadOptionSendSSLInfoWithResponse |
-                     mojom::kURLLoadOptionSendSSLInfoForCertificateError;
-  // Make sure the test server loads fine with no CRLSet.
-  LoadURL(test_server.GetURL("/echo"), options);
-  ASSERT_EQ(net::OK, client()->completion_status().error_code);
-
-  // Send a CRLSet that blocks the leaf cert.
-  std::string crl_set_bytes;
-  EXPECT_TRUE(base::ReadFileToString(
-      net::GetTestCertsDirectory().AppendASCII("crlset_by_leaf_spki.raw"),
-      &crl_set_bytes));
-
-  {
-    base::RunLoop run_loop;
-    service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)),
-                            run_loop.QuitClosure());
-    run_loop.Run();
-  }
-
-  // Flush all connections in the context, to force a new connection. A new
-  // verification should be attempted, due to the configuration having
-  // changed, thus forcing the CRLSet to be checked.
-  {
-    base::RunLoop run_loop;
-    context()->CloseAllConnections(run_loop.QuitClosure());
-    run_loop.Run();
-  }
-
-  // Make sure the connection fails, due to the certificate being revoked.
-  LoadURL(test_server.GetURL("/echo"), options);
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
-            client()->completion_status().error_code);
-  ASSERT_TRUE(client()->completion_status().ssl_info.has_value());
-  EXPECT_TRUE(client()->completion_status().ssl_info->cert_status &
-              net::CERT_STATUS_REVOKED);
-}
-
-// Verifies CRLSets configured before creating a new network context are
-// applied to that network context.
-TEST_F(NetworkServiceTestWithService, CRLSetIsPassedToNewContexts) {
-  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
-  test_server.AddDefaultHandlers(base::FilePath(kServicesTestData));
-  ASSERT_TRUE(test_server.Start());
-
-  // Send a CRLSet that blocks the leaf cert, even while no NetworkContexts
-  // exist.
-  std::string crl_set_bytes;
-  EXPECT_TRUE(base::ReadFileToString(
-      net::GetTestCertsDirectory().AppendASCII("crlset_by_leaf_spki.raw"),
-      &crl_set_bytes));
-
-  base::RunLoop run_loop;
-  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)),
-                          run_loop.QuitClosure());
-  run_loop.Run();
-
-  // Configure a new NetworkContext.
-  CreateNetworkContext();
-
-  uint32_t options = mojom::kURLLoadOptionSendSSLInfoWithResponse |
-                     mojom::kURLLoadOptionSendSSLInfoForCertificateError;
-  // Make sure the connection fails, due to the certificate being revoked.
-  LoadURL(test_server.GetURL("/echo"), options);
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
-            client()->completion_status().error_code);
-  ASSERT_TRUE(client()->completion_status().ssl_info.has_value());
-  EXPECT_TRUE(client()->completion_status().ssl_info->cert_status &
-              net::CERT_STATUS_REVOKED);
-}
-
-// Verifies newer CRLSets (by sequence number) are applied.
-TEST_F(NetworkServiceTestWithService, CRLSetIsUpdatedIfNewer) {
-  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
-  test_server.AddDefaultHandlers(base::FilePath(kServicesTestData));
-  ASSERT_TRUE(test_server.Start());
-
-  // Send a CRLSet that only allows the root cert if it matches a known SPKI
-  // hash (that matches the test server chain)
-  std::string crl_set_bytes;
-  ASSERT_TRUE(base::ReadFileToString(
-      net::GetTestCertsDirectory().AppendASCII("crlset_by_root_subject.raw"),
-      &crl_set_bytes));
-
-  {
-    base::RunLoop run_loop;
-    service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)),
-                            run_loop.QuitClosure());
-    run_loop.Run();
-  }
-
-  CreateNetworkContext();
-
-  uint32_t options = mojom::kURLLoadOptionSendSSLInfoWithResponse |
-                     mojom::kURLLoadOptionSendSSLInfoForCertificateError;
-  // Make sure the connection loads, due to the root being permitted.
-  LoadURL(test_server.GetURL("/echo"), options);
-  ASSERT_EQ(net::OK, client()->completion_status().error_code);
-
-  // Send a new CRLSet that removes trust in the root.
-  ASSERT_TRUE(base::ReadFileToString(net::GetTestCertsDirectory().AppendASCII(
-                                         "crlset_by_root_subject_no_spki.raw"),
-                                     &crl_set_bytes));
-
-  {
-    base::RunLoop run_loop;
-    service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)),
-                            run_loop.QuitClosure());
-    run_loop.Run();
-  }
-
-  // Flush all connections in the context, to force a new connection. A new
-  // verification should be attempted, due to the configuration having
-  // changed, thus forcing the CRLSet to be checked.
-  {
-    base::RunLoop run_loop;
-    context()->CloseAllConnections(run_loop.QuitClosure());
-    run_loop.Run();
-  }
-
-  // Make sure the connection fails, due to the certificate being revoked.
-  LoadURL(test_server.GetURL("/echo"), options);
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
-            client()->completion_status().error_code);
-  ASSERT_TRUE(client()->completion_status().ssl_info.has_value());
-  EXPECT_TRUE(client()->completion_status().ssl_info->cert_status &
-              net::CERT_STATUS_REVOKED);
-}
-
-// Verifies that attempting to send an older CRLSet (by sequence number)
-// does not apply to existing or new contexts.
-TEST_F(NetworkServiceTestWithService, CRLSetDoesNotDowngrade) {
-  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
-  test_server.AddDefaultHandlers(base::FilePath(kServicesTestData));
-  ASSERT_TRUE(test_server.Start());
-
-  // Send a CRLSet that blocks the root certificate by subject name.
-  std::string crl_set_bytes;
-  ASSERT_TRUE(base::ReadFileToString(net::GetTestCertsDirectory().AppendASCII(
-                                         "crlset_by_root_subject_no_spki.raw"),
-                                     &crl_set_bytes));
-
-  {
-    base::RunLoop run_loop;
-    service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)),
-                            run_loop.QuitClosure());
-    run_loop.Run();
-  }
-
-  CreateNetworkContext();
-
-  uint32_t options = mojom::kURLLoadOptionSendSSLInfoWithResponse |
-                     mojom::kURLLoadOptionSendSSLInfoForCertificateError;
-  // Make sure the connection fails, due to the certificate being revoked.
-  LoadURL(test_server.GetURL("/echo"), options);
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
-            client()->completion_status().error_code);
-  ASSERT_TRUE(client()->completion_status().ssl_info.has_value());
-  EXPECT_TRUE(client()->completion_status().ssl_info->cert_status &
-              net::CERT_STATUS_REVOKED);
-
-  // Attempt to configure an older CRLSet that allowed trust in the root.
-  ASSERT_TRUE(base::ReadFileToString(
-      net::GetTestCertsDirectory().AppendASCII("crlset_by_root_subject.raw"),
-      &crl_set_bytes));
-
-  {
-    base::RunLoop run_loop;
-    service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)),
-                            run_loop.QuitClosure());
-    run_loop.Run();
-  }
-
-  // Flush all connections in the context, to force a new connection. A new
-  // verification should be attempted, due to the configuration having
-  // changed, thus forcing the CRLSet to be checked.
-  {
-    base::RunLoop run_loop;
-    context()->CloseAllConnections(run_loop.QuitClosure());
-    run_loop.Run();
-  }
-
-  // Make sure the connection still fails, due to the newer CRLSet still
-  // applying.
-  LoadURL(test_server.GetURL("/echo"), options);
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
-            client()->completion_status().error_code);
-  ASSERT_TRUE(client()->completion_status().ssl_info.has_value());
-  EXPECT_TRUE(client()->completion_status().ssl_info->cert_status &
-              net::CERT_STATUS_REVOKED);
-
-  // Create a new NetworkContext and ensure the latest CRLSet is still
-  // applied.
-  network_context_.reset();
-  CreateNetworkContext();
-
-  // The newer CRLSet that blocks the connection should still apply, even to
-  // new NetworkContexts.
-  LoadURL(test_server.GetURL("/echo"), options);
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
-            client()->completion_status().error_code);
-  ASSERT_TRUE(client()->completion_status().ssl_info.has_value());
-  EXPECT_TRUE(client()->completion_status().ssl_info->cert_status &
-              net::CERT_STATUS_REVOKED);
-}
-
-#endif  // !defined(OS_IOS) && !defined(OS_ANDROID)
-
-// TODO(crbug.com/860189): AIA tests fail on iOS
-#if defined(OS_IOS)
-#define MAYBE_AIAFetching DISABLED_AIAFetching
-#else
-#define MAYBE_AIAFetching AIAFetching
-#endif
-// Test |primary_network_context|, which is required by AIA fetching, among
-// other things.
-TEST_F(NetworkServiceTestWithService, MAYBE_AIAFetching) {
-  mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  context_params->primary_network_context = true;
-
-  network_service_->CreateNetworkContext(
-      network_context_.BindNewPipeAndPassReceiver(), std::move(context_params));
-
-  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  net::EmbeddedTestServer::ServerCertificateConfig cert_config;
-  cert_config.intermediate = net::EmbeddedTestServer::IntermediateType::kByAIA;
-  test_server.SetSSLConfig(cert_config);
-  test_server.AddDefaultHandlers(base::FilePath(kServicesTestData));
-  ASSERT_TRUE(test_server.Start());
-
-  LoadURL(test_server.GetURL("/echo"),
-          mojom::kURLLoadOptionSendSSLInfoWithResponse);
-  EXPECT_EQ(net::OK, client()->completion_status().error_code);
-  ASSERT_TRUE(client()->response_head());
-  EXPECT_EQ(
-      0u, client()->response_head()->cert_status & net::CERT_STATUS_ALL_ERRORS);
-  ASSERT_TRUE(client()->ssl_info());
-  ASSERT_TRUE(client()->ssl_info()->cert);
-  EXPECT_EQ(2u, client()->ssl_info()->cert->intermediate_buffers().size());
-  ASSERT_TRUE(client()->ssl_info()->unverified_cert);
-  EXPECT_EQ(
-      0u, client()->ssl_info()->unverified_cert->intermediate_buffers().size());
-}
-
-// Check that destroying a NetworkContext with |primary_network_context| set
-// destroys all other NetworkContexts.
-TEST_F(NetworkServiceTestWithService,
-       DestroyingPrimaryNetworkContextDestroysOtherContexts) {
-  mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  context_params->primary_network_context = true;
-  mojo::Remote<mojom::NetworkContext> cert_validating_network_context;
-  network_service_->CreateNetworkContext(
-      cert_validating_network_context.BindNewPipeAndPassReceiver(),
-      std::move(context_params));
-
-  base::RunLoop run_loop;
-  mojo::Remote<mojom::NetworkContext> network_context;
-  network_service_->CreateNetworkContext(
-      network_context.BindNewPipeAndPassReceiver(), CreateContextParams());
-  network_context.set_disconnect_handler(run_loop.QuitClosure());
-
-  // Wait until the new NetworkContext has been created, so it's not created
-  // after the primary NetworkContext is destroyed.
-  network_service_.FlushForTesting();
-
-  // Destroying |cert_validating_network_context| should result in destroying
-  // |network_context| as well.
-  cert_validating_network_context.reset();
-  run_loop.Run();
-  EXPECT_FALSE(network_context.is_connected());
-}
-
 TEST_F(NetworkServiceTestWithService, GetDnsConfigChangeManager) {
   mojo::Remote<mojom::DnsConfigChangeManager> remote;
   ASSERT_FALSE(remote.is_bound());
@@ -1699,6 +1395,10 @@ class NetworkServiceNetworkDelegateTest : public NetworkServiceTest {
   void CreateNetworkContext() {
     mojom::NetworkContextParamsPtr context_params =
         mojom::NetworkContextParams::New();
+    // Use a dummy CertVerifier that always passes cert verification, since
+    // these unittests don't need to test CertVerifier behavior.
+    context_params->cert_verifier_params =
+        FakeTestCertVerifierParamsFactory::GetCertVerifierParams();
     service()->CreateNetworkContext(
         network_context_.BindNewPipeAndPassReceiver(),
         std::move(context_params));

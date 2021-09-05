@@ -38,8 +38,6 @@
 <translation id="1873233029667955273">Google Chrome तुमचा डीफॉल्ट ब्राउझर नाही</translation>
 <translation id="1874309113135274312">Google Chrome बीटा (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome कालबाह्य आहे</translation>
-<translation id="1900795423379050516">या पेजवर सेटिंग दिसत नसल्यास, तुमच्या <ph name="LINK_BEGIN" />
-      Chrome ब्राउझर सेटिंग्ज<ph name="LINK_END" /> मध्ये पाहा</translation>
 <translation id="1919130412786645364">Chrome मध्ये साइन इन करण्यासाठी अनुमती द्या</translation>
 <translation id="2063848847527508675">अपडेट लागू करण्यासाठी Chrome OS रीस्टार्ट करणे आवश्यक आहे.</translation>
 <translation id="2094919256425865063">तरीही Chrome बंद करायचे?</translation>
@@ -115,6 +113,7 @@
 <translation id="4251615635259297716">या खात्यावर तुमच्या Chrome डेटा लिंक करायचा?</translation>
 <translation id="4281844954008187215">सेवा अटी</translation>
 <translation id="4293420128516039005">तुमच्या डिव्हाइसवर Chrome सिंक आणि पर्सनलाइझ करण्यासाठी साइन इन करा</translation>
+<translation id="4325083532956419387">Chrome OS आवृत्ती</translation>
 <translation id="4328355335528187361">Google Chrome डेव्हलपर (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4335235004908507846">Chrome तुम्हाला डेटा भंग, खराब एक्स्टेंशन आणि बर्‍याच गोष्टींपासून सुरक्षित ठेवण्यात मदत करू शकते</translation>
@@ -136,7 +135,7 @@
 <translation id="4750550185319565338"><ph name="PLUGIN_NAME" /> सुरू करण्‍यासाठी Chrome रीस्टार्ट करा</translation>
 <translation id="4754614261631455953">Google Chrome कॅनरी (mDNS-मध्ये)</translation>
 <translation id="4771048833395599659">ही फाईल कदाचित धोकादायक असू शकते, त्यामुळे Chrome ने ती अवरोधित केली आहे.</translation>
-<translation id="479167709087336770">Google शोध मध्ये वापरत असेलेले समान स्पेल चेकर हे वापरते. तुम्ही ब्राउझरमध्ये टाइप करत असलेला मजकूर Google कडे पाठवला जातो. तुम्ही हे वर्तन कधीही सेटिंग्ज मध्ये बदलू शकता.</translation>
+<translation id="479167709087336770">Google Search मध्ये वापरत असेलेले समान स्पेल चेकर हे वापरते. तुम्ही ब्राउझरमध्ये टाइप करत असलेला मजकूर Google कडे पाठवला जातो. तुम्ही हे वर्तन कधीही सेटिंग्ज मध्ये बदलू शकता.</translation>
 <translation id="4891791193823137474">बॅकग्राउंडमध्ये Google Chrome सुरू द्या</translation>
 <translation id="4895437082222824641">लिंक नवीन Chrome &amp;टॅबमध्ये उघडा</translation>
 <translation id="4953650215774548573">तुमचा डीफॉल्ट ब्राउझर म्हणून Google Chrome सेट करा</translation>

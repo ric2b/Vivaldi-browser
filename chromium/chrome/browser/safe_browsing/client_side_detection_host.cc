@@ -17,7 +17,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "chrome/browser/browser_process.h"
@@ -133,8 +132,8 @@ class ClientSideDetectionHost::ShouldClassifyUrlRequest
     // csd-whitelist check has to be done on the IO thread because it
     // uses the SafeBrowsing service class.
     if (ShouldClassifyForPhishing()) {
-      base::PostTask(
-          FROM_HERE, {BrowserThread::IO},
+      content::GetIOThreadTaskRunner({})->PostTask(
+          FROM_HERE,
           base::BindOnce(&ShouldClassifyUrlRequest::CheckSafeBrowsingDatabase,
                          this, url_));
     }
@@ -145,9 +144,9 @@ class ClientSideDetectionHost::ShouldClassifyUrlRequest
     // Just to make sure we don't do anything stupid we reset all these
     // pointers except for the safebrowsing service class which may be
     // accessed by CheckSafeBrowsingDatabase().
-    web_contents_ = NULL;
-    csd_service_ = NULL;
-    host_ = NULL;
+    web_contents_ = nullptr;
+    csd_service_ = nullptr;
+    host_ = nullptr;
   }
 
  private:
@@ -223,8 +222,8 @@ class ClientSideDetectionHost::ShouldClassifyUrlRequest
     if (match_whitelist) {
       phishing_reason = NO_CLASSIFY_MATCH_CSD_WHITELIST;
     }
-    base::PostTask(FROM_HERE, {BrowserThread::UI},
-                   base::BindOnce(&ShouldClassifyUrlRequest::CheckCache, this,
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&ShouldClassifyUrlRequest::CheckCache, this,
                                   phishing_reason));
   }
 
@@ -291,12 +290,13 @@ std::unique_ptr<ClientSideDetectionHost> ClientSideDetectionHost::Create(
 ClientSideDetectionHost::ClientSideDetectionHost(WebContents* tab)
     : content::WebContentsObserver(tab),
       csd_service_(nullptr),
+      tab_(tab),
       classification_request_(nullptr),
       pageload_complete_(false),
       unsafe_unique_page_id_(-1),
       tick_clock_(base::DefaultTickClock::GetInstance()) {
   DCHECK(tab);
-  // Note: csd_service_ and sb_service will be NULL here in testing.
+  // Note: csd_service_ and sb_service will be nullptr here in testing.
   csd_service_ = ClientSideDetectionServiceFactory::GetForProfile(
       Profile::FromBrowserContext(tab->GetBrowserContext()));
   feature_extractor_.reset(new BrowserFeatureExtractor(tab));
@@ -313,6 +313,9 @@ ClientSideDetectionHost::ClientSideDetectionHost(WebContents* tab)
 ClientSideDetectionHost::~ClientSideDetectionHost() {
   if (ui_manager_.get())
     ui_manager_->RemoveObserver(this);
+
+  if (csd_service_)
+    csd_service_->RemoveClientSideDetectionHost(this);
 }
 
 void ClientSideDetectionHost::DidFinishNavigation(
@@ -370,6 +373,20 @@ void ClientSideDetectionHost::DidFinishNavigation(
   classification_request_->Start();
 }
 
+void ClientSideDetectionHost::SendModelToRenderFrame() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (!web_contents() || web_contents() != tab_)
+    return;
+
+  for (content::RenderFrameHost* frame : web_contents()->GetAllFrames()) {
+    if (phishing_detector_)
+      phishing_detector_.reset();
+    frame->GetRemoteInterfaces()->GetInterface(
+        phishing_detector_.BindNewPipeAndPassReceiver());
+    phishing_detector_->SetPhishingModel(csd_service_->GetModelStr());
+  }
+}
+
 void ClientSideDetectionHost::OnSafeBrowsingHit(
     const security_interstitials::UnsafeResource& resource) {
   if (!web_contents())
@@ -397,11 +414,6 @@ void ClientSideDetectionHost::OnSafeBrowsingHit(
   unsafe_resource_->callback.Reset();  // Don't do anything stupid.
 }
 
-scoped_refptr<SafeBrowsingDatabaseManager>
-ClientSideDetectionHost::database_manager() {
-  return database_manager_;
-}
-
 void ClientSideDetectionHost::WebContentsDestroyed() {
   // Tell any pending classification request that it is being canceled.
   if (classification_request_.get()) {
@@ -409,6 +421,17 @@ void ClientSideDetectionHost::WebContentsDestroyed() {
   }
   // Cancel all pending feature extractions.
   feature_extractor_.reset();
+
+  csd_service_->RemoveClientSideDetectionHost(this);
+}
+
+void ClientSideDetectionHost::RenderFrameCreated(
+    content::RenderFrameHost* render_frame_host) {
+  if (phishing_detector_)
+    phishing_detector_.reset();
+  render_frame_host->GetRemoteInterfaces()->GetInterface(
+      phishing_detector_.BindNewPipeAndPassReceiver());
+  phishing_detector_->SetPhishingModel(csd_service_->GetModelStr());
 }
 
 void ClientSideDetectionHost::OnPhishingPreClassificationDone(
@@ -442,12 +465,8 @@ void ClientSideDetectionHost::PhishingDetectionDone(
       base::TimeTicks::Now() - phishing_detection_start_time_);
   UMA_HISTOGRAM_ENUMERATION("SBClientPhishing.PhishingDetectorResult", result);
   if (result == mojom::PhishingDetectorResult::CLASSIFIER_NOT_READY) {
-    Profile* profile =
-        Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-    UMA_HISTOGRAM_ENUMERATION(
-        "SBClientPhishing.ClassifierNotReadyReason",
-        csd_service_->GetLastModelStatus(
-            IsExtendedReportingEnabled(*profile->GetPrefs())));
+    UMA_HISTOGRAM_ENUMERATION("SBClientPhishing.ClassifierNotReadyReason",
+                              csd_service_->GetLastModelStatus());
   }
   if (result != mojom::PhishingDetectorResult::SUCCESS)
     return;
@@ -459,6 +478,15 @@ void ClientSideDetectionHost::PhishingDetectionDone(
       browse_info_.get() &&
       verdict->ParseFromString(verdict_str) &&
       verdict->IsInitialized()) {
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+    if (!IsExtendedReportingEnabled(*profile->GetPrefs()) &&
+        !IsEnhancedProtectionEnabled(*profile->GetPrefs())) {
+      // These fields should only be set for SBER users.
+      verdict->clear_screenshot_phash();
+      verdict->clear_phash_dimension_size();
+    }
+
     // We only send phishing verdict to the server if the verdict is phishing or
     // if a SafeBrowsing interstitial was already shown for this site.  E.g., a
     // phishing interstitial was shown but the user clicked

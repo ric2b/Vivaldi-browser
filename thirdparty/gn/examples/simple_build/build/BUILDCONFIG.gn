@@ -15,6 +15,9 @@ if (current_os == "") {
   current_os = target_os
 }
 
+is_linux = host_os == "linux" && current_os == "linux" && target_os == "linux"
+is_mac = host_os == "mac" && current_os == "mac" && target_os == "mac"
+
 # All binary targets will get this list of configs by default.
 _shared_binary_target_configs = [ "//build:compiler_defaults" ]
 

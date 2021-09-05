@@ -40,6 +40,10 @@ const char kAccessibilityScreenMagnifierScale[] =
 // due to lack of a physical keyboard.
 const char kAccessibilityVirtualKeyboardEnabled[] =
     "settings.a11y.virtual_keyboard";
+// A pref that identifies which kind of features are enabled for the Web Kiosk
+// session.
+const char kAccessibilityVirtualKeyboardFeatures[] =
+    "settings.a11y.virtual_keyboard_features";
 // A boolean pref which determines whether the mono audio output is enabled for
 // accessibility.
 const char kAccessibilityMonoAudioEnabled[] = "settings.a11y.mono_audio";
@@ -77,6 +81,11 @@ const char kAccessibilityCaretHighlightEnabled[] =
 // A boolean pref which determines whether cursor highlighting is enabled.
 const char kAccessibilityCursorHighlightEnabled[] =
     "settings.a11y.cursor_highlight";
+// A boolean pref which determines whether custom cursor color is enabled.
+const char kAccessibilityCursorColorEnabled[] =
+    "settings.a11y.cursor_color_enabled";
+// An integer pref which determines the custom cursor color.
+const char kAccessibilityCursorColor[] = "settings.a11y.cursor_color";
 // A boolean pref which determines whether floating accessibility menu is
 // enabled.
 const char kAccessibilityFloatingMenuEnabled[] = "settings.a11y.floating_menu";
@@ -218,6 +227,12 @@ const char kEnableStylusTools[] = "settings.enable_stylus_tools";
 // eject input event has been received.
 const char kLaunchPaletteOnEjectEvent[] =
     "settings.launch_palette_on_eject_event";
+
+// Boolean pref indicating whether the privacy warning of the managed-guest
+// session on both; the login screen and inside the auto-launched session,
+// should be displayed or not.
+const char kManagedGuestSessionPrivacyWarningsEnabled[] =
+    "managed_session.privacy_warning_enabled";
 
 // A string pref storing the type of lock screen notification mode.
 // "show" -> show notifications on the lock screen
@@ -437,6 +452,10 @@ const char kDetachableBaseDevices[] = "ash.detachable_base.devices";
 const char kAssistantNumWarmerWelcomeTriggered[] =
     "ash.assistant.num_warmer_welcome_triggered";
 
+// Pref storing the time of the last Assistant interaction.
+const char kAssistantTimeOfLastInteraction[] =
+    "ash.assistant.time_of_last_interaction";
+
 // Whether the user is allowed to disconnect and configure VPN connections.
 const char kVpnConfigAllowed[] = "vpn_config_allowed";
 
@@ -512,6 +531,22 @@ const char kAssistantPrivacyInfoShownInLauncher[] =
 // info view, and do not show the privacy info any more.
 const char kAssistantPrivacyInfoDismissedInLauncher[] =
     "ash.launcher.assistant_privacy_info_dismissed";
+
+// An integer pref that specifies how many times the Suggested Content privacy
+// info has been shown in Launcher. This value will increment by one every time
+// when Launcher changes state from Peeking to Half or FullscreenSearch up to a
+// predefined threshold, e.g. six times. If the info has been shown for more
+// than the threshold, do not show the privacy info any more.
+const char kSuggestedContentInfoShownInLauncher[] =
+    "ash.launcher.suggested_content_info_shown";
+
+// A boolean pref that indicates whether the Suggested Content privacy info may
+// be displayed to user. A false value indicates that the info can be displayed
+// if the value of |kSuggestedContentInfoShownInLauncher| is smaller than the
+// predefined threshold. A true value implies that the user has dismissed the
+// info view, and do not show the privacy info any more.
+const char kSuggestedContentInfoDismissedInLauncher[] =
+    "ash.launcher.suggested_content_info_dismissed";
 
 // A boolean pref that indicates whether lock screen media controls are enabled.
 // Controlled by user policy.

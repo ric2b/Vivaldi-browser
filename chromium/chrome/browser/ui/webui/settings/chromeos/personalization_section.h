@@ -33,6 +33,11 @@ class PersonalizationSection : public OsSettingsSection {
   // OsSettingsSection:
   void AddLoadTimeData(content::WebUIDataSource* html_source) override;
   void AddHandlers(content::WebUI* web_ui) override;
+  int GetSectionNameMessageId() const override;
+  mojom::Section GetSection() const override;
+  mojom::SearchResultIcon GetSectionIcon() const override;
+  std::string GetSectionPath() const override;
+  void RegisterHierarchy(HierarchyGenerator* generator) const override;
 
   // ash::AmbientModeService::Observer:
   void OnAmbientModeEnabledStateChanged();

@@ -8,74 +8,26 @@
 #include <vector>
 
 #include "base/optional.h"
+#include "base/strings/string_util.h"
+#include "components/request_filter/adblock_filter/adblock_resources.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
 #include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
 #include "components/request_filter/adblock_filter/utils.h"
 #include "components/request_filter/filtered_request_info.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/web_contents.h"
+#include "net/base/escape.h"
+#include "net/base/net_errors.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
+#include "ui/base/page_transition_types.h"
 
 namespace adblock_filter {
 
 namespace {
-const std::array<std::string, flat::RedirectResource_MAX + 1>
-    kRedirectResources = {
-        "",                              // No Redirect
-        "data:text/plain,",              // blank-text
-        "data:text/css,",                // blank-css
-        "data:application/javascript,",  // blank-js
-        // blank-html
-        "data:text/html,<!DOCTYPE html><html><head></head><body></body></html>",
-        // blank-mp3
-        "data:audio/"
-        "mpeg;base64,"
-        "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjIwLjEwMAAAAAAAAAAAAAAA//"
-        "tUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAGAAADAAB"
-        "gYGBgYGBgYGBgYGBgYGBggICAgICAgICAgICAgICAgICgoKCgoKCgoKCgoKCgoKCgwMDA"
-        "wMDAwMDAwMDAwMDAwMDg4ODg4ODg4ODg4ODg4ODg4P////////////////////"
-        "8AAAAATGF2YzU4LjM1AAAAAAAAAAAAAAAAJAYAAAAAAAAAAwDVxttG//"
-        "sUZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVV"
-        "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//"
-        "sUZB4P8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVV"
-        "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//"
-        "sUZDwP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVV"
-        "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//"
-        "sUZFoP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVV"
-        "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//"
-        "sUZHgP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVV"
-        "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//"
-        "sUZJYP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVV"
-        "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV",
-        // blank-mp4
-        "data:video/"
-        "mp4;base64,"
-        "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAAhtZGF0AAAA1"
-        "m1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+"
-        "gAAAAAAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAA"
-        "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABidWR0YQAAAFptZXRhAAAA"
-        "AAAAACFoZGxyAAAAAAAAAABtZGlyYXBwbAAAAAAAAAAAAAAAAC1pbHN0AAAAJal0b28AA"
-        "AAdZGF0YQAAAAEAAAAATGF2ZjU3LjQxLjEwMA==",
-        // 1x1-transparent-gif
-        "data:image/gif;base64,R0lGODlhAQABAIABAAAAAP///"
-        "yH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
-        // 2x2-transparent-png
-        "data:image/"
-        "png;base64,"
-        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAC0lEQVQI12NgQAcAABIAA"
-        "e+JVKQAAAAASUVORK5CYII=",
-        // 3x2-transparent-png
-        "data:image/"
-        "png;base64,"
-        "iVBORw0KGgoAAAANSUhEUgAAAAMAAAACCAYAAACddGYaAAAAC0lEQVQI12NgwAUAABoAA"
-        "SRETuUAAAAASUVORK5CYII=",
-        // 32x32-transparent-png
-        "data:image/"
-        "png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAGklEQVRYw+"
-        "3BAQEAAACCIP+vbkhAAQAAAO8GECAAAZf3V9cAAAAASUVORK5CYII="};
-
 int RuleGroupToPriority(RuleGroup group) {
   switch (group) {
     case RuleGroup::kTrackingRules:
@@ -157,11 +109,13 @@ bool IsOriginWanted(content::BrowserContext* browser_context,
 AdBlockRequestFilter::AdBlockRequestFilter(
     RuleGroup group,
     base::WeakPtr<RulesIndexManager> rules_index_manager,
-    base::WeakPtr<BlockedUrlsReporter> blocked_urls_reporter)
+    base::WeakPtr<BlockedUrlsReporter> blocked_urls_reporter,
+    base::WeakPtr<Resources> resources)
     : vivaldi::RequestFilter(vivaldi::RequestFilter::kAdBlock,
                              RuleGroupToPriority(group)),
       rules_index_manager_(std::move(rules_index_manager)),
       blocked_urls_reporter_(std::move(blocked_urls_reporter)),
+      resources_(std::move(resources)),
       group_(group) {}
 
 AdBlockRequestFilter::~AdBlockRequestFilter() = default;
@@ -182,8 +136,18 @@ bool AdBlockRequestFilter::OnBeforeRequest(
   auto resource_type =
       static_cast<blink::mojom::ResourceType>(request->request.resource_type);
 
-  url::Origin document_origin = request->request.request_initiator.value_or(
-      url::Origin::Create(request->request.url));
+  bool is_main_frame =
+      resource_type == blink::mojom::ResourceType::kMainFrame ||
+      resource_type == blink::mojom::ResourceType::kNavigationPreloadMainFrame;
+  bool is_frame =
+      is_main_frame || resource_type == blink::mojom::ResourceType::kSubFrame ||
+      resource_type == blink::mojom::ResourceType::kNavigationPreloadSubFrame;
+
+  url::Origin document_origin;
+  if (is_main_frame || !request->request.request_initiator)
+    document_origin = url::Origin::Create(request->request.url);
+  else
+    document_origin = request->request.request_initiator.value();
 
   // TODO(julien): Add filtering of csp reports
   if (!rules_index_manager_ || !rules_index_manager_->rules_index() ||
@@ -193,13 +157,6 @@ bool AdBlockRequestFilter::OnBeforeRequest(
     std::move(callback).Run(false, false, GURL());
     return true;
   }
-
-  bool is_main_frame =
-      resource_type == blink::mojom::ResourceType::kMainFrame ||
-      resource_type == blink::mojom::ResourceType::kNavigationPreloadMainFrame;
-  bool is_frame =
-      is_main_frame || resource_type == blink::mojom::ResourceType::kSubFrame ||
-      resource_type == blink::mojom::ResourceType::kNavigationPreloadSubFrame;
 
   bool is_third_party = IsThirdParty(request->request.url, document_origin);
 
@@ -216,7 +173,14 @@ bool AdBlockRequestFilter::OnBeforeRequest(
         rules_index_manager_->rules_index()->FindMatchingActivationsRules(
             request->request.url, document_origin, is_third_party, frame);
     request_activations.in_allow_rules |= activations.in_allow_rules;
+    request_activations.in_block_rules |= activations.in_block_rules;
     activations = request_activations;
+  }
+
+  if ((is_main_frame &&
+       (activations.in_block_rules & flat::ActivationType_DOCUMENT) != 0)) {
+    std::move(callback).Run(true, false, GURL());
+    return true;
   }
 
   if (is_main_frame ||
@@ -225,10 +189,10 @@ bool AdBlockRequestFilter::OnBeforeRequest(
     return true;
   }
 
+  const flat::ResourceType reource_type = ResourceTypeFromRequest(*request);
   const flat::FilterRule* filter_rule =
       rules_index_manager_->rules_index()->FindMatchingBeforeRequestRule(
-          request->request.url, document_origin,
-          ResourceTypeFromRequest(*request), is_third_party,
+          request->request.url, document_origin, reource_type, is_third_party,
           (activations.in_allow_rules & flat::ActivationType_GENERIC_BLOCK));
 
   if (!filter_rule || filter_rule->options() & flat::OptionFlag_IS_ALLOW_RULE) {
@@ -239,10 +203,14 @@ bool AdBlockRequestFilter::OnBeforeRequest(
   if (blocked_urls_reporter_ && frame)
     blocked_urls_reporter_->OnUrlBlocked(group_, request->request.url, frame);
 
-  if (filter_rule->redirect() != flat::RedirectResource_NO_REDIRECT) {
-    std::move(callback).Run(false, false,
-                            GURL(kRedirectResources[filter_rule->redirect()]));
-    return true;
+  if (filter_rule->redirect() && filter_rule->redirect()->size() &&
+      resources_) {
+    base::Optional<std::string> resource(
+        resources_->Get(filter_rule->redirect()->c_str(), reource_type));
+    if (resource) {
+      std::move(callback).Run(false, false, GURL(resource.value()));
+      return true;
+    }
   }
 
   std::move(callback).Run(

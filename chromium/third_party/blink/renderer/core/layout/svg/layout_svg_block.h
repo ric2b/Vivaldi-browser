@@ -50,6 +50,7 @@ class LayoutSVGBlock : public LayoutBlockFlow {
       LayoutGeometryMap&) const final;
 
   AffineTransform LocalSVGTransform() const final { return local_transform_; }
+  void SetNeedsTransformUpdate() override { needs_transform_update_ = true; }
 
   PaintLayerType LayerTypeRequired() const override { return kNoPaintLayer; }
 
@@ -63,11 +64,15 @@ class LayoutSVGBlock : public LayoutBlockFlow {
       VisualRectFlags = kDefaultVisualRectFlags) const final;
 
   AffineTransform local_transform_;
+  bool needs_transform_update_ : 1;
+  bool transform_uses_reference_box_ : 1;
 
   bool IsOfType(LayoutObjectType type) const override {
     return type == kLayoutObjectSVG || LayoutBlockFlow::IsOfType(type);
   }
 
+  bool CheckForImplicitTransformChange(bool bbox_changed) const;
+  bool UpdateTransformAfterLayout(bool bounds_changed);
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
 
  private:

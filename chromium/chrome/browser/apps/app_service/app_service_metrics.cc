@@ -10,8 +10,8 @@
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/web_applications/default_web_app_ids.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "chrome/services/app_service/public/cpp/app_update.h"
-#include "chrome/services/app_service/public/mojom/app_service.mojom.h"
+#include "components/services/app_service/public/cpp/app_update.h"
+#include "components/services/app_service/public/mojom/app_service.mojom.h"
 #include "extensions/common/constants.h"
 
 #if defined(OS_CHROMEOS)
@@ -246,7 +246,7 @@ void RecordAppLaunch(const std::string& app_id,
   } else if (app_id == ash::kInternalAppIdDiscover) {
     RecordBuiltInAppLaunch(BuiltInAppName::kDiscover, launch_source);
 #if defined(OS_CHROMEOS)
-  } else if (app_id == plugin_vm::kPluginVmAppId) {
+  } else if (app_id == plugin_vm::kPluginVmShelfAppId) {
     RecordBuiltInAppLaunch(BuiltInAppName::kPluginVm, launch_source);
 #endif  // OS_CHROMEOS
   } else if (app_id == ash::kReleaseNotesAppId) {
@@ -268,7 +268,7 @@ void RecordBuiltInAppSearchResult(const std::string& app_id) {
     base::UmaHistogramEnumeration("Apps.AppListSearchResultInternalApp.Show",
                                   BuiltInAppName::kDiscover);
 #if defined(OS_CHROMEOS)
-  } else if (app_id == plugin_vm::kPluginVmAppId) {
+  } else if (app_id == plugin_vm::kPluginVmShelfAppId) {
     base::UmaHistogramEnumeration("Apps.AppListSearchResultInternalApp.Show",
                                   BuiltInAppName::kPluginVm);
 #endif  // OS_CHROMEOS
@@ -293,6 +293,14 @@ void RecordAppBounce(const apps::AppUpdate& app) {
   } else {
     base::UmaHistogramBoolean("Apps.Bounced", false);
   }
+}
+
+void RecordAppsPerNotification(int count) {
+  if (count <= 0) {
+    return;
+  }
+  base::UmaHistogramBoolean("ChromeOS.Apps.NumberOfAppsForNotification",
+                            (count > 1));
 }
 
 }  // namespace apps

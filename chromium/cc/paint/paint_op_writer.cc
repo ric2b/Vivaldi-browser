@@ -243,7 +243,7 @@ void PaintOpWriter::Write(const DrawImage& draw_image,
   // Security constrained serialization inlines the image bitmap.
   if (enable_security_constraints_) {
     SkBitmap bm;
-    if (!draw_image.paint_image().GetSkImage()->asLegacyBitmap(&bm)) {
+    if (!draw_image.paint_image().GetRasterSkImage()->asLegacyBitmap(&bm)) {
       Write(static_cast<uint8_t>(PaintOp::SerializedImageType::kNoImage));
       return;
     }
@@ -741,7 +741,7 @@ void PaintOpWriter::Write(const RecordPaintFilter& filter) {
   SkMatrix mat = options_.canvas->getTotalMatrix();
   SkSize scale;
   if (!mat.isScaleTranslate() && mat.decomposeScale(&scale))
-    mat = SkMatrix::MakeScale(scale.width(), scale.height());
+    mat = SkMatrix::Scale(scale.width(), scale.height());
   Write(filter.record().get(), gfx::Rect(), gfx::SizeF(1.f, 1.f), mat);
 }
 

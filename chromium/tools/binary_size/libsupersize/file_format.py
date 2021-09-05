@@ -5,9 +5,9 @@
 """Deals with loading & saving .size and .sizediff files.
 
 The .size file is written in the following format. There are no section
-delimiters, instead the end of a section is usually determined by a row count
-on the first line of a section, followed by that number of rows. In other
-cases, the sections have a known size.
+delimiters, instead the end of a section is usually determined by a row count on
+the first line of a section, followed by that number of rows. In other cases,
+the sections have a known size.
 
 Header
 ------
@@ -116,7 +116,8 @@ import parallel
 
 
 # File format version for .size files.
-_SERIALIZATION_VERSION = 'Size File Format v1'
+_SERIALIZATION_VERSION_SINGLE_CONTAINER = 'Size File Format v1'
+_SERIALIZATION_VERSION_MULTI_CONTAINER = 'Size File Format v1.1'
 
 # Header for .sizediff files
 _SIZEDIFF_HEADER = '# Created by //tools/binary_size\nDIFF\n'
@@ -171,16 +172,18 @@ def CalculatePadding(raw_symbols):
 
   # Padding not really required, but it is useful to check for large padding and
   # log a warning.
-  seen_sections = set()
+  seen_container_and_sections = set()
   for i, symbol in enumerate(raw_symbols[1:]):
     prev_symbol = raw_symbols[i]
     if symbol.IsOverhead():
       # Overhead symbols are not actionable so should be padding-only.
       symbol.padding = symbol.size
-    if prev_symbol.section_name != symbol.section_name:
-      assert symbol.section_name not in seen_sections, (
-          'Input symbols must be sorted by section, then address.')
-      seen_sections.add(symbol.section_name)
+    if (prev_symbol.container.name != symbol.container.name
+        or prev_symbol.section_name != symbol.section_name):
+      container_and_section = (symbol.container.name, symbol.section_name)
+      assert container_and_section not in seen_container_and_sections, (
+          'Input symbols must be sorted by container, section, then address.')
+      seen_container_and_sections.add(container_and_section)
       continue
     if (symbol.address <= 0 or prev_symbol.address <= 0
         or not symbol.IsNative() or not prev_symbol.IsNative()):
@@ -246,24 +249,45 @@ def _SaveSizeInfoToFile(size_info,
   else:
     raw_symbols = size_info.raw_symbols
 
+  num_containers = len(size_info.containers)
+  has_multi_containers = (num_containers > 1)
+
   w = _Writer(file_obj)
 
-  # Created by supersize header
+  # "Created by SuperSize" header
   w.WriteLine('# Created by //tools/binary_size')
-  w.WriteLine(_SERIALIZATION_VERSION)
+  if has_multi_containers:
+    w.WriteLine(_SERIALIZATION_VERSION_MULTI_CONTAINER)
+  else:
+    w.WriteLine(_SERIALIZATION_VERSION_SINGLE_CONTAINER)
+
   # JSON header fields
   fields = {
-      'metadata': size_info.metadata,
-      'section_sizes': size_info.section_sizes,
       'has_components': True,
       'has_padding': include_padding,
   }
+
+  if has_multi_containers:
+    # Write using new format.
+    assert len(set(c.name for c in size_info.containers)) == num_containers, (
+        'Container names must be distinct.')
+    fields['build_config'] = size_info.build_config
+    fields['containers'] = [{
+        'name': c.name,
+        'metadata': c.metadata,
+        'section_sizes': c.section_sizes,
+    } for c in size_info.containers]
+  else:
+    # Write using old format.
+    fields['metadata'] = size_info.metadata_legacy
+    fields['section_sizes'] = size_info.containers[0].section_sizes
+
   fields_str = json.dumps(fields, indent=2, sort_keys=True)
   w.WriteLine(str(len(fields_str)))
   w.WriteLine(fields_str)
   w.LogSize('header')  # For libchrome: 570 bytes.
 
-  # Store a single copy of all paths and have them referenced by index.
+  # Store a single copy of all paths and reference them by index.
   unique_path_tuples = sorted(
       set((s.object_path, s.source_path) for s in raw_symbols))
   path_tuples = {tup: i for i, tup in enumerate(unique_path_tuples)}
@@ -280,9 +304,18 @@ def _SaveSizeInfoToFile(size_info,
     w.WriteLine(comp)
   w.LogSize('components')
 
-  # Symbol counts by section.
-  symbol_group_by_section = raw_symbols.GroupedBySectionName()
-  w.WriteLine('\t'.join(g.name for g in symbol_group_by_section))
+  # Symbol counts by container and section.
+  symbol_group_by_section = raw_symbols.GroupedByContainerAndSectionName()
+  if has_multi_containers:
+    container_name_to_index = {
+        c.name: i
+        for i, c in enumerate(size_info.containers)
+    }
+    w.WriteLine('\t'.join('<%d>%s' %
+                          (container_name_to_index[g.name[0]], g.name[1])
+                          for g in symbol_group_by_section))
+  else:
+    w.WriteLine('\t'.join(g.name[1] for g in symbol_group_by_section))
   w.WriteLine('\t'.join(str(len(g)) for g in symbol_group_by_section))
 
   def gen_delta(gen, prev_value=0):
@@ -371,17 +404,49 @@ def _LoadSizeInfoFromFile(file_obj, size_path):
   """
   # Split lines on '\n', since '\r' can appear in some lines!
   lines = io.TextIOWrapper(file_obj, newline='\n')
-  _ReadLine(lines)  # Line 0: Created by supersize header
+  _ReadLine(lines)  # Line 0: "Created by SuperSize" header
   actual_version = _ReadLine(lines)
-  assert actual_version == _SERIALIZATION_VERSION, (
-      'Version mismatch. Need to write some upgrade code.')
+  if actual_version == _SERIALIZATION_VERSION_SINGLE_CONTAINER:
+    has_multi_containers = False
+  elif actual_version == _SERIALIZATION_VERSION_MULTI_CONTAINER:
+    has_multi_containers = True
+  else:
+    raise ValueError('Version mismatch. Need to write some upgrade code.')
+
   # JSON header fields
   json_len = int(_ReadLine(lines))
   json_str = lines.read(json_len)
 
   fields = json.loads(json_str)
-  section_sizes = fields['section_sizes']
-  metadata = fields.get('metadata')
+  assert ('containers' in fields) == has_multi_containers
+  assert ('build_config' in fields) == has_multi_containers
+  assert ('containers' in fields) == has_multi_containers
+  assert ('metadata' not in fields) == has_multi_containers
+  assert ('section_sizes' not in fields) == has_multi_containers
+
+  containers = []
+  if has_multi_containers:  # New format.
+    build_config = fields['build_config']
+    for cfield in fields['containers']:
+      c = models.Container(name=cfield['name'],
+                           metadata=cfield['metadata'],
+                           section_sizes=cfield['section_sizes'])
+      containers.append(c)
+  else:  # Old format.
+    build_config = {}
+    metadata = fields.get('metadata')
+    if metadata:
+      for key in models.BUILD_CONFIG_KEYS:
+        if key in metadata:
+          build_config[key] = metadata[key]
+          del metadata[key]
+    section_sizes = fields['section_sizes']
+    containers.append(
+        models.Container(name='',
+                         metadata=metadata,
+                         section_sizes=section_sizes))
+  models.Container.AssignShortNames(containers)
+
   has_components = fields.get('has_components', False)
   has_padding = fields.get('has_padding', False)
 
@@ -389,7 +454,7 @@ def _LoadSizeInfoFromFile(file_obj, size_path):
   _ReadLine(lines)
 
   # Path list
-  num_path_tuples = int(_ReadLine(lines))  # Line 4 - number of paths in list
+  num_path_tuples = int(_ReadLine(lines))  # Number of paths in list
   # Read the path list values and store for later
   path_tuples = [
       _ReadValuesFromLine(lines, split='\t') for _ in range(num_path_tuples)
@@ -401,8 +466,8 @@ def _LoadSizeInfoFromFile(file_obj, size_path):
     components = [_ReadLine(lines) for _ in range(num_components)]
 
   # Symbol counts by section.
-  section_names = _ReadValuesFromLine(lines, split='\t')
-  section_counts = [int(c) for c in _ReadValuesFromLine(lines, split='\t')]
+  container_and_section_names = _ReadValuesFromLine(lines, split='\t')
+  symbol_counts = [int(c) for c in _ReadValuesFromLine(lines, split='\t')]
 
   # Addresses, sizes, paddings, path indices, component indices
   def read_numeric(delta=False):
@@ -414,7 +479,7 @@ def _LoadSizeInfoFromFile(file_obj, size_path):
     """
     ret = []
     delta_multiplier = int(delta)
-    for _ in section_counts:
+    for _ in symbol_counts:
       value = 0
       fields = []
       for f in _ReadValuesFromLine(lines, split=' '):
@@ -428,21 +493,31 @@ def _LoadSizeInfoFromFile(file_obj, size_path):
   if has_padding:
     paddings = read_numeric(delta=False)
   else:
-    paddings = [None] * len(section_names)
+    paddings = [None] * len(container_and_section_names)
   path_indices = read_numeric(delta=True)
   if has_components:
     component_indices = read_numeric(delta=True)
   else:
-    component_indices = [None] * len(section_names)
+    component_indices = [None] * len(container_and_section_names)
 
-  raw_symbols = [None] * sum(section_counts)
+  raw_symbols = [None] * sum(symbol_counts)
   symbol_idx = 0
-  for (cur_section_name, cur_section_count, cur_addresses, cur_sizes,
-       cur_paddings, cur_path_indices, cur_component_indices) in zip(
-           section_names, section_counts, addresses, sizes, paddings,
-           path_indices, component_indices):
+  for (cur_container_and_section_name, cur_symbol_count, cur_addresses,
+       cur_sizes, cur_paddings, cur_path_indices,
+       cur_component_indices) in zip(container_and_section_names, symbol_counts,
+                                     addresses, sizes, paddings, path_indices,
+                                     component_indices):
+    if has_multi_containers:
+      # Extract '<cur_container_idx_str>cur_section_name'.
+      assert cur_container_and_section_name.startswith('<')
+      cur_container_idx_str, cur_section_name = (
+          cur_container_and_section_name[1:].split('>', 1))
+      cur_container = containers[int(cur_container_idx_str)]
+    else:
+      cur_section_name = cur_container_and_section_name
+      cur_container = containers[0]
     alias_counter = 0
-    for i in range(cur_section_count):
+    for i in range(cur_symbol_count):
       parts = _ReadValuesFromLine(lines, split='\t')
       full_name = parts[0]
       flags_part = None
@@ -469,6 +544,7 @@ def _LoadSizeInfoFromFile(file_obj, size_path):
 
       # Skip the constructor to avoid default value checks
       new_sym = models.Symbol.__new__(models.Symbol)
+      new_sym.container = cur_container
       new_sym.section_name = cur_section_name
       new_sym.full_name = full_name
       new_sym.address = cur_addresses[i]
@@ -505,7 +581,9 @@ def _LoadSizeInfoFromFile(file_obj, size_path):
   if not has_padding:
     CalculatePadding(raw_symbols)
 
-  return models.SizeInfo(section_sizes, raw_symbols, metadata=metadata,
+  return models.SizeInfo(build_config,
+                         containers,
+                         raw_symbols,
                          size_path=size_path)
 
 

@@ -11,8 +11,8 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/task/post_task.h"
 #include "base/test/task_environment.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "media/base/cdm_config.h"
 #include "media/base/mock_filters.h"
@@ -35,7 +35,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
-#include "url/origin.h"
 
 namespace media {
 
@@ -58,8 +57,6 @@ MATCHER_P(MatchesResult, success, "") {
 const char kClearKeyKeySystem[] = "org.w3.clearkey";
 const char kInvalidKeySystem[] = "invalid.key.system";
 #endif
-
-const char kSecurityOrigin[] = "https://foo.com";
 
 class MockRendererClient : public mojom::RendererClient {
  public:
@@ -90,7 +87,8 @@ class MockRendererClient : public mojom::RendererClient {
 };
 
 ACTION_P(QuitLoop, run_loop) {
-  base::PostTask(FROM_HERE, run_loop->QuitClosure());
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                run_loop->QuitClosure());
 }
 
 // Tests MediaService using TestMojoMediaClient, which supports CDM creation
@@ -139,8 +137,7 @@ class MediaServiceTest : public testing::Test {
     // cdm_id" out and then call DoAll.
     EXPECT_CALL(*this, OnCdmInitialized(MatchesResult(expected_result), _, _))
         .WillOnce(WithArg<1>(DoAll(SaveArg<0>(&cdm_id), QuitLoop(&run_loop))));
-    cdm_->Initialize(key_system, url::Origin::Create(GURL(kSecurityOrigin)),
-                     CdmConfig(),
+    cdm_->Initialize(key_system, CdmConfig(),
                      base::BindOnce(&MediaServiceTest::OnCdmInitialized,
                                     base::Unretained(this)));
     run_loop.Run();

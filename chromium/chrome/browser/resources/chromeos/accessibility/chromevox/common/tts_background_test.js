@@ -3,9 +3,7 @@
 // found in the LICENSE file.
 
 // Include test fixture.
-GEN_INCLUDE([
-  '../testing/chromevox_e2e_test_base.js', '../testing/assert_additions.js'
-]);
+GEN_INCLUDE(['../testing/chromevox_e2e_test_base.js']);
 
 // E2E tests for TtsBackground.
 
@@ -290,4 +288,16 @@ SYNC_TEST_F('ChromeVoxTtsBackgroundTest', 'Phonetics', function() {
   tts.speak('t', QueueMode.QUEUE, {lang: 'qwerty', phoneticCharacters: true});
   assertTrue(spokenStrings.includes('T'));
   assertEquals(1, spokenStrings.length);
+});
+
+SYNC_TEST_F('ChromeVoxTtsBackgroundTest', 'PitchChanges', function() {
+  const tts = new TtsBackground(false);
+  const preprocess = tts.preprocess.bind(tts);
+  const props = {relativePitch: -0.3};
+  localStorage['usePitchChanges'] = 'true';
+  preprocess('Hello world', props);
+  assertTrue(props.hasOwnProperty('relativePitch'));
+  localStorage['usePitchChanges'] = 'false';
+  preprocess('Hello world', props);
+  assertFalse(props.hasOwnProperty('relativePitch'));
 });

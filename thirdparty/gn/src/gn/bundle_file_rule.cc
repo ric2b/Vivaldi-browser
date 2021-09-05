@@ -54,7 +54,7 @@ bool BundleFileRule::ApplyPatternToSource(const Settings* settings,
     if (subrange.type == &SubstitutionLiteral) {
       output_path.append(subrange.literal);
     } else if (subrange.type == &SubstitutionBundleRootDir) {
-      if (bundle_data.contents_dir().is_null()) {
+      if (bundle_data.root_dir().is_null()) {
         *err = ErrMissingPropertyForExpansion(settings, target, this,
                                               variables::kBundleRootDir);
         return false;

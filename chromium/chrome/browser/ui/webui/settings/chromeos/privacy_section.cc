@@ -13,6 +13,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -32,7 +33,7 @@ const std::vector<SearchConcept>& GetPrivacySearchConcepts() {
       {IDS_OS_SETTINGS_TAG_PRIVACY,
        mojom::kPrivacyAndSecuritySectionPath,
        mojom::SearchResultIcon::kShield,
-       mojom::SearchResultDefaultRank::kHigh,
+       mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSection,
        {.section = mojom::Section::kPrivacyAndSecurity}},
       {IDS_OS_SETTINGS_TAG_PRIVACY_WIFI_SLEEP,
@@ -68,9 +69,10 @@ const std::vector<SearchConcept>& GetPrivacyGoogleChromeSearchConcepts() {
 PrivacySection::PrivacySection(Profile* profile,
                                SearchTagRegistry* search_tag_registry)
     : OsSettingsSection(profile, search_tag_registry) {
-  registry()->AddSearchTags(GetPrivacySearchConcepts());
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.AddSearchTags(GetPrivacySearchConcepts());
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  registry()->AddSearchTags(GetPrivacyGoogleChromeSearchConcepts());
+  updater.AddSearchTags(GetPrivacyGoogleChromeSearchConcepts());
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 
@@ -84,6 +86,9 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"wakeOnWifi", IDS_SETTINGS_WAKE_ON_WIFI_DESCRIPTION},
       {"enableContentProtectionAttestation",
        IDS_SETTINGS_ENABLE_CONTENT_PROTECTION_ATTESTATION},
+      {"enableSuggestedContent", IDS_SETTINGS_ENABLE_SUGGESTED_CONTENT_TITLE},
+      {"enableSuggestedContentDesc",
+       IDS_SETTINGS_ENABLE_SUGGESTED_CONTENT_DESC},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
 
@@ -91,9 +96,39 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       "privacySettingsRedesignEnabled",
       base::FeatureList::IsEnabled(::features::kPrivacySettingsRedesign));
 
+  html_source->AddBoolean("suggestedContentToggleEnabled",
+                          base::FeatureList::IsEnabled(
+                              ::chromeos::features::kSuggestedContentToggle));
+
+  html_source->AddString("suggestedContentLearnMoreURL",
+                         chrome::kSuggestedContentLearnMoreURL);
+
   html_source->AddString("syncAndGoogleServicesLearnMoreURL",
                          chrome::kSyncAndGoogleServicesLearnMoreURL);
   ::settings::AddPersonalizationOptionsStrings(html_source);
+}
+
+int PrivacySection::GetSectionNameMessageId() const {
+  return IDS_SETTINGS_PRIVACY;
+}
+
+mojom::Section PrivacySection::GetSection() const {
+  return mojom::Section::kPrivacyAndSecurity;
+}
+
+mojom::SearchResultIcon PrivacySection::GetSectionIcon() const {
+  return mojom::SearchResultIcon::kShield;
+}
+
+std::string PrivacySection::GetSectionPath() const {
+  return mojom::kPrivacyAndSecuritySectionPath;
+}
+
+void PrivacySection::RegisterHierarchy(HierarchyGenerator* generator) const {
+  generator->RegisterTopLevelSetting(mojom::Setting::kVerifiedAccess);
+  generator->RegisterTopLevelSetting(mojom::Setting::kKeepWifiOnDuringSleep);
+  generator->RegisterTopLevelSetting(
+      mojom::Setting::kUsageStatsAndCrashReports);
 }
 
 }  // namespace settings

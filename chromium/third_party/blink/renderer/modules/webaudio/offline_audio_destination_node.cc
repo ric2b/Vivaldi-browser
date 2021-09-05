@@ -51,17 +51,14 @@ OfflineAudioDestinationHandler::OfflineAudioDestinationHandler(
       frames_to_process_(frames_to_process),
       is_rendering_started_(false),
       number_of_channels_(number_of_channels),
-      sample_rate_(sample_rate) {
-  channel_count_ = number_of_channels;
+      sample_rate_(sample_rate),
+      main_thread_task_runner_(Context()->GetExecutionContext()->GetTaskRunner(
+          TaskType::kInternalMedia)) {
+  DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
 
+  channel_count_ = number_of_channels;
   SetInternalChannelCountMode(kExplicit);
   SetInternalChannelInterpretation(AudioBus::kSpeakers);
-
-  if (Context()->GetExecutionContext()) {
-    main_thread_task_runner_ = Context()->GetExecutionContext()->GetTaskRunner(
-        TaskType::kMiscPlatformAPI);
-    DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
-  }
 }
 
 scoped_refptr<OfflineAudioDestinationHandler>
@@ -92,8 +89,6 @@ void OfflineAudioDestinationHandler::Initialize() {
 void OfflineAudioDestinationHandler::Uninitialize() {
   if (!IsInitialized())
     return;
-
-  render_thread_.reset();
 
   AudioHandler::Uninitialize();
 }
@@ -218,7 +213,7 @@ void OfflineAudioDestinationHandler::SuspendOfflineRendering() {
   PostCrossThreadTask(
       *main_thread_task_runner_, FROM_HERE,
       CrossThreadBindOnce(&OfflineAudioDestinationHandler::NotifySuspend,
-                          WrapRefCounted(this),
+                          GetWeakPtr(),
                           Context()->CurrentSampleFrame()));
 }
 
@@ -229,7 +224,7 @@ void OfflineAudioDestinationHandler::FinishOfflineRendering() {
   PostCrossThreadTask(
       *main_thread_task_runner_, FROM_HERE,
       CrossThreadBindOnce(&OfflineAudioDestinationHandler::NotifyComplete,
-                          WrapRefCounted(this)));
+                          GetWeakPtr()));
 }
 
 void OfflineAudioDestinationHandler::NotifySuspend(size_t frame) {
@@ -387,7 +382,7 @@ OfflineAudioDestinationNode* OfflineAudioDestinationNode::Create(
       *context, number_of_channels, frames_to_process, sample_rate);
 }
 
-void OfflineAudioDestinationNode::Trace(Visitor* visitor) {
+void OfflineAudioDestinationNode::Trace(Visitor* visitor) const {
   visitor->Trace(destination_buffer_);
   AudioDestinationNode::Trace(visitor);
 }

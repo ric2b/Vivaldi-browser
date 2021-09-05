@@ -36,6 +36,7 @@
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/web/web_page_popup.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/frame/web_feature_forward.h"
 #include "third_party/blink/renderer/core/page/page_popup.h"
 #include "third_party/blink/renderer/core/page/page_widget_delegate.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -120,6 +121,24 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
   void RecordTimeToFirstActivePaint(base::TimeDelta duration) override;
   void SetSuppressFrameRequestsWorkaroundFor704763Only(bool) final;
   WebInputEventResult DispatchBufferedTouchEvents() override;
+  bool WillHandleGestureEvent(const WebGestureEvent& event) override;
+  bool WillHandleMouseEvent(const WebMouseEvent& event) override;
+  void ObserveGestureEventAndResult(
+      const WebGestureEvent& gesture_event,
+      const gfx::Vector2dF& unused_delta,
+      const cc::OverscrollBehavior& overscroll_behavior,
+      bool event_processed) override;
+  bool SupportsBufferedTouchEvents() override { return true; }
+  void QueueSyntheticEvent(
+      std::unique_ptr<blink::WebCoalescedInputEvent>) override;
+  void GetWidgetInputHandler(
+      mojo::PendingReceiver<mojom::blink::WidgetInputHandler> request,
+      mojo::PendingRemote<mojom::blink::WidgetInputHandlerHost> host) override;
+  bool HasCurrentImeGuard(bool request_to_show_virtual_keyboard) override;
+  void SendCompositionRangeChanged(
+      const gfx::Range& range,
+      const std::vector<gfx::Rect>& character_bounds) override;
+  void FocusChanged(bool enabled) override;
 
   // WebWidget implementation.
   // NOTE: The WebWidget may still be used after requesting the popup to be
@@ -135,6 +154,7 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
              base::OnceCallback<void()> cleanup_task) override;
   WebInputEventResult HandleInputEvent(const WebCoalescedInputEvent&) override;
   void SetFocus(bool) override;
+  bool HasFocus() override;
   WebURL GetURLForDebugTrace() override;
   WebHitTestResult HitTestResultAt(const gfx::PointF&) override { return {}; }
   cc::LayerTreeHost* InitializeCompositing(
@@ -144,6 +164,17 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
   scheduler::WebRenderWidgetSchedulingState* RendererWidgetSchedulingState()
       override;
   void SetCursor(const ui::Cursor& cursor) override;
+  bool HandlingInputEvent() override;
+  void SetHandlingInputEvent(bool handling) override;
+  void ProcessInputEventSynchronously(const WebCoalescedInputEvent&,
+                                      HandledEventCallback) override;
+  void UpdateTextInputState() override;
+  void ForceTextInputStateUpdate() override;
+  void UpdateCompositionInfo() override;
+  void UpdateSelectionBounds() override;
+  void ShowVirtualKeyboard() override;
+  void RequestCompositionUpdates(bool immediate_request,
+                                 bool monitor_updates) override;
 
   // PageWidgetEventHandler functions
   WebInputEventResult HandleCharEvent(const WebKeyboardEvent&) override;
@@ -158,6 +189,9 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
   Element* FocusedElement() const;
 
   bool IsViewportPointInWindow(int x, int y);
+  void CheckScreenPointInOwnerWindowAndCount(const gfx::PointF& point_in_screen,
+                                             WebFeature feature) const;
+  IntRect OwnerWindowRectInScreen() const;
 
   // PagePopup function
   AXObject* RootAXObject() override;
@@ -173,6 +207,12 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
   void SetRootLayer(scoped_refptr<cc::Layer>);
 
   WebRect WindowRectInScreen() const;
+
+  void InjectGestureScrollEvent(WebGestureDevice device,
+                                const gfx::Vector2dF& delta,
+                                ui::ScrollGranularity granularity,
+                                cc::ElementId scrollable_area_element_id,
+                                WebInputEvent::Type injected_type);
 
   WebPagePopupClient* web_page_popup_client_;
   WebViewImpl* web_view_;

@@ -76,8 +76,6 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
     return embedded_content_view_;
   }
 
-  void FrameCrossOriginToParentFrameChanged();
-
   class PluginDisposeSuspendScope {
     STACK_ALLOCATED();
 
@@ -131,11 +129,11 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   void ParseAttribute(const AttributeModificationParams&) override;
 
   void SetEmbeddingToken(const base::UnguessableToken& token);
-  const base::Optional<base::UnguessableToken>& GetEmbeddingToken() const {
-    return embedding_token_;
-  }
+  const base::Optional<base::UnguessableToken>& GetEmbeddingToken() const;
 
-  void Trace(Visitor*) override;
+  bool IsAdRelated() const override;
+
+  void Trace(Visitor*) const override;
 
  protected:
   HTMLFrameOwnerElement(const QualifiedName& tag_name, Document&);
@@ -166,12 +164,11 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   // Return a feature policy container policy for this frame, based on the
   // frame attributes and the effective origin specified in the frame
   // attributes.
-  virtual ParsedFeaturePolicy ConstructContainerPolicy(
-      Vector<String>* /*  messages */) const = 0;
+  virtual ParsedFeaturePolicy ConstructContainerPolicy() const = 0;
 
   // Update the container policy and notify the frame loader client of any
   // changes.
-  void UpdateContainerPolicy(Vector<String>* messages = nullptr);
+  void UpdateContainerPolicy();
 
   // Return a document policy required policy for this frame, based on the
   // frame attributes.
@@ -201,8 +198,6 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   virtual network::mojom::ReferrerPolicy ReferrerPolicyAttribute() {
     return network::mojom::ReferrerPolicy::kDefault;
   }
-
-  bool IsLoadingFrameDefaultEagerEnforced() const;
 
   Member<Frame> content_frame_;
   Member<EmbeddedContentView> embedded_content_view_;

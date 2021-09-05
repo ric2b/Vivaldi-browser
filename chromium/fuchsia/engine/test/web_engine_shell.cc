@@ -4,18 +4,18 @@
 
 #include <fuchsia/sys/cpp/fidl.h>
 #include <fuchsia/ui/policy/cpp/fidl.h>
-#include <fuchsia/ui/views/cpp/fidl.h>
 #include <fuchsia/web/cpp/fidl.h>
 #include <lib/sys/cpp/component_context.h>
 #include <lib/ui/scenic/cpp/view_token_pair.h>
 #include <lib/vfs/cpp/pseudo_file.h>
 #include <iostream>
+#include <utility>
 
 #include "base/base_paths_fuchsia.h"
 #include "base/command_line.h"
-#include "base/fuchsia/default_context.h"
 #include "base/fuchsia/file_utils.h"
 #include "base/fuchsia/fuchsia_logging.h"
+#include "base/fuchsia/process_context.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/message_loop/message_pump_type.h"
@@ -26,7 +26,6 @@
 #include "base/task/single_thread_task_executor.h"
 #include "base/values.h"
 #include "fuchsia/base/init_logging.h"
-#include "fuchsia/base/release_channel.h"
 #include "url/gurl.h"
 
 fuchsia::sys::ComponentControllerPtr component_controller_;
@@ -35,6 +34,8 @@ namespace {
 
 constexpr char kRemoteDebuggingPortSwitch[] = "remote-debugging-port";
 constexpr char kHeadlessSwitch[] = "headless";
+constexpr char kEnableProtectedMediaIdentifier[] =
+    "enable-protected-media-identifier";
 
 void PrintUsage() {
   std::cerr << "Usage: "
@@ -80,7 +81,7 @@ GURL GetUrlFromArgs(const base::CommandLine::StringVector& args) {
 fuchsia::web::ContextProviderPtr ConnectToContextProvider(
     const base::CommandLine::StringVector& extra_command_line_arguments) {
   sys::ComponentContext* const component_context =
-      base::fuchsia::ComponentContextForCurrentProcess();
+      base::ComponentContextForProcess();
 
   // If there are no additional command-line arguments then use the
   // system instance of the ContextProvider.
@@ -94,10 +95,8 @@ fuchsia::web::ContextProviderPtr ConnectToContextProvider(
   component_context->svc()->Connect(launcher.NewRequest());
 
   fuchsia::sys::LaunchInfo launch_info;
-  launch_info.url = base::StrCat({"fuchsia-pkg://fuchsia.com/web_engine",
-                                  BUILDFLAG(FUCHSIA_RELEASE_CHANNEL_SUFFIX),
-                                  "#meta/context_provider.cmx"});
-
+  launch_info.url =
+      "fuchsia-pkg://fuchsia.com/web_engine#meta/context_provider.cmx";
   launch_info.arguments = extra_command_line_arguments;
   fidl::InterfaceHandle<fuchsia::io::Directory> service_directory;
   launch_info.directory_request = service_directory.NewRequest().TakeChannel();
@@ -132,7 +131,10 @@ int main(int argc, char** argv) {
       return 1;
     }
   }
-  bool is_headless = command_line->HasSwitch(kHeadlessSwitch);
+
+  const bool is_headless = command_line->HasSwitch(kHeadlessSwitch);
+  const bool enable_protected_media_identifier_access =
+      command_line->HasSwitch(kEnableProtectedMediaIdentifier);
 
   base::CommandLine::StringVector additional_args = command_line->GetArgs();
   GURL url(GetUrlFromArgs(additional_args));
@@ -237,18 +239,26 @@ int main(int argc, char** argv) {
         }
       });
 
-  if (is_headless)
+  if (enable_protected_media_identifier_access) {
+    fuchsia::web::PermissionDescriptor protected_media_permission;
+    protected_media_permission.set_type(
+        fuchsia::web::PermissionType::PROTECTED_MEDIA_IDENTIFIER);
+    frame->SetPermissionState(std::move(protected_media_permission),
+                              url.GetOrigin().spec(),
+                              fuchsia::web::PermissionState::GRANTED);
+  }
+
+  if (is_headless) {
     frame->EnableHeadlessRendering();
-  else {
+  } else {
     // Present a fullscreen view of |frame|.
-    fuchsia::ui::views::ViewToken view_token;
-    fuchsia::ui::views::ViewHolderToken view_holder_token;
-    std::tie(view_token, view_holder_token) = scenic::NewViewTokenPair();
-    frame->CreateView(std::move(view_token));
-    auto presenter = base::fuchsia::ComponentContextForCurrentProcess()
+    auto view_tokens = scenic::ViewTokenPair::New();
+    frame->CreateView(std::move(view_tokens.view_token));
+    auto presenter = base::ComponentContextForProcess()
                          ->svc()
                          ->Connect<::fuchsia::ui::policy::Presenter>();
-    presenter->PresentView(std::move(view_holder_token), nullptr);
+    presenter->PresentOrReplaceView(std::move(view_tokens.view_holder_token),
+                                    nullptr);
   }
 
   LOG(INFO) << "Launched browser at URL " << url.spec();

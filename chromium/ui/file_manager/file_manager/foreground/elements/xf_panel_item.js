@@ -87,13 +87,16 @@ class PanelItem extends HTMLElement {
                   outline: none;
               }
 
+              :host([panel-type='3']) .xf-panel-text {
+                  width: 216px;
+              }
+
               :host([panel-type='3']) .xf-panel-label-text {
                   display: -webkit-box;
                   -webkit-line-clamp: 2;
                   -webkit-box-orient: vertical;
                   overflow: hidden;
                   white-space: normal;
-                  width: 216px;
               }
 
               :host([panel-type='3']) .xf-linebreaker {
@@ -102,6 +105,10 @@ class PanelItem extends HTMLElement {
 
               .xf-panel-label-text {
                   color: rgb(32, 33, 36);
+                  max-width: 216px;
+                  text-overflow: ellipsis;
+                  overflow: hidden;
+                  white-space: nowrap;
               }
 
               .xf-panel-secondary-text {
@@ -116,7 +123,7 @@ class PanelItem extends HTMLElement {
                   width: 16px;
               }
 
-              .xf-padder-24 {
+              .xf-grow-padder {
                   flex-grow: 16;
                   width: 24px;
               }
@@ -158,7 +165,7 @@ class PanelItem extends HTMLElement {
                     </span>
                     <br class='xf-linebreaker'/>
                 </div>
-                <div class='xf-padder-24'></div>
+                <div class='xf-grow-padder'></div>
                 <xf-button id='secondary-action' tabindex='-1'>
                 </xf-button>
                 <div id='button-gap' class='xf-padder-4'></div>

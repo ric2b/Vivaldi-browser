@@ -19,10 +19,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/third_party/icu/icu_utf.h"
 #include "chromeos/system/devicemode.h"
+#include "ui/base/ime/chromeos/ime_bridge.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/ime/composition_text.h"
-#include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/ime_engine_handler_interface.h"
 #include "ui/base/ime/input_method_delegate.h"
 #include "ui/base/ime/text_input_client.h"
@@ -30,6 +30,11 @@
 #include "ui/gfx/geometry/rect.h"
 
 namespace ui {
+
+ui::IMEEngineHandlerInterface* GetEngine() {
+  auto* bridge = ui::IMEBridge::Get();
+  return bridge ? bridge->GetCurrentEngineHandler() : nullptr;
+}
 
 // InputMethodChromeOS implementation -----------------------------------------
 InputMethodChromeOS::InputMethodChromeOS(
@@ -284,6 +289,20 @@ InputMethodChromeOS::GetInputMethodKeyboardController() {
   return InputMethodBase::GetInputMethodKeyboardController();
 }
 
+void InputMethodChromeOS::OnFocus() {
+  ui::IMEBridge* bridge = ui::IMEBridge::Get();
+  if (bridge) {
+    bridge->SetInputContextHandler(this);
+    bridge->MaybeSwitchEngine();
+  }
+}
+
+void InputMethodChromeOS::OnBlur() {
+  if (ui::IMEBridge::Get() &&
+      ui::IMEBridge::Get()->GetInputContextHandler() == this)
+    ui::IMEBridge::Get()->SetInputContextHandler(nullptr);
+}
+
 void InputMethodChromeOS::OnWillChangeFocusedClient(
     TextInputClient* focused_before,
     TextInputClient* focused) {
@@ -345,6 +364,16 @@ bool InputMethodChromeOS::SetCompositionRange(
     return client->SetCompositionFromExistingText(composition_range,
                                                   text_spans);
   }
+}
+
+bool InputMethodChromeOS::SetAutocorrectRange(
+    const base::string16& autocorrect_text,
+    uint32_t start,
+    uint32_t end) {
+  if (IsTextInputTypeNone())
+    return false;
+  return GetTextInputClient()->SetAutocorrectRange(autocorrect_text,
+                                                   gfx::Range(start, end));
 }
 
 bool InputMethodChromeOS::SetSelectionRange(uint32_t start, uint32_t end) {

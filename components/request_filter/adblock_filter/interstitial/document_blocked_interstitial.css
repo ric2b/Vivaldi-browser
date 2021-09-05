@@ -1,0 +1,17 @@
+/* Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved */
+
+.document-blocked .icon {
+  background-image: -webkit-image-set(
+      url(../../../../app/resources/components_resources/neterror/default_100_percent/vivaldi/100-error-offline.png) 1x,
+      url(../../../../app/resources/components_resources/neterror/default_200_percent/vivaldi/200-error-offline.png) 2x);
+}
+
+.document-blocked button {
+  background: #656565;
+}
+
+@media (prefers-color-scheme: dark) {
+  .document-blocked .icon {
+    filter: invert(1);
+  }
+}

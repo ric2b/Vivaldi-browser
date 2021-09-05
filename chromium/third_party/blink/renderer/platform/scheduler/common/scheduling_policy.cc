@@ -25,6 +25,9 @@ bool SchedulingPolicy::IsFeatureSticky(SchedulingPolicy::Feature feature) {
     case Feature::kWebHID:
     case Feature::kWebShare:
     case Feature::kWebDatabase:
+    case Feature::kPortal:
+    case Feature::kSpeechRecognizer:
+    case Feature::kSpeechSynthesis:
       return false;
     case Feature::kMainResourceHasCacheControlNoStore:
     case Feature::kMainResourceHasCacheControlNoCache:
@@ -54,6 +57,9 @@ bool SchedulingPolicy::IsFeatureSticky(SchedulingPolicy::Feature feature) {
     case Feature::kAppBanner:
     case Feature::kPrinting:
     case Feature::kPictureInPicture:
+    case Feature::kIdleManager:
+    case Feature::kPaymentManager:
+    case Feature::kKeyboardLock:
       return true;
   }
 }

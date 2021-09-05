@@ -28,6 +28,7 @@ namespace blink {
 class AssociatedInterfaceProvider;
 class InterfaceRegistry;
 class LocalFrame;
+class MessageEvent;
 class RemoteFrameClient;
 struct FrameLoadRequest;
 
@@ -49,7 +50,7 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   ~RemoteFrame() override;
 
   // Frame overrides:
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
   void Navigate(FrameLoadRequest&, WebFrameLoadType) override;
   const RemoteSecurityContext* GetSecurityContext() const override;
   bool DetachDocument() override;
@@ -57,6 +58,7 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   bool ShouldClose() override;
   void HookBackForwardCacheEviction() override {}
   void RemoveBackForwardCacheEviction() override {}
+  void SetTextDirection(base::i18n::TextDirection) override {}
   void SetIsInert(bool) override;
   void SetInheritedEffectiveTouchAction(TouchAction) override;
   bool BubbleLogicalScrollFromChildFrame(
@@ -80,7 +82,15 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   void SetView(RemoteFrameView*);
   void CreateView();
 
+  void ForwardPostMessage(
+      MessageEvent* message_event,
+      base::Optional<base::UnguessableToken> cluster_id,
+      scoped_refptr<const SecurityOrigin> target_security_origin,
+      LocalFrame* source_frame);
+
   mojom::blink::RemoteFrameHost& GetRemoteFrameHostRemote();
+
+  AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces();
 
   RemoteFrameView* View() const override;
 
@@ -143,10 +153,17 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   // sandbox flags or container policy. The new policy won't take effect until
   // the next navigation.
   void DidUpdateFramePolicy(const FramePolicy& frame_policy) override;
+  void UpdateOpener(const base::Optional<base::UnguessableToken>&
+                        opener_frame_token) override;
+
+  void TransferUserActivationToRenderer(
+      const base::UnguessableToken& source_frame_token) override;
 
   // Called only when this frame has a local frame owner.
   IntSize GetMainFrameViewportSize() const override;
   IntPoint GetMainFrameScrollOffset() const override;
+
+  void SetOpener(Frame* opener) override;
 
  private:
   // Frame protected overrides:

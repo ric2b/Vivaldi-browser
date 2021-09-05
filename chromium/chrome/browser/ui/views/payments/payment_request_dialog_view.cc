@@ -120,6 +120,9 @@ void PaymentRequestDialogView::CloseDialog() {
 }
 
 void PaymentRequestDialogView::ShowErrorMessage() {
+  if (being_closed_)
+    return;
+
   view_stack_->Push(CreateViewAndInstallController(
                         std::make_unique<ErrorMessageViewController>(
                             request_->spec(), request_->state(), this),
@@ -357,7 +360,7 @@ void PaymentRequestDialogView::ShowCreditCardEditor(
           std::make_unique<CreditCardEditorViewController>(
               request_->spec(), request_->state(), this, back_navigation_type,
               next_ui_tag, std::move(on_edited), std::move(on_added),
-              credit_card, request_->IsIncognito()),
+              credit_card, request_->IsOffTheRecord()),
           &controller_map_),
       /* animate = */ true);
   if (observer_for_testing_)
@@ -374,7 +377,7 @@ void PaymentRequestDialogView::ShowShippingAddressEditor(
           std::make_unique<ShippingAddressEditorViewController>(
               request_->spec(), request_->state(), this, back_navigation_type,
               std::move(on_edited), std::move(on_added), profile,
-              request_->IsIncognito()),
+              request_->IsOffTheRecord()),
           &controller_map_),
       /* animate = */ true);
   if (observer_for_testing_)
@@ -391,7 +394,7 @@ void PaymentRequestDialogView::ShowContactInfoEditor(
           std::make_unique<ContactInfoEditorViewController>(
               request_->spec(), request_->state(), this, back_navigation_type,
               std::move(on_edited), std::move(on_added), profile,
-              request_->IsIncognito()),
+              request_->IsOffTheRecord()),
           &controller_map_),
       /* animate = */ true);
   if (observer_for_testing_)

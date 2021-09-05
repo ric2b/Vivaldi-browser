@@ -42,6 +42,7 @@ class SkBitmap;
 
 namespace content {
 class DevToolsProtocolTestBindings;
+class JavaScriptDialogManager;
 class RenderFrameHost;
 class Shell;
 class WebTestBluetoothChooserFactory;
@@ -108,7 +109,6 @@ class WebTestResultPrinter {
 
 class WebTestControlHost : public WebContentsObserver,
                            public RenderProcessHostObserver,
-                           public NotificationObserver,
                            public GpuDataManagerObserver,
                            public mojom::WebTestControlHost {
  public:
@@ -127,10 +127,10 @@ class WebTestControlHost : public WebContentsObserver,
       int sender_process_host_id,
       const base::DictionaryValue& changed_web_test_runtime_flags);
 
-  // Makes sure that the potentially new renderer associated with |frame| is 1)
-  // initialized for the test, 2) kept up to date wrt test flags and 3)
-  // monitored for crashes.
-  void HandleNewRenderFrameHost(RenderFrameHost* frame);
+  void DidOpenNewWindowOrTab(WebContents* web_contents);
+
+  // Creates a JavascriptDialogManager to be used in web tests.
+  std::unique_ptr<JavaScriptDialogManager> CreateJavaScriptDialogManager();
 
   void SetTempPath(const base::FilePath& temp_path);
   void RendererUnresponsive();
@@ -152,13 +152,13 @@ class WebTestControlHost : public WebContentsObserver,
   // WebContentsObserver implementation.
   void PluginCrashed(const base::FilePath& plugin_path,
                      base::ProcessId plugin_pid) override;
-  void RenderFrameCreated(RenderFrameHost* render_frame_host) override;
   void TitleWasSet(NavigationEntry* entry) override;
   void DidFailLoad(RenderFrameHost* render_frame_host,
                    const GURL& validated_url,
                    int error_code) override;
   void WebContentsDestroyed() override;
   void DidUpdateFaviconURL(
+      RenderFrameHost* render_frame_host,
       const std::vector<blink::mojom::FaviconURLPtr>& candidates) override;
 
   // RenderProcessHostObserver implementation.
@@ -166,11 +166,6 @@ class WebTestControlHost : public WebContentsObserver,
       RenderProcessHost* render_process_host) override;
   void RenderProcessExited(RenderProcessHost* render_process_host,
                            const ChildProcessTerminationInfo& info) override;
-
-  // NotificationObserver implementation.
-  void Observe(int type,
-               const NotificationSource& source,
-               const NotificationDetails& details) override;
 
   // GpuDataManagerObserver implementation.
   void OnGpuProcessCrashed(base::TerminationStatus exit_code) override;
@@ -191,7 +186,8 @@ class WebTestControlHost : public WebContentsObserver,
   void Reload() override;
   void OverridePreferences(
       const content::WebPreferences& web_preferences) override;
-  void CloseRemainingWindows() override;
+  void SetMainWindowHidden(bool hidden) override;
+  void CheckForLeakedWindows() override;
   void GoToOffset(int offset) override;
   void SendBluetoothManualChooserEvent(const std::string& event,
                                        const std::string& argument) override;
@@ -222,9 +218,17 @@ class WebTestControlHost : public WebContentsObserver,
     DISALLOW_COPY_AND_ASSIGN(Node);
   };
 
+  class WebTestWindowObserver;
+
   static WebTestControlHost* instance_;
 
   void DiscardMainWindow();
+  void CloseTestOpenedWindows();
+
+  // Makes sure that the potentially new renderer associated with |frame| is 1)
+  // initialized for the test, 2) kept up to date wrt test flags and 3)
+  // monitored for crashes.
+  void HandleNewRenderFrameHost(RenderFrameHost* frame);
 
   // Message handlers.
   void OnAudioDump(const std::vector<unsigned char>& audio_dump);
@@ -234,7 +238,8 @@ class WebTestControlHost : public WebContentsObserver,
                                  const std::string& dump);
   void OnTestFinished();
   void OnCaptureSessionHistory();
-  void OnLeakDetectionDone(const LeakDetector::LeakDetectionReport& report);
+  void OnLeakDetectionDone(int pid,
+                           const LeakDetector::LeakDetectionReport& report);
 
   void OnCleanupFinished();
   void OnCaptureDumpCompleted(mojom::WebTestDumpPtr dump);
@@ -283,9 +288,6 @@ class WebTestControlHost : public WebContentsObserver,
   std::unique_ptr<DevToolsProtocolTestBindings>
       devtools_protocol_test_bindings_;
 
-  // The PID of the render process of the render view host of main_window_.
-  int current_pid_;
-
   // Tracks if (during the current test) we have already sent *initial* test
   // configuration to a renderer process (*initial* test configuration is
   // associated with some steps that should only be executed *once* per test -
@@ -309,8 +311,6 @@ class WebTestControlHost : public WebContentsObserver,
   bool should_override_prefs_;
   WebPreferences prefs_;
 
-  NotificationRegistrar registrar_;
-
   bool crash_when_leak_found_;
   std::unique_ptr<LeakDetector> leak_detector_;
 
@@ -320,6 +320,10 @@ class WebTestControlHost : public WebContentsObserver,
   std::map<int, std::string> frame_to_layout_dump_map_;
   // Number of WebTestRenderFrame.DumpFrameLayout responses we are waiting for.
   int pending_layout_dumps_;
+
+  // Observe windows opened by tests.
+  base::flat_map<WebContents*, std::unique_ptr<WebTestWindowObserver>>
+      test_opened_window_observers_;
 
   // Renderer processes are observed to detect crashes.
   ScopedObserver<RenderProcessHost, RenderProcessHostObserver>
@@ -337,6 +341,10 @@ class WebTestControlHost : public WebContentsObserver,
   base::Optional<SkBitmap> pixel_dump_;
   std::string actual_pixel_hash_;
   mojom::WebTestDumpPtr main_frame_dump_;
+  // By default a test that opens other windows will have them closed at the end
+  // of the test before checking for leaks. It may specify that it has closed
+  // any windows it opened, and thus look for leaks from them with this flag.
+  bool check_for_leaked_windows_ = false;
   bool waiting_for_pixel_results_ = false;
   bool waiting_for_main_frame_dump_ = false;
   int waiting_for_reset_done_ = 0;

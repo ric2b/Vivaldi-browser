@@ -122,11 +122,14 @@ Polymer({
       reflectToAttribute: true,
     },
 
+    inputmode: String,
+
     label: {
       type: String,
       value: '',
     },
 
+    /** @type {?string} */
     placeholder: {
       type: String,
       value: null,

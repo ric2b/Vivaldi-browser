@@ -59,7 +59,7 @@ class CORE_EXPORT Request final : public ScriptWrappable,
                          ExceptionState&);
   static Request* Create(ScriptState*, FetchRequestData*);
   static Request* Create(ScriptState*,
-                         const mojom::blink::FetchAPIRequest&,
+                         mojom::blink::FetchAPIRequestPtr,
                          ForServiceWorkerFetchEvent);
 
   Request(ScriptState*, FetchRequestData*, Headers*, AbortSignal*);
@@ -103,7 +103,7 @@ class CORE_EXPORT Request final : public ScriptWrappable,
   mojom::RequestContextType GetRequestContextType() const;
   network::mojom::RequestDestination GetRequestDestination() const;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  private:
   const FetchRequestData* GetRequest() const { return request_; }

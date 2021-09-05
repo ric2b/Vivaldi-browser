@@ -16,6 +16,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "components/captive_portal/core/captive_portal_detector.h"
+#import "components/safe_browsing/ios/browser/safe_browsing_url_allow_list.h"
 #include "components/security_interstitials/core/unsafe_resource.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
@@ -24,7 +25,6 @@
 #import "ios/chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
 #import "ios/chrome/browser/safe_browsing/safe_browsing_error.h"
 #import "ios/chrome/browser/safe_browsing/safe_browsing_unsafe_resource_container.h"
-#import "ios/chrome/browser/safe_browsing/safe_browsing_url_allow_list.h"
 #import "ios/chrome/browser/ssl/captive_portal_detector_tab_helper.h"
 #import "ios/chrome/browser/ssl/captive_portal_detector_tab_helper_delegate.h"
 #import "ios/chrome/browser/web/error_page_util.h"
@@ -355,15 +355,19 @@ TEST_F(ChromeWebClientTest, PrepareErrorPageWithSSLInfo) {
 TEST_F(ChromeWebClientTest, PrepareErrorPageForSafeBrowsingError) {
   // Store an unsafe resource in |web_state|'s container.
   web::TestWebState web_state;
+  web_state.SetBrowserState(browser_state());
   SafeBrowsingUrlAllowList::CreateForWebState(&web_state);
   SafeBrowsingUnsafeResourceContainer::CreateForWebState(&web_state);
   security_interstitials::IOSBlockingPageTabHelper::CreateForWebState(
       &web_state);
+
   security_interstitials::UnsafeResource resource;
   resource.threat_type = safe_browsing::SB_THREAT_TYPE_URL_PHISHING;
   resource.url = GURL("http://www.chromium.test");
   resource.resource_type = safe_browsing::ResourceType::kMainFrame;
   resource.web_state_getter = web_state.CreateDefaultGetter();
+  SafeBrowsingUrlAllowList::FromWebState(&web_state)
+      ->AddPendingUnsafeNavigationDecision(resource.url, resource.threat_type);
   SafeBrowsingUnsafeResourceContainer::FromWebState(&web_state)
       ->StoreUnsafeResource(resource);
 

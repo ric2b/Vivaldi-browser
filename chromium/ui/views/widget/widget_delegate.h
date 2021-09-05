@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "ui/accessibility/ax_enums.mojom-forward.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -20,7 +20,7 @@ class Rect;
 }  // namespace gfx
 
 namespace views {
-class BubbleDialogDelegateView;
+class BubbleDialogDelegate;
 class ClientView;
 class DialogDelegate;
 class NonClientFrameView;
@@ -32,6 +32,17 @@ class VIEWS_EXPORT WidgetDelegate {
   struct Params {
     Params();
     ~Params();
+
+    // The window's role. Useful values include kWindow (a plain window),
+    // kDialog (a dialog), and kAlertDialog (a high-priority dialog whose body
+    // is read when it appears). Using a role outside this set is not likely to
+    // work across platforms.
+    ax::mojom::Role accessible_role = ax::mojom::Role::kWindow;
+
+    // The accessible title for the window, often more descriptive than the
+    // plain title. If no accessible title is present the result of
+    // GetWindowTitle() will be used.
+    base::string16 accessible_title;
 
     // Whether the window should display controls for the user to minimize,
     // maximize, or resize it.
@@ -68,6 +79,7 @@ class VIEWS_EXPORT WidgetDelegate {
   };
 
   WidgetDelegate();
+  virtual ~WidgetDelegate();
 
   // Sets the return value of CanActivate(). Default is true.
   void SetCanActivate(bool can_activate);
@@ -81,6 +93,10 @@ class VIEWS_EXPORT WidgetDelegate {
   // Called when the work area (the desktop area minus task bars,
   // menu bars, etc.) changes in size.
   virtual void OnWorkAreaChanged();
+
+  // Called when the widget's initialization is beginning, right after the
+  // ViewsDelegate decides to use this WidgetDelegate for a Widget.
+  virtual void OnWidgetInitializing() {}
 
   // Called when the widget's initialization is complete.
   virtual void OnWidgetInitialized() {}
@@ -98,7 +114,7 @@ class VIEWS_EXPORT WidgetDelegate {
   // NULL no view is focused.
   virtual View* GetInitiallyFocusedView();
 
-  virtual BubbleDialogDelegateView* AsBubbleDialogDelegate();
+  virtual BubbleDialogDelegate* AsBubbleDialogDelegate();
   virtual DialogDelegate* AsDialogDelegate();
 
   // Returns true if the window can be resized.
@@ -196,10 +212,28 @@ class VIEWS_EXPORT WidgetDelegate {
   virtual void OnWindowEndUserBoundsChange() {}
 
   // Returns the Widget associated with this delegate.
-  virtual Widget* GetWidget() = 0;
-  virtual const Widget* GetWidget() const = 0;
+  virtual Widget* GetWidget();
+  virtual const Widget* GetWidget() const;
 
-  // Returns the View that is contained within this Widget.
+  // Get the view that is contained within this widget.
+  //
+  // WARNING: This method has unusual ownership behavior:
+  // * If the returned view is owned_by_client(), then the returned pointer is
+  //   never an owning pointer;
+  // * If the returned view is !owned_by_client() (the default & the
+  //   recommendation), then the returned pointer is *sometimes* an owning
+  //   pointer and sometimes not. Specifically, it is an owning pointer exactly
+  //   once, when this method is being used to construct the ClientView, which
+  //   takes ownership of the ContentsView() when !owned_by_client().
+  //
+  // Apart from being difficult to reason about this introduces a problem: a
+  // WidgetDelegate can't know whether it owns its contents view or not, so
+  // constructing a WidgetDelegate which one does not then use to construct a
+  // Widget (often done in tests) leaks memory in a way that can't be locally
+  // fixed.
+  //
+  // TODO(ellyjones): This is not tenable - figure out how this should work and
+  // replace it.
   virtual View* GetContentsView();
 
   // Called by the Widget to create the Client View used to host the contents
@@ -240,6 +274,8 @@ class VIEWS_EXPORT WidgetDelegate {
 
   // Setters for data parameters of the WidgetDelegate. If you use these
   // setters, there is no need to override the corresponding virtual getters.
+  void SetAccessibleRole(ax::mojom::Role role);
+  void SetAccessibleTitle(base::string16 title);
   void SetCanMaximize(bool can_maximize);
   void SetCanMinimize(bool can_minimize);
   void SetCanResize(bool can_resize);
@@ -249,16 +285,24 @@ class VIEWS_EXPORT WidgetDelegate {
   void SetShowIcon(bool show_icon);
   void SetShowTitle(bool show_title);
   void SetTitle(const base::string16& title);
+  void SetTitle(int title_message_id);
 #if defined(USE_AURA)
   void SetCenterTitle(bool center_title);
 #endif
+
+  // A convenience wrapper that does all three of SetCanMaximize,
+  // SetCanMinimize, and SetCanResize.
+  void SetHasWindowSizeControls(bool has_controls);
 
   void RegisterWindowWillCloseCallback(base::OnceClosure callback);
   void RegisterWindowClosingCallback(base::OnceClosure callback);
   void RegisterDeleteDelegateCallback(base::OnceClosure callback);
 
-  // Call this to notify the WidgetDelegate that its Widget is about to start
-  // closing.
+  // Called to notify the WidgetDelegate of changes to the state of its Widget.
+  // It is not usually necessary to call these from client code.
+  void WidgetInitializing(Widget* widget);
+  void WidgetInitialized();
+  void WidgetDestroying();
   void WindowWillClose();
 
   // Returns true if the title text should be centered.
@@ -266,12 +310,12 @@ class VIEWS_EXPORT WidgetDelegate {
 
   bool focus_traverses_out() const { return params_.focus_traverses_out; }
 
- protected:
-  virtual ~WidgetDelegate();
-
  private:
   friend class Widget;
 
+  // The Widget that was initialized with this instance as its WidgetDelegate,
+  // if any.
+  Widget* widget_ = nullptr;
   Params params_;
 
   View* default_contents_view_ = nullptr;
@@ -302,7 +346,7 @@ class VIEWS_EXPORT WidgetDelegateView : public WidgetDelegate, public View {
   void DeleteDelegate() override;
   Widget* GetWidget() override;
   const Widget* GetWidget() const override;
-  views::View* GetContentsView() override;
+  View* GetContentsView() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WidgetDelegateView);

@@ -55,7 +55,6 @@ class CoreOobeView;
 class ErrorScreensHistogramHelper;
 class GaiaScreenHandler;
 class LoginFeedback;
-class NativeWindowDelegate;
 class User;
 class UserContext;
 
@@ -73,10 +72,7 @@ class LoginDisplayWebUIHandler {
                          const std::string& error_text,
                          const std::string& help_link_text,
                          HelpAppLauncher::HelpTopic help_topic_id) = 0;
-  virtual void ShowErrorScreen(LoginDisplay::SigninError error_id) = 0;
   virtual void ShowSigninUI(const std::string& email) = 0;
-  virtual void ShowPasswordChangedDialog(bool show_password_error,
-                                         const std::string& email) = 0;
   virtual void ShowWhitelistCheckFailedError() = 0;
   virtual void LoadUsers(const user_manager::UserList& users,
                          const base::ListValue& users_list) = 0;
@@ -119,15 +115,9 @@ class SigninScreenHandlerDelegate {
   // Show wrong hwid screen.
   virtual void ShowWrongHWIDScreen() = 0;
 
-  // Show update required screen.
-  virtual void ShowUpdateRequiredScreen() = 0;
-
   // --------------- Rest of the methods.
   // Cancels user adding.
   virtual void CancelUserAdding() = 0;
-
-  // Attempts to remove given user.
-  virtual void RemoveUser(const AccountId& account_id) = 0;
 
   // Let the delegate know about the handler it is supposed to be using.
   virtual void SetWebUIHandler(LoginDisplayWebUIHandler* webui_handler) = 0;
@@ -196,8 +186,6 @@ class SigninScreenHandler
   // Sets delegate to be used by the handler. It is guaranteed that valid
   // delegate is set before Show() method will be called.
   void SetDelegate(SigninScreenHandlerDelegate* delegate);
-
-  void SetNativeWindowDelegate(NativeWindowDelegate* native_window_delegate);
 
   // NetworkStateInformer::NetworkStateInformerObserver implementation:
   void OnNetworkReady() override;
@@ -272,9 +260,6 @@ class SigninScreenHandler
                  const std::string& help_link_text,
                  HelpAppLauncher::HelpTopic help_topic_id) override;
   void ShowSigninUI(const std::string& email) override;
-  void ShowPasswordChangedDialog(bool show_password_error,
-                                 const std::string& email) override;
-  void ShowErrorScreen(LoginDisplay::SigninError error_id) override;
   void ShowWhitelistCheckFailedError() override;
   void LoadUsers(const user_manager::UserList& users,
                  const base::ListValue& users_list) override;
@@ -318,7 +303,6 @@ class SigninScreenHandler
                                  const std::string& input_method);
   void HandleOfflineLogin(const base::ListValue* args);
   void HandleRebootSystem();
-  void HandleRemoveUser(const AccountId& account_id);
   void HandleToggleEnrollmentScreen();
   void HandleToggleEnrollmentAd();
   void HandleToggleEnableDebuggingScreen();
@@ -334,10 +318,7 @@ class SigninScreenHandler
   void HandleAccountPickerReady();
   void HandleOpenInternetDetailDialog();
   void HandleLoginVisible(const std::string& source);
-  void HandleCancelPasswordChangedFlow(const AccountId& account_id);
   void HandleCancelUserAdding();
-  void HandleMigrateUserData(const std::string& password);
-  void HandleResyncUserData();
   void HandleLoginUIStateChanged(const std::string& source, bool active);
   void HandleLoginScreenUpdate();
   void HandleShowLoadingTimeoutError();
@@ -408,9 +389,6 @@ class SigninScreenHandler
 
   // A delegate that glues this handler with backend LoginDisplay.
   SigninScreenHandlerDelegate* delegate_ = nullptr;
-
-  // A delegate used to get gfx::NativeWindow.
-  NativeWindowDelegate* native_window_delegate_ = nullptr;
 
   // Whether screen should be shown right after initialization.
   bool show_on_init_ = false;

@@ -42,6 +42,16 @@ bool LayoutRubyText::IsChildAllowed(LayoutObject* child,
   return child->IsInline();
 }
 
+void LayoutRubyText::StyleDidChange(StyleDifference diff,
+                                    const ComputedStyle* old_style) {
+  if (StyleRef().GetTextAlign() !=
+      ComputedStyleInitialValues::InitialTextAlign()) {
+    UseCounter::Count(GetDocument(),
+                      WebFeature::kRubyTextWithNonDefaultTextAlign);
+  }
+  LayoutBlockFlow::StyleDidChange(diff, old_style);
+}
+
 ETextAlign LayoutRubyText::TextAlignmentForLine(
     bool ends_with_soft_break) const {
   ETextAlign text_align = StyleRef().GetTextAlign();
@@ -60,9 +70,10 @@ void LayoutRubyText::AdjustInlineDirectionLineBounds(
     LayoutUnit& logical_width) const {
   ETextAlign text_align = StyleRef().GetTextAlign();
   // FIXME: This check is bogus since user can set the initial value.
-  if (text_align != ComputedStyleInitialValues::InitialTextAlign())
+  if (text_align != ComputedStyleInitialValues::InitialTextAlign()) {
     return LayoutBlockFlow::AdjustInlineDirectionLineBounds(
         expansion_opportunity_count, logical_left, logical_width);
+  }
 
   int max_preferred_logical_width = PreferredLogicalWidths().max_size.ToInt();
   if (max_preferred_logical_width >= logical_width)

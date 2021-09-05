@@ -9,7 +9,7 @@
 #include <string>
 
 #include "ash/ash_export.h"
-#include "ash/public/cpp/quick_answers_controller.h"
+#include "ash/public/cpp/quick_answers/controller/quick_answers_controller.h"
 #include "chromeos/components/quick_answers/quick_answers_client.h"
 #include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "ui/gfx/geometry/rect.h"
@@ -80,8 +80,18 @@ class ASH_EXPORT QuickAnswersControllerImpl
   // Open Quick-Answers dogfood URL.
   void OpenQuickAnswersDogfoodLink();
 
+  QuickAnswersUiController* quick_answers_ui_controller() {
+    return quick_answers_ui_controller_.get();
+  }
+
  private:
   void MaybeDismissQuickAnswersConsent();
+
+  // Return true if the user consent view is showing.
+  bool MaybeShowUserConsent(const base::string16& intent_type,
+                            const base::string16& intent_text);
+
+  chromeos::quick_answers::QuickAnswersRequest BuildRequest();
 
   // Bounds of the anchor view.
   gfx::Rect anchor_bounds_;
@@ -108,6 +118,9 @@ class ASH_EXPORT QuickAnswersControllerImpl
 
   // The last received QuickAnswer from client.
   std::unique_ptr<chromeos::quick_answers::QuickAnswer> quick_answer_;
+
+  // If currently there is an active quick answers session.
+  bool is_session_active_ = false;
 };
 
 }  // namespace ash

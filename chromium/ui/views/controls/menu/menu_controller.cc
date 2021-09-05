@@ -623,6 +623,11 @@ bool MenuController::IsContextMenu() const {
   return state_.context_menu;
 }
 
+void MenuController::SelectItemAndOpenSubmenu(MenuItemView* item) {
+  DCHECK(item);
+  SetSelection(item, SELECTION_OPEN_SUBMENU | SELECTION_UPDATE_IMMEDIATELY);
+}
+
 bool MenuController::OnMousePressed(SubmenuView* source,
                                     const ui::MouseEvent& event) {
   // We should either have no current_mouse_event_target_, or should have a
@@ -1393,6 +1398,11 @@ void MenuController::SetSelection(MenuItemView* menu_item,
        menu_item->GetType() != MenuItemView::Type::kSubMenu ||
        (menu_item->GetType() == MenuItemView::Type::kActionableSubMenu &&
         (selection_types & SELECTION_OPEN_SUBMENU) == 0))) {
+    // Before firing the selection event, ensure that focus appears to be
+    // within the popup. This is helpful for ATs on some platforms,
+    // specifically on Windows, where selection events in a list are mapped
+    // to focus events. Without this call, the focus appears to be elsewhere.
+    menu_item->GetViewAccessibility().SetPopupFocusOverride();
     menu_item->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
     // Notify an accessibility selected children changed event on the parent
     // submenu.
@@ -1703,6 +1713,7 @@ MenuController::~MenuController() {
     active_instance_ = nullptr;
   StopShowTimer();
   StopCancelAllTimer();
+  CHECK(!IsInObserverList());
 }
 
 bool MenuController::SendAcceleratorToHotTrackedView() {
@@ -3207,20 +3218,18 @@ void MenuController::SetNextHotTrackedView(
 }
 
 void MenuController::SetHotTrackedButton(Button* hot_button) {
-  if (hot_button == hot_button_) {
-    // Hot-tracked state may change outside of the MenuController. Correct it.
-    if (hot_button && !hot_button->IsHotTracked()) {
-      hot_button->SetHotTracked(true);
-      hot_button->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
-    }
-    return;
-  }
-  if (hot_button_)
+  // If we're providing a new hot-tracked button, first remove the existing one.
+  if (hot_button_ && hot_button_ != hot_button) {
     hot_button_->SetHotTracked(false);
+    hot_button_->GetViewAccessibility().EndPopupFocusOverride();
+  }
+
+  // Then set the new one.
   hot_button_ = hot_button;
-  if (hot_button) {
-    hot_button->SetHotTracked(true);
-    hot_button->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
+  if (hot_button_ && !hot_button_->IsHotTracked()) {
+    hot_button_->GetViewAccessibility().SetPopupFocusOverride();
+    hot_button_->SetHotTracked(true);
+    hot_button_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
   }
 }
 

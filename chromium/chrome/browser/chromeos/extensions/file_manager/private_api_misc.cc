@@ -19,6 +19,7 @@
 #include "base/files/file_path.h"
 #include "base/i18n/encoding_detection.h"
 #include "base/memory/ref_counted.h"
+#include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -73,6 +74,7 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "google_apis/drive/auth_service.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "storage/common/file_system/file_system_types.h"
 #include "storage/common/file_system/file_system_util.h"
@@ -193,6 +195,17 @@ bool IsAllowedSource(storage::FileSystemType type,
     case api::file_manager_private::SOURCE_RESTRICTION_NATIVE_SOURCE:
       return type == storage::kFileSystemTypeNativeLocal;
   }
+}
+
+// Encodes PNG data as a dataURL.
+std::string MakeThumbnailDataUrlOnThreadPool(
+    const std::vector<uint8_t>& png_data) {
+  std::string encoded;
+  base::Base64Encode(
+      base::StringPiece(reinterpret_cast<const char*>(png_data.data()),
+                        png_data.size()),
+      &encoded);
+  return base::StrCat({"data:image/png;base64,", encoded});
 }
 
 }  // namespace
@@ -664,7 +677,7 @@ FileManagerPrivateMountCrostiniFunction::Run() {
       Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
   DCHECK(crostini::CrostiniFeatures::Get()->IsEnabled(profile));
   crostini::CrostiniManager::GetForProfile(profile)->RestartCrostini(
-      crostini::kCrostiniDefaultVmName, crostini::kCrostiniDefaultContainerName,
+      crostini::ContainerId::GetDefault(),
       base::BindOnce(&FileManagerPrivateMountCrostiniFunction::RestartCallback,
                      this));
   return RespondLater();
@@ -702,9 +715,7 @@ FileManagerPrivateInternalImportCrostiniImageFunction::Run() {
   base::FilePath path = file_system_context->CrackURL(GURL(params->url)).path();
 
   crostini::CrostiniExportImport::GetForProfile(profile)->ImportContainer(
-      crostini::ContainerId{crostini::kCrostiniDefaultVmName,
-                            crostini::kCrostiniDefaultContainerName},
-      path,
+      crostini::ContainerId::GetDefault(), path,
       base::BindOnce(
           [](base::FilePath path, crostini::CrostiniResult result) {
             if (result != crostini::CrostiniResult::SUCCESS) {
@@ -782,10 +793,15 @@ FileManagerPrivateInternalGetCrostiniSharedPathsFunction::Run() {
       Params;
   const std::unique_ptr<Params> params(Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
+  // TODO(crbug.com/1057591): Unexpected crashes in
+  // GuestOsSharePath::GetPersistedSharedPaths with null profile_.
+  CHECK(browser_context());
   Profile* profile = Profile::FromBrowserContext(browser_context());
+  CHECK(profile);
 
   auto* guest_os_share_path =
       guest_os::GuestOsSharePath::GetForProfile(profile);
+  CHECK(guest_os_share_path);
   bool first_for_session = params->observe_first_for_session &&
                            guest_os_share_path->GetAndSetFirstForSession();
   auto shared_paths =
@@ -832,7 +848,7 @@ FileManagerPrivateInternalGetLinuxPackageInfoFunction::Run() {
           profile, render_frame_host());
 
   crostini::CrostiniPackageService::GetForProfile(profile)->GetLinuxPackageInfo(
-      crostini::kCrostiniDefaultVmName, crostini::kCrostiniDefaultContainerName,
+      crostini::ContainerId::GetDefault(),
       file_system_context->CrackURL(GURL(params->url)),
       base::BindOnce(&FileManagerPrivateInternalGetLinuxPackageInfoFunction::
                          OnGetLinuxPackageInfo,
@@ -873,8 +889,7 @@ FileManagerPrivateInternalInstallLinuxPackageFunction::Run() {
 
   crostini::CrostiniPackageService::GetForProfile(profile)
       ->QueueInstallLinuxPackage(
-          crostini::kCrostiniDefaultVmName,
-          crostini::kCrostiniDefaultContainerName,
+          crostini::ContainerId::GetDefault(),
           file_system_context->CrackURL(GURL(params->url)),
           base::BindOnce(
               &FileManagerPrivateInternalInstallLinuxPackageFunction::
@@ -1108,4 +1123,105 @@ FileManagerPrivateDetectCharacterEncodingFunction::Run() {
       success ? std::move(encoding) : std::string())));
 }
 
+FileManagerPrivateInternalGetThumbnailFunction::
+    FileManagerPrivateInternalGetThumbnailFunction() {}
+
+FileManagerPrivateInternalGetThumbnailFunction::
+    ~FileManagerPrivateInternalGetThumbnailFunction() = default;
+
+ExtensionFunction::ResponseAction
+FileManagerPrivateInternalGetThumbnailFunction::Run() {
+  using extensions::api::file_manager_private_internal::GetThumbnail::Params;
+  const std::unique_ptr<Params> params(Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  const ChromeExtensionFunctionDetails chrome_details(this);
+  scoped_refptr<storage::FileSystemContext> file_system_context =
+      file_manager::util::GetFileSystemContextForRenderFrameHost(
+          chrome_details.GetProfile(), render_frame_host());
+  const GURL url = GURL(params->url);
+  const storage::FileSystemURL file_system_url =
+      file_system_context->CrackURL(url);
+
+  switch (file_system_url.type()) {
+    case storage::kFileSystemTypeNativeLocal:
+      return GetLocalThumbnail(chrome_details, file_system_url,
+                               params->crop_to_square);
+    case storage::kFileSystemTypeDriveFs:
+      return GetDrivefsThumbnail(chrome_details, file_system_url,
+                                 params->crop_to_square);
+    default:
+      return RespondNow(Error(base::StringPrintf(
+          "Unsupported file system type: %d", file_system_url.type())));
+  }
+}
+
+ExtensionFunction::ResponseAction
+FileManagerPrivateInternalGetThumbnailFunction::GetLocalThumbnail(
+    const ChromeExtensionFunctionDetails& chrome_details,
+    const storage::FileSystemURL& url,
+    bool crop_to_square) {
+  base::FilePath path = file_manager::util::GetLocalPathFromURL(
+      render_frame_host(), chrome_details.GetProfile(), url.ToGURL());
+  if (path.empty() ||
+      base::FilePath::CompareIgnoreCase(path.Extension(), ".pdf") != 0) {
+    return RespondNow(Error("Can only handle PDF files"));
+  }
+  return RespondNow(Error("Not implemented"));
+}
+
+ExtensionFunction::ResponseAction
+FileManagerPrivateInternalGetThumbnailFunction::GetDrivefsThumbnail(
+    const ChromeExtensionFunctionDetails& chrome_details,
+    const storage::FileSystemURL& url,
+    bool crop_to_square) {
+  // If the thumbnail is generated by drivefs give it a bit more time
+  // before issuing warnings about slow operation.
+  SetWarningThresholds(base::TimeDelta::FromSeconds(5),
+                       base::TimeDelta::FromMinutes(1));
+  if (url.type() != storage::kFileSystemTypeDriveFs) {
+    return RespondNow(Error("Invalid URL"));
+  }
+  auto* drive_integration_service =
+      drive::DriveIntegrationServiceFactory::FindForProfile(
+          chrome_details.GetProfile());
+  if (!drive_integration_service) {
+    return RespondNow(Error("Drive service not available"));
+  }
+  base::FilePath path;
+  if (!drive_integration_service->GetRelativeDrivePath(url.path(), &path)) {
+    return RespondNow(Error("File not found"));
+  }
+  auto* drivefs_interface = drive_integration_service->GetDriveFsInterface();
+  if (!drivefs_interface) {
+    return RespondNow(Error("Drivefs not available"));
+  }
+  drivefs_interface->GetThumbnail(
+      path, crop_to_square,
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(
+              &FileManagerPrivateInternalGetThumbnailFunction::GotThumbnail,
+              this),
+          base::Optional<std::vector<uint8_t>>()));
+  return RespondLater();
+}
+
+void FileManagerPrivateInternalGetThumbnailFunction::GotThumbnail(
+    const base::Optional<std::vector<uint8_t>>& data) {
+  if (!data) {
+    Respond(OneArgument(std::make_unique<base::Value>("")));
+    return;
+  }
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&MakeThumbnailDataUrlOnThreadPool, *data),
+      base::BindOnce(
+          &FileManagerPrivateInternalGetThumbnailFunction::SendEncodedThumbnail,
+          this));
+}
+
+void FileManagerPrivateInternalGetThumbnailFunction::SendEncodedThumbnail(
+    std::string thumbnail_data_url) {
+  Respond(OneArgument(
+      std::make_unique<base::Value>(std::move(thumbnail_data_url))));
+}
 }  // namespace extensions

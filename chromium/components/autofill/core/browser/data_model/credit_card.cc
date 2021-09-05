@@ -760,9 +760,16 @@ void CreditCard::SetExpirationDateFromString(const base::string16& text) {
 const std::pair<base::string16, base::string16> CreditCard::LabelPieces()
     const {
   base::string16 label;
-  // No CC number, return name only.
-  if (number().empty())
+  if (number().empty()) {
+    // No CC number, if valid nickname is present, return nickname only.
+    // Otherwise, return cardholder name only.
+    if (base::FeatureList::IsEnabled(
+            features::kAutofillEnableCardNicknameManagement) &&
+        HasValidNickname()) {
+      return std::make_pair(nickname_, base::string16());
+    }
     return std::make_pair(name_on_card_, base::string16());
+  }
 
   base::string16 obfuscated_cc_number =
       CardIdentifierStringForAutofillDisplay();
@@ -817,11 +824,12 @@ base::string16 CreditCard::NetworkAndLastFourDigits() const {
                          : network + ASCIIToUTF16("  ") + obfuscated_string;
 }
 
-base::string16 CreditCard::CardIdentifierStringForAutofillDisplay() const {
+base::string16 CreditCard::CardIdentifierStringForAutofillDisplay(
+    base::string16 customized_nickname) const {
   if (base::FeatureList::IsEnabled(
           features::kAutofillEnableSurfacingServerCardNickname) &&
-      HasValidNickname()) {
-    return NicknameAndLastFourDigits();
+      (HasValidNickname() || !customized_nickname.empty())) {
+    return NicknameAndLastFourDigits(customized_nickname);
   }
   // Return a Google-specific string for Google-issued cards.
   if (base::FeatureList::IsEnabled(features::kAutofillEnableGoogleIssuedCard) &&
@@ -832,10 +840,11 @@ base::string16 CreditCard::CardIdentifierStringForAutofillDisplay() const {
 }
 
 base::string16 CreditCard::CardIdentifierStringAndDescriptiveExpiration(
-    const std::string& app_locale) const {
+    const std::string& app_locale,
+    base::string16 customized_nickname) const {
   return l10n_util::GetStringFUTF16(
       IDS_AUTOFILL_CREDIT_CARD_TWO_LINE_LABEL_FROM_NAME,
-      CardIdentifierStringForAutofillDisplay(),
+      CardIdentifierStringForAutofillDisplay(customized_nickname),
       GetInfo(AutofillType(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR), app_locale));
 }
 
@@ -897,11 +906,15 @@ bool CreditCard::HasValidNickname() const {
     return false;
   }
   // Must not contain digits.
-  for (char c : nickname_) {
+  for (base::char16 c : nickname_) {
     if (base::IsAsciiDigit(c))
       return false;
   }
   return true;
+}
+
+base::string16 CreditCard::NicknameAndLastFourDigitsForTesting() const {
+  return NicknameAndLastFourDigits();
 }
 
 base::string16 CreditCard::Expiration2DigitYearAsString() const {
@@ -954,15 +967,17 @@ base::string16 CreditCard::NetworkForFill() const {
   return ::autofill::NetworkForFill(network_);
 }
 
-base::string16 CreditCard::NicknameAndLastFourDigits() const {
+base::string16 CreditCard::NicknameAndLastFourDigits(
+    base::string16 customized_nickname) const {
   // Should call HasValidNickname() to check valid nickname before calling this.
-  DCHECK(HasValidNickname());
+  DCHECK(HasValidNickname() || !customized_nickname.empty());
   const base::string16 digits = LastFourDigits();
   // If digits are empty, return nickname.
   if (digits.empty())
-    return nickname_;
+    return customized_nickname.empty() ? nickname_ : customized_nickname;
 
-  return nickname_ + ASCIIToUTF16("  ") +
+  return (customized_nickname.empty() ? nickname_ : customized_nickname) +
+         ASCIIToUTF16("  ") +
          internal::GetObfuscatedStringForCardDigits(digits);
 }
 

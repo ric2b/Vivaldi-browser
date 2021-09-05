@@ -33,6 +33,7 @@
 
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "third_party/blink/public/common/css/forced_colors.h"
 #include "third_party/blink/public/platform/web_color_scheme.h"
 #include "third_party/blink/public/platform/web_rect.h"
@@ -147,6 +148,7 @@ class WebThemeEngine {
     int thumb_x;
     int thumb_y;
     float zoom;
+    bool right_to_left;
   };
 
   // Extra parameters for PartInnerSpinButton
@@ -174,6 +176,24 @@ class WebThemeEngine {
     bool right_to_left;
   };
 
+#if defined(OS_MACOSX)
+  enum ScrollbarOrientation {
+    // Vertical scrollbar on the right side of content.
+    kVerticalOnRight,
+    // Vertical scrollbar on the left side of content.
+    kVerticalOnLeft,
+    // Horizontal scrollbar (on the bottom of content).
+    kHorizontal,
+  };
+
+  struct ScrollbarExtraParams {
+    bool is_hovering;
+    bool is_overlay;
+    WebColorScheme scrollbar_theme;
+    ScrollbarOrientation orientation;
+  };
+#endif
+
   union ExtraParams {
     ScrollbarTrackExtraParams scrollbar_track;
     ButtonExtraParams button;
@@ -184,6 +204,9 @@ class WebThemeEngine {
     ProgressBarExtraParams progress_bar;
     ScrollbarThumbExtraParams scrollbar_thumb;
     ScrollbarButtonExtraParams scrollbar_button;
+#if defined(OS_MACOSX)
+    ScrollbarExtraParams scrollbar_extra;
+#endif
   };
 
   virtual ~WebThemeEngine() {}

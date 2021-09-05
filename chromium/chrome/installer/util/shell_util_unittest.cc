@@ -76,6 +76,8 @@ class ShellUtilShortcutTest : public testing::Test {
     ASSERT_TRUE(fake_default_user_quick_launch_.CreateUniqueTempDir());
     ASSERT_TRUE(fake_start_menu_.CreateUniqueTempDir());
     ASSERT_TRUE(fake_common_start_menu_.CreateUniqueTempDir());
+    ASSERT_TRUE(fake_user_startup_.CreateUniqueTempDir());
+    ASSERT_TRUE(fake_common_startup_.CreateUniqueTempDir());
     user_desktop_override_.reset(new base::ScopedPathOverride(
         base::DIR_USER_DESKTOP, fake_user_desktop_.GetPath()));
     common_desktop_override_.reset(new base::ScopedPathOverride(
@@ -86,6 +88,10 @@ class ShellUtilShortcutTest : public testing::Test {
         base::DIR_START_MENU, fake_start_menu_.GetPath()));
     common_start_menu_override_.reset(new base::ScopedPathOverride(
         base::DIR_COMMON_START_MENU, fake_common_start_menu_.GetPath()));
+    common_startup_override_.reset(new base::ScopedPathOverride(
+        base::DIR_COMMON_STARTUP, fake_common_startup_.GetPath()));
+    user_startup_override_.reset(new base::ScopedPathOverride(
+        base::DIR_USER_STARTUP, fake_user_startup_.GetPath()));
 
     base::FilePath icon_path;
     base::CreateTemporaryFileInDir(temp_dir_.GetPath(), &icon_path);
@@ -147,9 +153,8 @@ class ShellUtilShortcutTest : public testing::Test {
   // implicit default properties) for |dist|.
   // Note: This method doesn't verify the |pin_to_taskbar| property as it
   // implies real (non-mocked) state which is flaky to test.
-  void ValidateChromeShortcut(
-      ShellUtil::ShortcutLocation location,
-      const ShellUtil::ShortcutProperties& properties) {
+  void ValidateChromeShortcut(ShellUtil::ShortcutLocation location,
+                              const ShellUtil::ShortcutProperties& properties) {
     base::FilePath expected_path(GetExpectedShortcutPath(location, properties));
 
     base::win::ShortcutProperties expected_properties;
@@ -205,11 +210,15 @@ class ShellUtilShortcutTest : public testing::Test {
   base::ScopedTempDir fake_default_user_quick_launch_;
   base::ScopedTempDir fake_start_menu_;
   base::ScopedTempDir fake_common_start_menu_;
+  base::ScopedTempDir fake_user_startup_;
+  base::ScopedTempDir fake_common_startup_;
   std::unique_ptr<base::ScopedPathOverride> user_desktop_override_;
   std::unique_ptr<base::ScopedPathOverride> common_desktop_override_;
   std::unique_ptr<base::ScopedPathOverride> user_quick_launch_override_;
   std::unique_ptr<base::ScopedPathOverride> start_menu_override_;
   std::unique_ptr<base::ScopedPathOverride> common_start_menu_override_;
+  std::unique_ptr<base::ScopedPathOverride> user_startup_override_;
+  std::unique_ptr<base::ScopedPathOverride> common_startup_override_;
 
   base::FilePath chrome_exe_;
   base::FilePath manganese_exe_;
@@ -246,6 +255,14 @@ TEST_F(ShellUtilShortcutTest, GetShortcutPath) {
       ShellUtil::SYSTEM_LEVEL, &path);
   EXPECT_EQ(fake_common_start_menu_.GetPath().Append(start_menu_subfolder),
             path);
+
+  ShellUtil::GetShortcutPath(ShellUtil::SHORTCUT_LOCATION_STARTUP,
+                             ShellUtil::SYSTEM_LEVEL, &path);
+  EXPECT_EQ(fake_common_startup_.GetPath(), path);
+
+  ShellUtil::GetShortcutPath(ShellUtil::SHORTCUT_LOCATION_STARTUP,
+                             ShellUtil::CURRENT_USER, &path);
+  EXPECT_EQ(fake_user_startup_.GetPath(), path);
 }
 
 TEST_F(ShellUtilShortcutTest, MoveExistingShortcut) {
@@ -646,14 +663,10 @@ TEST_F(ShellUtilShortcutTest, ClearShortcutArguments) {
   ShellUtil::ShortcutProperties expected_properties4(test_properties_);
 
   // List the shortcuts.
-  std::vector<std::pair<base::FilePath, base::string16> > shortcuts;
+  std::vector<std::pair<base::FilePath, base::string16>> shortcuts;
   EXPECT_TRUE(ShellUtil::ShortcutListMaybeRemoveUnknownArgs(
-      ShellUtil::SHORTCUT_LOCATION_DESKTOP,
-      ShellUtil::CURRENT_USER,
-      chrome_exe_,
-      false,
-      nullptr,
-      &shortcuts));
+      ShellUtil::SHORTCUT_LOCATION_DESKTOP, ShellUtil::CURRENT_USER,
+      chrome_exe_, false, nullptr, &shortcuts));
   ASSERT_EQ(2u, shortcuts.size());
   std::pair<base::FilePath, base::string16> shortcut3 =
       shortcuts[0].first == shortcut3_path ? shortcuts[0] : shortcuts[1];
@@ -667,17 +680,13 @@ TEST_F(ShellUtilShortcutTest, ClearShortcutArguments) {
   // Clear shortcuts.
   shortcuts.clear();
   EXPECT_TRUE(ShellUtil::ShortcutListMaybeRemoveUnknownArgs(
-      ShellUtil::SHORTCUT_LOCATION_DESKTOP,
-      ShellUtil::CURRENT_USER,
-      chrome_exe_,
-      true,
-      nullptr,
-      &shortcuts));
+      ShellUtil::SHORTCUT_LOCATION_DESKTOP, ShellUtil::CURRENT_USER,
+      chrome_exe_, true, nullptr, &shortcuts));
   ASSERT_EQ(2u, shortcuts.size());
-  shortcut3 = shortcuts[0].first == shortcut3_path ? shortcuts[0] :
-                                                     shortcuts[1];
-  shortcut4 = shortcuts[0].first == shortcut4_path ? shortcuts[0] :
-                                                     shortcuts[1];
+  shortcut3 =
+      shortcuts[0].first == shortcut3_path ? shortcuts[0] : shortcuts[1];
+  shortcut4 =
+      shortcuts[0].first == shortcut4_path ? shortcuts[0] : shortcuts[1];
   EXPECT_EQ(shortcut3_path, shortcut3.first);
   EXPECT_EQ(L"foo.com", shortcut3.second);
   EXPECT_EQ(shortcut4_path, shortcut4.first);
@@ -722,9 +731,8 @@ TEST_F(ShellUtilShortcutTest, CreateMultipleStartMenuShortcutsAndRemoveFolder) {
     ++count;
   EXPECT_EQ(2, count);
 
-  base::FileEnumerator chrome_apps_file_counter(chrome_apps_shortcut_folder,
-                                                false,
-                                                base::FileEnumerator::FILES);
+  base::FileEnumerator chrome_apps_file_counter(
+      chrome_apps_shortcut_folder, false, base::FileEnumerator::FILES);
   count = 0;
   while (!chrome_apps_file_counter.Next().empty())
     ++count;
@@ -803,10 +811,9 @@ class ShellUtilRegistryTest : public testing::Test {
 
     // .test2 files already have a default application.
     base::win::RegKey key;
-    ASSERT_EQ(
-        ERROR_SUCCESS,
-        key.Create(
-            HKEY_CURRENT_USER, L"Software\\Classes\\.test2", KEY_ALL_ACCESS));
+    ASSERT_EQ(ERROR_SUCCESS,
+              key.Create(HKEY_CURRENT_USER, L"Software\\Classes\\.test2",
+                         KEY_ALL_ACCESS));
     EXPECT_EQ(ERROR_SUCCESS, key.WriteValue(L"", L"SomeOtherApp"));
   }
 
@@ -840,23 +847,21 @@ TEST_F(ShellUtilRegistryTest, AddFileAssociations) {
   // Ensure that the registry keys have been correctly set.
   base::win::RegKey key;
   std::wstring value;
-  ASSERT_EQ(
-      ERROR_SUCCESS,
-      key.Open(HKEY_CURRENT_USER, L"Software\\Classes\\TestApp", KEY_READ));
+  ASSERT_EQ(ERROR_SUCCESS, key.Open(HKEY_CURRENT_USER,
+                                    L"Software\\Classes\\TestApp", KEY_READ));
   EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
   EXPECT_EQ(L"Test File Type", value);
   EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"FileExtensions", &value));
   EXPECT_EQ(L".test1;.test2", value);
   ASSERT_EQ(ERROR_SUCCESS,
             key.Open(HKEY_CURRENT_USER,
-                     L"Software\\Classes\\TestApp\\DefaultIcon",
-                     KEY_READ));
+                     L"Software\\Classes\\TestApp\\DefaultIcon", KEY_READ));
   EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
   EXPECT_EQ(L"D:\\test.ico,0", value);
-  ASSERT_EQ(ERROR_SUCCESS,
-            key.Open(HKEY_CURRENT_USER,
-                     L"Software\\Classes\\TestApp\\shell\\open\\command",
-                     KEY_READ));
+  ASSERT_EQ(
+      ERROR_SUCCESS,
+      key.Open(HKEY_CURRENT_USER,
+               L"Software\\Classes\\TestApp\\shell\\open\\command", KEY_READ));
   EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
   EXPECT_EQ(L"\"C:\\test.exe\" \"%1\"", value);
 
@@ -872,30 +877,26 @@ TEST_F(ShellUtilRegistryTest, AddFileAssociations) {
   }
 
   // .test1 should be default-associated with our test app.
-  ASSERT_EQ(
-      ERROR_SUCCESS,
-      key.Open(HKEY_CURRENT_USER, L"Software\\Classes\\.test1", KEY_READ));
+  ASSERT_EQ(ERROR_SUCCESS, key.Open(HKEY_CURRENT_USER,
+                                    L"Software\\Classes\\.test1", KEY_READ));
   EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
   EXPECT_EQ(L"TestApp", value);
   ASSERT_EQ(ERROR_SUCCESS,
             key.Open(HKEY_CURRENT_USER,
-                     L"Software\\Classes\\.test1\\OpenWithProgids",
-                     KEY_READ));
+                     L"Software\\Classes\\.test1\\OpenWithProgids", KEY_READ));
   EXPECT_TRUE(key.HasValue(L"TestApp"));
   EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"TestApp", &value));
   EXPECT_EQ(L"", value);
 
   // .test2 should still be associated with the other app (should not have been
   // overridden). But it should have our app in its Open With list.
-  ASSERT_EQ(
-      ERROR_SUCCESS,
-      key.Open(HKEY_CURRENT_USER, L"Software\\Classes\\.test2", KEY_READ));
+  ASSERT_EQ(ERROR_SUCCESS, key.Open(HKEY_CURRENT_USER,
+                                    L"Software\\Classes\\.test2", KEY_READ));
   EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
   EXPECT_EQ(L"SomeOtherApp", value);
   ASSERT_EQ(ERROR_SUCCESS,
             key.Open(HKEY_CURRENT_USER,
-                     L"Software\\Classes\\.test2\\OpenWithProgids",
-                     KEY_READ));
+                     L"Software\\Classes\\.test2\\OpenWithProgids", KEY_READ));
   EXPECT_TRUE(key.HasValue(L"TestApp"));
   EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"TestApp", &value));
   EXPECT_EQ(L"", value);
@@ -913,9 +914,8 @@ TEST_F(ShellUtilRegistryTest, DeleteFileAssociations) {
   // The class key should have been completely deleted.
   base::win::RegKey key;
   std::wstring value;
-  ASSERT_NE(
-      ERROR_SUCCESS,
-      key.Open(HKEY_CURRENT_USER, L"Software\\Classes\\TestApp", KEY_READ));
+  ASSERT_NE(ERROR_SUCCESS, key.Open(HKEY_CURRENT_USER,
+                                    L"Software\\Classes\\TestApp", KEY_READ));
 
   // .test1 and .test2 should no longer be associated with the test app.
   ASSERT_EQ(ERROR_SUCCESS,
@@ -933,9 +933,8 @@ TEST_F(ShellUtilRegistryTest, DeleteFileAssociations) {
   EXPECT_FALSE(key.HasValue(L""));
 
   // .test2 should still have the other app as its default handler.
-  ASSERT_EQ(
-      ERROR_SUCCESS,
-      key.Open(HKEY_CURRENT_USER, L"Software\\Classes\\.test2", KEY_READ));
+  ASSERT_EQ(ERROR_SUCCESS, key.Open(HKEY_CURRENT_USER,
+                                    L"Software\\Classes\\.test2", KEY_READ));
   EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
   EXPECT_EQ(L"SomeOtherApp", value);
 }
@@ -1011,9 +1010,9 @@ TEST(ShellUtilTest, BuildAppModelIdLongUsernameNormalProfile) {
 
 TEST(ShellUtilTest, BuildAppModelIdLongEverything) {
   std::vector<base::string16> components;
-  const base::string16 long_appname(L"Chrome.a_user_who_has_a_crazy_long_name_"
-                                    L"with_some_weird@symbols_in_"
-                                    L"it_" L"that_goes_over_64_characters");
+  const base::string16 long_appname(
+      L"Chrome.a_user_who_has_a_crazy_long_name_with_some_weird@symbols_in_it_"
+      L"that_goes_over_64_characters");
   components.push_back(long_appname);
   components.push_back(
       L"A_crazy_profile_name_not_even_sure_whether_that_is_possible");

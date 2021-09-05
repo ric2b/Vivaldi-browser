@@ -37,7 +37,8 @@ class SharedImageRepresentationEglImageGLTexture
   }
 
   bool BeginAccess(GLenum mode) override {
-    if (mode == GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM) {
+    if (mode == GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM ||
+        mode == GL_SHARED_IMAGE_ACCESS_MODE_OVERLAY_CHROMIUM) {
       if (!egl_backing()->BeginRead(this))
         return false;
       mode_ = RepresentationAccessMode::kRead;
@@ -262,10 +263,10 @@ gles2::Texture* SharedImageBackingEglImage::GenEGLImageSibling() {
   auto* texture = new gles2::Texture(service_id);
   texture->SetLightweightRef();
   texture->SetTarget(target, 1 /*max_levels*/);
-  texture->sampler_state_.min_filter = GL_LINEAR;
-  texture->sampler_state_.mag_filter = GL_LINEAR;
-  texture->sampler_state_.wrap_t = GL_CLAMP_TO_EDGE;
-  texture->sampler_state_.wrap_s = GL_CLAMP_TO_EDGE;
+  texture->set_min_filter(GL_LINEAR);
+  texture->set_mag_filter(GL_LINEAR);
+  texture->set_wrap_t(GL_CLAMP_TO_EDGE);
+  texture->set_wrap_s(GL_CLAMP_TO_EDGE);
 
   // If the backing is already cleared, no need to clear it again.
   gfx::Rect cleared_rect;

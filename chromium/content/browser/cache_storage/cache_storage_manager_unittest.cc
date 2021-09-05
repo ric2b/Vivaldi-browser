@@ -37,9 +37,7 @@
 #include "content/browser/cache_storage/legacy/legacy_cache_storage_manager.h"
 #include "content/common/background_fetch/background_fetch_types.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_usage_info.h"
-#include "content/public/common/content_features.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_utils.h"
@@ -48,12 +46,9 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/disk_cache/disk_cache.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
-#include "storage/browser/blob/blob_data_builder.h"
-#include "storage/browser/blob/blob_data_handle.h"
-#include "storage/browser/blob/blob_handle.h"
-#include "storage/browser/blob/blob_impl.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/quota/padding_key.h"
+#include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/test/fake_blob.h"
 #include "storage/browser/test/mock_quota_manager_proxy.h"
@@ -177,7 +172,10 @@ class MockCacheStorageQuotaManagerProxy
                                     base::SingleThreadTaskRunner* task_runner)
       : MockQuotaManagerProxy(quota_manager, task_runner) {}
 
-  void RegisterClient(scoped_refptr<storage::QuotaClient> client) override {
+  void RegisterClient(
+      scoped_refptr<storage::QuotaClient> client,
+      storage::QuotaClientType client_type,
+      const std::vector<blink::mojom::StorageType>& storage_types) override {
     registered_clients_.push_back(std::move(client));
   }
 
@@ -450,7 +448,6 @@ class CacheStorageManagerTest : public testing::Test {
   void CheckOpHistograms(base::HistogramTester& histogram_tester,
                          const char* op_name) {
     std::string base("ServiceWorkerCache.CacheStorage.Scheduler.");
-    histogram_tester.ExpectTotalCount(base + "IsOperationSlow." + op_name, 1);
     histogram_tester.ExpectTotalCount(base + "OperationDuration2." + op_name,
                                       1);
     histogram_tester.ExpectTotalCount(base + "QueueDuration2." + op_name, 1);
@@ -663,13 +660,16 @@ class CacheStorageManagerTest : public testing::Test {
     auto response = blink::mojom::FetchAPIResponse::New(
         std::vector<GURL>({request->url}), status_code, "OK", response_type,
         network::mojom::FetchResponseSource::kUnspecified, response_headers,
-        std::move(blob), blink::mojom::ServiceWorkerResponseError::kUnknown,
-        base::Time(), std::string() /* cache_storage_cache_name */,
+        base::nullopt /* mime_type */, std::move(blob),
+        blink::mojom::ServiceWorkerResponseError::kUnknown, base::Time(),
+        std::string() /* cache_storage_cache_name */,
         std::vector<std::string>() /* cors_exposed_header_names */,
         nullptr /* side_data_blob */,
         nullptr /* side_data_blob_for_cache_put */,
         network::mojom::ParsedHeaders::New(),
-        false /* loaded_with_credentials */);
+        net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN,
+        "unknown" /* alpn_negotiated_protocol */,
+        false /* loaded_with_credentials */, false /* was_fetched_via_spdy */);
 
     blink::mojom::BatchOperationPtr operation =
         blink::mojom::BatchOperation::New();
@@ -822,7 +822,6 @@ class CacheStorageManagerTest : public testing::Test {
   int callback_bool_;
   CacheStorageError callback_error_;
   blink::mojom::FetchAPIResponsePtr callback_cache_handle_response_;
-  std::unique_ptr<storage::BlobDataHandle> callback_data_handle_;
   std::vector<std::string> cache_names_;
 
   const url::Origin origin1_;
@@ -1056,8 +1055,6 @@ TEST_F(CacheStorageManagerTest, StorageReuseCacheName) {
   EXPECT_TRUE(Open(origin1_, "foo"));
   EXPECT_TRUE(CachePut(callback_cache_handle_.value(), kTestURL));
   EXPECT_TRUE(CacheMatch(callback_cache_handle_.value(), kTestURL));
-  std::unique_ptr<storage::BlobDataHandle> data_handle =
-      std::move(callback_data_handle_);
 
   EXPECT_TRUE(Delete(origin1_, "foo"));
   // The cache is deleted but the handle to one of its entries is still
@@ -2498,10 +2495,6 @@ class CacheStorageQuotaClientTest : public CacheStorageManagerTest {
     return callback_status_ == blink::mojom::QuotaStatusCode::kOk;
   }
 
-  bool QuotaDoesSupport(StorageType type) {
-    return quota_client_->DoesSupport(type);
-  }
-
   scoped_refptr<CacheStorageQuotaClient> quota_client_;
 
   blink::mojom::QuotaStatusCode callback_status_;
@@ -2524,11 +2517,6 @@ class CacheStorageQuotaClientTestP : public CacheStorageQuotaClientTest,
   }
   TestManager ManagerType() override { return GetParam().manager_; }
 };
-
-TEST_P(CacheStorageQuotaClientTestP, QuotaID) {
-  EXPECT_EQ(storage::QuotaClientType::kServiceWorkerCache,
-            quota_client_->type());
-}
 
 TEST_P(CacheStorageQuotaClientTestP, QuotaGetOriginUsage) {
   EXPECT_EQ(0, QuotaGetOriginUsage(origin1_));
@@ -2617,14 +2605,6 @@ TEST_F(CacheStorageQuotaClientDiskOnlyTest, QuotaDeleteUnloadedOriginData) {
 
   EXPECT_TRUE(QuotaDeleteOriginData(origin1_));
   EXPECT_EQ(0, QuotaGetOriginUsage(origin1_));
-}
-
-TEST_P(CacheStorageQuotaClientTestP, QuotaDoesSupport) {
-  EXPECT_TRUE(QuotaDoesSupport(StorageType::kTemporary));
-  EXPECT_FALSE(QuotaDoesSupport(StorageType::kPersistent));
-  EXPECT_FALSE(QuotaDoesSupport(StorageType::kSyncable));
-  EXPECT_FALSE(QuotaDoesSupport(StorageType::kQuotaNotManaged));
-  EXPECT_FALSE(QuotaDoesSupport(StorageType::kUnknown));
 }
 
 INSTANTIATE_TEST_SUITE_P(

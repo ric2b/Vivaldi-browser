@@ -32,6 +32,9 @@ class NGFragment;
 struct NGPreviousInflowPosition {
   LayoutUnit logical_block_offset;
   NGMarginStrut margin_strut;
+  // > 0: Block-end annotation space of the previous line
+  // < 0: Block-end annotation overflow of the previous line
+  LayoutUnit block_end_annotation_space;
   bool self_collapsing_child_had_clearance;
 };
 
@@ -113,7 +116,8 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
       const LogicalSize child_available_size,
       bool is_new_fc,
       const base::Optional<LayoutUnit> bfc_block_offset = base::nullopt,
-      bool has_clearance_past_adjoining_floats = false);
+      bool has_clearance_past_adjoining_floats = false,
+      LayoutUnit block_start_annotation_space = LayoutUnit());
 
   // @return Estimated BFC block offset for the "to be layout" child.
   NGInflowChildData ComputeChildData(const NGPreviousInflowPosition&,
@@ -215,14 +219,11 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
   // for the node being laid out by this algorithm.
   LayoutUnit FragmentainerSpaceAvailable() const;
 
-  // Return true if the node being laid out by this fragmentainer has used all
-  // the available space in the current fragmentainer.
-  // |block_offset| is the border-edge relative block offset we want to check
-  // whether fits within the fragmentainer or not.
-  bool IsFragmentainerOutOfSpace(LayoutUnit block_offset) const;
-
-  // Signal that we've reached the end of the fragmentainer.
-  void SetFragmentainerOutOfSpace(NGPreviousInflowPosition*);
+  // Consume all remaining fragmentainer space. This happens when we decide to
+  // break before a child.
+  //
+  // https://www.w3.org/TR/css-break-3/#box-splitting
+  void ConsumeRemainingFragmentainerSpace(NGPreviousInflowPosition*);
 
   // Final adjustments before fragment creation. We need to prevent the fragment
   // from crossing fragmentainer boundaries, and rather create a break token if
@@ -342,15 +343,6 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
   // |ruby_text_child|. This is called only if IsRubyText() returns true.
   void LayoutRubyText(NGLayoutInputNode* ruby_text_child);
 
-  // Border + padding sum, resolved from the node's computed style.
-  const NGBoxStrut border_padding_;
-
-  // Border + scrollbar + padding sum for the fragment to be generated (most
-  // importantly, for non-first fragments, leading block border + scrollbar +
-  // padding is zero).
-  NGBoxStrut border_scrollbar_padding_;
-
-  LogicalSize child_available_size_;
   LogicalSize child_percentage_size_;
   LogicalSize replaced_child_percentage_size_;
 
@@ -385,14 +377,6 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
   // in-flow child of a container. It is used to check if we're at a valid class
   // A or B breakpoint (between block-level siblings or line box siblings).
   bool has_processed_first_child_ = false;
-
-  // Set once we've inserted a break before a float. We need to know this, so
-  // that we don't attempt to lay out any more floats in the current
-  // fragmentainer. Floats aren't allowed have an earlier block-start offset
-  // than earlier floats.
-  bool broke_before_float_ = false;
-
-  bool did_break_before_child_ = false;
 
   NGExclusionSpace exclusion_space_;
 

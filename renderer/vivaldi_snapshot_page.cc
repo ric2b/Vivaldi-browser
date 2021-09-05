@@ -34,8 +34,16 @@ bool ToSkBitmap(
     SkBitmap* dest) {
   const sk_sp<SkImage> image =
       static_bitmap_image->PaintImageForCurrentFrame().GetSkImage();
-  return image && image->asLegacyBitmap(
-                      dest, SkImage::LegacyBitmapMode::kRO_LegacyBitmapMode);
+  if (!image) {
+    LOG(ERROR) << "Failed to create SkImage";
+    return false;
+  }
+  if (!image->asLegacyBitmap(
+      dest, SkImage::LegacyBitmapMode::kRO_LegacyBitmapMode)) {
+    LOG(ERROR) << "Failed to create SkBitmap";
+    return false;
+  }
+  return true;
 }
 
 }  // namespace
@@ -44,74 +52,76 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
                          bool full_page,
                          const blink::IntRect& rect,
                          SkBitmap* bitmap) {
-  // Disabled because third_party/blink/renderer/core/layout/layout_view.h
-  // requires access to blink-module-only function WebString(const
-  // WTF::String&), activated by the blink-only define INSIDE_BLINK This include
-  // file is only referenced inside blink. This code will have to be rewritten
-  // to not depend on internal blink functions or those parts will have to be
-  // migrated to a vivaldi code file that can be inserted into the blink public
-  // API.
-  blink::Document* document = local_frame->GetDocument();
-  if (!document || !document->GetLayoutView())
+  // This is based on DragController::DragImageForSelection.
+  //
+  // TODO(igor@vivaldi.com): Find out why when full_page is true and we paint
+  // the whole page including the invisible parts outside the scroll area and
+  // when the lifecycle is DocumentLifecycle::kVisualUpdatePending or
+  // perhaps is anything but DocumentLifecycle::kPaintClean or kPrePaintClean
+  // painting here may affect painting of the page later when the user scrolls
+  // the previously invisible parts. In such case the scrolled in areas may
+  // contains unpainted rectangles. For this reason we can only paint the
+  // visible part of the page when !full_page and we are drawing thumbnails to
+  // avoid rendering regressions later on each and every page.
+  if (!local_frame->View()) {
+    LOG(ERROR) << "no view";
     return false;
-
-  /*
-  We follow DragController::DragImageForSelection here while making sure that
-  we paint the whole document including the parts outside the scroll view.
-  TODO: See ChromePrintRenderFrameHelperDelegate::GetPdfElement for
-  capture of PDF.
-
-  TODO(igor@vivaldi.com): Find out why when full_page is true and we paint the
-  whole page including the invisible parts outside the scroll area and when
-  document->Lifecycle() is DocumentLifecycle::kVisualUpdatePending or perhaps is
-  anything but DocumentLifecycle::kPaintClean or kPrePaintClean painting here
-  may affect painting of the page later when the user scrolls the previously
-  invisible parts. In such case the scrolled in areas may contains unpainted
-  rectangles. For this reason we can only paint the visible part of the page
-  when !full_page and we are drawing thumbnails to avoid rendering regressions
-  later on each and every page.
-  */
-#if !defined(OS_ANDROID)
-  bool has_accelerated_compositing =
-    document->GetSettings()->GetAcceleratedCompositingEnabled();
-
-  // Disable accelerated compositing temporary to make canvas and other
-  // normally HWA element show up, restrict to full page rendering for now.
-  if (full_page) {
-    document->GetSettings()->SetAcceleratedCompositingEnabled(false);
   }
-#endif
 
-  // Force an update of the lifecycle since we changed the painting method
-  // of accelerated elements.
-  local_frame->View()->UpdateAllLifecyclePhasesExceptPaint(
-      blink::DocumentUpdateReason::kSelection);
+  blink::Document* document = local_frame->GetDocument();
+  if (!document) {
+    LOG(ERROR) << "no document";
+    return false;
+  }
 
-  blink::LayoutView* view = document->GetLayoutView();
-  blink::PhysicalRect document_rect = view->DocumentRect();
   blink::IntRect visible_content_rect =
     local_frame->View()->LayoutViewport()->VisibleContentRect();
+  if (visible_content_rect.IsEmpty()) {
+    LOG(ERROR) << "empty visible content rect";
+    return false;
+  }
 
-  blink::IntSize page_size;
+  blink::IntRect page_rect;
   if (full_page) {
+    blink::LayoutView* layout_view = document->GetLayoutView();
+    if (!layout_view) {
+      LOG(ERROR) << "no layout view";
+      return false;
+    }
+    blink::PhysicalRect document_rect = layout_view->DocumentRect();
     blink::FloatSize float_page_size = local_frame->ResizePageRectsKeepingRatio(
       blink::FloatSize(document_rect.Width(), document_rect.Height()),
       blink::FloatSize(document_rect.Width(), document_rect.Height()));
     float_page_size.SetHeight(
         std::min(float_page_size.Height(), static_cast<float>(rect.Height())));
-    page_size = ExpandedIntSize(float_page_size);
-  } else {
-    page_size.SetWidth(visible_content_rect.Width());
-    page_size.SetHeight(visible_content_rect.Height());
-  }
+    blink::IntSize page_size = ExpandedIntSize(float_page_size);
+    page_rect.SetWidth(page_size.Width());
+    page_rect.SetHeight(page_size.Height());
 
-  blink::IntRect page_rect(0, 0, page_size.Width(), page_size.Height());
-  if (full_page) {
     // page_rect is relative to the visible scroll area. To include the
     // document top we must use negative offsets for the upper left
     // corner.
     page_rect.SetX(-visible_content_rect.X());
     page_rect.SetY(-visible_content_rect.Y());
+  } else {
+    page_rect.SetWidth(visible_content_rect.Width());
+    page_rect.SetHeight(visible_content_rect.Height());
+  }
+
+  local_frame->View()->UpdateAllLifecyclePhasesExceptPaint(
+      blink::DocumentUpdateReason::kSelection);
+
+  switch (document->Lifecycle().GetState()) {
+    case blink::DocumentLifecycle::kPrePaintClean:
+    case blink::DocumentLifecycle::kPaintClean:
+      break;
+    default:
+      // DragController::DragImageForSelection proceeds with a call to
+      // LocalFrameView::PaintContentsOutsideOfLifecycle() in any paint state
+      // even if the documentation for the latter requres that the state must
+      // be one of the above. For now do the same but log it.
+      LOG(WARNING) << "Unexpected lifecycle state "
+                   << document->Lifecycle().GetState();
   }
 
   blink::PaintRecordBuilder picture_builder;
@@ -120,7 +130,7 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
     context.SetShouldAntialias(false);
 
     blink::GlobalPaintFlags global_paint_flags =
-      blink::kGlobalPaintFlattenCompositingLayers;
+        blink::kGlobalPaintFlattenCompositingLayers;
     if (full_page) {
       global_paint_flags |= blink::kGlobalPaintWholePage;
     }
@@ -129,19 +139,15 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
         context, global_paint_flags, blink::CullRect(page_rect));
   }
 
-#if !defined(OS_ANDROID)
-  if (full_page) {
-    document->GetSettings()->
-      SetAcceleratedCompositingEnabled(has_accelerated_compositing);
-  }
-#endif
-
   SkSurfaceProps surface_props(0, kUnknown_SkPixelGeometry);
   sk_sp<SkSurface> surface =
     SkSurface::MakeRasterN32Premul(
       page_rect.Width(), page_rect.Height(), &surface_props);
-  if (!surface)
+  if (!surface) {
+    LOG(ERROR) << "failed to allocate surface width=" << page_rect.Width()
+               << " height=" << page_rect.Height();
     return false;
+  }
 
   cc::SkiaPaintCanvas canvas(surface->getCanvas());
 
@@ -154,8 +160,10 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
     // Prepare PaintChunksToCcLayer called deep under EndRecording
     // to ignore clipping to the visible area.
     DCHECK(!blink::PaintChunksToCcLayer::TopClipToIgnore());
+    blink::LayoutView* layout_view = document->GetLayoutView();
+    DCHECK(layout_view);
     const blink::ObjectPaintProperties *root_properties =
-      view->FirstFragment().PaintProperties();
+      layout_view->FirstFragment().PaintProperties();
     if (root_properties) {
       blink::PaintChunksToCcLayer::TopClipToIgnore() =
         root_properties->OverflowClip();
@@ -182,5 +190,9 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
                 ? blink::UnacceleratedStaticBitmapImage::Create(snapshotImage)
                 : nullptr;
   }
-  return image ? ToSkBitmap(image, bitmap) : false;
+  if (!image) {
+    LOG(ERROR) << "failed to create bitmap image";
+    return false;
+  }
+  return ToSkBitmap(image, bitmap);
 }

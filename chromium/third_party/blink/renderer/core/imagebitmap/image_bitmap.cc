@@ -45,7 +45,6 @@ constexpr const char* kImageBitmapOptionResizeQualityMedium = "medium";
 constexpr const char* kImageBitmapOptionResizeQualityPixelated = "pixelated";
 constexpr const char* kPreserveImageBitmapColorSpaceConversion = "preserve";
 constexpr const char* kSRGBImageBitmapColorSpaceConversion = "srgb";
-constexpr const char* kLinearRGBImageBitmapColorSpaceConversion = "linear-rgb";
 constexpr const char* kP3ImageBitmapColorSpaceConversion = "p3";
 constexpr const char* kRec2020ImageBitmapColorSpaceConversion = "rec2020";
 
@@ -102,12 +101,7 @@ ImageBitmap::ParsedOptions ParseOptions(const ImageBitmapOptions* options,
       options->colorSpaceConversion() != kImageBitmapOptionNone &&
       options->colorSpaceConversion() != kImageBitmapOptionDefault) {
     parsed_options.color_params.SetCanvasPixelFormat(CanvasPixelFormat::kF16);
-    if (options->colorSpaceConversion() ==
-        kLinearRGBImageBitmapColorSpaceConversion) {
-      parsed_options.color_params.SetCanvasColorSpace(
-          CanvasColorSpace::kLinearRGB);
-    } else if (options->colorSpaceConversion() ==
-               kP3ImageBitmapColorSpaceConversion) {
+    if (options->colorSpaceConversion() == kP3ImageBitmapColorSpaceConversion) {
       parsed_options.color_params.SetCanvasColorSpace(CanvasColorSpace::kP3);
     } else if (options->colorSpaceConversion() ==
                kRec2020ImageBitmapColorSpaceConversion) {
@@ -243,8 +237,7 @@ std::unique_ptr<CanvasResourceProvider> CreateProvider(
             ->UsageForMailbox(source_image->GetMailboxHolder().mailbox);
     auto resource_provider = CanvasResourceProvider::CreateSharedImageProvider(
         size, context_provider, kLow_SkFilterQuality, color_params,
-        source_image->IsOriginTopLeft(),
-        CanvasResourceProvider::RasterMode::kGPU, usage_flags);
+        source_image->IsOriginTopLeft(), RasterMode::kGPU, usage_flags);
     if (resource_provider)
       return resource_provider;
 
@@ -329,6 +322,8 @@ scoped_refptr<StaticBitmapImage> GetImageWithAlphaDisposition(
                                ? kPremul_SkAlphaType
                                : kUnpremul_SkAlphaType;
   sk_sp<SkImage> skia_image = image->PaintImageForCurrentFrame().GetSkImage();
+  if (!skia_image)
+    return nullptr;
   if (skia_image->alphaType() == alpha_type)
     return std::move(image);
 
@@ -389,7 +384,7 @@ scoped_refptr<StaticBitmapImage> ScaleImage(
           SkRect::MakeWH(sk_image->width(), sk_image->height()),
           SkRect::MakeWH(parsed_options.resize_width,
                          parsed_options.resize_height),
-          &paint, cc::PaintCanvas::kStrict_SrcRectConstraint);
+          &paint, SkCanvas::kStrict_SrcRectConstraint);
       return resource_provider->Snapshot(image->CurrentFrameOrientation());
     }
   }
@@ -508,7 +503,7 @@ static scoped_refptr<StaticBitmapImage> CropImageAndApplyColorSpaceConversion(
           SkRect::MakeXYWH(src_rect.X(), src_rect.Y(), src_rect.Width(),
                            src_rect.Height()),
           SkRect::MakeWH(src_rect.Width(), src_rect.Height()), &paint,
-          cc::PaintCanvas::kStrict_SrcRectConstraint);
+          SkCanvas::kStrict_SrcRectConstraint);
       result = resource_provider->Snapshot(image->CurrentFrameOrientation());
     } else {
       result = UnacceleratedStaticBitmapImage::Create(
@@ -553,6 +548,8 @@ static scoped_refptr<StaticBitmapImage> CropImageAndApplyColorSpaceConversion(
                                         parsed_options.premultiply_alpha
                                             ? kPremultiplyAlpha
                                             : kUnpremultiplyAlpha);
+  if (!result)
+    return nullptr;
 
   // convert pixel format if needed
   result =
@@ -686,8 +683,8 @@ ImageBitmap::ImageBitmap(HTMLCanvasElement* canvas,
                          base::Optional<IntRect> crop_rect,
                          const ImageBitmapOptions* options) {
   SourceImageStatus status;
-  scoped_refptr<Image> image_input = canvas->GetSourceImageForCanvas(
-      &status, kPreferAcceleration, FloatSize());
+  scoped_refptr<Image> image_input =
+      canvas->GetSourceImageForCanvas(&status, FloatSize());
   if (status != kNormalSourceImageStatus)
     return;
   DCHECK(IsA<StaticBitmapImage>(image_input.get()));
@@ -713,7 +710,7 @@ ImageBitmap::ImageBitmap(OffscreenCanvas* offscreen_canvas,
                          const ImageBitmapOptions* options) {
   SourceImageStatus status;
   scoped_refptr<Image> raw_input = offscreen_canvas->GetSourceImageForCanvas(
-      &status, kPreferNoAcceleration, FloatSize(offscreen_canvas->Size()));
+      &status, FloatSize(offscreen_canvas->Size()));
   DCHECK(IsA<StaticBitmapImage>(raw_input.get()));
   scoped_refptr<StaticBitmapImage> input =
       static_cast<StaticBitmapImage*>(raw_input.get());
@@ -1107,7 +1104,6 @@ ScriptPromise ImageBitmap::CreateImageBitmap(ScriptState* script_state,
 
 scoped_refptr<Image> ImageBitmap::GetSourceImageForCanvas(
     SourceImageStatus* status,
-    AccelerationHint,
     const FloatSize&) {
   *status = kNormalSourceImageStatus;
   if (!image_)

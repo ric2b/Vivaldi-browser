@@ -5,6 +5,7 @@
 import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//content/public/common/zygote/features.gni")
 import("//ipc/features.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//ppapi/buildflags/buildflags.gni")
@@ -40,6 +41,8 @@ source_set("common") {
 
   sources = [
     "all_messages.h",
+    "android/cpu_time_metrics.cc",
+    "android/cpu_time_metrics.h",
     "android/gin_java_bridge_errors.cc",
     "android/gin_java_bridge_errors.h",
     "android/gin_java_bridge_value.cc",
@@ -55,6 +58,9 @@ source_set("common") {
     "appcache_interfaces.h",
     "ax_content_node_data.cc",
     "ax_content_node_data.h",
+    "ax_content_tree_data.cc",
+    "ax_content_tree_data.h",
+    "ax_content_tree_update.h",
     "ax_serialization_utils.cc",
     "ax_serialization_utils.h",
     "background_fetch/background_fetch_types.cc",
@@ -88,7 +94,6 @@ source_set("common") {
     "cursors/webcursor_android.cc",
     "cursors/webcursor_aura.cc",
     "cursors/webcursor_aurawin.cc",
-    "cursors/webcursor_aurax11.cc",
     "cursors/webcursor_mac.mm",
     "cursors/webcursor_ozone.cc",
     "drag_event_source_info.h",
@@ -120,14 +125,8 @@ source_set("common") {
     "input/event_with_latency_info.h",
     "input/gesture_event_stream_validator.cc",
     "input/gesture_event_stream_validator.h",
-    "input/ime_text_span_conversions.cc",
-    "input/ime_text_span_conversions.h",
-    "input/input_event.cc",
-    "input/input_event.h",
     "input/input_event_ack_state.cc",
     "input/input_event_dispatch_type.h",
-    "input/input_event_mojom_traits.cc",
-    "input/input_event_mojom_traits.h",
     "input/input_event_stream_validator.cc",
     "input/input_event_stream_validator.h",
     "input/synthetic_gesture_params.cc",
@@ -144,23 +143,21 @@ source_set("common") {
     "input/synthetic_smooth_scroll_gesture_params.h",
     "input/synthetic_tap_gesture_params.cc",
     "input/synthetic_tap_gesture_params.h",
-    "input/synthetic_web_input_event_builders.cc",
-    "input/synthetic_web_input_event_builders.h",
     "input/touch_event_stream_validator.cc",
     "input/touch_event_stream_validator.h",
-    "input/web_mouse_wheel_event_traits.cc",
-    "input/web_mouse_wheel_event_traits.h",
     "input/web_touch_event_traits.cc",
     "input/web_touch_event_traits.h",
     "input_messages.h",
     "inter_process_time_ticks_converter.cc",
     "inter_process_time_ticks_converter.h",
-    "mac/attributed_string_coder.h",
-    "mac/attributed_string_coder.mm",
+    "mac/attributed_string_type_converters.h",
+    "mac/attributed_string_type_converters.mm",
     "mac/font_loader.h",
     "mac/font_loader.mm",
     "media/cdm_info.cc",
     "media/media_player_delegate_messages.h",
+    "mojo_core_library_support.cc",
+    "mojo_core_library_support.h",
     "navigation_gesture.h",
     "navigation_params.cc",
     "navigation_params.h",
@@ -183,7 +180,6 @@ source_set("common") {
     "sandbox_init_linux.cc",
     "sandbox_init_mac.cc",
     "sandbox_init_win.cc",
-    "savable_subframe.h",
     "service_manager/service_manager_connection_impl.cc",
     "service_manager/service_manager_connection_impl.h",
     "service_worker/service_worker_loader_helpers.cc",
@@ -192,9 +188,8 @@ source_set("common") {
     "service_worker/service_worker_utils.h",
     "skia_utils.cc",
     "skia_utils.h",
+    "state_transitions.h",
     "text_input_client_messages.h",
-    "text_input_state.cc",
-    "text_input_state.h",
     "thread_pool_util.cc",
     "thread_pool_util.h",
     "unfreezable_frame_messages.h",
@@ -230,7 +225,7 @@ source_set("common") {
     "//third_party/blink/public/common",
     "//ui/accessibility",
     "//ui/accessibility/mojom",
-    "//ui/base/cursor",
+    "//ui/base/cursor:cursor_base",
     "//ui/base/cursor/mojom:cursor_type",
     "//ui/events/ipc",
   ]
@@ -276,8 +271,8 @@ source_set("common") {
     "//services/network/public/cpp",
     "//services/network/public/mojom",
     "//services/resource_coordinator/public/cpp/memory_instrumentation",
+    "//services/service_manager/embedder:embedder_result_codes",
     "//services/service_manager/public/mojom",
-    "//services/service_manager/zygote:zygote_buildflags",
     "//services/video_capture/public/mojom",
     "//services/viz/public/mojom",
     "//skia",
@@ -347,24 +342,32 @@ source_set("common") {
     deps += [ "//ppapi/proxy:ipc_sources" ]
   }
 
-  if (use_ozone) {
-    deps += [ "//ui/ozone" ]
-  } else {
+  if (!use_x11 && !use_ozone) {
     sources -= [ "cursors/webcursor_ozone.cc" ]
   }
 
-  if (!use_aura) {
+  if (use_aura) {
+    deps += [ "//ui/base/cursor" ]
+  } else {
     sources -= [ "cursors/webcursor_aura.cc" ]
   }
 
-  if (!use_aura || !use_x11) {
-    sources -= [ "cursors/webcursor_aurax11.cc" ]
-  } else {
-    deps += [ "//ui/gfx/x" ]
+  if (is_linux) {
+    sources += [
+      "zygote/sandbox_support_linux.cc",
+      "zygote/send_zygote_child_ping_linux.cc",
+      "zygote/zygote_commands_linux.h",
+      "zygote/zygote_communication_linux.cc",
+      "zygote/zygote_communication_linux.h",
+    ]
+    deps += [ "//third_party/fontconfig" ]
   }
 
-  if (is_linux) {
-    deps += [ "//third_party/fontconfig" ]
+  if (use_zygote_handle) {
+    sources += [
+      "zygote/zygote_handle_impl_linux.h",
+      "zygote/zygote_handle_linux.cc",
+    ]
   }
 
   if (is_mac || is_win || is_android || is_fuchsia) {
@@ -447,9 +450,7 @@ mojom("mojo_bindings") {
     "frame_proxy.mojom",
     "frame_sink_provider.mojom",
     "histogram_fetcher.mojom",
-    "input/input_handler.mojom",
     "input/input_injector.mojom",
-    "input/synchronous_compositor.mojom",
     "media/media_log_records.mojom",
     "media/renderer_audio_input_stream_factory.mojom",
     "media/renderer_audio_output_stream_factory.mojom",
@@ -464,7 +465,6 @@ mojom("mojo_bindings") {
     "renderer.mojom",
     "renderer_host.mojom",
     "renderer_variations_configuration.mojom",
-    "widget.mojom",
   ]
 
   enabled_features = []
@@ -549,17 +549,20 @@ mojom("mojo_bindings") {
           cpp = "::content::ContentSecurityPolicy"
         },
         {
-          mojom = "content.mojom.Event"
-          cpp = "::std::unique_ptr<::content::InputEvent>"
-          move_only = true
-        },
-        {
           mojom = "content.mojom.FrameReplicationState"
           cpp = "::content::FrameReplicationState"
         },
         {
+          mojom = "content.mojom.NavigationDownloadPolicy"
+          cpp = "::content::NavigationDownloadPolicy"
+        },
+        {
           mojom = "content.mojom.NetworkConnectionType"
           cpp = "::net::NetworkChangeNotifier::ConnectionType"
+        },
+        {
+          mojom = "content.mojom.Impression"
+          cpp = "::content::Impression"
         },
         {
           mojom = "content.mojom.ScrollGranularity"
@@ -590,6 +593,10 @@ mojom("mojo_bindings") {
           cpp = "::ui::NativeTheme::SystemThemeColor"
         },
         {
+          mojom = "content.mojom.TriggeringEventInfo"
+          cpp = "::blink::TriggeringEventInfo"
+        },
+        {
           mojom = "content.mojom.VisualProperties"
           cpp = "::content::VisualProperties"
         },
@@ -607,7 +614,6 @@ mojom("mojo_bindings") {
         "//cc/input/touch_action.h",
         "//content/common/cursors/webcursor.h",
         "//content/common/frame_replication_state.h",
-        "//content/common/input/input_event.h",
         "//content/common/input/synthetic_pinch_gesture_params.h",
         "//content/common/input/synthetic_pointer_action_list_params.h",
         "//content/common/input/synthetic_smooth_drag_gesture_params.h",
@@ -616,10 +622,12 @@ mojom("mojo_bindings") {
         "//content/common/visual_properties.h",
         "//content/public/common/web_preferences.h",
         "//net/base/network_change_notifier.h",
+        "//third_party/blink/public/common/input/web_coalesced_input_event_mojom_traits.h",
         "//third_party/blink/public/common/input/web_input_event.h",
         "//third_party/blink/public/common/input/web_mouse_wheel_event.h",
         "//third_party/blink/public/common/input/web_pointer_properties.h",
         "//third_party/blink/public/common/input/web_touch_point.h",
+        "//third_party/blink/public/common/navigation/triggering_event_info.h",
         "//ui/events/blink/did_overscroll_params.h",
         "//ui/events/blink/web_input_event_traits.h",
         "//ui/latency/ipc/latency_info_param_traits.h",
@@ -628,7 +636,6 @@ mojom("mojo_bindings") {
 
       traits_private_headers = [
         "//content/common/frame_messages.h",
-        "//content/common/input/input_event_mojom_traits.h",
         "//content/common/input_messages.h",
         "//content/common/view_messages.h",
         "//content/common/widget_messages.h",
@@ -651,7 +658,7 @@ mojom("mojo_bindings") {
         "//services/network/public/cpp",
         "//third_party/blink/public/common",
         "//ui/accessibility",
-        "//ui/base/cursor",
+        "//ui/base/cursor:cursor_base",
         "//ui/base/ime:text_input_types",
         "//ui/events/blink",
         "//ui/gfx/ipc",
@@ -763,18 +770,12 @@ mojom("mojo_bindings") {
       {
         types = [
           {
-            mojom = "content.mojom.EncodedAttributedString"
-            cpp = "::mac::AttributedStringCoder::EncodedString"
-          },
-          {
             mojom = "content.mojom.ScrollerStyle"
             cpp = "::blink::ScrollerStyle"
           },
         ]
-        traits_headers = [
-          "//content/common/mac/attributed_string_coder.h",
-          "//third_party/blink/public/platform/mac/web_scrollbar_theme.h",
-        ]
+        traits_headers =
+            [ "//third_party/blink/public/platform/mac/web_scrollbar_theme.h" ]
         traits_private_headers = [ "//content/common/view_messages.h" ]
         traits_public_deps = [ "//third_party/blink/public:blink_headers" ]
       },

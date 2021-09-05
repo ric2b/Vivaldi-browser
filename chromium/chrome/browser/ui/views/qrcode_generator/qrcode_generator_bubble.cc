@@ -8,6 +8,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/sharing/features.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -50,10 +51,18 @@ namespace {
 // Rendered QR Code size, pixels.
 constexpr int kQRImageSizePx = 200;
 constexpr int kPaddingTooltipDownloadButtonPx = 10;
+// Padding around the QR code. Ensures we can scan when using dark themes.
+constexpr int kQRPaddingPx = 40;
 
 // Calculates preview image dimensions.
 constexpr gfx::Size GetQRImageSize() {
   return gfx::Size(kQRImageSizePx, kQRImageSizePx);
+}
+
+// Calculates the height of the QR Code with padding.
+constexpr gfx::Size GetPreferredQRCodeImageSize() {
+  return gfx::Size(kQRImageSizePx + kQRPaddingPx,
+                   kQRImageSizePx + kQRPaddingPx);
 }
 
 // Renders a solid square of color {r, g, b} at 100% alpha.
@@ -89,6 +98,7 @@ QRCodeGeneratorBubble::QRCodeGeneratorBubble(
   DCHECK(controller);
 
   SetButtons(ui::DIALOG_BUTTON_NONE);
+  SetTitle(IDS_BROWSER_SHARING_QR_CODE_DIALOG_TITLE);
 
   base::RecordAction(base::UserMetricsAction("SharingQRCode.DialogLaunched"));
 }
@@ -134,10 +144,13 @@ void QRCodeGeneratorBubble::UpdateQRContent() {
 void QRCodeGeneratorBubble::OnCodeGeneratorResponse(
     const mojom::GenerateQRCodeResponsePtr response) {
   if (response->error_code != mojom::QRCodeGeneratorError::NONE) {
-    DisplayPlaceholderImage();
+    DisplayError(response->error_code);
     return;
   }
 
+  ShrinkAndHideDisplay(center_error_label_);
+  bottom_error_label_->SetVisible(false);
+  download_button_->SetEnabled(true);
   gfx::ImageSkia image = gfx::ImageSkia::CreateFrom1xBitmap(response->bitmap);
   UpdateQRImage(image);
 }
@@ -145,19 +158,35 @@ void QRCodeGeneratorBubble::OnCodeGeneratorResponse(
 void QRCodeGeneratorBubble::UpdateQRImage(gfx::ImageSkia qr_image) {
   qr_code_image_->SetImage(qr_image);
   qr_code_image_->SetImageSize(GetQRImageSize());
-  qr_code_image_->SetBackground(nullptr);
+  qr_code_image_->SetPreferredSize(GetPreferredQRCodeImageSize());
+  qr_code_image_->SetVisible(true);
 }
 
 void QRCodeGeneratorBubble::DisplayPlaceholderImage() {
   UpdateQRImage(GetPlaceholderImageSkia(gfx::kGoogleGrey100));
 }
 
-views::View* QRCodeGeneratorBubble::GetInitiallyFocusedView() {
-  return textfield_url_;
+void QRCodeGeneratorBubble::DisplayError(mojom::QRCodeGeneratorError error) {
+  download_button_->SetEnabled(false);
+  if (error == mojom::QRCodeGeneratorError::INPUT_TOO_LONG) {
+    ShrinkAndHideDisplay(center_error_label_);
+    DisplayPlaceholderImage();
+    bottom_error_label_->SetVisible(true);
+    return;
+  }
+  ShrinkAndHideDisplay(qr_code_image_);
+  bottom_error_label_->SetVisible(false);
+  center_error_label_->SetPreferredSize(GetPreferredQRCodeImageSize());
+  center_error_label_->SetVisible(true);
 }
 
-base::string16 QRCodeGeneratorBubble::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(IDS_BROWSER_SHARING_QR_CODE_DIALOG_TITLE);
+void QRCodeGeneratorBubble::ShrinkAndHideDisplay(views::View* view) {
+  view->SetPreferredSize(gfx::Size(0, 0));
+  view->SetVisible(false);
+}
+
+views::View* QRCodeGeneratorBubble::GetInitiallyFocusedView() {
+  return textfield_url_;
 }
 
 bool QRCodeGeneratorBubble::ShouldShowCloseButton() const {
@@ -184,8 +213,10 @@ void QRCodeGeneratorBubble::Init() {
 
   // Internal IDs for column layout; no effect on UI.
   constexpr int kQRImageColumnSetId = 0;
-  constexpr int kTextFieldColumnSetId = 1;
-  constexpr int kDownloadRowColumnSetId = 2;
+  constexpr int kCenterErrorLabelColumnSetId = 1;
+  constexpr int kTextFieldColumnSetId = 2;
+  constexpr int kBottomErrorLabelColumnSetId = 3;
+  constexpr int kDownloadRowColumnSetId = 4;
 
   // Add top-level Grid Layout manager for this dialog.
   views::GridLayout* const layout =
@@ -200,17 +231,37 @@ void QRCodeGeneratorBubble::Init() {
       1.0, views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   using Alignment = views::ImageView::Alignment;
   auto qr_code_image = std::make_unique<views::ImageView>();
+  const int border_radius =
+      views::LayoutProvider::Get()->GetCornerRadiusMetric(views::EMPHASIS_HIGH);
   qr_code_image->SetBorder(views::CreateRoundedRectBorder(
-      /*thickness=*/10,
-      views::LayoutProvider::Get()->GetCornerRadiusMetric(views::EMPHASIS_HIGH),
-      gfx::kGoogleGrey200));
+      /*thickness=*/2, border_radius, gfx::kGoogleGrey200));
   qr_code_image->SetHorizontalAlignment(Alignment::kCenter);
   qr_code_image->SetVerticalAlignment(Alignment::kCenter);
   qr_code_image->SetImageSize(GetQRImageSize());
-  qr_code_image->SetPreferredSize(GetQRImageSize());
+  qr_code_image->SetPreferredSize(GetPreferredQRCodeImageSize());
+  qr_code_image->SetBackground(
+      views::CreateRoundedRectBackground(SK_ColorWHITE, border_radius));
+
   layout->StartRow(views::GridLayout::kFixedSize, kQRImageColumnSetId);
   qr_code_image_ = layout->AddView(std::move(qr_code_image));
-  DisplayPlaceholderImage();
+
+  // Center error message.
+  views::ColumnSet* column_set_center_error_label =
+      layout->AddColumnSet(kCenterErrorLabelColumnSetId);
+  column_set_center_error_label->AddColumn(
+      views::GridLayout::CENTER, views::GridLayout::CENTER, 1.0,
+      views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
+  auto center_error_label = std::make_unique<views::Label>();
+  center_error_label->SetHorizontalAlignment(gfx::ALIGN_CENTER);
+  center_error_label->SetVerticalAlignment(gfx::ALIGN_MIDDLE);
+  center_error_label->SetEnabledColor(
+      center_error_label->GetNativeTheme()->GetSystemColor(
+          ui::NativeTheme::kColorId_LabelSecondaryColor));
+  center_error_label->SetText(l10n_util::GetStringUTF16(
+      IDS_BROWSER_SHARING_QR_CODE_DIALOG_ERROR_UNKNOWN));
+  layout->StartRow(views::GridLayout::kFixedSize, kCenterErrorLabelColumnSetId);
+  center_error_label_ = layout->AddView(std::move(center_error_label));
+  ShrinkAndHideDisplay(center_error_label_);
 
   // Padding
   AddSmallPaddingRow(layout);
@@ -235,11 +286,33 @@ void QRCodeGeneratorBubble::Init() {
   layout->StartRow(views::GridLayout::kFixedSize, kTextFieldColumnSetId);
   textfield_url_ = layout->AddView(std::move(textfield_url));
 
+  // Lower error message.
+  views::ColumnSet* column_set_bottom_error_label =
+      layout->AddColumnSet(kBottomErrorLabelColumnSetId);
+  column_set_bottom_error_label->AddColumn(
+      views::GridLayout::FILL, views::GridLayout::CENTER, 1.0,
+      views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
+  auto bottom_error_label = std::make_unique<views::Label>();
+  bottom_error_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  bottom_error_label->SetEnabledColor(
+      bottom_error_label->GetNativeTheme()->GetSystemColor(
+          ui::NativeTheme::kColorId_LabelSecondaryColor));
+  int maxUrlLength = base::GetFieldTrialParamByFeatureAsInt(
+      kSharingQRCodeGenerator, "max_url_length", 122);
+  bottom_error_label->SetText(l10n_util::GetStringFUTF16Int(
+      IDS_BROWSER_SHARING_QR_CODE_DIALOG_ERROR_TOO_LONG, maxUrlLength));
+  bottom_error_label->SetVisible(false);
+  layout->StartRow(views::GridLayout::kFixedSize, kBottomErrorLabelColumnSetId);
+  bottom_error_label_ = layout->AddView(std::move(bottom_error_label));
+  // Updating the image requires both error labels to be initialized.
+  DisplayPlaceholderImage();
+
   // Padding - larger between controls and action buttons.
   layout->AddPaddingRow(
       views::GridLayout::kFixedSize,
       ChromeLayoutProvider::Get()->GetDistanceMetric(
-          views::DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_CONTROL));
+          views::DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_CONTROL) -
+          bottom_error_label_->GetPreferredSize().height());
 
   // Controls row: tooltip and download button.
   views::ColumnSet* control_columns =

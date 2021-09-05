@@ -34,6 +34,7 @@
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
@@ -154,17 +155,20 @@ void UserTriggeredManualGenerationFromContextMenu(
   }
   // The client ensures the callback won't be run if it is destroyed, so
   // base::Unretained is safe.
-  password_manager_client->TriggerReauthForPrimaryAccount(base::BindOnce(
-      [](password_manager::PasswordManagerClient* client,
-         password_manager::PasswordManagerClient::ReauthSucceeded succeeded) {
-        if (succeeded) {
-          client->GeneratePassword();
-          LogPasswordGenerationEvent(
-              autofill::password_generation::
-                  PASSWORD_GENERATION_CONTEXT_MENU_PRESSED);
-        }
-      },
-      base::Unretained(password_manager_client)));
+  password_manager_client->TriggerReauthForPrimaryAccount(
+      signin_metrics::ReauthAccessPoint::kGeneratePasswordContextMenu,
+      base::BindOnce(
+          [](password_manager::PasswordManagerClient* client,
+             password_manager::PasswordManagerClient::ReauthSucceeded
+                 succeeded) {
+            if (succeeded) {
+              client->GeneratePassword();
+              LogPasswordGenerationEvent(
+                  autofill::password_generation::
+                      PASSWORD_GENERATION_CONTEXT_MENU_PRESSED);
+            }
+          },
+          base::Unretained(password_manager_client)));
 }
 
 // TODO(http://crbug.com/890318): Add unitests to check cleaners are correctly
@@ -204,7 +208,7 @@ base::StringPiece GetSignonRealmWithProtocolExcluded(const PasswordForm& form) {
 
   // Find the web origin (with protocol excluded) in the signon_realm.
   const size_t after_protocol =
-      signon_realm_protocol_excluded.find(form.origin.host_piece());
+      signon_realm_protocol_excluded.find(form.url.host_piece());
   DCHECK_NE(after_protocol, base::StringPiece::npos);
 
   // Keep the string starting with position |after_protocol|.
@@ -323,16 +327,15 @@ autofill::PasswordForm MakeNormalizedBlacklistedForm(
   result.signon_realm = std::move(digest.signon_realm);
   // In case |digest| corresponds to an Android credential copy the origin as
   // is, otherwise clear out the path by calling GetOrigin().
-  if (password_manager::FacetURI::FromPotentiallyInvalidSpec(
-          digest.origin.spec())
+  if (password_manager::FacetURI::FromPotentiallyInvalidSpec(digest.url.spec())
           .IsValidAndroidFacetURI()) {
-    result.origin = std::move(digest.origin);
+    result.url = std::move(digest.url);
   } else {
     // GetOrigin() will return an empty GURL if the origin is not valid or
     // standard. DCHECK that this will not happen.
-    DCHECK(digest.origin.is_valid());
-    DCHECK(digest.origin.IsStandard());
-    result.origin = digest.origin.GetOrigin();
+    DCHECK(digest.url.is_valid());
+    DCHECK(digest.url.IsStandard());
+    result.url = digest.url.GetOrigin();
   }
   return result;
 }

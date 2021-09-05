@@ -25,7 +25,7 @@ class GroupNode extends SAChildNode {
 
   /** @override */
   get actions() {
-    return [];
+    return [SwitchAccessMenuAction.SELECT];
   }
 
   /** @override */
@@ -103,7 +103,7 @@ class GroupNode extends SAChildNode {
   isValidAndVisible() {
     for (const child of this.children_) {
       if (child.isValidAndVisible()) {
-        return true;
+        return super.isValidAndVisible();
       }
     }
     return false;
@@ -111,7 +111,7 @@ class GroupNode extends SAChildNode {
 
   /** @override */
   performAction(action) {
-    if (action === SAConstants.MenuAction.SELECT) {
+    if (action === SwitchAccessMenuAction.SELECT) {
       NavigationManager.enterGroup();
       return SAConstants.ActionResponse.CLOSE_MENU;
     }
@@ -139,7 +139,10 @@ class GroupNode extends SAChildNode {
         i++;
       }
       if (children.length <= 1) {
-        throw new Error('Cannot group row with only one element.');
+        setTimeout(NavigationManager.moveToValidNode, 0);
+        throw SwitchAccess.error(
+            SAConstants.ErrorType.ROW_TOO_SHORT,
+            'Cannot group row with only one element.');
       }
 
       result.push(new GroupNode(children));

@@ -18,7 +18,9 @@ namespace autofill_assistant {
 class InteractionHandlerAndroid;
 class BasicInteractions;
 class EventHandler;
+class RadioButtonController;
 class UserModel;
+class ViewHandlerAndroid;
 
 class GenericUiControllerAndroid {
  public:
@@ -27,6 +29,7 @@ class GenericUiControllerAndroid {
   // Ownership of the arguments is not changed.
   static std::unique_ptr<GenericUiControllerAndroid> CreateFromProto(
       const GenericUserInterfaceProto& proto,
+      const std::map<std::string, std::string> context,
       base::android::ScopedJavaGlobalRef<jobject> jcontext,
       base::android::ScopedJavaGlobalRef<jobject> jdelegate,
       EventHandler* event_handler,
@@ -39,20 +42,16 @@ class GenericUiControllerAndroid {
 
   GenericUiControllerAndroid(
       base::android::ScopedJavaGlobalRef<jobject> jroot_view,
-      std::unique_ptr<
-          std::map<std::string, base::android::ScopedJavaGlobalRef<jobject>>>
-          views,
-      std::unique_ptr<InteractionHandlerAndroid> interaction_handler);
+      std::unique_ptr<ViewHandlerAndroid> view_handler,
+      std::unique_ptr<InteractionHandlerAndroid> interaction_handler,
+      std::unique_ptr<RadioButtonController> radio_button_controller);
   ~GenericUiControllerAndroid();
 
  private:
   base::android::ScopedJavaGlobalRef<jobject> jroot_view_;
-
-  // Maps view-ids to android views.
-  std::unique_ptr<
-      std::map<std::string, base::android::ScopedJavaGlobalRef<jobject>>>
-      views_;
+  std::unique_ptr<ViewHandlerAndroid> view_handler_;
   std::unique_ptr<InteractionHandlerAndroid> interaction_handler_;
+  std::unique_ptr<RadioButtonController> radio_button_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(GenericUiControllerAndroid);
 };

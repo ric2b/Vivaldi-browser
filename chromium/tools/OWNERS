@@ -7,6 +7,7 @@
 
 brucedawson@chromium.org
 dpranke@chromium.org
+dpranke@google.com
 scottmg@chromium.org
 thakis@chromium.org
 
@@ -14,7 +15,7 @@ thakis@chromium.org
 # changes in this directory are rare and most changes happen in better-owned
 # subdirectories.
 #
-# TEAM: infra-dev@chromium.org
+# TEAM: build@chromium.org
 # COMPONENT: Build
 
 per-file autotest.py=mthiesse@chromium.org
@@ -37,8 +38,6 @@ per-file gypv8sh.py=jochen@chromium.org
 per-file include_tracer.py=thakis@chromium.org
 
 per-file ipc_messages_log.py=yfriedman@chromium.org
-
-per-file licenses.py=ichikawa@chromium.org
 
 per-file nocompile_driver.py=ajwong@chromium.org
 per-file nocompile_driver.py=wychen@chromium.org

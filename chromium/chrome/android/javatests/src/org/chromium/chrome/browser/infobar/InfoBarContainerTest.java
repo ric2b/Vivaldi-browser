@@ -7,10 +7,11 @@ package org.chromium.chrome.browser.infobar;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.TextView;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -23,7 +24,6 @@ import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -49,7 +49,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Tests for the InfoBarContainer.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@RetryOnFailure
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class InfoBarContainerTest {
     @Rule

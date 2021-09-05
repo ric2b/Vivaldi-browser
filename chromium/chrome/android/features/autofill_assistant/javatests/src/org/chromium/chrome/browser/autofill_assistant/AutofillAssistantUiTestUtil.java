@@ -4,8 +4,8 @@
 
 package org.chromium.chrome.browser.autofill_assistant;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 
@@ -18,12 +18,6 @@ import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.os.Build.VERSION;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.espresso.NoMatchingViewException;
-import android.support.test.espresso.UiController;
-import android.support.test.espresso.ViewAction;
-import android.support.test.espresso.ViewAssertion;
-import android.support.test.espresso.core.deps.guava.base.Preconditions;
-import android.support.test.espresso.matcher.BoundedMatcher;
 import android.text.Spanned;
 import android.text.SpannedString;
 import android.text.style.ClickableSpan;
@@ -38,6 +32,11 @@ import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
+import androidx.test.espresso.NoMatchingViewException;
+import androidx.test.espresso.UiController;
+import androidx.test.espresso.ViewAction;
+import androidx.test.espresso.ViewAssertion;
+import androidx.test.espresso.matcher.BoundedMatcher;
 
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
@@ -54,8 +53,8 @@ import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcher;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcherConfig;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.chrome.test.ChromeActivityTestRule;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -85,14 +84,8 @@ class AutofillAssistantUiTestUtil {
         }
 
         @Override
-        public void fetchGif(String url, String clientName, Callback<BaseGifImage> callback) {
+        public void fetchGif(final ImageFetcher.Params params, Callback<BaseGifImage> callback) {
             callback.onResult(mGifToFetch);
-        }
-
-        @Override
-        public void fetchImage(
-                String url, String clientName, int width, int height, Callback<Bitmap> callback) {
-            callback.onResult(mBitmapToFetch);
         }
 
         @Override
@@ -244,7 +237,7 @@ class AutofillAssistantUiTestUtil {
     }
 
     static Matcher<View> isNextAfterSibling(final Matcher<View> siblingMatcher) {
-        Preconditions.checkNotNull(siblingMatcher);
+        assert siblingMatcher != null;
         return new TypeSafeMatcher<View>() {
             @Override
             public void describeTo(Description description) {

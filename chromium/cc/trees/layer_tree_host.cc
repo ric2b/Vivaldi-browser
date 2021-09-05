@@ -18,6 +18,7 @@
 #include "base/command_line.h"
 #include "base/containers/adapters.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -93,6 +94,9 @@ LayerTreeHost::InitParams::~InitParams() = default;
 LayerTreeHost::InitParams::InitParams(InitParams&&) = default;
 LayerTreeHost::InitParams& LayerTreeHost::InitParams::operator=(InitParams&&) =
     default;
+
+LayerTreeHost::ScrollAnimationState::ScrollAnimationState() = default;
+LayerTreeHost::ScrollAnimationState::~ScrollAnimationState() = default;
 
 std::unique_ptr<LayerTreeHost> LayerTreeHost::CreateThreaded(
     scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner,
@@ -263,14 +267,6 @@ const LayerTreeSettings& LayerTreeHost::GetSettings() const {
 void LayerTreeHost::QueueSwapPromise(
     std::unique_ptr<SwapPromise> swap_promise) {
   swap_promise_manager_.QueueSwapPromise(std::move(swap_promise));
-
-  // Request a main frame if one is not already in progress. This might either
-  // A) request a commit ahead of time or B) request a commit which is not
-  // needed because there are not pending updates. If B) then the frame will
-  // be aborted early and the swap promises will be broken (see
-  // EarlyOut_NoUpdates).
-  if (!inside_main_frame_)
-    SetNeedsAnimate();
 }
 
 void LayerTreeHost::WillBeginMainFrame() {
@@ -609,6 +605,11 @@ void LayerTreeHost::SetNeedsAnimate() {
   events_metrics_manager_.SaveActiveEventMetrics();
 }
 
+void LayerTreeHost::SetNeedsAnimateIfNotInsideMainFrame() {
+  if (!inside_main_frame_)
+    SetNeedsAnimate();
+}
+
 DISABLE_CFI_PERF
 void LayerTreeHost::SetNeedsUpdateLayers() {
   proxy_->SetNeedsUpdateLayers();
@@ -785,6 +786,13 @@ bool LayerTreeHost::CaptureContent(std::vector<NodeId>* content) {
   return true;
 }
 
+void LayerTreeHost::DidObserveFirstScrollDelay(
+    base::TimeDelta first_scroll_delay,
+    base::TimeTicks first_scroll_timestamp) {
+  client_->DidObserveFirstScrollDelay(first_scroll_delay,
+                                      first_scroll_timestamp);
+}
+
 bool LayerTreeHost::DoUpdateLayers() {
   TRACE_EVENT1("cc,benchmark", "LayerTreeHost::DoUpdateLayers",
                "source_frame_number", SourceFrameNumber());
@@ -848,6 +856,24 @@ void LayerTreeHost::ApplyViewportChanges(const ScrollAndScaleSet& info) {
   gfx::ScrollOffset inner_viewport_scroll_delta;
   if (info.inner_viewport_scroll.element_id)
     inner_viewport_scroll_delta = info.inner_viewport_scroll.scroll_delta;
+
+  // When a new scroll-animation starts, it is necessary to check
+  // |info.manipulation_info| to make sure the scroll-animation was started by
+  // an input event.
+  // If there is already an ongoing scroll-animation, then it is necessary to
+  // only look at |info.ongoing_scroll_animation| (since it is possible for the
+  // scroll-animation to continue even if no event was handled).
+  bool new_ongoing_scroll =
+      scroll_animation_.in_progress
+          ? info.ongoing_scroll_animation
+          : (info.ongoing_scroll_animation && info.manipulation_info);
+  if (scroll_animation_.in_progress && !new_ongoing_scroll) {
+    scroll_animation_.in_progress = false;
+    if (!scroll_animation_.end_notification.is_null())
+      std::move(scroll_animation_.end_notification).Run();
+  } else {
+    scroll_animation_.in_progress = new_ongoing_scroll;
+  }
 
   if (inner_viewport_scroll_delta.IsZero() && info.page_scale_delta == 1.f &&
       info.elastic_overscroll_delta.IsZero() && !info.top_controls_delta &&
@@ -985,6 +1011,14 @@ void LayerTreeHost::NotifyThroughputTrackerResults(
   client_->NotifyThroughputTrackerResults(std::move(results));
 }
 
+void LayerTreeHost::SubmitThroughputData(ukm::SourceId source_id,
+                                         int aggregated_percent,
+                                         int impl_percent,
+                                         base::Optional<int> main_percent) {
+  client_->SubmitThroughputData(source_id, aggregated_percent, impl_percent,
+                                main_percent);
+}
+
 const base::WeakPtr<InputHandler>& LayerTreeHost::GetInputHandler() const {
   return input_handler_weak_ptr_;
 }
@@ -1068,6 +1102,15 @@ void LayerTreeHost::RequestPresentationTimeForNextFrame(
   pending_presentation_time_callbacks_.push_back(std::move(callback));
 }
 
+void LayerTreeHost::RequestScrollAnimationEndNotification(
+    base::OnceClosure callback) {
+  DCHECK(scroll_animation_.end_notification.is_null());
+  if (scroll_animation_.in_progress)
+    scroll_animation_.end_notification = std::move(callback);
+  else
+    std::move(callback).Run();
+}
+
 void LayerTreeHost::SetRootLayer(scoped_refptr<Layer> root_layer) {
   if (root_layer_.get() == root_layer.get())
     return;
@@ -1118,9 +1161,13 @@ Layer* LayerTreeHost::InnerViewportScrollLayerForTesting() const {
 }
 
 Layer* LayerTreeHost::OuterViewportScrollLayerForTesting() const {
+  return LayerByElementId(OuterViewportScrollElementId());
+}
+
+ElementId LayerTreeHost::OuterViewportScrollElementId() const {
   auto* scroll_node =
       property_trees()->scroll_tree.Node(viewport_property_ids_.outer_scroll);
-  return scroll_node ? LayerByElementId(scroll_node->element_id) : nullptr;
+  return scroll_node ? scroll_node->element_id : ElementId();
 }
 
 void LayerTreeHost::RegisterSelection(const LayerSelection& selection) {
@@ -1439,10 +1486,6 @@ void LayerTreeHost::AddLayerShouldPushProperties(Layer* layer) {
   layers_that_should_push_properties_.insert(layer);
 }
 
-void LayerTreeHost::RemoveLayerShouldPushProperties(Layer* layer) {
-  layers_that_should_push_properties_.erase(layer);
-}
-
 void LayerTreeHost::ClearLayersThatShouldPushProperties() {
   layers_that_should_push_properties_.clear();
 }
@@ -1566,6 +1609,9 @@ void LayerTreeHost::PushLayerTreePropertiesTo(LayerTreeImpl* tree_impl) {
   }
 
   tree_impl->set_display_transform_hint(display_transform_hint_);
+
+  if (delegated_ink_metadata_)
+    tree_impl->set_delegated_ink_metadata(std::move(delegated_ink_metadata_));
 }
 
 void LayerTreeHost::PushSurfaceRangesTo(LayerTreeImpl* tree_impl) {

@@ -43,7 +43,7 @@ class CORE_EXPORT HTMLIFrameElement final
   USING_GARBAGE_COLLECTED_MIXIN(HTMLIFrameElement);
 
  public:
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   explicit HTMLIFrameElement(Document&);
   ~HTMLIFrameElement() override;
@@ -55,8 +55,7 @@ class CORE_EXPORT HTMLIFrameElement final
   // Returns attributes that should be checked against Trusted Types
   const AttrNameToTrustedType& GetCheckedAttributeTypes() const override;
 
-  ParsedFeaturePolicy ConstructContainerPolicy(
-      Vector<String>* /* messages */) const override;
+  ParsedFeaturePolicy ConstructContainerPolicy() const override;
   DocumentPolicy::FeatureState ConstructRequiredPolicy() const override;
 
   mojom::blink::FrameOwnerElementType OwnerType() const final {

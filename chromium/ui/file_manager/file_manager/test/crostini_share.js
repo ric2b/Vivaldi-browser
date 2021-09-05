@@ -7,14 +7,14 @@ const shareBase = {
   vmNameTermina: 'termina',
   vmNameSelectorLinux: 'linux',
   toastSharedTextLinux: '1 folder shared with Linux',
-  toastActionTextLinux: 'Manage Linux sharing',
+  toastActionTextLinux: 'Manage',
   enumUmaShareWithLinux: 12,
   enumUmaManageLinuxSharing: 13,
   // Params for 'Share with Plugin VM'.
   vmNamePluginVm: 'PvmDefault',
   vmNameSelectorPluginVm: 'plugin-vm',
-  toastSharedTextPluginVm: '1 folder shared with Plugin VM',
-  toastActionTextPluginVm: 'Manage Plugin VM sharing',
+  toastSharedTextPluginVm: '1 folder shared with Parallels Desktop',
+  toastActionTextPluginVm: 'Manage',
   enumUmaShareWithPluginVm: 16,
   enumUmaManagePluginVmSharing: 17,
 };
@@ -75,9 +75,13 @@ shareBase.testSharePaths = async (
   const googleDrive = '#directory-tree .tree-item [volume-type-icon="drive"]';
   const menuHidden = '#file-context-menu[hidden]';
   const androidRoot = '#directory-tree [volume-type-icon="android_files"]';
-
-  const shareLabel = {'termina': 'Linux apps', 'PvmDefault': 'Plugin VM'};
+  const shareLabel = {
+    'termina': 'Linux apps',
+    'PvmDefault': 'Parallels Desktop'
+  };
   const givePermission = `Give ${shareLabel[vmName]} permission to modify `;
+  const shareMessageShown = '#files-message:not([hidden])';
+  const shareMessageHidden = '#files-message[hidden]';
 
   const oldSharePaths = chrome.fileManagerPrivate.sharePathsWithCrostini;
   let sharePathsCalled = false;
@@ -149,6 +153,14 @@ shareBase.testSharePaths = async (
   const lastEnumUma = chrome.metricsPrivate.values_.pop();
   assertEquals('FileBrowser.MenuItemSelected', lastEnumUma[0].metricName);
   assertEquals(enumUma, lastEnumUma[1]);
+
+  // Click 'photos directory and ensure share message is shown.
+  assertTrue(test.fakeMouseDoubleClick(photos), 'click photos');
+  await test.waitForElement(shareMessageShown);
+
+  // Go back to 'My files' and ensure message is not shown.
+  assertTrue(test.fakeMouseDoubleClick(myFilesDirTree), 'click My files');
+  await test.waitForElement(shareMessageHidden);
 
   // Dispatch unshare event which is normally initiated when the user
   // manages shared paths in the settings page.
@@ -252,7 +264,48 @@ shareBase.testSharePaths = async (
   done();
 };
 
+const createMockFilesAppToast = () => {
+  const toast = document.querySelector('#toast');
+
+  toast.shadowRoot.innerHTML = `
+    <div class="container" id="container" hidden>
+      <div class="text" id="text" hidden></div>
+      <cr-button class="action" id="action" hidden></cr-button>
+    </div>
+  `;
+
+  toast.visible = false;
+
+  toast.show = (message, action) => {
+    const host = document.querySelector('#toast');
+
+    if (typeof message === 'string') {
+      const text = host.shadowRoot.querySelector('#text');
+      text.innerText = message;
+      text.hidden = false;
+    } else {
+      assertTrue(false, 'Invalid <files-toast> message');
+      return;
+    }
+
+    if (action && action.text && action.callback) {
+      const button = host.shadowRoot.querySelector('#action');
+      button.innerText = action.text;
+      button.hidden = false;
+    } else {
+      assertTrue(false, 'Invalid <files-toast> action');
+      return;
+    }
+
+    console.log('Toasted ' + message);
+    const container = host.shadowRoot.querySelector('#container');
+    container.hidden = false;
+    host.visible = true;
+  };
+};
+
 crostiniShare.testSharePaths = done => {
+  createMockFilesAppToast();
   shareBase.testSharePaths(
       shareBase.vmNameTermina, shareBase.vmNameSelectorLinux,
       shareBase.toastSharedTextLinux, shareBase.toastActionTextLinux,
@@ -260,6 +313,7 @@ crostiniShare.testSharePaths = done => {
 };
 
 pluginVmShare.testSharePaths = done => {
+  createMockFilesAppToast();
   shareBase.testSharePaths(
       shareBase.vmNamePluginVm, shareBase.vmNameSelectorPluginVm,
       shareBase.toastSharedTextPluginVm, shareBase.toastActionTextPluginVm,

@@ -127,14 +127,14 @@ class _ArticleBrowsingStory(_BrowsingStory):
 ##############################################################################
 
 
-class CnnStory2018(_ArticleBrowsingStory):
+class CnnStory2020(_ArticleBrowsingStory):
   """The second top website in http://www.alexa.com/topsites/category/News"""
-  NAME = 'browse:news:cnn:2018'
+  NAME = 'browse:news:cnn:2020'
   URL = 'http://edition.cnn.com/'
   ITEM_SELECTOR = '.cd__content > h3 > a'
   ITEMS_TO_VISIT = 2
   TAGS = [
-      story_tags.HEALTH_CHECK, story_tags.JAVASCRIPT_HEAVY, story_tags.YEAR_2018
+      story_tags.HEALTH_CHECK, story_tags.JAVASCRIPT_HEAVY, story_tags.YEAR_2020
   ]
 
 
@@ -210,18 +210,19 @@ class HackerNewsDesktopStory2018(_ArticleBrowsingStory):
   TAGS = [story_tags.YEAR_2018]
 
 
-class NytimesDesktopStory2018(_ArticleBrowsingStory):
+class NytimesDesktopStory2020(_ArticleBrowsingStory):
   """
   The third top website in http://www.alexa.com/topsites/category/News
   Known Replay Errors:
   - window.EventTracker is not loaded
   - all network errors are related to ads
   """
-  NAME = 'browse:news:nytimes:2018'
+  NAME = 'browse:news:nytimes:2020'
   URL = 'http://www.nytimes.com'
-  ITEM_SELECTOR = "a[href*='/2018/']"
+  ITEM_SELECTOR = "a[href*='/2020/']"
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
-  TAGS = [story_tags.YEAR_2018]
+  TAGS = [story_tags.YEAR_2020]
+
 
 class NytimesMobileStory2019(_ArticleBrowsingStory):
   """The third top website in http://www.alexa.com/topsites/category/News"""
@@ -1304,7 +1305,7 @@ class GoogleDocsDesktopScrollingStory(system_health_story.SystemHealthStory):
       'ccv':
           'telemetry:reported_by_page:viewable',
       'fcoe':
-          'telemetry:reported_by_page:editable',
+          'telemetry:reported_by_page:interactive',
     };
   '''
 
@@ -1327,10 +1328,11 @@ class GoogleDocsDesktopScrollingStory(system_health_story.SystemHealthStory):
   '''
 
   # Page event queries.
-  EDITABLE_EVENT = '''
+  INTERACTIVE_EVENT = '''
     (window.__telemetry_observed_page_events.has(
-        "telemetry:reported_by_page:editable"))
+        "telemetry:reported_by_page:interactive"))
   '''
+  CLEAR_EVENTS = 'window.__telemetry_observed_page_events.clear()'
 
   def __init__(self, story_set, take_memory_measurement):
     super(GoogleDocsDesktopScrollingStory, self).__init__(
@@ -1343,8 +1345,9 @@ class GoogleDocsDesktopScrollingStory(system_health_story.SystemHealthStory):
 
   def _DidLoadDocument(self, action_runner):
     # Wait for load.
-    action_runner.WaitForJavaScriptCondition(self.EDITABLE_EVENT)
-    action_runner.Wait(10)
+    action_runner.WaitForJavaScriptCondition(self.INTERACTIVE_EVENT)
+    action_runner.Wait(5)
+    action_runner.EvaluateJavaScript(self.CLEAR_EVENTS)
     # Scroll through the document.
     action_runner.RepeatableBrowserDrivenScroll(
         x_scroll_distance_ratio=0.0,

@@ -110,18 +110,6 @@ ResourceError::ResourceError(const WebURLError& error)
   InitializeDescription();
 }
 
-ResourceError ResourceError::Copy() const {
-  ResourceError error_copy(error_code_, failing_url_.Copy(),
-                           cors_error_status_);
-  error_copy.extended_error_code_ = extended_error_code_;
-  error_copy.resolve_error_info_ = resolve_error_info_;
-  error_copy.has_copy_in_cache_ = has_copy_in_cache_;
-  error_copy.localized_description_ = localized_description_.IsolatedCopy();
-  error_copy.is_access_check_ = is_access_check_;
-  error_copy.trust_token_operation_error_ = trust_token_operation_error_;
-  return error_copy;
-}
-
 ResourceError::operator WebURLError() const {
   WebURLError::HasCopyInCache has_copy_in_cache =
       has_copy_in_cache_ ? WebURLError::HasCopyInCache::kTrue
@@ -202,7 +190,6 @@ bool ResourceError::ShouldCollapseInitiator() const {
 }
 
 namespace {
-
 blink::ResourceRequestBlockedReason
 BlockedByResponseReasonToResourceRequestBlockedReason(
     network::mojom::BlockedByResponseReason reason) {
@@ -227,8 +214,8 @@ BlockedByResponseReasonToResourceRequestBlockedReason(
   NOTREACHED();
   return blink::ResourceRequestBlockedReason::kOther;
 }
-
 }  // namespace
+
 base::Optional<ResourceRequestBlockedReason>
 ResourceError::GetResourceRequestBlockedReason() const {
   if (error_code_ != net::ERR_BLOCKED_BY_CLIENT &&
@@ -240,6 +227,15 @@ ResourceError::GetResourceRequestBlockedReason() const {
         *blocked_by_response_reason_);
   }
   return static_cast<ResourceRequestBlockedReason>(extended_error_code_);
+}
+
+base::Optional<network::mojom::BlockedByResponseReason>
+ResourceError::GetBlockedByResponseReason() const {
+  if (error_code_ != net::ERR_BLOCKED_BY_CLIENT &&
+      error_code_ != net::ERR_BLOCKED_BY_RESPONSE) {
+    return base::nullopt;
+  }
+  return blocked_by_response_reason_;
 }
 
 namespace {

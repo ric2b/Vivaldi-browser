@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/exo/input_trace.h"
 #include "components/exo/pointer_constraint_delegate.h"
 #include "components/exo/pointer_delegate.h"
@@ -41,11 +42,7 @@
 #endif
 
 #if defined(USE_OZONE)
-#include "ui/ozone/public/cursor_factory_ozone.h"
-#endif
-
-#if defined(USE_X11)
-#include "ui/base/cursor/cursor_loader_x11.h"
+#include "ui/base/cursor/cursor_factory.h"
 #endif
 
 namespace exo {
@@ -343,6 +340,8 @@ void Pointer::OnSurfaceDestroying(Surface* surface) {
 // ui::EventHandler overrides:
 
 void Pointer::OnMouseEvent(ui::MouseEvent* event) {
+  seat_->SetLastLocation(event->root_location());
+
   Surface* target = GetEffectiveTargetForEvent(event);
   gfx::PointF location_in_target = event->location_f();
   if (target) {
@@ -555,7 +554,8 @@ void Pointer::OnWindowFocused(aura::Window* gained_focus,
 ////////////////////////////////////////////////////////////////////////////////
 // Pointer, private:
 
-Surface* Pointer::GetEffectiveTargetForEvent(ui::LocatedEvent* event) const {
+Surface* Pointer::GetEffectiveTargetForEvent(
+    const ui::LocatedEvent* event) const {
   if (capture_window_)
     return Surface::AsSurface(capture_window_);
 
@@ -637,6 +637,7 @@ void Pointer::CaptureCursor(const gfx::Point& hotspot) {
           base::BindOnce(&Pointer::OnCursorCaptured,
                          cursor_capture_weak_ptr_factory_.GetWeakPtr(),
                          hotspot));
+  request->set_result_task_runner(base::SequencedTaskRunnerHandle::Get());
 
   request->set_source(cursor_capture_source_id_);
   host_window()->layer()->RequestCopyOfOutput(std::move(request));
@@ -688,8 +689,8 @@ void Pointer::UpdateCursor() {
     // TODO(reveman): Add interface for creating cursors from GpuMemoryBuffers
     // and use that here instead of the current bitmap API.
     // https://crbug.com/686600
-    platform_cursor = ui::CursorFactoryOzone::GetInstance()->CreateImageCursor(
-        bitmap, hotspot, 0);
+    platform_cursor =
+        ui::CursorFactory::GetInstance()->CreateImageCursor(bitmap, hotspot);
 #elif defined(USE_X11)
     XcursorImage* image = ui::SkBitmapToXcursorImage(&bitmap, hotspot);
     platform_cursor = ui::CreateReffedCustomXCursor(image);
@@ -698,7 +699,7 @@ void Pointer::UpdateCursor() {
     cursor_.set_custom_bitmap(bitmap);
     cursor_.set_custom_hotspot(hotspot);
 #if defined(USE_OZONE)
-    ui::CursorFactoryOzone::GetInstance()->UnrefImageCursor(platform_cursor);
+    ui::CursorFactory::GetInstance()->UnrefImageCursor(platform_cursor);
 #elif defined(USE_X11)
     ui::UnrefCustomXCursor(platform_cursor);
 #endif

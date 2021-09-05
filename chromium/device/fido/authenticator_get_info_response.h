@@ -26,6 +26,7 @@ namespace device {
 struct COMPONENT_EXPORT(DEVICE_FIDO) AuthenticatorGetInfoResponse {
  public:
   AuthenticatorGetInfoResponse(base::flat_set<ProtocolVersion> versions,
+                               base::flat_set<Ctap2Version> in_ctap2_version,
                                base::span<const uint8_t, kAaguidLength> aaguid);
   AuthenticatorGetInfoResponse(AuthenticatorGetInfoResponse&& that);
   AuthenticatorGetInfoResponse& operator=(AuthenticatorGetInfoResponse&& other);
@@ -35,6 +36,7 @@ struct COMPONENT_EXPORT(DEVICE_FIDO) AuthenticatorGetInfoResponse {
       const AuthenticatorGetInfoResponse& response);
 
   base::flat_set<ProtocolVersion> versions;
+  base::flat_set<Ctap2Version> ctap2_versions;
   std::array<uint8_t, kAaguidLength> aaguid;
   base::Optional<uint32_t> max_msg_size;
   base::Optional<uint32_t> max_credential_count_in_list;
@@ -42,7 +44,7 @@ struct COMPONENT_EXPORT(DEVICE_FIDO) AuthenticatorGetInfoResponse {
   base::Optional<std::vector<uint8_t>> pin_protocols;
   base::Optional<std::vector<std::string>> extensions;
   std::vector<int32_t> algorithms = {
-      static_cast<int32_t>(CoseAlgorithmIdentifier::kCoseEs256),
+      static_cast<int32_t>(CoseAlgorithmIdentifier::kEs256),
   };
   AuthenticatorSupportedOptions options;
 

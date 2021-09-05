@@ -1,0 +1,47 @@
+En effektiv blocker: Forbruger kun lidt hukommelse og CPU, men kan alligevel indlæse og håndhæve tusindvis flere filtre end andre populære blockers.
+
+Illustreret oversigt over dens effektivitet: https://github.com/gorhill/uBlock/wiki/uBlock-vs.-ABP:-efficiency-compared
+
+Anvendelse: Den store slå til/fra knap i popup-vinduet benyttes til permanent at deaktivere/aktivere uBlock på det aktuelle websted. Dette gælder kun for det aktuelle websted, det er ikke en global til/fra-knap.
+
+***
+
+Fleksibel og mere end en "annonce-blocker": Den kan også læse og oprette filtre fra værtsfiler.
+
+Helt fra starten indlæses og håndhæves flg. filterlister:
+
+- EasyList
+- Peter Lowe’s Ad server list
+- EasyPrivacy
+- Malware-domæner
+
+Du kan, om ønsket, vælge fra flere tilgængelige lister:
+
+- Fanboy’s Enhanced Tracking List
+- Dan Pollocks værtsfil
+-Hphosts' annonce- og sporingsservere
+- MVPS HOSTS
+- Spam404
+- Og mange flere
+
+Jo flere aktive filtre, desto højere hukommelsesforbrug, selvfølgelig. Selv efter tilføjelse af Fanboys to ekstra lister samt hpHosts’ annonce- og sporingsservere har uBlock imidlertid stadig et lavere hukommelsesforbrug end andre meget populære blockere.
+
+Vær også opmærksom på, at vælger du nogle af disse ekstra lister, kan det øge risikoen for fejlviste websteder – især for de lister, som normalt anvendes som hosts-fil.
+
+***
+
+Uden forvalgslisterne med filtre er denne udvidelse intet værd. Hvis du nogensinde virkelig ønsker at bidrage med noget, så tænk på de personer, som arbejder hårdt for at vedligeholdede filterlisterne, du benytter - lister, som alle frit kan anvende.
+
+***
+
+Gratis.
+Open source med offentlig licens (GPLv3)
+Til brugere, af brugere.
+
+Bidragsydere på Github: https://github.com/gorhill/uBlock/graphs/contributors
+Bidragsydere på Crowdin: https://crowdin.net/project/ublock
+
+***
+
+Projektændringslog:
+https://github.com/gorhill/uBlock/releases

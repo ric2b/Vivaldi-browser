@@ -134,8 +134,11 @@ class PasswordFormManager : public PasswordFormManagerForUI,
       autofill::FieldRendererId generation_element_id,
       const base::string16& password);
 
+  // Sets |was_unblacklisted_while_on_page| to true.
+  void MarkWasUnblacklisted();
+
   // PasswordFormManagerForUI:
-  const GURL& GetOrigin() const override;
+  const GURL& GetURL() const override;
   const std::vector<const autofill::PasswordForm*>& GetBestMatches()
       const override;
   std::vector<const autofill::PasswordForm*> GetFederatedMatches()
@@ -147,6 +150,7 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   base::span<const CompromisedCredentials> GetCompromisedCredentials()
       const override;
   bool IsBlacklisted() const override;
+  bool WasUnblacklisted() const override;
   bool IsMovableToAccountStore() const override;
 
   void Save() override;
@@ -170,7 +174,7 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   void PasswordNoLongerGenerated();
   bool HasGeneratedPassword() const;
   void SetGenerationPopupWasShown(bool is_manual_generation);
-  void SetGenerationElement(const base::string16& generation_element);
+  void SetGenerationElement(autofill::FieldRendererId generation_element);
   bool IsPossibleChangePasswordFormWithoutUsername() const;
   bool IsPasswordUpdate() const;
   base::WeakPtr<PasswordManagerDriver> GetDriver() const;
@@ -186,14 +190,14 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   void PresaveGeneratedPassword(PasswordManagerDriver* driver,
                                 const autofill::FormData& form,
                                 const base::string16& generated_password,
-                                const base::string16& generation_element);
+                                autofill::FieldRendererId generation_element);
 
   // Return false and do nothing if |form_identifier| does not correspond to
   // |observed_form_|. Otherwise set a value of the field with
   // |field_identifier| of |observed_form_| to |field_value|. In case if there
   // is a presaved credential this function updates the presaved credential.
-  bool UpdateStateOnUserInput(const base::string16& form_identifier,
-                              const base::string16& field_identifier,
+  bool UpdateStateOnUserInput(autofill::FormRendererId form_id,
+                              autofill::FieldRendererId field_id,
                               const base::string16& field_value);
 
   void SetDriver(const base::WeakPtr<PasswordManagerDriver>& driver);
@@ -312,6 +316,11 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   // reading from PasswordStore again. Upon reading from the store again, we set
   // this boolean to false again.
   bool newly_blacklisted_ = false;
+
+  // Set to true when the user unblacklists the origin while on the page.
+  // This is used to decide when to record
+  // |PasswordManager.ResultOfSavingAfterUnblacklisting|.
+  bool was_unblacklisted_while_on_page_ = false;
 
   // Takes care of recording metrics and events for |*this|.
   scoped_refptr<PasswordFormMetricsRecorder> metrics_recorder_;

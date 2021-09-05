@@ -56,8 +56,9 @@ def main():
   args = _ParseArgs()
   proguard_cmd = [
       build_utils.JAVA_PATH,
-      '-jar',
+      '-cp',
       args.r8_path,
+      'com.android.tools.r8.R8',
       '--classfile',
       '--no-desugaring',
       '--lib',
@@ -131,11 +132,9 @@ def main():
     f.write(main_dex_list)
 
   if args.depfile:
-    build_utils.WriteDepfile(
-        args.depfile,
-        args.main_dex_list_path,
-        inputs=args.class_inputs_filearg,
-        add_pydeps=False)
+    build_utils.WriteDepfile(args.depfile,
+                             args.main_dex_list_path,
+                             inputs=args.class_inputs_filearg)
 
 
 if __name__ == '__main__':

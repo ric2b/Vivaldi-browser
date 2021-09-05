@@ -6,6 +6,9 @@
 
 #include "base/macros.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "cc/metrics/throughput_ukm_reporter.h"
+#include "cc/trees/ukm_manager.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -28,11 +31,34 @@ TEST(FrameSequenceMetricsTest, AggregatedThroughputClearedAfterReport) {
                              nullptr);
   first.impl_throughput().frames_expected = 200u;
   first.impl_throughput().frames_produced = 190u;
+  first.aggregated_throughput().frames_expected = 170u;
   first.aggregated_throughput().frames_produced = 150u;
 
   first.ReportMetrics();
   EXPECT_EQ(first.aggregated_throughput().frames_expected, 0u);
   EXPECT_EQ(first.aggregated_throughput().frames_produced, 0u);
+}
+
+// Test that ThroughputUkmReporter::ReportThroughputUkm isn't called for the
+// kUniversal tracker.
+TEST(FrameSequenceMetricsTest, UniversalNotReportUkmAtRenderer) {
+  auto recorder = std::make_unique<ukm::TestUkmRecorder>();
+  auto ukm_manager = std::make_unique<UkmManager>(std::move(recorder));
+  ThroughputUkmReporter reporter(ukm_manager.get());
+  auto metric = std::make_unique<FrameSequenceMetrics>(
+      FrameSequenceTrackerType::kUniversal, &reporter);
+
+  metric->impl_throughput().frames_expected = 200u;
+  metric->impl_throughput().frames_produced = 190u;
+  metric->aggregated_throughput().frames_expected = 170u;
+  metric->aggregated_throughput().frames_produced = 150u;
+  metric->ReportMetrics();
+
+  // The corresponding |samples_to_next_event_| element is 0 if the
+  // ReportThroughputUkm isn't called.
+  EXPECT_EQ(reporter.GetSamplesToNextEventForTesting(
+                static_cast<int>(FrameSequenceTrackerType::kUniversal)),
+            1u);
 }
 
 TEST(FrameSequenceMetricsTest, MergeMetrics) {

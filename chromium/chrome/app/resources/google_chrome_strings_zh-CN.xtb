@@ -35,8 +35,6 @@
 <translation id="1873233029667955273">Google Chrome 不是您的默认浏览器</translation>
 <translation id="1874309113135274312">Google Chrome 测试版 (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome版本太旧</translation>
-<translation id="1900795423379050516">如果此页面中未显示某项设置，请在 <ph name="LINK_BEGIN" />
-      Chrome 浏览器设置<ph name="LINK_END" />中查找</translation>
 <translation id="1919130412786645364">允许登录 Chrome</translation>
 <translation id="2063848847527508675">需要重新启动 Chrome 操作系统以应用更新。</translation>
 <translation id="2094919256425865063">仍要退出 Chrome？</translation>
@@ -112,6 +110,7 @@
 <translation id="4251615635259297716">是否将您的 Chrome 数据与此帐号相关联？</translation>
 <translation id="4281844954008187215">服务条款</translation>
 <translation id="4293420128516039005">登录即可在您的所有设备上同步并个性化设置 Chrome</translation>
+<translation id="4325083532956419387">Chrome 操作系统版本</translation>
 <translation id="4328355335528187361">Google Chrome 开发者版 (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome 操作系统</translation>
 <translation id="4335235004908507846">Chrome 有助于保护您免受数据泄露、不良扩展程序等问题的影响</translation>

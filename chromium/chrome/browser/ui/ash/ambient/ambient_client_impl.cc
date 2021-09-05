@@ -7,12 +7,15 @@
 #include <string>
 #include <utility>
 
+#include "ash/public/cpp/ambient/ambient_prefs.h"
 #include "base/callback.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/account_id/account_id.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/access_token_fetcher.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/consent_level.h"
@@ -20,12 +23,15 @@
 #include "components/signin/public/identity_manager/scope_set.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "content/public/browser/device_service.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace {
 
 constexpr char kPhotosOAuthScope[] = "https://www.googleapis.com/auth/photos";
+constexpr char kBackdropOAuthScope[] =
+    "https://www.googleapis.com/auth/cast.backdrop";
 
 const user_manager::User* GetActiveUser() {
   return user_manager::UserManager::Get()->GetActiveUser();
@@ -43,7 +49,9 @@ AmbientClientImpl::AmbientClientImpl() = default;
 
 AmbientClientImpl::~AmbientClientImpl() = default;
 
-bool AmbientClientImpl::IsAmbientModeAllowedForActiveUser() {
+bool AmbientClientImpl::IsAmbientModeAllowed() {
+  DCHECK(chromeos::features::IsAmbientModeEnabled());
+
   if (chromeos::DemoSession::IsDeviceInDemoMode())
     return false;
 
@@ -54,6 +62,11 @@ bool AmbientClientImpl::IsAmbientModeAllowedForActiveUser() {
   auto* profile = GetProfileForActiveUser();
   if (!profile)
     return false;
+
+  if (!profile->GetPrefs()->GetBoolean(
+          ash::ambient::prefs::kAmbientModeEnabled)) {
+    return false;
+  }
 
   if (!profile->IsRegularProfile())
     return false;
@@ -72,7 +85,7 @@ void AmbientClientImpl::RequestAccessToken(GetAccessTokenCallback callback) {
   CoreAccountInfo account_info = identity_manager->GetPrimaryAccountInfo(
       signin::ConsentLevel::kNotRequired);
 
-  const signin::ScopeSet scopes{kPhotosOAuthScope};
+  const signin::ScopeSet scopes{kPhotosOAuthScope, kBackdropOAuthScope};
   // TODO(b/148463064): Handle retry refresh token and multiple requests.
   // Currently only one request is allowed.
   DCHECK(!access_token_fetcher_);
@@ -91,6 +104,11 @@ AmbientClientImpl::GetURLLoaderFactory() {
   DCHECK(profile);
 
   return profile->GetURLLoaderFactory();
+}
+
+void AmbientClientImpl::RequestWakeLockProvider(
+    mojo::PendingReceiver<device::mojom::WakeLockProvider> receiver) {
+  content::GetDeviceService().BindWakeLockProvider(std::move(receiver));
 }
 
 void AmbientClientImpl::GetAccessToken(

@@ -7,8 +7,12 @@
 #include <utility>
 
 #include "ash/accessibility/accessibility_controller_impl.h"
-#include "ash/public/cpp/fps_counter.h"
+#include "ash/public/cpp/ash_features.h"
+#include "ash/public/cpp/metrics_util.h"
+#include "ash/public/cpp/shelf_model.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -34,6 +38,7 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/compositor.h"
+#include "ui/compositor/throughput_tracker.h"
 #include "ui/wm/public/activation_client.h"
 
 namespace ash {
@@ -90,8 +95,7 @@ void RemoveAllWindowsFromOverview() {
   }
 }
 
-// Selects and returns the compositor that the FpsCounter will use to measure
-// the animation smoothness.
+// Selects and returns the compositor to measure the animation smoothness.
 ui::Compositor* GetSelectedCompositorForAnimationSmoothness() {
   // Favor the compositor associated with the active window's root window (if
   // any), or that of the primary root window.
@@ -113,6 +117,40 @@ base::string16 GetDeskDefaultName(size_t desk_index) {
                 "Wrong default desks' names.");
 
   return l10n_util::GetStringUTF16(kStringIds[desk_index]);
+}
+
+// Updates the |ShelfItem::is_on_active_desk| of the items associated with
+// |windows_on_inactive_desk| and |windows_on_active_desk|. The items of the
+// given windows will be updated, while the rest will remain unchanged. Either
+// or both window lists can be empty.
+void MaybeUpdateShelfItems(
+    const std::vector<aura::Window*>& windows_on_inactive_desk,
+    const std::vector<aura::Window*>& windows_on_active_desk) {
+  if (!features::IsPerDeskShelfEnabled())
+    return;
+
+  auto* shelf_model = ShelfModel::Get();
+  DCHECK(shelf_model);
+  std::vector<ShelfModel::ItemDeskUpdate> shelf_items_updates;
+
+  auto add_shelf_item_update = [&](aura::Window* window,
+                                   bool is_on_active_desk) {
+    const ShelfID shelf_id =
+        ShelfID::Deserialize(window->GetProperty(kShelfIDKey));
+    const int index = shelf_model->ItemIndexByID(shelf_id);
+
+    if (index < 0)
+      return;
+
+    shelf_items_updates.push_back({index, is_on_active_desk});
+  };
+
+  for (auto* window : windows_on_inactive_desk)
+    add_shelf_item_update(window, /*is_on_active_desk=*/false);
+  for (auto* window : windows_on_active_desk)
+    add_shelf_item_update(window, /*is_on_active_desk=*/true);
+
+  shelf_model->UpdateItemsForDeskChange(shelf_items_updates);
 }
 
 }  // namespace
@@ -140,8 +178,7 @@ class DesksController::DeskAnimationBase
     for (auto& observer : controller_->observers_)
       observer.OnDeskSwitchAnimationLaunching();
 
-    fps_counter_ = std::make_unique<FpsCounter>(
-        GetSelectedCompositorForAnimationSmoothness());
+    throughput_tracker_.Start(GetReportCallback());
 
     // This step makes sure that the containers of the target desk are shown at
     // the beginning of the animation (but not actually visible to the user yet,
@@ -214,7 +251,7 @@ class DesksController::DeskAnimationBase
 
     desk_switch_animators_.clear();
 
-    ComputeAnimationSmoothnessAndReport();
+    throughput_tracker_.Stop();
 
     for (auto& observer : controller_->observers_)
       observer.OnDeskSwitchAnimationFinished();
@@ -240,9 +277,10 @@ class DesksController::DeskAnimationBase
 
   // Since performance here matters, we have to use the UMA histograms macros to
   // report the smoothness histograms, but each macro use has to be associated
-  // with exactly one histogram name. This function allows subclasses to report
-  // the histogram using the macro with their desired name.
-  virtual void ReportSmoothness(int smoothness) const = 0;
+  // with exactly one histogram name. This function allows subclasses to return
+  // a callback that reports the histogram using the macro with their desired
+  // name.
+  virtual ash::metrics_util::ReportCallback GetReportCallback() const = 0;
 
   DesksController* const controller_;
 
@@ -255,17 +293,10 @@ class DesksController::DeskAnimationBase
   const Desk* const ending_desk_;
 
  private:
-  // Computes the animation smoothness and reports an UMA stat for it.
-  void ComputeAnimationSmoothnessAndReport() {
-    DCHECK(fps_counter_);
-    const int smoothness = fps_counter_->ComputeSmoothness();
-    if (smoothness < 0)
-      return;
-    ReportSmoothness(smoothness);
-  }
-
-  // The FPS counter used for measuring this animation smoothness.
-  std::unique_ptr<FpsCounter> fps_counter_;
+  // ThroughputTracker used for measuring this animation smoothness.
+  ui::ThroughputTracker throughput_tracker_ =
+      GetSelectedCompositorForAnimationSmoothness()
+          ->RequestNewThroughputTracker();
 
   DISALLOW_COPY_AND_ASSIGN(DeskAnimationBase);
 };
@@ -323,9 +354,12 @@ class DesksController::DeskActivationAnimation
 
   void OnDeskSwitchAnimationFinishedInternal() override {}
 
-  void ReportSmoothness(int smoothness) const override {
-    UMA_HISTOGRAM_PERCENTAGE(kDeskActivationSmoothnessHistogramName,
-                             smoothness);
+  ash::metrics_util::ReportCallback GetReportCallback() const override {
+    return ash::metrics_util::ForSmoothness(
+        base::BindRepeating([](int smoothness) {
+          UMA_HISTOGRAM_PERCENTAGE(kDeskActivationSmoothnessHistogramName,
+                                   smoothness);
+        }));
   }
 
  private:
@@ -388,8 +422,12 @@ class DesksController::DeskRemovalAnimation
     MaybeRestoreSplitView(/*refresh_snapped_windows=*/true);
   }
 
-  void ReportSmoothness(int smoothness) const override {
-    UMA_HISTOGRAM_PERCENTAGE(kDeskRemovalSmoothnessHistogramName, smoothness);
+  ash::metrics_util::ReportCallback GetReportCallback() const override {
+    return ash::metrics_util::ForSmoothness(
+        base::BindRepeating([](int smoothness) {
+          UMA_HISTOGRAM_PERCENTAGE(kDeskRemovalSmoothnessHistogramName,
+                                   smoothness);
+        }));
   }
 
  private:
@@ -631,6 +669,9 @@ bool DesksController::MoveWindowFromActiveDeskTo(
 
   active_desk_->MoveWindowToDesk(window, target_desk, target_root);
 
+  MaybeUpdateShelfItems(/*windows_on_inactive_desk=*/{window},
+                        /*windows_on_active_desk=*/{});
+
   Shell::Get()
       ->accessibility_controller()
       ->TriggerAccessibilityAlertWithMessage(l10n_util::GetStringFUTF8(
@@ -776,6 +817,8 @@ void DesksController::ActivateDeskInternal(const Desk* desk,
   old_active->Deactivate(update_window_activation);
   active_desk_->Activate(update_window_activation);
 
+  MaybeUpdateShelfItems(old_active->windows(), active_desk_->windows());
+
   for (auto& observer : observers_)
     observer.OnDeskActivationChanged(active_desk_, old_active);
 }
@@ -820,6 +863,8 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
         active_desk_->GetScopedNotifyContentChangedDisabler();
 
     removed_desk->MoveWindowsToDesk(active_desk_);
+
+    MaybeUpdateShelfItems({}, removed_desk_windows);
 
     // If overview mode is active, we add the windows of the removed desk to the
     // overview grid in the order of the new MRU (which changes after removing a

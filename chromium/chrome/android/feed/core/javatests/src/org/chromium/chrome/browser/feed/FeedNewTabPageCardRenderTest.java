@@ -4,15 +4,15 @@
 
 package org.chromium.chrome.browser.feed;
 
-import static android.support.test.espresso.Espresso.onView;
+import static androidx.test.espresso.Espresso.onView;
 
 import static org.hamcrest.Matchers.instanceOf;
 
-import android.support.test.espresso.contrib.RecyclerViewActions;
-import android.support.test.filters.MediumTest;
 import android.view.ViewGroup;
 
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.espresso.contrib.RecyclerViewActions;
+import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -53,9 +53,11 @@ import java.util.List;
  */
 // clang-format off
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
+        "disable-features=IPH_FeedHeaderMenu"})
 @Features.EnableFeatures({ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS,
     ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO})
+@Features.DisableFeatures({ChromeFeatureList.REPORT_FEED_USER_ACTIONS, ChromeFeatureList.QUERY_TILES})
 public class FeedNewTabPageCardRenderTest {
     //clang-format on
     private static final String TEST_FEED_DATA_BASE_PATH = "/chrome/test/data/android/feed/";
@@ -152,6 +154,6 @@ public class FeedNewTabPageCardRenderTest {
 
     private boolean getPreferenceForArticleSectionHeader() throws Exception {
         return ThreadUtils.runOnUiThreadBlocking(
-                () -> PrefServiceBridge.getInstance().getBoolean(Pref.NTP_ARTICLES_LIST_VISIBLE));
+                () -> PrefServiceBridge.getInstance().getBoolean(Pref.ARTICLES_LIST_VISIBLE));
     }
 }

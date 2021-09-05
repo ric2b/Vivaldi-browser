@@ -125,6 +125,8 @@ void RenderWidgetHostViewBase::OnRenderFrameMetadataChangedAfterActivation() {
       host()->GetRootBrowserAccessibilityManager();
   if (manager)
     manager->SetPageScaleFactor(metadata.page_scale_factor);
+
+  is_drawing_delegated_ink_trails_ = metadata.has_delegated_ink_metadata;
 }
 
 void RenderWidgetHostViewBase::OnRenderFrameSubmission() {}
@@ -141,10 +143,15 @@ gfx::Size RenderWidgetHostViewBase::GetCompositorViewportPixelSize() {
 }
 
 void RenderWidgetHostViewBase::SelectionBoundsChanged(
-    const WidgetHostMsg_SelectionBounds_Params& params) {
+    const gfx::Rect& anchor_rect,
+    base::i18n::TextDirection anchor_dir,
+    const gfx::Rect& focus_rect,
+    base::i18n::TextDirection focus_dir,
+    bool is_anchor_first) {
 #if !defined(OS_ANDROID)
   if (GetTextInputManager())
-    GetTextInputManager()->SelectionBoundsChanged(this, params);
+    GetTextInputManager()->SelectionBoundsChanged(
+        this, anchor_rect, anchor_dir, focus_rect, focus_dir, is_anchor_first);
 #else
   NOTREACHED() << "Selection bounds should be routed through the compositor.";
 #endif
@@ -594,6 +601,15 @@ void RenderWidgetHostViewBase::TransformPointToRootSurface(gfx::PointF* point) {
   return;
 }
 
+const DisplayFeature* RenderWidgetHostViewBase::GetDisplayFeature() {
+  return base::OptionalOrNullptr(display_feature_);
+}
+
+void RenderWidgetHostViewBase::SetDisplayFeatureForTesting(
+    base::Optional<DisplayFeature> display_feature) {
+  display_feature_ = std::move(display_feature);
+}
+
 void RenderWidgetHostViewBase::OnDidNavigateMainFrameToNewPage() {
 }
 
@@ -689,7 +705,7 @@ RenderWidgetHostViewBase::ExtractAndCancelActiveTouches() {
 }
 
 void RenderWidgetHostViewBase::TextInputStateChanged(
-    const TextInputState& text_input_state) {
+    const ui::mojom::TextInputState& text_input_state) {
   if (GetTextInputManager())
     GetTextInputManager()->UpdateTextInputState(this, text_input_state);
 }
@@ -755,21 +771,18 @@ RenderWidgetHostViewBase::GetTouchSelectionControllerClientManager() {
 void RenderWidgetHostViewBase::SetRecordContentToVisibleTimeRequest(
     base::TimeTicks start_time,
     base::Optional<bool> destination_is_loaded,
-    base::Optional<bool> destination_is_frozen,
     bool show_reason_tab_switching,
     bool show_reason_unoccluded,
     bool show_reason_bfcache_restore) {
   if (last_record_tab_switch_time_request_.has_value()) {
     last_record_tab_switch_time_request_.value().UpdateRequest(
         RecordContentToVisibleTimeRequest(
-            start_time, destination_is_loaded, destination_is_frozen,
-            show_reason_tab_switching, show_reason_unoccluded,
-            show_reason_bfcache_restore));
+            start_time, destination_is_loaded, show_reason_tab_switching,
+            show_reason_unoccluded, show_reason_bfcache_restore));
   } else {
     last_record_tab_switch_time_request_.emplace(
-        start_time, destination_is_loaded, destination_is_frozen,
-        show_reason_tab_switching, show_reason_unoccluded,
-        show_reason_bfcache_restore);
+        start_time, destination_is_loaded, show_reason_tab_switching,
+        show_reason_unoccluded, show_reason_bfcache_restore);
   }
 }
 

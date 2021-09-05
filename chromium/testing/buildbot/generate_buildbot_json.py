@@ -21,6 +21,8 @@ import string
 import sys
 import traceback
 
+import buildbot_json_magic_substitutions as magic_substitutions
+
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -211,9 +213,10 @@ def check_compound_references(other_test_suites=None,
   """Ensure comound reference's don't target other compounds"""
   del kwargs
   if sub_suite in other_test_suites or sub_suite in target_test_suites:
-      raise BBGenErr('%s may not refer to other composition type test '
-                     'suites (error found while processing %s)'
-                     % (test_type, suite))
+    raise BBGenErr('%s may not refer to other composition type test '
+                   'suites (error found while processing %s)' %
+                   (test_type, suite))
+
 
 def check_basic_references(basic_suites=None,
                            sub_suite=None,
@@ -222,8 +225,9 @@ def check_basic_references(basic_suites=None,
   """Ensure test has a basic suite reference"""
   del kwargs
   if sub_suite not in basic_suites:
-      raise BBGenErr('Unable to find reference to %s while processing %s'
-                     % (sub_suite, suite))
+    raise BBGenErr('Unable to find reference to %s while processing %s' %
+                   (sub_suite, suite))
+
 
 def check_conflicting_definitions(basic_suites=None,
                                   seen_tests=None,
@@ -266,9 +270,9 @@ def check_matrix_identifier(sub_suite=None,
 
 
 class BBJSONGenerator(object):
-  def __init__(self):
+  def __init__(self, args):
     self.this_dir = THIS_DIR
-    self.args = None
+    self.args = args
     self.waterfalls = None
     self.test_suites = None
     self.exceptions = None
@@ -276,22 +280,99 @@ class BBJSONGenerator(object):
     self.gn_isolate_map = None
     self.variants = None
 
+  @staticmethod
+  def parse_args(argv):
+
+    # RawTextHelpFormatter allows for styling of help statement
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawTextHelpFormatter)
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        '-c',
+        '--check',
+        action='store_true',
+        help=
+        'Do consistency checks of configuration and generated files and then '
+        'exit. Used during presubmit. '
+        'Causes the tool to not generate any files.')
+    group.add_argument(
+        '--query',
+        type=str,
+        help=(
+            "Returns raw JSON information of buildbots and tests.\n" +
+            "Examples:\n" + "  List all bots (all info):\n" +
+            "    --query bots\n\n" +
+            "  List all bots and only their associated tests:\n" +
+            "    --query bots/tests\n\n" +
+            "  List all information about 'bot1' " +
+            "(make sure you have quotes):\n" + "    --query bot/'bot1'\n\n" +
+            "  List tests running for 'bot1' (make sure you have quotes):\n" +
+            "    --query bot/'bot1'/tests\n\n" + "  List all tests:\n" +
+            "    --query tests\n\n" +
+            "  List all tests and the bots running them:\n" +
+            "    --query tests/bots\n\n" +
+            "  List all tests that satisfy multiple parameters\n" +
+            "  (separation of parameters by '&' symbol):\n" +
+            "    --query tests/'device_os:Android&device_type:hammerhead'\n\n" +
+            "  List all tests that run with a specific flag:\n" +
+            "    --query bots/'--test-launcher-print-test-studio=always'\n\n" +
+            "  List specific test (make sure you have quotes):\n"
+            "    --query test/'test1'\n\n"
+            "  List all bots running 'test1' " +
+            "(make sure you have quotes):\n" + "    --query test/'test1'/bots"))
+    parser.add_argument(
+        '-n',
+        '--new-files',
+        action='store_true',
+        help=
+        'Write output files as .new.json. Useful during development so old and '
+        'new files can be looked at side-by-side.')
+    parser.add_argument('-v',
+                        '--verbose',
+                        action='store_true',
+                        help='Increases verbosity. Affects consistency checks.')
+    parser.add_argument('waterfall_filters',
+                        metavar='waterfalls',
+                        type=str,
+                        nargs='*',
+                        help='Optional list of waterfalls to generate.')
+    parser.add_argument(
+        '--pyl-files-dir',
+        type=os.path.realpath,
+        help='Path to the directory containing the input .pyl files.')
+    parser.add_argument(
+        '--json',
+        metavar='JSON_FILE_PATH',
+        help='Outputs results into a json file. Only works with query function.'
+    )
+    parser.add_argument(
+        '--infra-config-dir',
+        help='Path to the LUCI services configuration directory',
+        default=os.path.abspath(
+            os.path.join(os.path.dirname(__file__), '..', '..', 'infra',
+                         'config')))
+    args = parser.parse_args(argv)
+    if args.json and not args.query:
+      parser.error(
+          "The --json flag can only be used with --query.")  # pragma: no cover
+    args.infra_config_dir = os.path.abspath(args.infra_config_dir)
+    return args
+
   def generate_abs_file_path(self, relative_path):
-    return os.path.join(self.this_dir, relative_path) # pragma: no cover
+    return os.path.join(self.this_dir, relative_path)
 
   def print_line(self, line):
     # Exists so that tests can mock
     print line # pragma: no cover
 
   def read_file(self, relative_path):
-    with open(self.generate_abs_file_path(
-        relative_path)) as fp: # pragma: no cover
-      return fp.read() # pragma: no cover
+    with open(self.generate_abs_file_path(relative_path)) as fp:
+      return fp.read()
 
   def write_file(self, relative_path, contents):
-    with open(self.generate_abs_file_path(
-        relative_path), 'wb') as fp: # pragma: no cover
-      fp.write(contents) # pragma: no cover
+    with open(self.generate_abs_file_path(relative_path), 'wb') as fp:
+      fp.write(contents)
 
   def pyl_file_path(self, filename):
     if self.args and self.args.pyl_files_dir:
@@ -412,6 +493,34 @@ class BBJSONGenerator(object):
     arr = self.merge_command_line_args(arr, '--enable-features=', ',')
     arr = self.merge_command_line_args(arr, '--extra-browser-args=', ' ')
     return arr
+
+  def substitute_magic_args(self, test_config):
+    """Substitutes any magic substitution args present in |test_config|.
+
+    Substitutions are done in-place.
+
+    See buildbot_json_magic_substitutions.py for more information on this
+    feature.
+
+    Args:
+      test_config: A dict containing a configuration for a specific test on
+          a specific builder, e.g. the output of update_and_cleanup_test.
+    """
+    substituted_array = []
+    for arg in test_config.get('args', []):
+      if arg.startswith(magic_substitutions.MAGIC_SUBSTITUTION_PREFIX):
+        function = arg.replace(
+            magic_substitutions.MAGIC_SUBSTITUTION_PREFIX, '')
+        if hasattr(magic_substitutions, function):
+          substituted_array.extend(
+              getattr(magic_substitutions, function)(test_config))
+        else:
+          raise BBGenErr(
+              'Magic substitution function %s does not exist' % function)
+      else:
+        substituted_array.append(arg)
+    if substituted_array:
+      test_config['args'] = self.maybe_fixup_args_array(substituted_array)
 
   def dictionary_merge(self, a, b, path=None, update=True):
     """http://stackoverflow.com/questions/7204805/
@@ -585,20 +694,7 @@ class BBJSONGenerator(object):
                              tester_name))
 
   def add_common_test_properties(self, test, tester_config):
-    if tester_config.get('use_multi_dimension_trigger_script'):
-      # Assumes update_and_cleanup_test has already been called, so the
-      # builder's mixins have been flattened into the test.
-      test['trigger_script'] = {
-        'script': '//testing/trigger_scripts/trigger_multiple_dimensions.py',
-        'args': [
-          '--multiple-trigger-configs',
-          json.dumps(test['swarming']['dimension_sets'] +
-                     tester_config.get('alternate_swarming_dimensions', [])),
-          '--multiple-dimension-script-verbose',
-          'True'
-        ],
-      }
-    elif self.is_chromeos(tester_config) and tester_config.get('use_swarming',
+    if self.is_chromeos(tester_config) and tester_config.get('use_swarming',
                                                                True):
       # The presence of the "device_type" dimension indicates that the tests
       # are targeting CrOS hardware and so need the special trigger script.
@@ -670,6 +766,7 @@ class BBJSONGenerator(object):
     result = self.update_and_cleanup_test(
         result, test_name, tester_name, tester_config, waterfall)
     self.add_common_test_properties(result, tester_config)
+    self.substitute_magic_args(result)
 
     if not result.get('merge'):
       # TODO(https://crbug.com/958376): Consider adding the ability to not have
@@ -695,6 +792,7 @@ class BBJSONGenerator(object):
     result = self.update_and_cleanup_test(
         result, test_name, tester_name, tester_config, waterfall)
     self.add_common_test_properties(result, tester_config)
+    self.substitute_magic_args(result)
 
     if not result.get('merge'):
       # TODO(https://crbug.com/958376): Consider adding the ability to not have
@@ -722,6 +820,7 @@ class BBJSONGenerator(object):
     }
     result = self.update_and_cleanup_test(
         result, test_name, tester_name, tester_config, waterfall)
+    self.substitute_magic_args(result)
     return result
 
   def generate_junit_test(self, waterfall, tester_name, tester_config,
@@ -737,6 +836,7 @@ class BBJSONGenerator(object):
     self.initialize_args_for_test(result, tester_config)
     result = self.update_and_cleanup_test(
         result, test_name, tester_name, tester_config, waterfall)
+    self.substitute_magic_args(result)
     return result
 
   def generate_instrumentation_test(self, waterfall, tester_name, tester_config,
@@ -751,6 +851,7 @@ class BBJSONGenerator(object):
       result['test'] = test_name
     result = self.update_and_cleanup_test(
         result, test_name, tester_name, tester_config, waterfall)
+    self.substitute_magic_args(result)
     return result
 
   def substitute_gpu_args(self, tester_config, swarming_config, args):
@@ -1156,6 +1257,19 @@ class BBJSONGenerator(object):
     if 'swarming' in mixin:
       swarming_mixin = mixin['swarming']
       new_test.setdefault('swarming', {})
+      # Copy over any explicit dimension sets first so that they will be updated
+      # by any subsequent 'dimensions' entries.
+      if 'dimension_sets' in swarming_mixin:
+        existing_dimension_sets = new_test['swarming'].setdefault(
+            'dimension_sets', [])
+        # Appending to the existing list could potentially result in different
+        # behavior depending on the order the mixins were applied, but that's
+        # already the case for other parts of mixins, so trust that the user
+        # will verify that the generated output is correct before submitting.
+        for dimension_set in swarming_mixin['dimension_sets']:
+          if dimension_set not in existing_dimension_sets:
+            existing_dimension_sets.append(dimension_set)
+        del swarming_mixin['dimension_sets']
       if 'dimensions' in swarming_mixin:
         new_test['swarming'].setdefault('dimension_sets', [{}])
         for dimension_set in new_test['swarming']['dimension_sets']:
@@ -1283,16 +1397,18 @@ class BBJSONGenerator(object):
     # references to configs outside of this directory are added, please change
     # their presubmit to run `generate_buildbot_json.py -c`, so that the tree
     # never ends up in an invalid state.
-    project_star = glob.glob(
-        os.path.join(self.args.infra_config_dir, 'project.star'))
-    if project_star:
-      is_master_pattern = re.compile('is_master\s*=\s*(True|False)')
-      for l in self.read_file(project_star[0]).splitlines():
-        match = is_master_pattern.search(l)
-        if match:
-          if match.group(1) == 'False':
-            return None
-          break
+
+    # Get the generated project.pyl so we can check if we should be enforcing
+    # that the specs are for builders that actually exist
+    # If not, return None to indicate that we won't enforce that builders in
+    # waterfalls.pyl are defined in LUCI
+    project_pyl_path = os.path.join(self.args.infra_config_dir, 'generated',
+                                    'project.pyl')
+    if os.path.exists(project_pyl_path):
+      settings = ast.literal_eval(self.read_file(project_pyl_path))
+      if not settings.get('validate_source_side_specs_have_builder', True):
+        return None
+
     bot_names = set()
     milo_configs = glob.glob(
         os.path.join(self.args.infra_config_dir, 'generated', 'luci-milo*.cfg'))
@@ -1332,6 +1448,7 @@ class BBJSONGenerator(object):
       'Win7 ANGLE Tryserver (AMD)',
       # chromium.fyi
       'linux-blink-rel-dummy',
+      'linux-blink-optional-highdpi-rel-dummy',
       'mac10.10-blink-rel-dummy',
       'mac10.11-blink-rel-dummy',
       'mac10.12-blink-rel-dummy',
@@ -1765,74 +1882,6 @@ class BBJSONGenerator(object):
     self.check_input_file_consistency(verbose) # pragma: no cover
     self.check_output_file_consistency(verbose) # pragma: no cover
 
-  def parse_args(self, argv): # pragma: no cover
-
-    # RawTextHelpFormatter allows for styling of help statement
-    parser = argparse.ArgumentParser(formatter_class=
-                                     argparse.RawTextHelpFormatter)
-
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-      '-c', '--check', action='store_true', help=
-      'Do consistency checks of configuration and generated files and then '
-      'exit. Used during presubmit. Causes the tool to not generate any files.')
-    group.add_argument(
-      '--query', type=str, help=
-        ("Returns raw JSON information of buildbots and tests.\n" +
-        "Examples:\n" +
-          "  List all bots (all info):\n" +
-          "    --query bots\n\n" +
-          "  List all bots and only their associated tests:\n" +
-          "    --query bots/tests\n\n" +
-          "  List all information about 'bot1' " +
-               "(make sure you have quotes):\n" +
-          "    --query bot/'bot1'\n\n" +
-          "  List tests running for 'bot1' (make sure you have quotes):\n" +
-          "    --query bot/'bot1'/tests\n\n" +
-          "  List all tests:\n" +
-          "    --query tests\n\n" +
-          "  List all tests and the bots running them:\n" +
-          "    --query tests/bots\n\n"+
-          "  List all tests that satisfy multiple parameters\n" +
-          "  (separation of parameters by '&' symbol):\n" +
-          "    --query tests/'device_os:Android&device_type:hammerhead'\n\n" +
-          "  List all tests that run with a specific flag:\n" +
-          "    --query bots/'--test-launcher-print-test-studio=always'\n\n" +
-          "  List specific test (make sure you have quotes):\n"
-          "    --query test/'test1'\n\n"
-          "  List all bots running 'test1' " +
-               "(make sure you have quotes):\n" +
-          "    --query test/'test1'/bots" ))
-    parser.add_argument(
-      '-n', '--new-files', action='store_true', help=
-      'Write output files as .new.json. Useful during development so old and '
-      'new files can be looked at side-by-side.')
-    parser.add_argument(
-      '-v', '--verbose', action='store_true', help=
-      'Increases verbosity. Affects consistency checks.')
-    parser.add_argument(
-      'waterfall_filters', metavar='waterfalls', type=str, nargs='*',
-      help='Optional list of waterfalls to generate.')
-    parser.add_argument(
-      '--pyl-files-dir', type=os.path.realpath,
-      help='Path to the directory containing the input .pyl files.')
-    parser.add_argument(
-      '--json', help=
-      ("Outputs results into a json file. Only works with query function.\n" +
-      "Examples:\n" +
-      "  Outputs file into specified json file: \n" +
-      "    --json <file-name-here.json>"))
-    parser.add_argument(
-      '--infra-config-dir',
-      help='Path to the LUCI services configuration directory',
-      default=os.path.abspath(
-          os.path.join(os.path.dirname(__file__),
-                       '..', '..', 'infra', 'config')))
-    self.args = parser.parse_args(argv)
-    if self.args.json and not self.args.query:
-      parser.error("The --json flag can only be used with --query.")
-    self.args.infra_config_dir = os.path.abspath(self.args.infra_config_dir)
-
   def does_test_match(self, test_info, params_dict):
     """Checks to see if the test matches the parameters given.
 
@@ -2106,8 +2155,7 @@ class BBJSONGenerator(object):
       self.error_msg("Your command did not match any valid commands." +
                      "Try starting with 'bots', 'bot', 'tests', or 'test'.")
 
-  def main(self, argv): # pragma: no cover
-    self.parse_args(argv)
+  def main(self):  # pragma: no cover
     if self.args.check:
       self.check_consistency(verbose=self.args.verbose)
     elif self.args.query:
@@ -2117,5 +2165,5 @@ class BBJSONGenerator(object):
     return 0
 
 if __name__ == "__main__": # pragma: no cover
-  generator = BBJSONGenerator()
-  sys.exit(generator.main(sys.argv[1:]))
+  generator = BBJSONGenerator(BBJSONGenerator.parse_args(sys.argv[1:]))
+  sys.exit(generator.main())

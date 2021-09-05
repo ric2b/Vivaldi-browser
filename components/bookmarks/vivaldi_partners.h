@@ -5,7 +5,12 @@
 
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/values.h"
+
+namespace base {
+class SequencedTaskRunner;
+}  // namspace base
 
 namespace vivaldi_partners {
 
@@ -65,35 +70,21 @@ struct PartnerDetails {
   DISALLOW_COPY_AND_ASSIGN(PartnerDetails);
 };
 
-class PartnerDatabase {
-public:
-  PartnerDatabase();
-  ~PartnerDatabase();
+const PartnerDetails* FindDetailsByName(base::StringPiece name);
 
-  static std::unique_ptr<PartnerDatabase> Read();
+// If id is an old locale-based partner id, change it to the coresponding
+// locale-independent GUID and return true. Otherwise return false and leave
+// the id unchanged.
+bool MapLocaleIdToGUID(std::string& id);
 
-  const PartnerDetails* FindDetailsByName(base::StringPiece name) const;
+// Return an empty string if partner_id is not known or does not have a
+// thumbnail.
+const std::string& GetThumbnailUrl(const std::string& partner_id);
 
-  // If id is an old locale-based partner id, change it to the coresponding
-  // locale-independent GUID and return true. Otherwise return false and leave
-  // the id unchanged.
-  bool MapLocaleIdToGUID(std::string& id) const;
-
-private:
- bool ParseJson(base::Value root, base::Value partners_locale_value);
-
- std::vector<PartnerDetails> details_list_;
-
- // Map old locale-based partner id to the guid or guid2 if the old id is for
- // an url under Bookmarks folder.
- base::flat_map<std::string, base::StringPiece> locale_id_guid_map_;
-
- // Map partner details name to its index in the details array.
- base::flat_map<base::StringPiece, const PartnerDetails*> name_index_;
-
- // The maps above contains references, so prevent copy/assignment for safety.
- DISALLOW_COPY_AND_ASSIGN(PartnerDatabase);
-};
+// Load the partner database from a worker thread and store the result on the
+// main thread using passed reference.
+void LoadOnWorkerThread(
+    const scoped_refptr<base::SequencedTaskRunner>& main_thread_task_runner);
 
 }  // namespace vivaldi_partners
 

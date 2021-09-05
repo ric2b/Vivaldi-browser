@@ -8,9 +8,10 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/optional.h"
+#include "chrome/common/subresource_redirect_service.mojom.h"
+#include "chrome/renderer/lite_video/lite_video_hint_agent.h"
 #include "chrome/renderer/subresource_redirect/subresource_redirect_hints_agent.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
@@ -44,6 +45,9 @@ class ResourceLoadingHintsAgent
     return subresource_redirect_hints_agent_;
   }
 
+  // Notifies the browser process that https image compression fetch had failed.
+  void NotifyHttpsImageCompressionFetchFailed(base::TimeDelta retry_after);
+
  private:
   // content::RenderFrameObserver:
   void DidStartNavigation(
@@ -61,6 +65,9 @@ class ResourceLoadingHintsAgent
                                    resource_loading_hints) override;
   void SetCompressPublicImagesHints(
       blink::mojom::CompressPublicImagesHintsPtr images_hints) override;
+  void SetLiteVideoHint(
+      blink::mojom::LiteVideoHintPtr lite_video_hint) override;
+  void StopThrottlingMediaRequests() override;
 
   void SetReceiver(
       mojo::PendingAssociatedReceiver<
@@ -73,6 +80,10 @@ class ResourceLoadingHintsAgent
 
   mojo::AssociatedReceiver<blink::mojom::PreviewsResourceLoadingHintsReceiver>
       receiver_{this};
+
+  mojo::AssociatedRemote<
+      subresource_redirect::mojom::SubresourceRedirectService>
+      subresource_redirect_service_remote_;
 
   subresource_redirect::SubresourceRedirectHintsAgent
       subresource_redirect_hints_agent_;

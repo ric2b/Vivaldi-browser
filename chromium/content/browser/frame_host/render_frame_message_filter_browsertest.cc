@@ -35,6 +35,7 @@
 #include "ipc/ipc_security_test_util.h"
 #include "net/base/features.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_util.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -78,9 +79,7 @@ void SetCookieDirect(WebContentsImpl* tab,
       ->SetCanonicalCookie(
           *cookie_obj, url, options,
           base::BindLambdaForTesting(
-              [&](net::CanonicalCookie::CookieInclusionStatus status) {
-                run_loop.Quit();
-              }));
+              [&](net::CookieInclusionStatus status) { run_loop.Quit(); }));
   run_loop.Run();
 }
 
@@ -93,14 +92,14 @@ std::string GetCookiesDirect(WebContentsImpl* tab, const GURL& url) {
   base::RunLoop run_loop;
   BrowserContext::GetDefaultStoragePartition(tab->GetBrowserContext())
       ->GetCookieManagerForBrowserProcess()
-      ->GetCookieList(url, options,
-                      base::BindLambdaForTesting(
-                          [&](const net::CookieStatusList& cookie_list,
-                              const net::CookieStatusList& excluded_cookies) {
-                            result =
-                                net::cookie_util::StripStatuses(cookie_list);
-                            run_loop.Quit();
-                          }));
+      ->GetCookieList(
+          url, options,
+          base::BindLambdaForTesting(
+              [&](const net::CookieAccessResultList& cookie_list,
+                  const net::CookieAccessResultList& excluded_cookies) {
+                result = net::cookie_util::StripAccessResults(cookie_list);
+                run_loop.Quit();
+              }));
   run_loop.Run();
   return net::CanonicalCookie::BuildCookieLine(result);
 }

@@ -15,18 +15,15 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 import org.chromium.base.ContextUtils;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.send_tab_to_self.SendTabToSelfMetrics.SendTabToSelfShareClickResult;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
+import org.chromium.chrome.browser.sync.AndroidSyncSettings;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
-import org.chromium.components.sync.AndroidSyncSettings;
-import org.chromium.content_public.browser.NavigationEntry;
-import org.chromium.content_public.browser.WebContents;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.ui.widget.ButtonCompat;
 import org.chromium.ui.widget.Toast;
 
@@ -45,28 +42,23 @@ public class DevicePickerBottomSheetContent implements BottomSheetContent, OnIte
     private ViewGroup mToolbarView;
     private ViewGroup mContentView;
     private final DevicePickerBottomSheetAdapter mAdapter;
-    private final NavigationEntry mEntry;
     private final Profile mProfile;
-    private final WebContents mWebContents;
+    private final String mUrl;
+    private final String mTitle;
+    private final long mNavigationTime;
 
-    public DevicePickerBottomSheetContent(Context context, NavigationEntry entry,
-            BottomSheetController controller, WebContents webContents) {
+    public DevicePickerBottomSheetContent(Context context, String url, String title,
+            long navigationTime, BottomSheetController controller) {
         mContext = context;
         mController = controller;
         mProfile = Profile.getLastUsedRegularProfile();
         mAdapter = new DevicePickerBottomSheetAdapter(mProfile);
-        mEntry = entry;
-        mWebContents = webContents;
+        mUrl = url;
+        mTitle = title;
+        mNavigationTime = navigationTime;
 
         createToolbarView();
         createContentView();
-        recordNumberOfDevicesDisplayed();
-    }
-
-    private void recordNumberOfDevicesDisplayed() {
-        // This histogram is used across multiple platforms and should be
-        // kept consistent.
-        RecordHistogram.recordCount100Histogram("SendTabToSelf.DeviceCount", mAdapter.getCount());
     }
 
     private void createToolbarView() {
@@ -182,8 +174,8 @@ public class DevicePickerBottomSheetContent implements BottomSheetContent, OnIte
                 SendTabToSelfShareClickResult.ClickType.CLICK_ITEM);
         TargetDeviceInfo targetDeviceInfo = mAdapter.getItem(position);
 
-        SendTabToSelfAndroidBridge.addEntry(mProfile, mEntry.getUrl(), mEntry.getTitle(),
-                mEntry.getTimestamp(), targetDeviceInfo.cacheGuid);
+        SendTabToSelfAndroidBridge.addEntry(
+                mProfile, mUrl, mTitle, mNavigationTime, targetDeviceInfo.cacheGuid);
 
         Resources res = mContext.getResources();
         String toastMessage =

@@ -65,6 +65,8 @@ class MetricsWebContentsObserver
     // fine.
     virtual void OnCommit(PageLoadTracker* tracker) {}
 
+    virtual void OnRestoredFromBackForwardCache(PageLoadTracker* tracker) {}
+
     // Returns the observer delegate for the committed load associated with
     // the MetricsWebContentsObserver.
     const PageLoadMetricsObserverDelegate& GetDelegateForCommittedLoad();
@@ -83,9 +85,6 @@ class MetricsWebContentsObserver
 
   // Note that the returned metrics is owned by the web contents.
   static MetricsWebContentsObserver* CreateForWebContents(
-      content::WebContents* web_contents,
-      std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface);
-  MetricsWebContentsObserver(
       content::WebContents* web_contents,
       std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface);
   ~MetricsWebContentsObserver() override;
@@ -131,6 +130,8 @@ class MetricsWebContentsObserver
                          const GURL& first_party_url,
                          bool blocked_by_policy,
                          StorageType storage_type);
+  void DidActivatePortal(content::WebContents* predecessor_web_contents,
+                         base::TimeTicks activation_time) override;
 
   // These methods are forwarded from the MetricsNavigationThrottle.
   void WillStartNavigationRequest(content::NavigationHandle* navigation_handle);
@@ -171,6 +172,10 @@ class MetricsWebContentsObserver
  private:
   friend class content::WebContentsUserData<MetricsWebContentsObserver>;
 
+  MetricsWebContentsObserver(
+      content::WebContents* web_contents,
+      std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface);
+
   void WillStartNavigationRequestImpl(
       content::NavigationHandle* navigation_handle);
 
@@ -183,6 +188,14 @@ class MetricsWebContentsObserver
                     mojom::CpuTimingPtr cpu_timing,
                     mojom::DeferredResourceCountsPtr new_deferred_resource_data,
                     mojom::InputTimingPtr input_timing) override;
+
+  // Update the throughput samples on the browser side, and report it to UKM at
+  // page shuts down / nagivates away, report it to UKM.
+  void SubmitThroughputData(
+      mojom::ThroughputUkmDataPtr throughput_data) override;
+
+  // Common part for UpdateThroughput and OnTimingUpdated.
+  bool DoesTimingUpdateHaveError();
 
   void HandleFailedNavigationForTrackedLoad(
       content::NavigationHandle* navigation_handle,

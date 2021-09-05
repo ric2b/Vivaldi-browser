@@ -10,13 +10,11 @@
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/metrics/subprocess_metrics_provider.h"
 #include "chrome/browser/previews/previews_test_util.h"
 #include "chrome/browser/previews/resource_loading_hints/resource_loading_hints_web_contents_observer.h"
 #include "chrome/browser/profiles/profile.h"
@@ -31,11 +29,12 @@
 #include "components/optimization_guide/optimization_guide_service.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "components/optimization_guide/test_hints_component_creator.h"
-#include "components/previews/core/previews_black_list.h"
+#include "components/previews/core/previews_block_list.h"
 #include "components/previews/core/previews_features.h"
 #include "components/previews/core/previews_switches.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -134,10 +133,10 @@ class ResourceLoadingNoFeaturesBrowserTest : public InProcessBrowserTest {
 
     cmd->AppendSwitch("purge_hint_cache_store");
 
-    // Due to race conditions, it's possible that blacklist data is not loaded
+    // Due to race conditions, it's possible that blocklist data is not loaded
     // at the time of first navigation. That may prevent Preview from
     // triggering, and causing the test to flake.
-    cmd->AppendSwitch(previews::switches::kIgnorePreviewsBlacklist);
+    cmd->AppendSwitch(previews::switches::kIgnorePreviewsBlocklist);
   }
 
   // Creates hint data from the |component_info| and waits for it to be fully
@@ -322,8 +321,8 @@ class ResourceLoadingNoFeaturesBrowserTest : public InProcessBrowserTest {
   void MonitorResourceRequest(const net::test_server::HttpRequest& request) {
     // This method is called on embedded test server thread. Post the
     // information on UI thread.
-    base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                   base::BindOnce(&ResourceLoadingNoFeaturesBrowserTest::
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&ResourceLoadingNoFeaturesBrowserTest::
                                       MonitorResourceRequestOnUIThread,
                                   base::Unretained(this), request.GetURL()));
   }

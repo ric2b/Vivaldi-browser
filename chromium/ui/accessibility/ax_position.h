@@ -23,7 +23,6 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node.h"
@@ -518,9 +517,12 @@ class AXPosition {
         // We assume that white space, including but not limited to hard line
         // breaks, might be used to separate lines. For example, an inline text
         // box with just a single space character inside it can be used to
-        // represent a soft line break. if an inline text box containing white
+        // represent a soft line break. If an inline text box containing white
         // space separates two lines, it should always be connected to the first
-        // line via "kPreviousOnLineId". This is guaranteed by the renderer.
+        // line via "kPreviousOnLineId". This is guaranteed by the renderer. If
+        // there are multiple line breaks separating the two lines, then only
+        // the first line break is connected to the first line via
+        // "kPreviousOnLineId".
         //
         // Sometimes there might be an inline text box with a single space in it
         // at the end of a text field. We should not mark positions that are at
@@ -530,11 +532,11 @@ class AXPosition {
         // all cases, the parent of an inline text box is a static text object,
         // whose end signifies the end of the text span. One exception is line
         // breaks.
-        if (!text_position->AtEndOfTextSpan() &&
+        if (text_position->AtEndOfAnchor() &&
+            !text_position->AtEndOfTextSpan() &&
             text_position->IsInWhiteSpace() &&
             GetNextOnLineID(text_position->anchor_id_) ==
-                AXNode::kInvalidAXID &&
-            text_position->AtEndOfAnchor()) {
+                AXNode::kInvalidAXID) {
           return true;
         }
 
@@ -573,10 +575,12 @@ class AXPosition {
         // In other cases, we assume that white space, including but not limited
         // to hard line breaks, might be used to separate lines. For example, an
         // inline text box with just a single space character inside it can be
-        // used to represent a soft line break. if an inline text box containing
+        // used to represent a soft line break. If an inline text box containing
         // white space separates two lines, it should always be connected to the
         // first line via "kPreviousOnLineId". This is guaranteed by the
-        // renderer.
+        // renderer. If there are multiple line breaks separating the two lines,
+        // then only the first line break is connected to the first line via
+        // "kPreviousOnLineId".
         //
         // We don't treat a position that is at the start of white space that is
         // on a line by itself as being at the end of the line. This is in order
@@ -641,9 +645,10 @@ class AXPosition {
 
         // 2. The current position is not whitespace only, unless it is also
         //    the first leaf text position within the document.
-        if (text_position->IsInWhiteSpace())
+        if (text_position->IsInWhiteSpace()) {
           return text_position->CreatePreviousLeafTextPosition()
               ->IsNullPosition();
+        }
 
         // 3. Either (a) the current leaf text position is the first leaf text
         //    position in the document, or (b) there are no line breaking
@@ -3036,7 +3041,7 @@ class AXPosition {
     if (AnchorUnignoredChildCount())
       return false;
 
-    // All unignored leaf nodes in the AXTree except the document and the text
+    // All unignored leaf nodes in the AXTree except document and text
     // nodes should be replaced by the embedded object character. Also, nodes
     // that only have ignored children (e.g., a button that contains only an
     // empty div) need to be treated as leaf nodes.
@@ -3083,14 +3088,12 @@ class AXPosition {
     // The first unignored ancestor is necessarily the empty object if this node
     // is the descendant of an empty object.
     AXNodeType* ancestor_node = GetLowestUnignoredAncestor();
-
     if (!ancestor_node)
       return nullptr;
 
     AXPositionInstance position = CreateTextPosition(
         tree_id_, GetAnchorID(ancestor_node), 0 /* text_offset */,
         ax::mojom::TextAffinity::kDownstream);
-
     if (position && position->IsEmptyObjectReplacedByCharacter())
       return ancestor_node;
 

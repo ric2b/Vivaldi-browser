@@ -630,7 +630,7 @@ sk_sp<SkColorSpace> ColorSpace::ToSkColorSpace() const {
       gamut = SkNamedGamut::kAdobeRGB;
       break;
     case PrimaryID::SMPTEST432_1:
-      gamut = SkNamedGamut::kDCIP3;
+      gamut = SkNamedGamut::kDisplayP3;
       break;
     case PrimaryID::BT2020:
       gamut = SkNamedGamut::kRec2020;
@@ -893,7 +893,7 @@ bool ColorSpace::GetTransferFunction(TransferID transfer,
     //    software uses the sRGB transfer function.
     //  * User studies shows that users don't really care.
     //  * Apple's CoreVideo uses gamma=1.961.
-    // Bearing all of that in mind, use the same transfer funciton as sRGB,
+    // Bearing all of that in mind, use the same transfer function as sRGB,
     // which will allow more optimization, and will more closely match other
     // media players.
     case ColorSpace::TransferID::IEC61966_2_1:
@@ -908,8 +908,7 @@ bool ColorSpace::GetTransferFunction(TransferID transfer,
       fn->g = 1.961000000000f;
       return true;
     case ColorSpace::TransferID::SMPTEST428_1:
-      fn->a = 0.225615407568f;
-      fn->e = -1.091041666667f;
+      fn->a = 1.034080527699f;  // (52.37 / 48.0) ^ (1.0 / 2.6) per ITU-T H.273.
       fn->g = 2.600000000000f;
       return true;
     case ColorSpace::TransferID::IEC61966_2_4:
@@ -1021,9 +1020,9 @@ void ColorSpace::GetTransferMatrix(SkMatrix44* matrix) const {
 
     case ColorSpace::MatrixID::YCOCG: {
       float data[16] = {
-           0.25f, 0.5f,  0.25f, 0.5f,  // Y
+           0.25f, 0.5f,  0.25f, 0.0f,  // Y
           -0.25f, 0.5f, -0.25f, 0.5f,  // Cg
-            0.5f, 0.0f,  -0.5f, 0.0f,  // Co
+            0.5f, 0.0f,  -0.5f, 0.5f,  // Co
             0.0f, 0.0f,   0.0f, 1.0f
       };
       matrix->setRowMajorf(data);
@@ -1081,7 +1080,8 @@ void ColorSpace::GetTransferMatrix(SkMatrix44* matrix) const {
   matrix->setRowMajorf(data);
 }
 
-void ColorSpace::GetRangeAdjustMatrix(SkMatrix44* matrix) const {
+void ColorSpace::GetRangeAdjustMatrix(int bit_depth, SkMatrix44* matrix) const {
+  DCHECK_GE(bit_depth, 8);
   switch (range_) {
     case RangeID::FULL:
     case RangeID::INVALID:
@@ -1093,33 +1093,21 @@ void ColorSpace::GetRangeAdjustMatrix(SkMatrix44* matrix) const {
       break;
   }
 
-  // Note: The values below assume an 8-bit range and aren't entirely correct
-  // for higher bit depths. They are close enough though (with a relative error
-  // of ~2.9% for 10-bit and ~3.7% for 12-bit) that it's not worth adding a
-  // |bit_depth| field to gfx::ColorSpace yet.
-  //
-  // The limited ranges are [64,940] and [256, 3760] for 10 and 12 bit content
-  // respectively. So the final values end up being:
-  //
-  //   16 /  255 = 0.06274509803921569
-  //   64 / 1023 = 0.06256109481915934
-  //  256 / 4095 = 0.06251526251526252
-  //
-  //  235 /  255 = 0.9215686274509803
-  //  940 / 1023 = 0.9188660801564027
-  // 3760 / 4095 = 0.9181929181929182
-  //
-  // Relative error (same for min/max):
-  //   10 bit: abs(16/235 - 64/1023)/(64/1023)   = 0.0029411764705882222
-  //   12 bit: abs(16/235 - 256/4095)/(256/4095) = 0.003676470588235281
+  // See ITU-T H.273 (2016), Section 8.3. The following is derived from
+  // Equations 20-31.
+  const int shift = bit_depth - 8;
+  const float a_y = 219 << shift;
+  const float c = (1 << bit_depth) - 1;
+  const float scale_y = c / a_y;
   switch (matrix_) {
     case MatrixID::RGB:
     case MatrixID::GBR:
     case MatrixID::INVALID:
-    case MatrixID::YCOCG:
-      matrix->setScale(255.0f/219.0f, 255.0f/219.0f, 255.0f/219.0f);
-      matrix->postTranslate(-16.0f/219.0f, -16.0f/219.0f, -16.0f/219.0f);
+    case MatrixID::YCOCG: {
+      matrix->setScale(scale_y, scale_y, scale_y);
+      matrix->postTranslate(-16.0f / 219.0f, -16.0f / 219.0f, -16.0f / 219.0f);
       break;
+    }
 
     case MatrixID::BT709:
     case MatrixID::FCC:
@@ -1128,18 +1116,23 @@ void ColorSpace::GetRangeAdjustMatrix(SkMatrix44* matrix) const {
     case MatrixID::SMPTE240M:
     case MatrixID::BT2020_NCL:
     case MatrixID::BT2020_CL:
-    case MatrixID::YDZDX:
-      matrix->setScale(255.0f/219.0f, 255.0f/224.0f, 255.0f/224.0f);
-      matrix->postTranslate(-16.0f/219.0f, -15.5f/224.0f, -15.5f/224.0f);
+    case MatrixID::YDZDX: {
+      const float a_uv = 224 << shift;
+      const float scale_uv = c / a_uv;
+      const float translate_uv = (a_uv - c) / (2.0f * a_uv);
+      matrix->setScale(scale_y, scale_uv, scale_uv);
+      matrix->postTranslate(-16.0f / 219.0f, translate_uv, translate_uv);
       break;
+    }
   }
 }
 
 bool ColorSpace::ToSkYUVColorSpace(SkYUVColorSpace* out) const {
   if (range_ == RangeID::FULL) {
-    // TODO(dalecurtis): This is probably not right for BT.2020.
-    *out = kJPEG_SkYUVColorSpace;
-    return true;
+    if (matrix_ == MatrixID::BT470BG || matrix_ == MatrixID::SMPTE170M) {
+      *out = kJPEG_SkYUVColorSpace;
+      return true;
+    }
   }
   switch (matrix_) {
     case MatrixID::BT709:
@@ -1148,7 +1141,6 @@ bool ColorSpace::ToSkYUVColorSpace(SkYUVColorSpace* out) const {
 
     case MatrixID::BT470BG:
     case MatrixID::SMPTE170M:
-    case MatrixID::SMPTE240M:
       *out = kRec601_SkYUVColorSpace;
       return true;
 

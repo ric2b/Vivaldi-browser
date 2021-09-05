@@ -89,7 +89,7 @@ class VideoMockCompositorFrameSink
   void SubmitCompositorFrame(
       const viz::LocalSurfaceId& id,
       viz::CompositorFrame frame,
-      viz::mojom::blink::HitTestRegionListPtr hit_test_region_list,
+      base::Optional<viz::HitTestRegionList> hit_test_region_list,
       uint64_t submit_time) override {
     last_submitted_compositor_frame_ = std::move(frame);
     DoSubmitCompositorFrame(id, &last_submitted_compositor_frame_);
@@ -97,7 +97,7 @@ class VideoMockCompositorFrameSink
   void SubmitCompositorFrameSync(
       const viz::LocalSurfaceId& id,
       viz::CompositorFrame frame,
-      viz::mojom::blink::HitTestRegionListPtr hit_test_region_list,
+      base::Optional<viz::HitTestRegionList> hit_test_region_list,
       uint64_t submit_time,
       const SubmitCompositorFrameSyncCallback callback) override {
     last_submitted_compositor_frame_ = std::move(frame);
@@ -959,10 +959,8 @@ TEST_F(VideoFrameSubmitterTest, ProcessTimingDetails) {
   int reports = 0;
   base::TimeDelta frame_duration = base::TimeDelta::FromSecondsD(1.0 / fps);
   int frames_to_run =
-      (fps / 2) *
-      (cc::VideoPlaybackRoughnessReporter::kMinWindowsBeforeSubmit + 1);
-  WTF::HashMap<uint32_t, viz::mojom::blink::FrameTimingDetailsPtr>
-      timing_details;
+      fps * (cc::VideoPlaybackRoughnessReporter::kMinWindowsBeforeSubmit + 1);
+  WTF::HashMap<uint32_t, viz::FrameTimingDetails> timing_details;
 
   MakeSubmitter(
       base::BindLambdaForTesting([&](int frames, base::TimeDelta duration,
@@ -975,14 +973,13 @@ TEST_F(VideoFrameSubmitterTest, ProcessTimingDetails) {
   auto sink_submit = [&](const viz::LocalSurfaceId&,
                          viz::CompositorFrame* frame) {
     auto token = frame->metadata.frame_token;
-    viz::mojom::blink::FrameTimingDetailsPtr details =
-        viz::mojom::blink::FrameTimingDetails::New();
-    details->presentation_feedback =
-        gfx::mojom::blink::PresentationFeedback::New();
-    details->presentation_feedback->timestamp =
+    viz::FrameTimingDetails details;
+    details.presentation_feedback.timestamp =
         base::TimeTicks() + frame_duration * token;
+    details.presentation_feedback.flags =
+        gfx::PresentationFeedback::kHWCompletion;
     timing_details.clear();
-    timing_details.Set(token, std::move(details));
+    timing_details.Set(token, details);
   };
 
   EXPECT_CALL(*video_frame_provider_, UpdateCurrentFrame)
@@ -998,14 +995,13 @@ TEST_F(VideoFrameSubmitterTest, ProcessTimingDetails) {
     auto frame = media::VideoFrame::CreateFrame(
         media::PIXEL_FORMAT_YV12, gfx::Size(8, 8), gfx::Rect(gfx::Size(8, 8)),
         gfx::Size(8, 8), i * frame_duration);
-    frame->metadata()->SetTimeDelta(
-        media::VideoFrameMetadata::WALLCLOCK_FRAME_DURATION, frame_duration);
+    frame->metadata()->wallclock_frame_duration = frame_duration;
     EXPECT_CALL(*video_frame_provider_, GetCurrentFrame())
         .WillRepeatedly(Return(frame));
 
     auto args = begin_frame_source_->CreateBeginFrameArgs(BEGINFRAME_FROM_HERE,
                                                           now_src_.get());
-    submitter_->OnBeginFrame(args, std::move(timing_details));
+    submitter_->OnBeginFrame(args, timing_details);
     task_environment_.RunUntilIdle();
     AckSubmittedFrame();
   }

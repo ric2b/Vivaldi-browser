@@ -28,6 +28,7 @@
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "components/datasource/vivaldi_data_source_api.h"
+#include "components/datasource/vivaldi_data_url_utils.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/bookmarks_private.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -251,8 +252,7 @@ void VivaldiBookmarksAPI::BookmarkNodeFaviconChanged(BookmarkModel* model,
 bool VivaldiBookmarksAPI::SetBookmarkThumbnail(
     content::BrowserContext* browser_context,
     int64_t bookmark_id,
-    const std::string& url,
-    std::string* old_url) {
+    const std::string& url) {
   BookmarkModel* model =
       BookmarkModelFactory::GetForBrowserContext(browser_context);
   // model should be loaded as bookmark_id comes from it.
@@ -266,7 +266,6 @@ bool VivaldiBookmarksAPI::SetBookmarkThumbnail(
     LOG(ERROR) << "Cannot modify special bookmark " << bookmark_id;
     return false;
   }
-  node->GetMetaInfo("Thumbnail", old_url);
   model->SetNodeMetaInfo(node, "Thumbnail", url);
   return true;
 }
@@ -352,7 +351,7 @@ BookmarksPrivateIsCustomThumbnailFunction::RunOnReady() {
 
   std::string url = vivaldi_bookmark_kit::GetThumbnail(node);
   bool is_custom_thumbnail =
-      !url.empty() && !VivaldiDataSourcesAPI::IsBookmarkCapureUrl(url);
+      !url.empty() && !vivaldi_data_url_utils::IsBookmarkCapureUrl(url);
   return ArgumentList(Results::Create(is_custom_thumbnail));
 }
 

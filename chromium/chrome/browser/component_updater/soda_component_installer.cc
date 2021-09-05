@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/pref_names.h"
@@ -15,6 +14,7 @@
 #include "components/soda/constants.h"
 #include "components/update_client/update_client_errors.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "crypto/sha2.h"
 
 using content::BrowserThread;
@@ -133,12 +133,38 @@ void RegisterSODAComponent(ComponentUpdateService* cus,
 
   auto installer = base::MakeRefCounted<ComponentInstaller>(
       std::make_unique<SODAComponentInstallerPolicy>(base::BindRepeating(
-          [](PrefService* prefs, const base::FilePath& install_dir) {
-            base::PostTask(
-                FROM_HERE, {BrowserThread::UI, base::TaskPriority::BEST_EFFORT},
-                base::BindOnce(&UpdateSODAInstallDirPref, prefs, install_dir));
+          [](ComponentUpdateService* cus, PrefService* prefs,
+             const base::FilePath& install_dir) {
+            if (prefs->GetBoolean(prefs::kLiveCaptionEnabled)) {
+              content::GetUIThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
+                  ->PostTask(FROM_HERE,
+                             base::BindOnce(&UpdateSODAInstallDirPref, prefs,
+                                            install_dir));
+            }
           },
-          prefs)));
-  installer->Register(cus, std::move(callback));
+          cus, prefs)));
+
+  if (prefs->GetBoolean(prefs::kLiveCaptionEnabled)) {
+    installer->Register(cus, std::move(callback));
+  } else {
+    // Register and uninstall the SODA component to delete the previously
+    // installed SODA files.
+    if (!prefs->GetFilePath(prefs::kSODAPath).empty()) {
+      installer->Register(
+          cus,
+          base::BindOnce(
+              [](ComponentUpdateService* cus, PrefService* prefs) {
+                if (component_updater::UninstallSODAComponent(cus, prefs)) {
+                  prefs->SetFilePath(prefs::kSODAPath, base::FilePath());
+                }
+              },
+              cus, prefs));
+    }
+  }
+}
+
+bool UninstallSODAComponent(ComponentUpdateService* cus, PrefService* prefs) {
+  return cus->UnregisterComponent(
+      SODAComponentInstallerPolicy::GetExtensionId());
 }
 }  // namespace component_updater

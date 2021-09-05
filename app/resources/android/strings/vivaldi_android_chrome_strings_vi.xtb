@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="vi">
-<translation id="1169602411434249000">Chặn theo dõi</translation>
 <translation id="1397811292916898096">Tìm kiếm bằng <ph name="PRODUCT_NAME" /></translation>
 <translation id="1598449788754183301">Chuyển đổi tab thông thường/riêng tư</translation>
 <translation id="1644574205037202324">Lịch sử</translation>
@@ -14,13 +13,17 @@
 <translation id="3234355010754616171">Tab riêng tư mới</translation>
 <translation id="3518985090088779359">Chấp nhận và tiếp tục</translation>
 <translation id="3700829948786686853">Chào mừng bạn đến với Vivaldi</translation>
+<translation id="4121750346708795461">Bằng việc sử dụng ứng dụng này, bạn đồng ý với <ph name="BEGIN_LINK1" />Thỏa thuận Cấp phép Người dùng Cuối<ph name="END_LINK1" /> và <ph name="BEGIN_LINK2" />Chính Sách Riêng Tư<ph name="END_LINK2" /> của Vivaldi.</translation>
 <translation id="4243710787042215766">Mớ trong tab riêng tư</translation>
 <translation id="4526803704855831732">Tab Riêng tư</translation>
 <translation id="4883379392681899581">Thoát chế độ riêng tư</translation>
 <translation id="4943872375798546930">Không tìm thấy kết quả nào</translation>
+<translation id="49576331685473090">Trình chặn nội dung</translation>
+<translation id="4960569554487356883">Bật quyền cho Vivaldi trong <ph name="BEGIN_LINK" />Thiết lập Android<ph name="END_LINK" />.</translation>
 <translation id="5118676864324397542">Bộ nhớ lưu trữ <ph name="APP_NAME" /></translation>
 <translation id="5233638681132016545">Tab mới</translation>
 <translation id="5495228542153126976">Bạn đã chuyển sang chế độ riêng tư</translation>
+<translation id="5553467336321715093">Bật quyền cho Vivaldi trong <ph name="BEGIN_LINK" />Thiết lập Android<ph name="END_LINK" />.</translation>
 <translation id="572328651809341494">Các tab gần đây</translation>
 <translation id="5840488417521835756">Tìm hiểu về các chủ đề trên trang web mà không cần rời khỏi trang. Tính năng Nhấn để Tìm chỉ khả dụng khi Google được đặt là công cụ tìm kiếm mặc định trên Vivaldi. Nó sẽ gửi một từ và ngữ cảnh xung quanh Công cụ tìm kiếm Google, trả về định nghĩa, hình ảnh, kết quả tìm kiếm và các chi tiết khác.
 

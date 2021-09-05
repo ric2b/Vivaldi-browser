@@ -42,6 +42,7 @@
 <translation id="2359808026110333948">Fortsätt</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Att köra nätverksdiagnostik<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Aviseringar</translation>
+<translation id="2501278716633472235">Gå tillbaka</translation>
 <translation id="2539524384386349900">Identifiera</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> skickade ett ogiltigt svar.</translation>
 <translation id="2586657967955657006">Urklipp</translation>
@@ -70,6 +71,7 @@
 <translation id="3226128629678568754">Tryck knappen Hämta om för att sända de data som behövs för att läsa in sidan på nytt.</translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3234666976984236645">Upptäck alltid viktigt innehåll på den här webbplatsen</translation>
+<translation id="3308738399950580893">annonser</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> kan inte nås för tillfället.</translation>
 <translation id="3427092606871434483">Tillåt (standard)</translation>
 <translation id="3447661539832366887">Enhetens ägare har stängt av dinosauriespelet.</translation>
@@ -85,6 +87,7 @@
 <translation id="3681007416295224113">Certifikatinformation</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Kontrollera mellanservern (proxy), brandväggen och DNS-konfigurationen<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Om du använder en proxyserver ...</translation>
+<translation id="3894751534882749287">Om du ändå vill se sidan så kan du ändra dess blockeringsnivå i popup-fönstret för spårningsblockeraren eller genom att klicka på Tillåt-knappen</translation>
 <translation id="3950820424414687140">Logga in</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> har blockerats</translation>
 <translation id="3987940399970879459">Mindre än 1 MB</translation>
@@ -111,6 +114,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Anslutningen avbröts</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Att köra Windows nätverksdiagnostik<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Spårningsblockerare</translation>
 <translation id="4744603770635761495">Sökväg till körbar fil</translation>
 <translation id="4750917950439032686">Dina uppgifter (till exempel lösenord eller kreditkortsnummer) är privata när de skickas till den här webbplatsen.</translation>
 <translation id="4764776831041365478">Webbsidan på <ph name="URL" /> kan ligga nere för tillfället eller kan ha flyttats permanent till en ny webbadress.</translation>
@@ -173,10 +177,12 @@
 <translation id="7090678807593890770">Sök efter <ph name="LINK" /> på Google</translation>
 <translation id="7108819624672055576">Beviljades av ett tillägg</translation>
 <translation id="7111012039238467737">(Giltigt)</translation>
+<translation id="7113310725918019676">Tillåt <ph name="BLOCKED_TYPE" /> från <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> följer inte säkerhetsstandarderna.</translation>
 <translation id="7219179957768738017">För anslutningen används <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Återkalla åtkomst</translation>
 <translation id="7353601530677266744">Kommandorad</translation>
+<translation id="7364115444476960850">Sidan du försökte komma åt blockerades av Vivaldis <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profilsökväg</translation>
 <translation id="7445762425076701745">Det går inte att fastställa identiteten hos servern som du är ansluten till. Servernamnet som du angav vid anslutningen är bara giltigt inom ditt nätverk och externa certifikatutfärdare kan inte fastställa dess ägarskap. Vissa certifikatutfärdare utfärdar certifikat oavsett namn och därför går det inte att säkerställa att du är ansluten till den avsedda webbplatsen och inte till en skadlig server.</translation>
 <translation id="7455133967321480974">Använd global standardinställning (Blockera)</translation>
@@ -200,6 +206,7 @@
 <translation id="8037357227543935929">Fråga (standard)</translation>
 <translation id="8041940743680923270">Använd global standardinställning (Fråga)</translation>
 <translation id="808894953321890993">Byt lösenord</translation>
+<translation id="8119307142152921512">spårare och annonser</translation>
 <translation id="8142868475871995937">Besök &lt;strong&gt;vivaldi://policy&lt;/strong&gt; om du vill visa listan med webbadresser som inte är godkända och andra policyer som angetts av systemadministratören.</translation>
 <translation id="8149426793427495338">Datorn gick ner i vänteläge.</translation>
 <translation id="8150722005171944719">Det går inte att läsa filen på <ph name="URL" />. Den kan ha tagits bort eller flyttats, eller så krävs behörighet för att få åtkomst till den.</translation>
@@ -217,6 +224,7 @@
 <translation id="8703575177326907206">Din anslutning till <ph name="DOMAIN" /> är inte krypterad.</translation>
 <translation id="8740359287975076522">Det gick inte att hitta <ph name="HOST_NAME" />s &lt;abbr id="dnsDefinition"&gt;DNS-adress&lt;/abbr&gt;. Diagnostiserar problemet.</translation>
 <translation id="8820817407110198400">Bokmärken</translation>
+<translation id="8940028675168378100">Blockerad av <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">Proxyservern <ph name="DOMAIN" /> kräver användarnamn och lösenord.</translation>
 <translation id="9008201768610948239">Ignorera</translation>
 <translation id="9011424611726486705">Öppna webbplatsinställningarna</translation>
@@ -224,6 +232,7 @@
 <translation id="9039213469156557790">Den här sidan innehåller emellertid andra resurser som inte är säkra. Andra kan se resurserna när de överförs och angripare kan ändra resurserna så att sidan får ett annat beteende.</translation>
 <translation id="9069693763241529744">Blockerades av ett tillägg</translation>
 <translation id="9169664750068251925">Blockera alltid på den här webbplatsen</translation>
+<translation id="9180553614777056266">Annonsblockerare</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> använder ett protokoll som inte stöds.</translation>
 <translation id="9219103736887031265">Bilder</translation>
 <translation id="936602727769022409">Du kan förlora tillgången till Google-kontot. Vivaldi rekommenderar att du ändrar lösenordet nu. Du kommer bli uppmanad att logga in.</translation>

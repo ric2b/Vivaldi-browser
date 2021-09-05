@@ -13,8 +13,12 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
+#include "base/time/time.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "build/build_config.h"
+#include "gpu/command_buffer/common/constants.h"
+#include "gpu/command_buffer/common/gl2_types.h"
 #include "gpu/command_buffer/common/skia_utils.h"
 #include "gpu/command_buffer/service/gl_context_virtual_delegate.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
@@ -47,6 +51,10 @@ class FeatureInfo;
 struct ContextState;
 }  // namespace gles2
 
+namespace raster {
+class RasterDecoderTestBase;
+}  // namespace raster
+
 class GPU_GLES2_EXPORT SharedContextState
     : public base::trace_event::MemoryDumpProvider,
       public gpu::GLContextVirtualDelegate,
@@ -68,7 +76,7 @@ class GPU_GLES2_EXPORT SharedContextState
       base::WeakPtr<gpu::MemoryTracker::Observer> peak_memory_monitor =
           nullptr);
 
-  void InitializeGrContext(const GpuPreferences& gpu_preferences,
+  bool InitializeGrContext(const GpuPreferences& gpu_preferences,
                            const GpuDriverBugWorkarounds& workarounds,
                            GrContextOptions::PersistentCache* cache,
                            GpuProcessActivityFlags* activity_flags = nullptr,
@@ -92,7 +100,7 @@ class GPU_GLES2_EXPORT SharedContextState
 
   bool MakeCurrent(gl::GLSurface* surface, bool needs_gl = false);
   void ReleaseCurrent(gl::GLSurface* surface);
-  void MarkContextLost();
+  void MarkContextLost(error::ContextLostReason reason = error::kUnknown);
   bool IsCurrent(gl::GLSurface* surface);
 
   void PurgeMemory(
@@ -122,7 +130,10 @@ class GPU_GLES2_EXPORT SharedContextState
   void compileError(const char* shader, const char* errors) override;
   gles2::FeatureInfo* feature_info() { return feature_info_.get(); }
   gles2::ContextState* context_state() const { return context_state_.get(); }
-  bool context_lost() const { return context_lost_; }
+  bool context_lost() const { return !!context_lost_reason_; }
+  base::Optional<error::ContextLostReason> context_lost_reason() {
+    return context_lost_reason_;
+  }
   bool need_context_state_reset() const { return need_context_state_reset_; }
   void set_need_context_state_reset(bool reset) {
     need_context_state_reset_ = reset;
@@ -179,8 +190,14 @@ class GPU_GLES2_EXPORT SharedContextState
     return found->second->unique();
   }
 
+  // Updates |context_lost_reason| and returns true if lost
+  // (e.g. VK_ERROR_DEVICE_LOST or GL_UNKNOWN_CONTEXT_RESET_ARB).
+  bool CheckResetStatus(bool needs_gl);
+  bool device_needs_reset() { return device_needs_reset_; }
+
  private:
   friend class base::RefCounted<SharedContextState>;
+  friend class raster::RasterDecoderTestBase;
 
   // Observer which is notified when SkiaOutputSurfaceImpl takes ownership of a
   // shared image, and forward information to both histograms and task manager.
@@ -265,10 +282,14 @@ class GPU_GLES2_EXPORT SharedContextState
   // driver's GL state.
   bool need_context_state_reset_ = false;
 
-  bool context_lost_ = false;
+  base::Optional<error::ContextLostReason> context_lost_reason_;
   base::ObserverList<ContextLostObserver>::Unchecked context_lost_observers_;
 
   base::MRUCache<void*, sk_sp<SkSurface>> sk_surface_cache_;
+
+  bool device_needs_reset_ = false;
+  base::Time last_gl_check_graphics_reset_status_;
+  bool disable_check_reset_status_throttling_for_test_ = false;
 
   base::WeakPtrFactory<SharedContextState> weak_ptr_factory_{this};
 

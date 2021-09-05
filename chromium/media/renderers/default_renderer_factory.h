@@ -66,8 +66,6 @@ class MEDIA_EXPORT DefaultRendererFactory : public RendererFactory {
       const gfx::ColorSpace& target_color_space,
       bool use_platform_media_pipeline = false) final;
 
-  void TranscribeAudio(scoped_refptr<media::AudioBuffer> buffer);
-
  private:
   std::vector<std::unique_ptr<AudioDecoder>> CreateAudioDecoders(
       const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,

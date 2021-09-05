@@ -135,25 +135,17 @@ class MockActionDelegate : public ActionDelegate {
   MOCK_METHOD1(
       WriteUserData,
       void(base::OnceCallback<void(UserData*, UserData::FieldChange*)>));
-  MOCK_METHOD1(WriteUserModel, void(base::OnceCallback<void(UserModel*)>));
 
-  MOCK_METHOD1(OnGetFullCard,
-               void(base::OnceCallback<void(const autofill::CreditCard& card,
-                                            const base::string16& cvc)>&));
-
-  void GetFullCard(GetFullCardCallback callback) override {
-    // A local variable is necessary to allow OnGetFullCard to get a reference.
-    base::OnceCallback<void(const autofill::CreditCard& card,
-                            const base::string16& cvc)>
-        transformed_callback = base::BindOnce(
-            [](GetFullCardCallback real_callback,
-               const autofill::CreditCard& card, const base::string16& cvc) {
-              std::move(real_callback)
-                  .Run(std::make_unique<autofill::CreditCard>(card), cvc);
-            },
-            std::move(callback));
-    OnGetFullCard(transformed_callback);
+  void GetFullCard(const autofill::CreditCard* credit_card,
+                   ActionDelegate::GetFullCardCallback callback) override {
+    OnGetFullCard(credit_card, callback);
   }
+
+  MOCK_METHOD2(
+      OnGetFullCard,
+      void(const autofill::CreditCard* credit_card,
+           base::OnceCallback<void(std::unique_ptr<autofill::CreditCard> card,
+                                   const base::string16& cvc)>& callback));
 
   void GetFieldValue(const Selector& selector,
                      base::OnceCallback<void(const ClientStatus&,
@@ -238,7 +230,11 @@ class MockActionDelegate : public ActionDelegate {
   MOCK_METHOD1(SetInfoBox, void(const InfoBox& info_box));
   MOCK_METHOD0(ClearInfoBox, void());
   MOCK_METHOD1(SetProgress, void(int progress));
+  MOCK_METHOD1(SetProgressActiveStep, void(int active_step));
   MOCK_METHOD1(SetProgressVisible, void(bool visible));
+  MOCK_METHOD1(SetStepProgressBarConfiguration,
+               void(const ShowProgressBarProto::StepProgressBarConfiguration&
+                        configuration));
   MOCK_METHOD1(SetUserActions,
                void(std::unique_ptr<std::vector<UserAction>> user_action));
   MOCK_METHOD1(SetViewportMode, void(ViewportMode mode));
@@ -294,19 +290,20 @@ class MockActionDelegate : public ActionDelegate {
   MOCK_METHOD0(RequireUI, void());
   MOCK_METHOD0(SetExpandSheetForPromptAction, bool());
 
-  MOCK_METHOD2(
+  MOCK_METHOD3(
       OnSetGenericUi,
       void(std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-           base::OnceCallback<void(bool,
-                                   ProcessedActionStatusProto,
-                                   const UserModel*)>& end_action_callback));
+           base::OnceCallback<void(const ClientStatus&)>& end_action_callback,
+           base::OnceCallback<void(const ClientStatus&)>&
+               view_inflation_finished_callback));
 
   void SetGenericUi(
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-      base::OnceCallback<void(bool,
-                              ProcessedActionStatusProto,
-                              const UserModel*)> end_action_callback) override {
-    OnSetGenericUi(std::move(generic_ui), end_action_callback);
+      base::OnceCallback<void(const ClientStatus&)> end_action_callback,
+      base::OnceCallback<void(const ClientStatus&)>
+          view_inflation_finished_callback) override {
+    OnSetGenericUi(std::move(generic_ui), end_action_callback,
+                   view_inflation_finished_callback);
   }
   MOCK_METHOD0(ClearGenericUi, void());
 

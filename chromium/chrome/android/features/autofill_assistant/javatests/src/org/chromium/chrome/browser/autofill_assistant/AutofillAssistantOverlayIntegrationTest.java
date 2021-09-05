@@ -4,8 +4,11 @@
 
 package org.chromium.chrome.browser.autofill_assistant;
 
-import static android.support.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -18,7 +21,8 @@ import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUi
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilViewMatchesCondition;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -30,9 +34,9 @@ import org.chromium.chrome.browser.autofill_assistant.proto.ActionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ChipProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ElementAreaProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ElementAreaProto.Rectangle;
-import org.chromium.chrome.browser.autofill_assistant.proto.ElementReferenceProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.FocusElementProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.SelectorProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto.PresentationProto;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
@@ -74,9 +78,11 @@ public class AutofillAssistantOverlayIntegrationTest {
     @Test
     @MediumTest
     public void testShowCastOnDocumentElement() throws Exception {
-        ElementReferenceProto element = (ElementReferenceProto) ElementReferenceProto.newBuilder()
-                                                .addSelectors("#touch_area_one")
-                                                .build();
+        SelectorProto element =
+                (SelectorProto) SelectorProto.newBuilder()
+                        .addFilters(
+                                SelectorProto.Filter.newBuilder().setCssSelector("#touch_area_one"))
+                        .build();
 
         ArrayList<ActionProto> list = new ArrayList<>();
         list.add(
@@ -115,14 +121,84 @@ public class AutofillAssistantOverlayIntegrationTest {
     }
 
     /**
+     * Showcasts the same element twice in a row, and taps it the second time. Tests that the second
+     * showcast works correctly, even though the showcasted area hasn't changed (see b/161471176).
+     */
+    @Test
+    @MediumTest
+    public void testRepeatedShowCastOnSameElement() throws Exception {
+        SelectorProto element =
+                (SelectorProto) SelectorProto.newBuilder()
+                        .addFilters(
+                                SelectorProto.Filter.newBuilder().setCssSelector("#touch_area_one"))
+                        .build();
+
+        ArrayList<ActionProto> list = new ArrayList<>();
+        list.add(
+                (ActionProto) ActionProto.newBuilder()
+                        .setFocusElement(FocusElementProto.newBuilder()
+                                                 .setElement(element)
+                                                 .setTouchableElementArea(
+                                                         ElementAreaProto.newBuilder().addTouchable(
+                                                                 Rectangle.newBuilder().addElements(
+                                                                         element))))
+                        .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setPrompt(PromptProto.newBuilder()
+                                            .setMessage("First Prompt")
+                                            .addChoices(PromptProto.Choice.newBuilder().setChip(
+                                                    ChipProto.newBuilder().setText("Continue"))))
+                         .build());
+        list.add(
+                (ActionProto) ActionProto.newBuilder()
+                        .setFocusElement(FocusElementProto.newBuilder()
+                                                 .setElement(element)
+                                                 .setTouchableElementArea(
+                                                         ElementAreaProto.newBuilder().addTouchable(
+                                                                 Rectangle.newBuilder().addElements(
+                                                                         element))))
+                        .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setPrompt(PromptProto.newBuilder()
+                                            .setMessage("Second Prompt")
+                                            .addChoices(PromptProto.Choice.newBuilder().setChip(
+                                                    ChipProto.newBuilder().setText("Done"))))
+                         .build());
+
+        AutofillAssistantTestScript script = new AutofillAssistantTestScript(
+                (SupportedScriptProto) SupportedScriptProto.newBuilder()
+                        .setPath("autofill_assistant_target_website.html")
+                        .setPresentation(PresentationProto.newBuilder().setAutostart(true).setChip(
+                                ChipProto.newBuilder().setText("Done")))
+                        .build(),
+                list);
+        runScript(script);
+
+        waitUntil(() -> checkElementOnScreen(mTestRule, "touch_area_one"));
+        waitUntilViewMatchesCondition(withText("First Prompt"), isCompletelyDisplayed());
+        onView(withContentDescription("Continue")).perform(click());
+        waitUntilViewMatchesCondition(withText("Second Prompt"), isCompletelyDisplayed());
+
+        // Tapping on the element should remove it from the DOM.
+        assertThat(checkElementExists(mTestRule.getWebContents(), "touch_area_one"), is(true));
+        tapElement(mTestRule, "touch_area_one");
+        waitUntil(() -> !checkElementExists(mTestRule.getWebContents(), "touch_area_one"));
+        // Tapping on the element should be blocked by the overlay.
+        tapElement(mTestRule, "touch_area_four");
+        assertThat(checkElementExists(mTestRule.getWebContents(), "touch_area_four"), is(true));
+    }
+
+    /**
      * Tests that clicking on a document element requiring scrolling works with a showcast.
      */
     @Test
     @MediumTest
     public void testShowCastOnDocumentElementInScrolledBrowserWindow() throws Exception {
-        ElementReferenceProto element = (ElementReferenceProto) ElementReferenceProto.newBuilder()
-                                                .addSelectors("#touch_area_five")
-                                                .build();
+        SelectorProto element =
+                (SelectorProto) SelectorProto.newBuilder()
+                        .addFilters(SelectorProto.Filter.newBuilder().setCssSelector(
+                                "#touch_area_five"))
+                        .build();
 
         ArrayList<ActionProto> list = new ArrayList<>();
         list.add(
@@ -167,10 +243,17 @@ public class AutofillAssistantOverlayIntegrationTest {
     @Test
     @MediumTest
     public void testShowCastOnIFrameElement() throws Exception {
-        ElementReferenceProto element = (ElementReferenceProto) ElementReferenceProto.newBuilder()
-                                                .addSelectors("#iframe")
-                                                .addSelectors("#touch_area_1")
-                                                .build();
+        SelectorProto element =
+                (SelectorProto) SelectorProto.newBuilder()
+                        .addFilters(SelectorProto.Filter.newBuilder().setCssSelector("#iframe"))
+                        .addFilters(SelectorProto.Filter.newBuilder().setPickOne(
+                                SelectorProto.EmptyFilter.getDefaultInstance()))
+                        .addFilters(SelectorProto.Filter.newBuilder().setEnterFrame(
+                                SelectorProto.EmptyFilter.getDefaultInstance()))
+
+                        .addFilters(
+                                SelectorProto.Filter.newBuilder().setCssSelector("#touch_area_1"))
+                        .build();
 
         ArrayList<ActionProto> list = new ArrayList<>();
         list.add(
@@ -216,10 +299,17 @@ public class AutofillAssistantOverlayIntegrationTest {
     @Test
     @MediumTest
     public void testShowCastOnIFrameElementInScrollIFrame() throws Exception {
-        ElementReferenceProto element = (ElementReferenceProto) ElementReferenceProto.newBuilder()
-                                                .addSelectors("#iframe")
-                                                .addSelectors("#touch_area_3")
-                                                .build();
+        SelectorProto element =
+                (SelectorProto) SelectorProto.newBuilder()
+                        .addFilters(SelectorProto.Filter.newBuilder().setCssSelector("#iframe"))
+                        .addFilters(SelectorProto.Filter.newBuilder().setPickOne(
+                                SelectorProto.EmptyFilter.getDefaultInstance()))
+                        .addFilters(SelectorProto.Filter.newBuilder().setEnterFrame(
+                                SelectorProto.EmptyFilter.getDefaultInstance()))
+
+                        .addFilters(
+                                SelectorProto.Filter.newBuilder().setCssSelector("#touch_area_3"))
+                        .build();
 
         ArrayList<ActionProto> list = new ArrayList<>();
         list.add(

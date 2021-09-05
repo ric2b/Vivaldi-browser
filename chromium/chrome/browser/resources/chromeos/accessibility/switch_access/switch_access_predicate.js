@@ -15,8 +15,6 @@ const DefaultActionVerb = chrome.automation.DefaultActionVerb;
  *    - isInterestingSubtree
  *    - isVisible
  *    - isTextInput
- *    - isNotContainer
- *    - isSwitchAccessMenuPanel
  *
  * In addition to these basic predicates, there are also methods to get the
  * restrictions required by TreeWalker for specific traversal situations.
@@ -28,7 +26,7 @@ const SwitchAccessPredicate = {
    * Returns true if |node| is actionable, meaning that a user can interact with
    * it in some way.
    *
-   * @param {!chrome.automation.AutomationNode} node
+   * @param {!AutomationNode} node
    * @return {boolean}
    */
   isActionable: (node) => {
@@ -68,7 +66,8 @@ const SwitchAccessPredicate = {
       return true;
     }
 
-    if (SwitchAccessPredicate.isTextInput(node)) {
+    if (AutomationPredicate.comboBox(node) ||
+        SwitchAccessPredicate.isTextInput(node)) {
       return true;
     }
 
@@ -105,16 +104,22 @@ const SwitchAccessPredicate = {
    * Additionally, for |node| to be a group, it cannot have the same bounding
    * box as its scope.
    *
-   * @param {!chrome.automation.AutomationNode} node
-   * @param {SARootNode} scope
+   * @param {!AutomationNode} node
+   * @param {AutomationNode|SARootNode} scope
    * @return {boolean}
    */
   isGroup: (node, scope) => {
-    if (scope && !scope.isEquivalentTo(node) &&
+    const scopeEqualsNode = scope &&
+        (scope instanceof SARootNode ? scope.isEquivalentTo(node) :
+                                       scope === node);
+    if (scope && !scopeEqualsNode &&
         RectHelper.areEqual(node.location, scope.location)) {
       return false;
     }
     if (node.state[StateType.INVISIBLE]) {
+      return false;
+    }
+    if (AutomationPredicate.comboBox(node)) {
       return false;
     }
 
@@ -138,8 +143,8 @@ const SwitchAccessPredicate = {
    * Returns true if |node| is interesting for the user, meaning that |node|
    * is either actionable or a group.
    *
-   * @param {!chrome.automation.AutomationNode} node
-   * @param {!SARootNode} scope
+   * @param {!AutomationNode} node
+   * @param {!AutomationNode|!SARootNode} scope
    * @return {boolean}
    */
   isInteresting: (node, scope) => SwitchAccessPredicate.isActionable(node) ||
@@ -148,7 +153,7 @@ const SwitchAccessPredicate = {
   /**
    * Returns true if the element is visible to the user for any reason.
    *
-   * @param {chrome.automation.AutomationNode} node
+   * @param {AutomationNode} node
    * @return {boolean}
    */
   isVisible: (node) => !node.state[StateType.OFFSCREEN] && !!node.location &&
@@ -163,7 +168,7 @@ const SwitchAccessPredicate = {
    * cause a loop (isInteresting calls isGroup, and isGroup calls
    * isInterestingSubtree).
    *
-   * @param {!chrome.automation.AutomationNode} node
+   * @param {!AutomationNode} node
    * @return {boolean}
    */
   isInterestingSubtree: (node) => SwitchAccessPredicate.isActionable(node) ||
@@ -171,33 +176,15 @@ const SwitchAccessPredicate = {
 
   /**
    * Returns true if |node| is an element that contains editable text.
-   * @param {chrome.automation.AutomationNode} node
+   * @param {AutomationNode} node
    * @return {boolean}
    */
   isTextInput: (node) => !!node && !!node.state[StateType.EDITABLE],
 
   /**
-   * Returns true if |node| does not have a role of desktop, window, web view,
-   * or root web area.
-   * @param {!chrome.automation.AutomationNode} node
-   * @return {boolean}
-   */
-  isNotContainer: (node) => node.role !== RoleType.ROOT_WEB_AREA &&
-      node.role !== RoleType.WINDOW && node.role !== RoleType.DESKTOP &&
-      node.role !== RoleType.WEB_VIEW,
-
-  /**
-   * Returns true if |node| is the Switch Access menu.
-   * @param {!chrome.automation.AutomationNode} node
-   * @return {boolean}
-   */
-  isSwitchAccessMenuPanel: (node) =>
-      node.htmlAttributes.id === SAConstants.MENU_PANEL_ID,
-
-  /**
    * Returns a Restrictions object ready to be passed to AutomationTreeWalker.
    *
-   * @param {!SARootNode} scope
+   * @param {!AutomationNode} scope
    * @return {!AutomationTreeWalkerRestriction}
    */
   restrictions: (scope) => {
@@ -212,47 +199,35 @@ const SwitchAccessPredicate = {
    * Creates a function that confirms if |node| is a terminal leaf node of a
    * SwitchAccess scope tree when |scope| is the root.
    *
-   * @param {!SARootNode} scope
-   * @return {function(!chrome.automation.AutomationNode): boolean}
+   * @param {!AutomationNode} scope
+   * @return {function(!AutomationNode): boolean}
    */
   leaf(scope) {
     return (node) => node.state[StateType.INVISIBLE] ||
-        (!scope.isEquivalentTo(node) &&
-         SwitchAccessPredicate.isInteresting(node, scope)) ||
-        !SwitchAccessPredicate.isInterestingSubtree(node);
+        !SwitchAccessPredicate.isInterestingSubtree(node) ||
+        (scope !== node && SwitchAccessPredicate.isInteresting(node, scope));
   },
 
   /**
    * Creates a function that confirms if |node| is the root of a SwitchAccess
    * scope tree when |scope| is the root.
    *
-   * @param {!SARootNode} scope
-   * @return {function(!chrome.automation.AutomationNode): boolean}
+   * @param {!AutomationNode} scope
+   * @return {function(!AutomationNode): boolean}
    */
   root(scope) {
-    return (node) => scope.isEquivalentTo(node);
+    return (node) => scope === node;
   },
 
   /**
    * Creates a function that determines whether |node| is to be visited in the
    * SwitchAccess scope tree with |scope| as the root.
    *
-   * @param {!SARootNode} scope
-   * @return {function(!chrome.automation.AutomationNode): boolean}
+   * @param {!AutomationNode} scope
+   * @return {function(!AutomationNode): boolean}
    */
   visit(scope) {
     return (node) => node.role !== RoleType.DESKTOP &&
         SwitchAccessPredicate.isInteresting(node, scope);
-  },
-
-  /**
-   * Returns a Restrictions object for finding the Switch Access Menu root.
-   * @return {!AutomationTreeWalkerRestriction}
-   */
-  switchAccessMenuPanelDiscoveryRestrictions: () => {
-    return {
-      leaf: SwitchAccessPredicate.isNotContainer,
-      visit: SwitchAccessPredicate.isSwitchAccessMenuPanel
-    };
   }
 };

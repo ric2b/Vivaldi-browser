@@ -4,7 +4,9 @@
 
 package org.chromium.chrome.browser.autofill;
 
-import android.support.test.filters.SmallTest;
+import static com.google.common.truth.Truth.assertThat;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -14,7 +16,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
@@ -47,7 +48,6 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @RetryOnFailure
     public void testAddAndEditProfiles() throws TimeoutException {
         AutofillProfile profile = new AutofillProfile("" /* guid */, "" /* origin */, "John Smith",
                 "Acme Inc.", "1 Main\nApt A", "CA", "San Francisco", "", "94102", "", "US",
@@ -78,7 +78,6 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @RetryOnFailure
     public void testUpdateLanguageCodeInProfile() throws TimeoutException {
         AutofillProfile profile = new AutofillProfile("" /* guid */, "" /* origin */, "John Smith",
                 "Acme Inc.", "1 Main\nApt A", "CA", "San Francisco", "", "94102", "", "US",
@@ -107,7 +106,6 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @RetryOnFailure
     public void testAddAndDeleteProfile() throws TimeoutException {
         String profileOneGUID = mHelper.setProfile(createTestProfile());
         Assert.assertEquals(1, mHelper.getNumberOfProfilesForSettings());
@@ -119,7 +117,6 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @RetryOnFailure
     public void testAddAndEditCreditCards() throws TimeoutException {
         CreditCard card = new CreditCard(
                 "" /* guid */, "" /* origin */, "Visa", "1234123412341234", "", "5", "2020");
@@ -157,7 +154,26 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @RetryOnFailure
+    public void testAddAndEditCreditCardNickname() throws TimeoutException {
+        CreditCard cardWithoutNickname = new CreditCard("" /* guid */, "" /* origin */, "Visa",
+                "1234123412341234", "", "5", AutofillTestHelper.nextYear());
+        String nickname = "test nickname";
+        CreditCard cardWithNickname = new CreditCard("" /* guid */, "" /* origin */,
+                "American Express", "1234123412341234", "", "8", AutofillTestHelper.nextYear());
+        cardWithNickname.setNickname(nickname);
+
+        String cardWithoutNicknameGuid = mHelper.setCreditCard(cardWithoutNickname);
+        String cardWithNicknameGuid = mHelper.setCreditCard(cardWithNickname);
+
+        CreditCard storedCardWithoutNickname = mHelper.getCreditCard(cardWithoutNicknameGuid);
+        CreditCard storedCardWithNickname = mHelper.getCreditCard(cardWithNicknameGuid);
+        assertThat(storedCardWithoutNickname.getNickname()).isEmpty();
+        assertThat(storedCardWithNickname.getNickname()).isEqualTo(nickname);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Autofill"})
     public void testAddAndDeleteCreditCard() throws TimeoutException {
         CreditCard card = new CreditCard(
                 "" /* guid */, "Chrome settings" /* origin */,
@@ -197,7 +213,6 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @RetryOnFailure
     public void testMultilineStreetAddress() throws TimeoutException {
         final String streetAddress1 = "Chez Mireille COPEAU Appartment. 2\n"
                 + "Entree A Batiment Jonquille\n"
@@ -348,7 +363,6 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @RetryOnFailure
     public void testCreditCardsDeduping() throws TimeoutException {
         // Create a local card and an identical server card.
         CreditCard card1 = new CreditCard("" /* guid */, "" /* origin */, true /* isLocal */,
@@ -372,7 +386,6 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @RetryOnFailure
     public void testProfileUseStatsSettingAndGetting() throws TimeoutException {
         String guid = mHelper.setProfile(createTestProfile());
 
@@ -391,7 +404,6 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @RetryOnFailure
     public void testCreditCardUseStatsSettingAndGetting() throws TimeoutException {
         String guid = mHelper.setCreditCard(new CreditCard("" /* guid */, "" /* origin */,
                 true /* isLocal */, false /* isCached */, "John Doe", "1234123412341234", "", "5",
@@ -413,7 +425,6 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @RetryOnFailure
     public void testRecordAndLogProfileUse() throws TimeoutException {
         String guid = mHelper.setProfile(createTestProfile());
 
@@ -438,7 +449,6 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @RetryOnFailure
     public void testRecordAndLogCreditCardUse() throws TimeoutException {
         String guid = mHelper.setCreditCard(new CreditCard("" /* guid */, "" /* origin */,
                 true /* isLocal */, false /* isCached */, "John Doe", "1234123412341234", "", "5",
@@ -466,7 +476,6 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @RetryOnFailure
     public void testGetProfilesToSuggest_NoName() throws TimeoutException {
         mHelper.setProfile(createTestProfile());
 
@@ -479,7 +488,6 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @RetryOnFailure
     public void testGetProfilesToSuggest_WithName() throws TimeoutException {
         mHelper.setProfile(createTestProfile());
 

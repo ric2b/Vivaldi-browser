@@ -14,68 +14,16 @@
 
 class Browser;
 
-namespace gfx {
-class Canvas;
-}
-
-namespace ui {
-class ThemeProvider;
-}
-
-using offline_items_collection::ContentId;
-using offline_items_collection::OfflineItem;
-using DownloadUIModelPtr = DownloadUIModel::DownloadUIModelPtr;
+namespace offline_items_collection {
+struct ContentId;
+}  // namespace offline_items_collection
 
 // This is an abstract base class for platform specific download shelf
 // implementations.
 class DownloadShelf {
  public:
-  // Reason for closing download shelf.
-  enum CloseReason {
-    // Closing the shelf automatically. E.g.: all remaining downloads in the
-    // shelf have been opened, last download in shelf was removed, or the
-    // browser is switching to full-screen mode.
-    AUTOMATIC,
-
-    // Closing shelf due to a user selection. E.g.: the user clicked on the
-    // 'close' button on the download shelf, or the shelf is being closed as a
-    // side-effect of the user opening the downloads page.
-    USER_ACTION
-  };
-
-  // Download progress animations ----------------------------------------------
-
-  // Size of the space used for the progress indicator.
-  static constexpr int kProgressIndicatorSize = 25;
-
-  DownloadShelf();
+  DownloadShelf(Browser* browser, Profile* profile);
   virtual ~DownloadShelf();
-
-  // Paint the common download animation progress foreground and background,
-  // clipping the foreground to 'percent' full. If percent is -1, then we don't
-  // know the total size, so we just draw a rotating segment until we're done.
-  // |progress_time| is only used for these unknown size downloads.
-  static void PaintDownloadProgress(gfx::Canvas* canvas,
-                                    const ui::ThemeProvider& theme_provider,
-                                    const base::TimeDelta& progress_time,
-                                    int percent);
-
-  static void PaintDownloadComplete(gfx::Canvas* canvas,
-                                    const ui::ThemeProvider& theme_provider,
-                                    double animation_progress);
-
-  static void PaintDownloadInterrupted(gfx::Canvas* canvas,
-                                       const ui::ThemeProvider& theme_provider,
-                                       double animation_progress);
-
-  // A new download has started. Add it to our shelf and show the download
-  // started animation.
-  //
-  // Some downloads are removed from the shelf on completion (See
-  // DownloadItemModel::ShouldRemoveFromShelfWhenComplete()). These transient
-  // downloads are added to the shelf after a delay. If the download completes
-  // before the delay duration, it will not be added to the shelf at all.
-  void AddDownload(DownloadUIModelPtr download);
 
   // The browser view needs to know when we are going away to properly return
   // the resize corner size to WebKit so that we don't draw on top of it.
@@ -86,11 +34,20 @@ class DownloadShelf {
   // Returns whether the download shelf is showing the close animation.
   virtual bool IsClosing() const = 0;
 
+  // A new download has started. Add it to our shelf and show the download
+  // started animation.
+  //
+  // Some downloads are removed from the shelf on completion (See
+  // DownloadItemModel::ShouldRemoveFromShelfWhenComplete()). These transient
+  // downloads are added to the shelf after a delay. If the download completes
+  // before the delay duration, it will not be added to the shelf at all.
+  void AddDownload(DownloadUIModel::DownloadUIModelPtr download);
+
   // Opens the shelf.
   void Open();
 
   // Closes the shelf.
-  void Close(CloseReason reason);
+  void Close();
 
   // Hides the shelf. This closes the shelf if it is currently showing.
   void Hide();
@@ -99,33 +56,34 @@ class DownloadShelf {
   // when it was hidden, or was shown while it was hidden.
   void Unhide();
 
-  virtual Browser* browser() const = 0;
+  Browser* browser() { return browser_; }
 
   // Returns whether the download shelf is hidden.
   bool is_hidden() { return is_hidden_; }
 
  protected:
-  virtual void DoAddDownload(DownloadUIModelPtr download) = 0;
+  virtual void DoShowDownload(DownloadUIModel::DownloadUIModelPtr download) = 0;
   virtual void DoOpen() = 0;
-  virtual void DoClose(CloseReason reason) = 0;
+  virtual void DoClose() = 0;
   virtual void DoHide() = 0;
   virtual void DoUnhide() = 0;
 
   // Time delay to wait before adding a transient download to the shelf.
   // Protected virtual for testing.
-  virtual base::TimeDelta GetTransientDownloadShowDelay();
+  virtual base::TimeDelta GetTransientDownloadShowDelay() const;
 
-  // Virtual for testing.
-  virtual Profile* profile() const;
+  Profile* profile() { return profile_; }
 
  private:
   // Show the download on the shelf immediately. Also displayes the download
   // started animation if necessary.
-  void ShowDownload(DownloadUIModelPtr download);
+  void ShowDownload(DownloadUIModel::DownloadUIModelPtr download);
 
   // Similar to ShowDownload() but refers to the download using an ID.
-  void ShowDownloadById(ContentId id);
+  void ShowDownloadById(const offline_items_collection::ContentId& id);
 
+  Browser* const browser_;
+  Profile* const profile_;
   bool should_show_on_unhide_;
   bool is_hidden_;
   base::WeakPtrFactory<DownloadShelf> weak_ptr_factory_{this};

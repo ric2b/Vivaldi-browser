@@ -10,7 +10,6 @@ import("//ios/build/chrome_build.gni")
 import("//ios/build/config.gni")
 import("//ios/chrome/features.gni")
 import("//ios/public/provider/chrome/browser/build_config.gni")
-import("//ios/third_party/features.gni")
 
 source_set("app") {
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -49,6 +48,7 @@ source_set("unit_tests") {
     "//components/prefs",
     "//ios/chrome/app/application_delegate:application_delegate_internal",
     "//ios/chrome/app/application_delegate:tab_opening",
+    "//ios/chrome/app/application_delegate:url_opener_params",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/tabs",
@@ -59,6 +59,7 @@ source_set("unit_tests") {
     "//ios/public/provider/chrome/browser:test_support",
     "//ios/public/provider/chrome/browser/distribution",
     "//ios/testing:block_swizzler",
+    "//ios/third_party/material_components_ios",
     "//ios/web/public/test:test",
     "//testing/gtest",
     "//third_party/ocmock",
@@ -95,6 +96,12 @@ tweak_info_plist("info_plist") {
   } else if (ios_enable_scene_startup) {
     info_plists += [ "resources/MultiWindowDisabled+Info.plist" ]
   }
+  if (ios_chrome_info_plist_addition_targets != []) {
+    if (!defined(deps)) {
+      deps = []
+    }
+    deps += ios_chrome_info_plist_addition_targets
+  }
   args = [
     "--breakpad=$breakpad_enabled_as_int",
     "--branding=$chromium_short_name",
@@ -130,6 +137,7 @@ source_set("app_internal") {
 
   deps = [
     ":app",
+    ":blocking_scene_commands",
     ":mode",
     ":tests_hook",
     "//base",
@@ -162,6 +170,7 @@ source_set("app_internal") {
     "//ios/chrome/app/application_delegate",
     "//ios/chrome/app/application_delegate:application_delegate_internal",
     "//ios/chrome/app/application_delegate:tab_opening",
+    "//ios/chrome/app/application_delegate:url_opener_params",
     "//ios/chrome/app/intents",
     "//ios/chrome/app/spotlight",
     "//ios/chrome/app/startup",
@@ -176,6 +185,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/crash_report:crash_report_internal",
     "//ios/chrome/browser/crash_report/breadcrumbs",
     "//ios/chrome/browser/crash_report/breadcrumbs:feature_flags",
+    "//ios/chrome/browser/credential_provider",
     "//ios/chrome/browser/download",
     "//ios/chrome/browser/external_files",
     "//ios/chrome/browser/favicon",
@@ -258,6 +268,13 @@ source_set("app_internal") {
   ]
 }
 
+source_set("blocking_scene_commands") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [ "blocking_scene_commands.h" ]
+
+  deps = [ "//base" ]
+}
+
 source_set("mode") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [ "application_mode.h" ]
@@ -279,19 +296,31 @@ source_set("main") {
     "//ios/testing/perf:startup",
   ]
 
-  if (ios_third_party_material_components_built_as_framework) {
-    if (ios_chrome_links_with_material_components_framework) {
-      deps += [
-        "//ios/third_party/material_components_ios:material_components_ios+bundle",
-        "//ios/third_party/material_components_ios:material_components_ios+link",
-      ]
-    } else {
-      assert_no_deps = [
-        "//ios/third_party/material_components_ios:material_components_ios+bundle",
-        "//ios/third_party/material_components_ios:material_components_ios+link",
-      ]
-    }
+  if (ios_chrome_links_with_material_components_framework) {
+    deps += [
+      "//ios/third_party/material_components_ios:material_components_ios+bundle",
+      "//ios/third_party/material_components_ios:material_components_ios+link",
+    ]
+  } else {
+    assert_no_deps = [
+      "//ios/third_party/material_components_ios:material_components_ios+bundle",
+      "//ios/third_party/material_components_ios:material_components_ios+link",
+    ]
   }
+}
+
+source_set("multitasking_test_app_delegate") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "multitasking_test_application_delegate.h",
+    "multitasking_test_application_delegate.mm",
+  ]
+  deps = [
+    ":app_internal",
+    "//base",
+    "//ios/chrome/app/application_delegate:application_delegate_internal",
+    "//ios/third_party/material_components_ios",
+  ]
 }
 
 ios_app_bundle("chrome") {
@@ -350,18 +379,16 @@ ios_app_bundle("chrome") {
 
   assert_no_deps = ios_assert_no_deps + ios_chrome_extra_assert_no_deps
 
-  if (ios_third_party_material_components_built_as_framework) {
-    if (ios_chrome_links_with_material_components_framework) {
-      deps += [
-        "//ios/third_party/material_components_ios:material_components_ios+bundle",
-        "//ios/third_party/material_components_ios:material_components_ios+link",
-      ]
-    } else {
-      assert_no_deps += [
-        "//ios/third_party/material_components_ios:material_components_ios+bundle",
-        "//ios/third_party/material_components_ios:material_components_ios+link",
-      ]
-    }
+  if (ios_chrome_links_with_material_components_framework) {
+    deps += [
+      "//ios/third_party/material_components_ios:material_components_ios+bundle",
+      "//ios/third_party/material_components_ios:material_components_ios+link",
+    ]
+  } else {
+    assert_no_deps += [
+      "//ios/third_party/material_components_ios:material_components_ios+bundle",
+      "//ios/third_party/material_components_ios:material_components_ios+link",
+    ]
   }
 }
 

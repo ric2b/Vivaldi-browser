@@ -15,7 +15,6 @@
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "content/browser/browser_child_process_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -30,6 +29,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
+#include "content/public/common/zygote/zygote_buildflags.h"
 #include "media/base/media_switches.h"
 #include "media/webrtc/webrtc_switches.h"
 #include "services/network/public/cpp/network_switches.h"
@@ -38,7 +38,6 @@
 #include "services/service_manager/sandbox/features.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 #include "services/service_manager/sandbox/switches.h"
-#include "services/service_manager/zygote/common/zygote_buildflags.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gl/gl_switches.h"
 
@@ -54,7 +53,7 @@
 #endif
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
-#include "services/service_manager/zygote/common/zygote_handle.h"  // nogncheck
+#include "content/common/zygote/zygote_handle_impl_linux.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -85,6 +84,7 @@ class UtilitySandboxedProcessLauncherDelegate
         sandbox_type_ == service_manager::SandboxType::kXrCompositing ||
         sandbox_type_ == service_manager::SandboxType::kProxyResolver ||
         sandbox_type_ == service_manager::SandboxType::kPdfConversion ||
+        sandbox_type_ == service_manager::SandboxType::kIconReader ||
 #endif
         sandbox_type_ == service_manager::SandboxType::kUtility ||
         sandbox_type_ == service_manager::SandboxType::kNetwork ||
@@ -94,6 +94,7 @@ class UtilitySandboxedProcessLauncherDelegate
         sandbox_type_ == service_manager::SandboxType::kVideoCapture ||
 #if defined(OS_CHROMEOS)
         sandbox_type_ == service_manager::SandboxType::kIme ||
+        sandbox_type_ == service_manager::SandboxType::kTts ||
 #endif  // OS_CHROMEOS
         sandbox_type_ == service_manager::SandboxType::kAudio ||
 #if !defined(OS_MACOSX)
@@ -154,6 +155,31 @@ class UtilitySandboxedProcessLauncherDelegate
       return true;
     }
 
+    if (sandbox_type_ == service_manager::SandboxType::kIconReader) {
+      policy->SetTokenLevel(sandbox::USER_RESTRICTED_SAME_ACCESS,
+                            sandbox::USER_LOCKDOWN);
+      policy->SetDelayedIntegrityLevel(sandbox::INTEGRITY_LEVEL_UNTRUSTED);
+      policy->SetIntegrityLevel(sandbox::INTEGRITY_LEVEL_LOW);
+      policy->SetLockdownDefaultDacl();
+      policy->SetAlternateDesktop(true);
+
+      sandbox::MitigationFlags flags = policy->GetDelayedProcessMitigations();
+      flags |= sandbox::MITIGATION_DYNAMIC_CODE_DISABLE;
+      if (sandbox::SBOX_ALL_OK != policy->SetDelayedProcessMitigations(flags))
+        return false;
+
+      // Allow file read. These should match IconLoader::GroupForFilepath().
+      policy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
+                      sandbox::TargetPolicy::FILES_ALLOW_READONLY,
+                      L"\\??\\*.exe");
+      policy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
+                      sandbox::TargetPolicy::FILES_ALLOW_READONLY,
+                      L"\\??\\*.dll");
+      policy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
+                      sandbox::TargetPolicy::FILES_ALLOW_READONLY,
+                      L"\\??\\*.ico");
+    }
+
     if (sandbox_type_ == service_manager::SandboxType::kXrCompositing &&
         base::FeatureList::IsEnabled(service_manager::features::kXRSandbox)) {
       // There were issues with some mitigations, causing an inability
@@ -201,7 +227,7 @@ class UtilitySandboxedProcessLauncherDelegate
 #endif  // OS_WIN
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
-  service_manager::ZygoteHandle GetZygote() override {
+  ZygoteHandle GetZygote() override {
     // If the sandbox has been disabled for a given type, don't use a zygote.
     if (service_manager::IsUnsandboxedSandboxType(sandbox_type_))
       return nullptr;
@@ -212,14 +238,15 @@ class UtilitySandboxedProcessLauncherDelegate
     if (sandbox_type_ == service_manager::SandboxType::kNetwork ||
 #if defined(OS_CHROMEOS)
         sandbox_type_ == service_manager::SandboxType::kIme ||
+        sandbox_type_ == service_manager::SandboxType::kTts ||
 #endif  // OS_CHROMEOS
         sandbox_type_ == service_manager::SandboxType::kAudio ||
         sandbox_type_ == service_manager::SandboxType::kSpeechRecognition) {
-      return service_manager::GetUnsandboxedZygote();
+      return GetUnsandboxedZygote();
     }
 
     // All other types use the pre-sandboxed zygote.
-    return service_manager::GetGenericZygote();
+    return GetGenericZygote();
   }
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
@@ -353,10 +380,9 @@ bool UtilityProcessHost::StartProcess() {
     DCHECK(g_utility_main_thread_factory);
     // See comment in RenderProcessHostImpl::Init() for the background on why we
     // support single process mode this way.
-    in_process_thread_.reset(
-        g_utility_main_thread_factory(InProcessChildThreadParams(
-            base::CreateSingleThreadTaskRunner({BrowserThread::IO}),
-            process_->GetInProcessMojoInvitation())));
+    in_process_thread_.reset(g_utility_main_thread_factory(
+        InProcessChildThreadParams(GetIOThreadTaskRunner({}),
+                                   process_->GetInProcessMojoInvitation())));
     in_process_thread_->Start();
   } else {
     const base::CommandLine& browser_command_line =
@@ -463,6 +489,7 @@ bool UtilityProcessHost::StartProcess() {
       switches::kVModule,
 #if defined(OS_ANDROID)
       switches::kEnableReachedCodeProfiler,
+      switches::kReachedCodeSamplingIntervalUs,
 #endif
       switches::kEnableExperimentalWebPlatformFeatures,
       // These flags are used by the audio service:

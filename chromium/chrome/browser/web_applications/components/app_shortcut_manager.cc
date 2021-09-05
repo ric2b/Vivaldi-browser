@@ -8,8 +8,12 @@
 
 #include "base/callback.h"
 #include "base/feature_list.h"
+#include "base/no_destructor.h"
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/web_applications/components/app_icon_manager.h"
+#include "chrome/browser/web_applications/components/web_app_run_on_os_login.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -22,17 +26,9 @@ namespace web_app {
 
 namespace {
 
-void OnShortcutsInfoRetrievedRegisterShortcutsMenuWithOs(
-    const std::vector<WebApplicationShortcutInfo>& shortcuts,
-    std::unique_ptr<ShortcutInfo> shortcut_info) {
-  // |shortcut_data_dir| is located in per-app OS integration resources
-  // directory. See GetOsIntegrationResourcesDirectoryForApp function for more
-  // info.
-  base::FilePath shortcut_data_dir =
-      internals::GetShortcutDataDir(*shortcut_info);
-  RegisterShortcutsMenuWithOs(
-      std::move(shortcut_data_dir), std::move(shortcut_info->extension_id),
-      std::move(shortcut_info->profile_path), shortcuts);
+AppShortcutManager::ShortcutCallback& GetShortcutUpdateCallbackForTesting() {
+  static base::NoDestructor<AppShortcutManager::ShortcutCallback> callback;
+  return *callback;
 }
 
 }  // namespace
@@ -41,7 +37,9 @@ AppShortcutManager::AppShortcutManager(Profile* profile) : profile_(profile) {}
 
 AppShortcutManager::~AppShortcutManager() = default;
 
-void AppShortcutManager::SetSubsystems(AppRegistrar* registrar) {
+void AppShortcutManager::SetSubsystems(AppIconManager* icon_manager,
+                                       AppRegistrar* registrar) {
+  icon_manager_ = icon_manager;
   registrar_ = registrar;
 }
 
@@ -74,10 +72,28 @@ void AppShortcutManager::OnWebAppInstalled(const AppId& app_id) {
 #endif
 }
 
+void AppShortcutManager::OnWebAppManifestUpdated(const AppId& app_id,
+                                                 base::StringPiece old_name) {
+  if (!CanCreateShortcuts())
+    return;
+
+  GetShortcutInfoForApp(
+      app_id, base::BindOnce(
+                  &AppShortcutManager::OnShortcutInfoRetrievedUpdateShortcuts,
+                  weak_ptr_factory_.GetWeakPtr(), base::UTF8ToUTF16(old_name)));
+}
+
 void AppShortcutManager::OnWebAppUninstalled(const AppId& app_id) {
   std::unique_ptr<ShortcutInfo> shortcut_info = BuildShortcutInfo(app_id);
   base::FilePath shortcut_data_dir =
       internals::GetShortcutDataDir(*shortcut_info);
+
+  if (base::FeatureList::IsEnabled(features::kDesktopPWAsRunOnOsLogin)) {
+    internals::GetShortcutIOTaskRunner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&internals::UnregisterRunOnOsLogin,
+                       shortcut_info->profile_path, shortcut_info->title));
+  }
 
   internals::PostShortcutIOTask(
       base::BindOnce(&internals::DeletePlatformShortcuts, shortcut_data_dir),
@@ -88,6 +104,11 @@ void AppShortcutManager::OnWebAppUninstalled(const AppId& app_id) {
 
 void AppShortcutManager::OnWebAppProfileWillBeDeleted(const AppId& app_id) {
   DeleteSharedAppShims(app_id);
+}
+
+void AppShortcutManager::SetShortcutUpdateCallbackForTesting(
+    base::OnceCallback<void(const ShortcutInfo*)> callback) {
+  GetShortcutUpdateCallbackForTesting() = std::move(callback);
 }
 
 void AppShortcutManager::DeleteSharedAppShims(const AppId& app_id) {
@@ -131,17 +152,51 @@ void AppShortcutManager::CreateShortcuts(const AppId& app_id,
                                  std::move(callback))));
 }
 
+void AppShortcutManager::ReadAllShortcutsMenuIconsAndRegisterShortcutsMenu(
+    const AppId& app_id,
+    RegisterShortcutsMenuCallback callback) {
+  if (base::FeatureList::IsEnabled(
+          features::kDesktopPWAsAppIconShortcutsMenu)) {
+    icon_manager_->ReadAllShortcutsMenuIcons(
+        app_id,
+        base::BindOnce(
+            &AppShortcutManager::OnShortcutsMenuIconsReadRegisterShortcutsMenu,
+            weak_ptr_factory_.GetWeakPtr(), app_id, std::move(callback)));
+  } else {
+    std::move(callback).Run(/*shortcuts_menu_registered=*/true);
+  }
+}
+
 void AppShortcutManager::RegisterShortcutsMenuWithOs(
-    const std::vector<WebApplicationShortcutInfo>& shortcuts,
-    const AppId& app_id) {
+    const AppId& app_id,
+    const std::vector<WebApplicationShortcutsMenuItemInfo>& shortcut_infos,
+    const ShortcutsMenuIconsBitmaps& shortcuts_menu_icons_bitmaps) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!web_app::ShouldRegisterShortcutsMenuWithOs() ||
+      suppress_shortcuts_for_testing()) {
+    return;
+  }
+
+  std::unique_ptr<ShortcutInfo> shortcut_info = BuildShortcutInfo(app_id);
+  if (!shortcut_info)
+    return;
+
+  // |shortcut_data_dir| is located in per-app OS integration resources
+  // directory. See GetOsIntegrationResourcesDirectoryForApp function for more
+  // info.
+  base::FilePath shortcut_data_dir =
+      internals::GetShortcutDataDir(*shortcut_info);
+  web_app::RegisterShortcutsMenuWithOs(
+      shortcut_info->extension_id, shortcut_info->profile_path,
+      shortcut_data_dir, shortcut_infos, shortcuts_menu_icons_bitmaps);
+}
+
+void AppShortcutManager::UnregisterShortcutsMenuWithOs(const AppId& app_id) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!web_app::ShouldRegisterShortcutsMenuWithOs())
     return;
 
-  GetShortcutInfoForApp(
-      app_id,
-      base::BindOnce(&OnShortcutsInfoRetrievedRegisterShortcutsMenuWithOs,
-                     shortcuts));
+  web_app::UnregisterShortcutsMenuWithOs(app_id, profile_->GetPath());
 }
 
 void AppShortcutManager::OnShortcutsCreated(const AppId& app_id,
@@ -175,12 +230,62 @@ void AppShortcutManager::OnShortcutInfoRetrievedCreateShortcuts(
   if (!base::FeatureList::IsEnabled(
           features::kDesktopPWAsAppIconShortcutsMenu) &&
       web_app::ShouldRegisterShortcutsMenuWithOs()) {
-    UnregisterShortcutsMenuWithOs(info->extension_id, info->profile_path);
+    web_app::UnregisterShortcutsMenuWithOs(info->extension_id,
+                                           info->profile_path);
   }
 
   internals::ScheduleCreatePlatformShortcuts(
       std::move(shortcut_data_dir), locations, SHORTCUT_CREATION_BY_USER,
       std::move(info), std::move(callback));
+}
+
+void AppShortcutManager::OnShortcutsMenuIconsReadRegisterShortcutsMenu(
+    const AppId& app_id,
+    RegisterShortcutsMenuCallback callback,
+    ShortcutsMenuIconsBitmaps shortcuts_menu_icons_bitmaps) {
+  std::vector<WebApplicationShortcutsMenuItemInfo> shortcut_infos =
+      registrar_->GetAppShortcutInfos(app_id);
+  if (!shortcut_infos.empty()) {
+    RegisterShortcutsMenuWithOs(app_id, shortcut_infos,
+                                shortcuts_menu_icons_bitmaps);
+  }
+
+  std::move(callback).Run(/*shortcuts_menu_registered=*/true);
+}
+
+void AppShortcutManager::RegisterRunOnOsLogin(
+    const AppId& app_id,
+    RegisterRunOnOsLoginCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  GetShortcutInfoForApp(
+      app_id,
+      base::BindOnce(
+          &AppShortcutManager::OnShortcutInfoRetrievedRegisterRunOnOsLogin,
+          weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void AppShortcutManager::OnShortcutInfoRetrievedRegisterRunOnOsLogin(
+    RegisterRunOnOsLoginCallback callback,
+    std::unique_ptr<ShortcutInfo> info) {
+  ScheduleRegisterRunOnOsLogin(std::move(info), std::move(callback));
+}
+
+void AppShortcutManager::OnShortcutInfoRetrievedUpdateShortcuts(
+    base::string16 old_name,
+    std::unique_ptr<ShortcutInfo> shortcut_info) {
+  if (GetShortcutUpdateCallbackForTesting())
+    std::move(GetShortcutUpdateCallbackForTesting()).Run(shortcut_info.get());
+
+  if (suppress_shortcuts_for_testing() || !shortcut_info)
+    return;
+
+  base::FilePath shortcut_data_dir =
+      internals::GetShortcutDataDir(*shortcut_info);
+  internals::PostShortcutIOTask(
+      base::BindOnce(&internals::UpdatePlatformShortcuts,
+                     std::move(shortcut_data_dir), std::move(old_name)),
+      std::move(shortcut_info));
 }
 
 }  // namespace web_app

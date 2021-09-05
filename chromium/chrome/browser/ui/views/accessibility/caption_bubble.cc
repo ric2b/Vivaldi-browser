@@ -14,6 +14,7 @@
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "chrome/browser/accessibility/caption_controller.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/vector_icons/vector_icons.h"
 #include "third_party/re2/src/re2/re2.h"
@@ -149,21 +150,28 @@ class CaptionBubbleFrameView : public views::BubbleFrameView {
 
  private:
   views::View* close_button_;
-  std::unique_ptr<views::FocusRing> focus_ring_;
+  views::FocusRing* focus_ring_ = nullptr;
   bool contents_focused_ = false;
 };
 
 CaptionBubble::CaptionBubble(views::View* anchor,
+                             BrowserView* browser_view,
                              base::OnceClosure destroyed_callback)
     : BubbleDialogDelegateView(anchor,
                                views::BubbleBorder::FLOAT,
                                views::BubbleBorder::Shadow::NO_SHADOW),
       destroyed_callback_(std::move(destroyed_callback)),
       ratio_in_parent_x_(kDefaultRatioInParentX),
-      ratio_in_parent_y_(kDefaultRatioInParentY) {
+      ratio_in_parent_y_(kDefaultRatioInParentY),
+      browser_view_(browser_view) {
+  // Bubbles that use transparent colors should not paint their ClientViews to a
+  // layer as doing so could result in visual artifacts.
+  SetPaintClientToLayer(false);
   SetButtons(ui::DIALOG_BUTTON_NONE);
   set_draggable(true);
   AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
+  AddAccelerator(ui::Accelerator(ui::VKEY_F6, ui::EF_NONE));
+  AddAccelerator(ui::Accelerator(ui::VKEY_F6, ui::EF_SHIFT_DOWN));
   // The CaptionBubble is focusable. It will alert the CaptionBubbleFrameView
   // when its focus changes so that the focus ring can be updated.
   // TODO(crbug.com/1055150): Consider using
@@ -172,7 +180,10 @@ CaptionBubble::CaptionBubble(views::View* anchor,
   SetFocusBehavior(View::FocusBehavior::ALWAYS);
 }
 
-CaptionBubble::~CaptionBubble() = default;
+CaptionBubble::~CaptionBubble() {
+  if (model_)
+    model_->RemoveObserver();
+}
 
 gfx::Rect CaptionBubble::GetBubbleBounds() {
   // Get the height and width of the full bubble using the superclass method.
@@ -295,6 +306,14 @@ void CaptionBubble::Init() {
   label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
   label->SetTooltipText(base::string16());
 
+  // Render text truncates the end of text that is greater than 10000 chars.
+  // While it is unlikely that the text will exceed 10000 chars, it is not
+  // impossible, if the speech service sends a very long transcription_result.
+  // In order to guarantee that the caption bubble displays the last lines, and
+  // in order to ensure that caption_bubble_->GetTextIndexOfLine() is correct,
+  // set the truncate_length to 0 to ensure that it never truncates.
+  label->SetTruncateLength(0);
+
   auto title = std::make_unique<views::Label>();
   title->SetEnabledColor(gfx::kGoogleGrey500);
   title->SetBackgroundColor(SK_ColorTRANSPARENT);
@@ -378,14 +397,25 @@ void CaptionBubble::OnKeyEvent(ui::KeyEvent* event) {
 }
 
 bool CaptionBubble::AcceleratorPressed(const ui::Accelerator& accelerator) {
-  DCHECK_EQ(accelerator.key_code(), ui::VKEY_ESCAPE);
-  // We don't want to close when the user hits "escape", because this isn't a
-  // normal dialog bubble -- it's meant to be up all the time. We just want to
-  // release focus back to the page in that case.
-  // Users should use the "close" button to close the bubble.
-  // TODO(crbug.com/1055150): This doesn't work in Mac.
-  GetAnchorView()->RequestFocus();
-  return true;
+  if (accelerator.key_code() == ui::VKEY_ESCAPE) {
+    // We don't want to close when the user hits "escape", because this isn't a
+    // normal dialog bubble -- it's meant to be up all the time. We just want to
+    // release focus back to the page in that case.
+    // Users should use the "close" button to close the bubble.
+    GetAnchorView()->RequestFocus();
+    GetAnchorView()->GetWidget()->Activate();
+    return true;
+  }
+  if (accelerator.key_code() == ui::VKEY_F6) {
+    // F6 rotates focus through the panes in the browser. Use
+    // BrowserView::AcceleratorPressed so that metrics are logged appropriately.
+    browser_view_->AcceleratorPressed(accelerator);
+    // Remove focus from this widget.
+    browser_view_->GetWidget()->Activate();
+    return true;
+  }
+  NOTREACHED();
+  return false;
 }
 
 void CaptionBubble::OnFocus() {
@@ -400,7 +430,7 @@ void CaptionBubble::OnBlur() {
 // readers without over-verbalizing. Currently it reads the full text when
 // focused and does not announce when text changes.
 void CaptionBubble::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  if (has_error_) {
+  if (model_ && model_->HasError()) {
     node_data->SetName(error_message_->GetText());
     node_data->SetNameFrom(ax::mojom::NameFrom::kContents);
   } else if (label_->GetText().size()) {
@@ -422,7 +452,7 @@ void CaptionBubble::AddedToWidget() {
       anchor_widget()->GetFocusTraversable());
   GetWidget()->SetFocusTraversableParentView(GetAnchorView());
   GetAnchorView()->SetProperty(views::kAnchoredDialogKey,
-                               static_cast<BubbleDialogDelegateView*>(this));
+                               static_cast<BubbleDialogDelegate*>(this));
 }
 
 void CaptionBubble::ButtonPressed(views::Button* sender,
@@ -434,30 +464,43 @@ void CaptionBubble::ButtonPressed(views::Button* sender,
     UMA_HISTOGRAM_ENUMERATION(
         "Accessibility.LiveCaptions.Session",
         CaptionController::SessionEvent::kCloseButtonClicked);
-    DCHECK(GetWidget());
-    GetWidget()->CloseWithReason(
-        views::Widget::ClosedReason::kCloseButtonClicked);
+    if (model_)
+      model_->Close();
   }
 }
 
-void CaptionBubble::SetText(const std::string& text) {
-  label_->SetText(base::ASCIIToUTF16(text));
+void CaptionBubble::SetModel(CaptionBubbleModel* model) {
+  if (model_)
+    model_->RemoveObserver();
+  model_ = model;
+  if (model_)
+    model_->SetObserver(this);
+}
+
+void CaptionBubble::OnTextChange() {
+  DCHECK(model_);
+  label_->SetText(base::ASCIIToUTF16(model_->GetFullText()));
   UpdateBubbleAndTitleVisibility();
 }
 
-void CaptionBubble::SetHasError(bool has_error) {
-  if (has_error_ == has_error)
-    return;
-  has_error_ = has_error;
+void CaptionBubble::OnErrorChange() {
+  DCHECK(model_);
+  bool has_error = model_->HasError();
   label_->SetVisible(!has_error);
+
+  // The error icon height may be different from the line height, so update the
+  // bubble content height accordingly.
+  UpdateContentSize();
   UpdateBubbleAndTitleVisibility();
+
   error_icon_->SetVisible(has_error);
   error_message_->SetVisible(has_error);
 }
 
 void CaptionBubble::UpdateBubbleAndTitleVisibility() {
+  DCHECK(model_);
   // Show the title if there is room for it and no error.
-  title_->SetVisible(!has_error_ &&
+  title_->SetVisible(!model_->HasError() &&
                      label_->GetPreferredSize().height() <
                          kLineHeightDip * kNumLines * GetTextScaleFactor());
   UpdateBubbleVisibility();
@@ -465,14 +508,18 @@ void CaptionBubble::UpdateBubbleAndTitleVisibility() {
 
 void CaptionBubble::UpdateBubbleVisibility() {
   DCHECK(GetWidget());
-  // Show the widget if it can be shown, there is room for it and it has text
-  // or an error to display.
-  if (!should_show_ || !can_layout_) {
+  if (!model_) {
+    // If there is no model set, do not show the bubble.
     if (GetWidget()->IsVisible())
       GetWidget()->Hide();
-  } else if (label_->GetText().size() > 0 || has_error_) {
-    // Only show the widget if it isn't already visible. Always calling
-    // Widget::Show() will mean the widget gets focus each time.
+  } else if (!can_layout_ || model_->IsClosed()) {
+    // Hide the widget if there is no room for it or the model is closed.
+    if (GetWidget()->IsVisible())
+      GetWidget()->Hide();
+  } else if (label_->GetText().size() > 0 || model_->HasError()) {
+    // Show the widget if it has text or an error to display. Only show the
+    // widget if it isn't already visible. Always calling Widget::Show() will
+    // mean the widget gets focus each time.
     if (!GetWidget()->IsVisible())
       GetWidget()->Show();
   } else if (GetWidget()->IsVisible()) {
@@ -488,14 +535,16 @@ void CaptionBubble::UpdateCaptionStyle(
   SizeToContents();
 }
 
-void CaptionBubble::Show() {
-  should_show_ = true;
-  UpdateBubbleVisibility();
+size_t CaptionBubble::GetTextIndexOfLineInLabel(size_t line) const {
+  return label_->GetTextIndexOfLine(line);
 }
 
-void CaptionBubble::Hide() {
-  should_show_ = false;
-  UpdateBubbleVisibility();
+size_t CaptionBubble::GetNumLinesInLabel() const {
+  return label_->GetRequiredLines();
+}
+
+const char* CaptionBubble::GetClassName() const {
+  return "CaptionBubble";
 }
 
 double CaptionBubble::GetTextScaleFactor() {
@@ -524,10 +573,16 @@ void CaptionBubble::UpdateTextSize() {
   label_->SetLineHeight(kLineHeightDip * textScaleFactor);
   title_->SetLineHeight(kLineHeightDip * textScaleFactor);
   error_message_->SetLineHeight(kLineHeightDip * textScaleFactor);
+  UpdateContentSize();
+}
+
+void CaptionBubble::UpdateContentSize() {
+  double textScaleFactor = GetTextScaleFactor();
 
   int content_height =
-      has_error_ ? kLineHeightDip * textScaleFactor + kErrorImageSizeDip
-                 : kLineHeightDip * kNumLines * textScaleFactor;
+      (model_ && model_->HasError())
+          ? kLineHeightDip * textScaleFactor + kErrorImageSizeDip
+          : kLineHeightDip * kNumLines * textScaleFactor;
   content_container_->SetPreferredSize(
       gfx::Size(kMaxWidthDip, content_height + kVerticalMarginsDip));
   // TODO(crbug.com/1055150): On hover, show/hide the close button. At that
@@ -535,6 +590,10 @@ void CaptionBubble::UpdateTextSize() {
   SetPreferredSize(
       gfx::Size(kMaxWidthDip, content_height + kCloseButtonMargin +
                                   close_button_->GetPreferredSize().height()));
+}
+
+std::string CaptionBubble::GetLabelTextForTesting() {
+  return base::UTF16ToUTF8(label_->GetText());
 }
 
 }  // namespace captions

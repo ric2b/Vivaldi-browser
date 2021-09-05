@@ -212,8 +212,8 @@ EnterpriseEnrollmentHelperImpl::GetRobotAuthCodeDeviceType() {
   return enterprise_management::DeviceServiceApiAccessRequest::CHROME_OS;
 }
 
-std::string EnterpriseEnrollmentHelperImpl::GetRobotOAuthScopes() {
-  return GaiaConstants::kAnyApiOAuth2Scope;
+std::set<std::string> EnterpriseEnrollmentHelperImpl::GetRobotOAuthScopes() {
+  return {GaiaConstants::kAnyApiOAuth2Scope};
 }
 
 scoped_refptr<network::SharedURLLoaderFactory>
@@ -450,6 +450,11 @@ void EnterpriseEnrollmentHelperImpl::ReportEnrollmentStatus(
         case policy::DM_STATUS_SERVICE_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE:
           UMA(policy::
                   kMetricEnrollmentRegisterConsumerAccountWithPackagedLicense);
+          break;
+        case policy::
+            DM_STATUS_SERVICE_ENTERPRISE_ACCOUNT_IS_NOT_ELIGIBLE_TO_ENROLL:
+          UMA(policy::
+                  kMetricEnrollmentRegisterEnterpriseAccountIsNotEligibleToEnroll);
           break;
         case policy::DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED:
           UMA(policy::kMetricEnrollmentRegisterEnterpriseTosHasNotBeenAccepted);

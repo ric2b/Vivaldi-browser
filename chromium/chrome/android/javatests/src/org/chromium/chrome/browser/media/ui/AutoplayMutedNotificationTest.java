@@ -9,7 +9,8 @@ import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_E
 import android.content.Context;
 import android.media.AudioManager;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -20,7 +21,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -35,7 +35,6 @@ import org.chromium.net.test.EmbeddedTestServer;
  * Integration test that checks that autoplay muted doesn't show a notification nor take audio focus
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@RetryOnFailure
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class AutoplayMutedNotificationTest {
     @Rule
@@ -57,7 +56,7 @@ public class AutoplayMutedNotificationTest {
     }
 
     private boolean isMediaNotificationVisible() {
-        return MediaNotificationManager.hasManagerForTesting(R.id.media_playback_notification);
+        return MediaNotificationManager.hasControllerForTesting(R.id.media_playback_notification);
     }
 
     private class MockAudioFocusChangeListener implements AudioManager.OnAudioFocusChangeListener {

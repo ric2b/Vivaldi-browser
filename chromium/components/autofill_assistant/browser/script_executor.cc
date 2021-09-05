@@ -104,7 +104,12 @@ void ScriptExecutor::Run(const UserData* user_data,
   callback_ = std::move(callback);
   DCHECK(delegate_->GetService());
 
+#ifdef NDEBUG
+  VLOG(2) << "GetActions for (redacted)";
+#else
   VLOG(2) << "GetActions for " << delegate_->GetCurrentURL().host();
+#endif
+
   delegate_->GetService()->GetActions(
       script_path_, delegate_->GetScriptURL(),
       MergedTriggerContext(
@@ -117,6 +122,10 @@ void ScriptExecutor::Run(const UserData* user_data,
 const UserData* ScriptExecutor::GetUserData() const {
   DCHECK(user_data_);
   return user_data_;
+}
+
+UserModel* ScriptExecutor::GetUserModel() {
+  return delegate_->GetUserModel();
 }
 
 void ScriptExecutor::OnNavigationStateChanged() {
@@ -150,7 +159,9 @@ void ScriptExecutor::OnNavigationStateChanged() {
           std::move(on_expected_navigation_done_)
               .Run(!delegate_->HasNavigationError());
       }
-      break;
+      // Early return since current_action_data_ is no longer valid at this
+      // point.
+      return;
 
     case ExpectedNavigationStep::DONE:
       // nothing to do
@@ -242,11 +253,6 @@ void ScriptExecutor::WriteUserData(
   delegate_->WriteUserData(std::move(write_callback));
 }
 
-void ScriptExecutor::WriteUserModel(
-    base::OnceCallback<void(UserModel*)> write_callback) {
-  delegate_->WriteUserModel(std::move(write_callback));
-}
-
 void ScriptExecutor::OnGetUserData(
     base::OnceCallback<void(UserData*, const UserModel*)> callback,
     UserData* user_data,
@@ -274,8 +280,11 @@ void ScriptExecutor::OnTermsAndConditionsLinkClicked(
   std::move(callback).Run(link, user_data, user_model);
 }
 
-void ScriptExecutor::GetFullCard(GetFullCardCallback callback) {
-  DCHECK(GetUserData()->selected_card_.get());
+void ScriptExecutor::GetFullCard(
+    const autofill::CreditCard* credit_card,
+    base::OnceCallback<void(std::unique_ptr<autofill::CreditCard> card,
+                            const base::string16& cvc)> callback) {
+  DCHECK(credit_card);
 
   // User might be asked to provide the cvc.
   delegate_->EnterState(AutofillAssistantState::MODAL_DIALOG);
@@ -284,7 +293,7 @@ void ScriptExecutor::GetFullCard(GetFullCardCallback callback) {
   // so as to unit test it.
   (new SelfDeleteFullCardRequester())
       ->GetFullCard(
-          GetWebContents(), GetUserData()->selected_card_.get(),
+          GetWebContents(), credit_card,
           base::BindOnce(&ScriptExecutor::OnGetFullCard,
                          weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -422,8 +431,17 @@ void ScriptExecutor::SetProgress(int progress) {
   delegate_->SetProgress(progress);
 }
 
+void ScriptExecutor::SetProgressActiveStep(int active_step) {
+  delegate_->SetProgressActiveStep(active_step);
+}
+
 void ScriptExecutor::SetProgressVisible(bool visible) {
   delegate_->SetProgressVisible(visible);
+}
+
+void ScriptExecutor::SetStepProgressBarConfiguration(
+    const ShowProgressBarProto::StepProgressBarConfiguration& configuration) {
+  delegate_->SetStepProgressBarConfiguration(configuration);
 }
 
 void ScriptExecutor::GetFieldValue(
@@ -478,6 +496,9 @@ void ScriptExecutor::GetElementTag(
 }
 
 void ScriptExecutor::ExpectNavigation() {
+  // TODO(b/160948417): Clean this up such that the logic is not required in
+  //  both |ScriptExecutor| and |Controller|.
+  delegate_->ExpectNavigation();
   expected_navigation_step_ = ExpectedNavigationStep::EXPECTED;
 }
 
@@ -622,10 +643,11 @@ void ScriptExecutor::RequireUI() {
 
 void ScriptExecutor::SetGenericUi(
     std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-    base::OnceCallback<void(bool, ProcessedActionStatusProto, const UserModel*)>
-        end_action_callback) {
-  delegate_->SetGenericUi(std::move(generic_ui),
-                          std::move(end_action_callback));
+    base::OnceCallback<void(const ClientStatus&)> end_action_callback,
+    base::OnceCallback<void(const ClientStatus&)>
+        view_inflation_finished_callback) {
+  delegate_->SetGenericUi(std::move(generic_ui), std::move(end_action_callback),
+                          std::move(view_inflation_finished_callback));
 }
 
 void ScriptExecutor::ClearGenericUi() {
@@ -771,6 +793,7 @@ void ScriptExecutor::OnProcessedAction(
   processed_action.set_direct_action(current_action_data_.direct_action);
   *processed_action.mutable_navigation_info() =
       current_action_data_.navigation_info;
+
   if (processed_action.status() != ProcessedActionStatusProto::ACTION_APPLIED) {
     if (delegate_->HasNavigationError()) {
       // Overwrite the original error, as the root cause is most likely a
@@ -848,9 +871,6 @@ ScriptExecutor::WaitForDomOperation::~WaitForDomOperation() {
 
 void ScriptExecutor::WaitForDomOperation::Run() {
   delegate_->AddListener(this);
-  if (delegate_->IsNavigatingToNewDocument())
-    return;  // start paused
-
   Start();
 }
 

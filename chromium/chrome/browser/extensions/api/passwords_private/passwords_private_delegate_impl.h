@@ -53,13 +53,15 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
       int id,
       base::string16 new_username,
       base::Optional<base::string16> new_password) override;
-  void RemoveSavedPassword(int id) override;
-  void RemovePasswordException(int id) override;
+  void RemoveSavedPasswords(const std::vector<int>& ids) override;
+  void RemovePasswordExceptions(const std::vector<int>& ids) override;
   void UndoRemoveSavedPasswordOrException() override;
   void RequestPlaintextPassword(int id,
                                 api::passwords_private::PlaintextReason reason,
                                 PlaintextPasswordCallback callback,
                                 content::WebContents* web_contents) override;
+  void MovePasswordToAccount(int id,
+                             content::WebContents* web_contents) override;
   void ImportPasswords(content::WebContents* web_contents) override;
   void ExportPasswords(base::OnceCallback<void(const std::string&)> accepted,
                        content::WebContents* web_contents) override;
@@ -123,8 +125,8 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   void SendSavedPasswordsList();
   void SendPasswordExceptionsList();
 
-  void RemoveSavedPasswordInternal(int id);
-  void RemovePasswordExceptionInternal(int id);
+  void RemoveSavedPasswordsInternal(const std::vector<int>& ids);
+  void RemovePasswordExceptionsInternal(const std::vector<int>& ids);
   void UndoRemoveSavedPasswordOrExceptionInternal();
 
   // Callback for when the password list has been written to the destination.
@@ -162,7 +164,9 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   // Generators that map between sort keys used by |password_manager_presenter_|
   // and ids used by the JavaScript front end.
   IdGenerator<std::string> password_id_generator_;
+  IdGenerator<std::string> password_frontend_id_generator_;
   IdGenerator<std::string> exception_id_generator_;
+  IdGenerator<std::string> exception_frontend_id_generator_;
 
   // Whether SetPasswordList and SetPasswordExceptionList have been called, and
   // whether this class has been initialized, meaning both have been called.

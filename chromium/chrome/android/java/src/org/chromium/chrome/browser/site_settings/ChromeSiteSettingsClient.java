@@ -155,14 +155,14 @@ public class ChromeSiteSettingsClient implements SiteSettingsClient {
             // great to dynamically remove the preference in this way.
             case SiteSettingsCategory.Type.ADS:
                 return SiteSettingsCategory.adsCategoryEnabled();
+            case SiteSettingsCategory.Type.BLUETOOTH:
+                return ContentFeatureList.isEnabled(
+                        ContentFeatureList.WEB_BLUETOOTH_NEW_PERMISSIONS_BACKEND);
             case SiteSettingsCategory.Type.BLUETOOTH_SCANNING:
                 return CommandLine.getInstance().hasSwitch(
                         ContentSwitches.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES);
             case SiteSettingsCategory.Type.NFC:
                 return ContentFeatureList.isEnabled(ContentFeatureList.WEB_NFC);
-            case SiteSettingsCategory.Type.AUGMENTED_REALITY: // Fall-through
-            case SiteSettingsCategory.Type.VIRTUAL_REALITY:
-                return ContentFeatureList.isEnabled(ContentFeatureList.WEBXR_PERMISSIONS_API);
             default:
                 return true;
         }

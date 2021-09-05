@@ -11,6 +11,7 @@
 #include "chromeos/grit/chromeos_help_app_resources.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/resources/grit/webui_resources.h"
 
 namespace chromeos {
@@ -36,6 +37,10 @@ content::WebUIDataSource* CreateHelpAppUntrustedDataSource(
 
   source->UseStringsJs();
   source->AddFrameAncestor(GURL(kChromeUIHelpAppURL));
+
+  // TODO(https://crbug.com/1085328): Audit and tighten CSP.
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::DefaultSrc, "");
   return source;
 }
 

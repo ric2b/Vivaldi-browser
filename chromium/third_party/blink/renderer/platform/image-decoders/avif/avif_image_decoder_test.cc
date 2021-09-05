@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <memory>
+#include <ostream>
 #include <vector>
 
 #include "testing/gtest/include/gtest/gtest.h"
@@ -13,13 +14,9 @@
 #include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
 #include "third_party/libavif/src/include/avif/avif.h"
 
-#define FIXME_SUPPORT_10BIT_IMAGE_WITH_ALPHA 0
-#define FIXME_SUPPORT_12BIT_IMAGE_WITH_ALPHA 0
-#define FIXME_CRASH_IF_COLOR_TRANSFORMATION_IS_ENABLED 0
 #define FIXME_SUPPORT_ICC_PROFILE_NO_TRANSFORM 0
 #define FIXME_SUPPORT_ICC_PROFILE_TRANSFORM 0
 #define FIXME_DISTINGUISH_LOSSY_OR_LOSSLESS 0
-#define FIXME_CRASH_IF_COLOR_BEHAVIOR_IS_IGNORE 0
 
 namespace blink {
 
@@ -63,6 +60,42 @@ struct StaticColorCheckParam {
   std::vector<ExpectedColor> colors;
 };
 
+std::ostream& operator<<(std::ostream& os, const StaticColorCheckParam& param) {
+  const char* color_type;
+  switch (param.color_type) {
+    case ColorType::kRgb:
+      color_type = "kRgb";
+      break;
+    case ColorType::kRgbA:
+      color_type = "kRgbA";
+      break;
+    case ColorType::kMono:
+      color_type = "kMono";
+      break;
+    case ColorType::kMonoA:
+      color_type = "kMonoA";
+      break;
+  }
+  const char* alpha_option =
+      (param.alpha_option == ImageDecoder::kAlphaPremultiplied
+           ? "kAlphaPremultiplied"
+           : "kAlphaNotPremultiplied");
+  const char* color_behavior;
+  if (param.color_behavior.IsIgnore()) {
+    color_behavior = "Ignore";
+  } else if (param.color_behavior.IsTag()) {
+    color_behavior = "Tag";
+  } else {
+    DCHECK(param.color_behavior.IsTransformToSRGB());
+    color_behavior = "TransformToSRGB";
+  }
+  return os << "\nStaticColorCheckParam {\n  path: \"" << param.path
+            << "\",\n  bit_depth: " << param.bit_depth
+            << ",\n  color_type: " << color_type
+            << ",\n  alpha_option: " << alpha_option
+            << ",\n  color_behavior: " << color_behavior << "\n}";
+}
+
 StaticColorCheckParam kTestParams[] = {
     {
         "/images/resources/avif/red-at-12-oclock-with-color-profile-lossy.avif",
@@ -74,7 +107,6 @@ StaticColorCheckParam kTestParams[] = {
         0,
         {},  // we just check that this image is lossy.
     },
-#if FIXME_CRASH_IF_COLOR_BEHAVIOR_IS_IGNORE
     {
         "/images/resources/avif/red-at-12-oclock-with-color-profile-lossy.avif",
         8,
@@ -86,7 +118,6 @@ StaticColorCheckParam kTestParams[] = {
         {},  // we just check that the decoder won't crash when
              // ColorBehavior::Ignore() is used.
     },
-#endif
     {"/images/resources/avif/red-with-alpha-8bpc.avif",
      8,
      ColorType::kRgbA,
@@ -117,7 +148,7 @@ StaticColorCheckParam kTestParams[] = {
      ImageDecoder::kLosslessFormat,
      ImageDecoder::kAlphaNotPremultiplied,
      ColorBehavior::Tag(),
-     0,
+     3,
      {
          {gfx::Point(0, 0), SkColorSetARGB(255, 255, 0, 0)},
          {gfx::Point(1, 1), SkColorSetARGB(255, 255, 0, 0)},
@@ -147,7 +178,6 @@ StaticColorCheckParam kTestParams[] = {
          {gfx::Point(1, 1), SkColorSetARGB(255, 128, 128, 128)},
          {gfx::Point(2, 2), SkColorSetARGB(255, 255, 255, 255)},
      }},
-#if FIXME_CRASH_IF_COLOR_TRANSFORMATION_IS_ENABLED
     {"/images/resources/avif/red-with-alpha-8bpc.avif",
      8,
      ColorType::kRgbA,
@@ -157,14 +187,10 @@ StaticColorCheckParam kTestParams[] = {
      1,
      {
          {gfx::Point(0, 0), SkColorSetARGB(0, 0, 0, 0)},
-         // If the color space is sRGB, pre-multiplied red should be 187.84.
-         //  http://www.color.org/sRGB.pdf
-         {gfx::Point(1, 1), SkColorSetARGB(128, 188, 0, 0)},
+         {gfx::Point(1, 1), SkColorSetARGB(128, 255, 0, 0)},
          {gfx::Point(2, 2), SkColorSetARGB(255, 255, 0, 0)},
      }},
-#endif
-#if FIXME_SUPPORT_ICC_PROFILE_NO_TRANSFORM && \
-    FIXME_CRASH_IF_COLOR_BEHAVIOR_IS_IGNORE
+#if FIXME_SUPPORT_ICC_PROFILE_NO_TRANSFORM
     {"/images/resources/avif/red-with-profile-8bpc.avif",
      8,
      ColorType::kRgb,
@@ -196,7 +222,6 @@ StaticColorCheckParam kTestParams[] = {
          {gfx::Point(2, 2), SkColorSetARGB(255, 255, 0, 0)},
      }},
 #endif
-#if FIXME_SUPPORT_10BIT_IMAGE_WITH_ALPHA
     {"/images/resources/avif/red-with-alpha-10bpc.avif",
      10,
      ColorType::kRgbA,
@@ -221,7 +246,6 @@ StaticColorCheckParam kTestParams[] = {
          {gfx::Point(1, 1), SkColorSetARGB(128, 255, 0, 0)},
          {gfx::Point(2, 2), SkColorSetARGB(255, 255, 0, 0)},
      }},
-#if FIXME_CRASH_IF_COLOR_TRANSFORMATION_IS_ENABLED
     {"/images/resources/avif/red-with-alpha-10bpc.avif",
      10,
      ColorType::kRgbA,
@@ -231,20 +255,16 @@ StaticColorCheckParam kTestParams[] = {
      1,
      {
          {gfx::Point(0, 0), SkColorSetARGB(0, 0, 0, 0)},
-         // If the color space is sRGB, pre-multiplied red should be 187.84.
-         //  http://www.color.org/sRGB.pdf
-         {gfx::Point(1, 1), SkColorSetARGB(128, 188, 0, 0)},
+         {gfx::Point(1, 1), SkColorSetARGB(128, 255, 0, 0)},
          {gfx::Point(2, 2), SkColorSetARGB(255, 255, 0, 0)},
      }},
-#endif
-#endif
     {"/images/resources/avif/red-full-ranged-10bpc.avif",
      10,
      ColorType::kRgb,
      ImageDecoder::kLosslessFormat,
      ImageDecoder::kAlphaNotPremultiplied,
      ColorBehavior::Tag(),
-     0,
+     2,
      {
          {gfx::Point(0, 0), SkColorSetARGB(255, 255, 0, 0)},
          {gfx::Point(1, 1), SkColorSetARGB(255, 255, 0, 0)},
@@ -274,8 +294,7 @@ StaticColorCheckParam kTestParams[] = {
          {gfx::Point(1, 1), SkColorSetARGB(255, 128, 128, 128)},
          {gfx::Point(2, 2), SkColorSetARGB(255, 255, 255, 255)},
      }},
-#if FIXME_SUPPORT_ICC_PROFILE_NO_TRANSFORM && \
-    FIXME_CRASH_IF_COLOR_BEHAVIOR_IS_IGNORE
+#if FIXME_SUPPORT_ICC_PROFILE_NO_TRANSFORM
     {"/images/resources/avif/red-with-profile-10bpc.avif",
      10,
      ColorType::kRgb,
@@ -307,7 +326,6 @@ StaticColorCheckParam kTestParams[] = {
          {gfx::Point(2, 2), SkColorSetARGB(255, 255, 0, 0)},
      }},
 #endif
-#if FIXME_SUPPORT_12BIT_IMAGE_WITH_ALPHA
     {"/images/resources/avif/red-with-alpha-12bpc.avif",
      12,
      ColorType::kRgbA,
@@ -332,7 +350,6 @@ StaticColorCheckParam kTestParams[] = {
          {gfx::Point(1, 1), SkColorSetARGB(128, 255, 0, 0)},
          {gfx::Point(2, 2), SkColorSetARGB(255, 255, 0, 0)},
      }},
-#if FIXME_CRASH_IF_COLOR_TRANSFORMATION_IS_ENABLED
     {"/images/resources/avif/red-with-alpha-12bpc.avif",
      12,
      ColorType::kRgbA,
@@ -342,20 +359,16 @@ StaticColorCheckParam kTestParams[] = {
      1,
      {
          {gfx::Point(0, 0), SkColorSetARGB(0, 0, 0, 0)},
-         // If the color space is sRGB, pre-multiplied red should be 187.84.
-         //  http://www.color.org/sRGB.pdf
-         {gfx::Point(1, 1), SkColorSetARGB(128, 188, 0, 0)},
+         {gfx::Point(1, 1), SkColorSetARGB(128, 255, 0, 0)},
          {gfx::Point(2, 2), SkColorSetARGB(255, 255, 0, 0)},
      }},
-#endif
-#endif
     {"/images/resources/avif/red-full-ranged-12bpc.avif",
      12,
      ColorType::kRgb,
      ImageDecoder::kLosslessFormat,
      ImageDecoder::kAlphaNotPremultiplied,
      ColorBehavior::Tag(),
-     0,
+     2,
      {
          {gfx::Point(0, 0), SkColorSetARGB(255, 255, 0, 0)},
          {gfx::Point(1, 1), SkColorSetARGB(255, 255, 0, 0)},
@@ -385,14 +398,13 @@ StaticColorCheckParam kTestParams[] = {
          {gfx::Point(1, 1), SkColorSetARGB(255, 128, 128, 128)},
          {gfx::Point(2, 2), SkColorSetARGB(255, 255, 255, 255)},
      }},
-#if FIXME_SUPPORT_ICC_PROFILE_NO_TRANSFORM && \
-    FIXME_CRASH_IF_COLOR_BEHAVIOR_IS_IGNORE
+#if FIXME_SUPPORT_ICC_PROFILE_NO_TRANSFORM
     {"/images/resources/avif/red-with-profile-12bpc.avif",
      12,
      ColorType::kRgb,
      ImageDecoder::kLosslessFormat,
      ImageDecoder::kAlphaNotPremultiplied,
-     ColorBehavior::Tag(),
+     ColorBehavior::Ignore(),
      1,
      {
          {gfx::Point(0, 0), SkColorSetARGB(255, 0, 0, 255)},
@@ -451,8 +463,60 @@ void TestInvalidStaticImage(const char* avif_file, ErrorPhase error_phase) {
     ImageFrame* frame = decoder->DecodeFrameBufferAtIndex(0);
     ASSERT_TRUE(frame);
     EXPECT_NE(ImageFrame::kFrameComplete, frame->GetStatus());
+    EXPECT_TRUE(decoder->Failed());
   }
-  EXPECT_TRUE(decoder->Failed());
+}
+
+void ReadYUV(int* output_y_width,
+             int* output_y_height,
+             int* output_uv_width,
+             int* output_uv_height,
+             const char* image_file_path) {
+  scoped_refptr<SharedBuffer> data = ReadFile(image_file_path);
+  ASSERT_TRUE(data);
+
+  auto decoder = std::make_unique<AVIFImageDecoder>(
+      ImageDecoder::kAlphaNotPremultiplied, ImageDecoder::kDefaultBitDepth,
+      ColorBehavior::Tag(), ImageDecoder::kNoDecodedImageByteLimit);
+  decoder->SetData(data.get(), true);
+  ASSERT_TRUE(decoder->CanDecodeToYUV());
+
+  ASSERT_TRUE(decoder->IsSizeAvailable());
+
+  IntSize size = decoder->DecodedSize();
+  IntSize y_size = decoder->DecodedYUVSize(0);
+  IntSize u_size = decoder->DecodedYUVSize(1);
+  IntSize v_size = decoder->DecodedYUVSize(2);
+
+  EXPECT_EQ(size.Width(), y_size.Width());
+  EXPECT_EQ(size.Height(), y_size.Height());
+  EXPECT_EQ(u_size.Width(), v_size.Width());
+  EXPECT_EQ(u_size.Height(), v_size.Height());
+
+  *output_y_width = y_size.Width();
+  *output_y_height = y_size.Height();
+  *output_uv_width = u_size.Width();
+  *output_uv_height = u_size.Height();
+
+  size_t row_bytes[3];
+  row_bytes[0] = decoder->DecodedYUVWidthBytes(0);
+  row_bytes[1] = decoder->DecodedYUVWidthBytes(1);
+  row_bytes[2] = decoder->DecodedYUVWidthBytes(2);
+
+  size_t planes_data_size = row_bytes[0] * y_size.Height() +
+                            row_bytes[1] * u_size.Height() +
+                            row_bytes[2] * v_size.Height();
+  auto planes_data = std::make_unique<char[]>(planes_data_size);
+
+  void* planes[3];
+  planes[0] = planes_data.get();
+  planes[1] = static_cast<char*>(planes[0]) + row_bytes[0] * y_size.Height();
+  planes[2] = static_cast<char*>(planes[1]) + row_bytes[1] * u_size.Height();
+
+  decoder->SetImagePlanes(std::make_unique<ImagePlanes>(planes, row_bytes));
+
+  decoder->DecodeToYUV();
+  EXPECT_FALSE(decoder->Failed());
 }
 
 }  // namespace
@@ -467,19 +531,15 @@ TEST(AnimatedAVIFTests, ValidImages) {
   TestByteByByteDecode(&CreateAVIFDecoder,
                        "/images/resources/avif/star-10bpc.avifs", 5u,
                        kAnimationLoopInfinite);
-#if FIXME_SUPPORT_10BIT_IMAGE_WITH_ALPHA
   TestByteByByteDecode(&CreateAVIFDecoder,
                        "/images/resources/avif/star-10bpc-with-alpha.avifs", 5u,
                        kAnimationLoopInfinite);
-#endif
   TestByteByByteDecode(&CreateAVIFDecoder,
                        "/images/resources/avif/star-12bpc.avifs", 5u,
                        kAnimationLoopInfinite);
-#if FIXME_SUPPORT_12BIT_IMAGE_WITH_ALPHA
   TestByteByByteDecode(&CreateAVIFDecoder,
                        "/images/resources/avif/star-12bpc-with-alpha.avifs", 5u,
                        kAnimationLoopInfinite);
-#endif
   // TODO(ryoh): Add avifs with EditListBox.
 }
 
@@ -515,6 +575,18 @@ TEST(StaticAVIFTests, ValidImages) {
       &CreateAVIFDecoder,
       "/images/resources/avif/red-at-12-oclock-with-color-profile-12bpc.avif",
       1, kAnimationNone);
+}
+
+TEST(StaticAVIFTests, YUV) {
+  const char* avif_file =
+      "/images/resources/avif/red-full-ranged-8bpc.avif";  // 3x3, YUV 4:2:0
+  int output_y_width, output_y_height, output_uv_width, output_uv_height;
+  ReadYUV(&output_y_width, &output_y_height, &output_uv_width,
+          &output_uv_height, avif_file);
+  EXPECT_EQ(3, output_y_width);
+  EXPECT_EQ(3, output_y_height);
+  EXPECT_EQ(2, output_uv_width);
+  EXPECT_EQ(2, output_uv_height);
 }
 
 using StaticAVIFColorTests = ::testing::TestWithParam<StaticColorCheckParam>;

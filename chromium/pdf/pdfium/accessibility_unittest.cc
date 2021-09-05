@@ -485,7 +485,7 @@ TEST_F(AccessibilityTest, GetAccessibilityHighlightInfo) {
   constexpr uint32_t kHighlightNoColor = MakeARGB(0, 0, 0, 0);
   static const pp::PDF::PrivateAccessibilityHighlightInfo
       kExpectedHighlightInfo[] = {
-          {"", 0, 0, 1, {{5, 196}, {49, 26}}, kHighlightDefaultColor},
+          {"Text Note", 0, 0, 1, {{5, 196}, {49, 26}}, kHighlightDefaultColor},
           {"", 1, 2, 1, {{110, 196}, {77, 26}}, kHighlightRedColor},
           {"", 2, 3, 1, {{192, 196}, {13, 26}}, kHighlightNoColor}};
 
@@ -520,6 +520,7 @@ TEST_F(AccessibilityTest, GetAccessibilityHighlightInfo) {
     EXPECT_EQ(highlight_info.text_run_count,
               kExpectedHighlightInfo[i].text_run_count);
     EXPECT_EQ(highlight_info.color, kExpectedHighlightInfo[i].color);
+    EXPECT_EQ(highlight_info.note_text, kExpectedHighlightInfo[i].note_text);
   }
 }
 
@@ -563,12 +564,12 @@ TEST_F(AccessibilityTest, GetAccessibilityTextFieldInfo) {
   CompareRect(kExpectedPageRect, page_info.bounds);
   EXPECT_EQ(text_runs.size(), page_info.text_run_count);
   EXPECT_EQ(chars.size(), page_info.char_count);
-  ASSERT_EQ(page_objects.text_fields.size(),
+  ASSERT_EQ(page_objects.form_fields.text_fields.size(),
             base::size(kExpectedTextFieldInfo));
 
-  for (size_t i = 0; i < page_objects.text_fields.size(); ++i) {
+  for (size_t i = 0; i < page_objects.form_fields.text_fields.size(); ++i) {
     const pp::PDF::PrivateAccessibilityTextFieldInfo& text_field_info =
-        page_objects.text_fields[i];
+        page_objects.form_fields.text_fields[i];
     EXPECT_EQ(kExpectedTextFieldInfo[i].name, text_field_info.name);
     EXPECT_EQ(kExpectedTextFieldInfo[i].value, text_field_info.value);
     EXPECT_EQ(kExpectedTextFieldInfo[i].is_read_only,

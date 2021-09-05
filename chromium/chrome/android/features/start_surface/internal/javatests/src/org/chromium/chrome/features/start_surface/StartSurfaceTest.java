@@ -5,18 +5,20 @@
 package org.chromium.chrome.features.start_surface;
 
 import static android.os.Build.VERSION_CODES.P;
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.Espresso.pressBack;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.action.ViewActions.pressKey;
-import static android.support.test.espresso.action.ViewActions.replaceText;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.matcher.ViewMatchers.Visibility.GONE;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
-import static android.support.test.espresso.matcher.ViewMatchers.withParent;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.Espresso.pressBack;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.action.ViewActions.pressKey;
+import static androidx.test.espresso.action.ViewActions.replaceText;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.Visibility.GONE;
+import static androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.withParent;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.equalTo;
@@ -26,6 +28,7 @@ import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
@@ -39,23 +42,26 @@ import static org.chromium.chrome.test.util.ViewUtils.waitForView;
 import android.content.Intent;
 import android.os.Build;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.espresso.ViewAction;
-import android.support.test.espresso.action.GeneralLocation;
-import android.support.test.espresso.action.GeneralSwipeAction;
-import android.support.test.espresso.action.Press;
-import android.support.test.espresso.action.Swipe;
-import android.support.test.espresso.action.ViewActions;
-import android.support.test.espresso.contrib.RecyclerViewActions;
-import android.support.test.filters.MediumTest;
 import android.view.KeyEvent;
 import android.view.ViewGroup;
 
+import androidx.test.espresso.ViewAction;
+import androidx.test.espresso.action.GeneralLocation;
+import androidx.test.espresso.action.GeneralSwipeAction;
+import androidx.test.espresso.action.Press;
+import androidx.test.espresso.action.Swipe;
+import androidx.test.espresso.action.ViewActions;
+import androidx.test.espresso.contrib.RecyclerViewActions;
+import androidx.test.filters.MediumTest;
+
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterAnnotations.UseRunnerDelegate;
 import org.chromium.base.test.params.ParameterSet;
@@ -66,13 +72,17 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.DeferredStartupHandler;
 import org.chromium.chrome.browser.compositor.layouts.phone.StackLayout;
+import org.chromium.chrome.browser.feed.FeedSurfaceCoordinator;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
+import org.chromium.chrome.browser.tasks.SingleTabSwitcherMediator;
 import org.chromium.chrome.browser.tasks.pseudotab.TabAttributeCache;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.start_surface.R;
 import org.chromium.chrome.test.ChromeActivityTestRule;
@@ -85,7 +95,6 @@ import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
-import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.IOException;
@@ -96,7 +105,8 @@ import java.util.concurrent.ExecutionException;
 /** Integration tests of the {@link StartSurface}. */
 @RunWith(ParameterizedRunner.class)
 @UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
-@Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+@Restriction(
+        {UiRestriction.RESTRICTION_TYPE_PHONE, Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
 @EnableFeatures({ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
 @CommandLineFlags.
 Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "force-fieldtrials=Study/Group"})
@@ -126,7 +136,6 @@ public class StartSurfaceTest {
     public TestRule mProcessor = new Features.InstrumentationProcessor();
 
     private final boolean mImmediateReturn;
-    private String mUrl;
 
     public StartSurfaceTest(boolean useInstantStart, boolean immediateReturn) {
         CachedFeatureFlags.setForTesting(ChromeFeatureList.INSTANT_START, useInstantStart);
@@ -152,11 +161,6 @@ public class StartSurfaceTest {
 
     @Before
     public void setUp() throws IOException {
-        EmbeddedTestServer testServer =
-                EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
-
-        mUrl = testServer.getURL("/chrome/test/data/android/navigate/simple.html");
-
         // Scrolling tests need more tabs.
         String scrollMode = StartSurfaceConfiguration.START_SURFACE_OMNIBOX_SCROLL_MODE.getValue();
         int expectedTabs = scrollMode.isEmpty() ? 1 : 16;
@@ -183,6 +187,7 @@ public class StartSurfaceTest {
             TabAttributeCache.setTitleForTesting(0, "tab title");
             startMainActivityFromLauncher();
         } else {
+            assertFalse(ReturnToChromeExperimentsUtil.shouldShowTabSwitcher(-1));
             // Cannot use startMainActivityFromLauncher().
             // Otherwise tab switcher could be shown immediately if single-pane is enabled.
             mActivityTestRule.startMainActivityOnBlankPage();
@@ -196,18 +201,20 @@ public class StartSurfaceTest {
     @DisabledTest(message = "crbug.com/1084176")
     @CommandLineFlags.Add({BASE_PARAMS + "/tasksonly"})
     public void testShow_TasksOnly() {
+        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         if (!mImmediateReturn) {
-            TabUiTestHelper.enterTabSwitcher(mActivityTestRule.getActivity());
+            TabUiTestHelper.enterTabSwitcher(cta);
         }
         onViewWaiting(allOf(withId(R.id.primary_tasks_surface_view), isDisplayed()));
         onView(withId(org.chromium.chrome.tab_ui.R.id.mv_tiles_container))
                 .check(matches(isDisplayed()));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .check(matches(isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.trendy_terms_recycler_view))
+                .check(matches(withEffectiveVisibility(GONE)));
 
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> mActivityTestRule.getActivity().getLayoutManager().hideOverview(false));
-        assertFalse(mActivityTestRule.getActivity().getLayoutManager().overviewVisible());
+        TestThreadUtils.runOnUiThreadBlocking(() -> cta.getLayoutManager().hideOverview(false));
+        assertFalse(cta.getLayoutManager().overviewVisible());
     }
 
     @Test
@@ -228,6 +235,63 @@ public class StartSurfaceTest {
                 .check(matches(withEffectiveVisibility(GONE)));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .check(matches(isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.trendy_terms_recycler_view))
+                .check(matches(withEffectiveVisibility(GONE)));
+
+        if (!isInstantReturn()) {
+            // TODO(crbug.com/1076274): fix toolbar to make incognito switch part of the view.
+            onView(withId(org.chromium.chrome.tab_ui.R.id.incognito_switch))
+                    .check(matches(withEffectiveVisibility(GONE)));
+        }
+        mActivityTestRule.waitForActivityNativeInitializationComplete();
+
+        TabUiTestHelper.createTabs(cta, true, 1);
+        TabUiTestHelper.verifyTabModelTabCount(cta, 1, 1);
+        if (isInstantReturn()) {
+            // TODO(crbug.com/1076274): fix toolbar to avoid wrongly focusing on the toolbar
+            // omnibox.
+            return;
+        }
+        TabUiTestHelper.enterTabSwitcher(cta);
+        if (!isInstantReturn()) {
+            // TODO(crbug.com/1076274): fix toolbar to make incognito switch part of the view.
+            onView(withId(org.chromium.chrome.tab_ui.R.id.incognito_switch))
+                    .check(matches(isDisplayed()));
+        }
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> cta.getTabModelSelector().getModel(true).closeAllTabs());
+        TabUiTestHelper.verifyTabModelTabCount(cta, 1, 0);
+        assertTrue(mActivityTestRule.getActivity().getLayoutManager().overviewVisible());
+        if (!isInstantReturn()) {
+            // TODO(crbug.com/1076274): fix toolbar to make incognito switch part of the view.
+            onView(withId(org.chromium.chrome.tab_ui.R.id.incognito_switch))
+                    .check(matches(withEffectiveVisibility(GONE)));
+        }
+
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> mActivityTestRule.getActivity().getLayoutManager().hideOverview(false));
+        assertFalse(mActivityTestRule.getActivity().getLayoutManager().overviewVisible());
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"StartSurface"})
+    // clang-format off
+    @CommandLineFlags.Add({BASE_PARAMS + "/trendyterms" +
+            "/hide_switch_when_no_incognito_tabs/true"})
+    public void testShow_TrendyTerms() {
+        // clang-format on
+        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        if (!mImmediateReturn) {
+            TabUiTestHelper.enterTabSwitcher(cta);
+        }
+        onViewWaiting(allOf(withId(R.id.primary_tasks_surface_view), isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.mv_tiles_container))
+                .check(matches(withEffectiveVisibility(GONE)));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
+                .check(matches(isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.trendy_terms_recycler_view))
+                .check(matches(withEffectiveVisibility(VISIBLE)));
 
         if (!isInstantReturn()) {
             // TODO(crbug.com/1076274): fix toolbar to make incognito switch part of the view.
@@ -280,6 +344,8 @@ public class StartSurfaceTest {
                 .check(matches(isDisplayed()));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .check(matches(isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.trendy_terms_recycler_view))
+                .check(matches(withEffectiveVisibility(GONE)));
 
         onView(withId(R.id.ss_explore_tab)).perform(click());
         onViewWaiting(withId(R.id.start_surface_explore_view));
@@ -315,6 +381,8 @@ public class StartSurfaceTest {
                 .check(matches(isDisplayed()));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .check(matches(isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.trendy_terms_recycler_view))
+                .check(matches(withEffectiveVisibility(GONE)));
 
         // Note that onView(R.id.more_tabs).perform(click()) can not be used since it requires 90
         // percent of the view's area is displayed to the users. However, this view has negative
@@ -374,6 +442,8 @@ public class StartSurfaceTest {
                 .check(matches(isDisplayed()));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .check(matches(isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.trendy_terms_recycler_view))
+                .check(matches(withEffectiveVisibility(GONE)));
 
         if (!isInstantReturn()) {
             // TODO(crbug.com/1076274): fix toolbar to make incognito switch part of the view.
@@ -441,6 +511,8 @@ public class StartSurfaceTest {
                 .check(matches(isDisplayed()));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .check(matches(isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.trendy_terms_recycler_view))
+                .check(matches(withEffectiveVisibility(GONE)));
 
         if (!isInstantReturn()) {
             // TODO(crbug.com/1076274): fix toolbar to make incognito switch part of the view.
@@ -507,6 +579,8 @@ public class StartSurfaceTest {
                 .check(matches(isDisplayed()));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .check(matches(isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.trendy_terms_recycler_view))
+                .check(matches(withEffectiveVisibility(GONE)));
 
         onView(withId(org.chromium.chrome.tab_ui.R.id.incognito_switch))
                 .check(matches(withEffectiveVisibility(GONE)));
@@ -619,7 +693,7 @@ public class StartSurfaceTest {
 
         OverviewModeBehaviorWatcher hideWatcher =
                 TabUiTestHelper.createOverviewHideWatcher(mActivityTestRule.getActivity());
-        onView(withId(R.id.search_box_text)).perform(replaceText(mUrl));
+        onView(withId(R.id.search_box_text)).perform(replaceText("about:blank"));
         onView(withId(R.id.url_bar)).perform(pressKey(KeyEvent.KEYCODE_ENTER));
         hideWatcher.waitForBehavior();
         assertThat(
@@ -656,7 +730,8 @@ public class StartSurfaceTest {
 
         OverviewModeBehaviorWatcher hideWatcher =
                 TabUiTestHelper.createOverviewHideWatcher(mActivityTestRule.getActivity());
-        onView(allOf(withId(R.id.search_box_text), isDisplayed())).perform(replaceText(mUrl));
+        onView(allOf(withId(R.id.search_box_text), isDisplayed()))
+                .perform(replaceText("about:blank"));
         onView(withId(R.id.url_bar)).perform(pressKey(KeyEvent.KEYCODE_ENTER));
         hideWatcher.waitForBehavior();
         assertThat(
@@ -782,21 +857,23 @@ public class StartSurfaceTest {
     @DisableIf.Build(hardware_is = "bullhead", message = "crbug.com/1081657")
     @CommandLineFlags.Add({BASE_PARAMS + "/omniboxonly" +
         "/hide_switch_when_no_incognito_tabs/true/omnibox_scroll_mode/top"})
-    public void testScroll_OmniboxOnly_Top() {
+    public void testScroll_Top() {
         // clang-format on
-        if (!mImmediateReturn) {
-            // TODO(crbug.com/1082664): Make it work with NoReturn.
-            return;
-        }
+        // TODO(crbug.com/1082664): Make it work with NoReturn.
+        assumeTrue(mImmediateReturn);
+
         onViewWaiting(allOf(withId(R.id.primary_tasks_surface_view), isDisplayed()));
 
-        onView(withId(R.id.search_box)).check(matches(isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.scroll_component_container))
+                .check(matches(isDisplayed()));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .perform(SWIPE_UP_FROM_CENTER, SWIPE_UP_FROM_CENTER, SWIPE_UP_FROM_CENTER);
-        onView(withId(R.id.search_box)).check(matches(not(isDisplayed())));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.scroll_component_container))
+                .check(matches(not(isDisplayed())));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .perform(SWIPE_DOWN_FROM_CENTER);
-        onView(withId(R.id.search_box)).check(matches(not(isDisplayed())));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.scroll_component_container))
+                .check(matches(not(isDisplayed())));
     }
 
     @Test
@@ -806,21 +883,23 @@ public class StartSurfaceTest {
     @DisableIf.Build(sdk_is_less_than = P, message = "crbug.com/1083174")
     @CommandLineFlags.Add({BASE_PARAMS + "/omniboxonly" +
         "/hide_switch_when_no_incognito_tabs/true/omnibox_scroll_mode/quick"})
-    public void testScroll_OmniboxOnly_Quick() {
+    public void testScroll_Quick() {
         // clang-format on
-        if (!mImmediateReturn) {
-            // TODO(crbug.com/1082664): Make it work with NoReturn.
-            return;
-        }
+        // TODO(crbug.com/1082664): Make it work with NoReturn.
+        assumeTrue(mImmediateReturn);
+
         onViewWaiting(allOf(withId(R.id.primary_tasks_surface_view), isDisplayed()));
 
-        onView(withId(R.id.search_box)).check(matches(isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.scroll_component_container))
+                .check(matches(isDisplayed()));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .perform(SWIPE_UP_FROM_CENTER, SWIPE_UP_FROM_CENTER, SWIPE_UP_FROM_CENTER);
-        onView(withId(R.id.search_box)).check(matches(not(isDisplayed())));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.scroll_component_container))
+                .check(matches(not(isDisplayed())));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .perform(SWIPE_DOWN_FROM_CENTER);
-        onView(withId(R.id.search_box)).check(matches(isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.scroll_component_container))
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -830,18 +909,19 @@ public class StartSurfaceTest {
     @DisabledTest(message = "crbug.com/1083459")
     @CommandLineFlags.Add({BASE_PARAMS + "/omniboxonly" +
         "/hide_switch_when_no_incognito_tabs/true/omnibox_scroll_mode/pinned"})
-    public void testScroll_OmniboxOnly_Pinned() {
+    public void testScroll_Pinned() {
         // clang-format on
-        if (!mImmediateReturn) {
-            // TODO(crbug.com/1082664): Make it work with NoReturn.
-            return;
-        }
+        // TODO(crbug.com/1082664): Make it work with NoReturn.
+        assumeTrue(mImmediateReturn);
+
         onViewWaiting(allOf(withId(R.id.primary_tasks_surface_view), isDisplayed()));
 
-        onView(withId(R.id.search_box)).check(matches(isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.scroll_component_container))
+                .check(matches(isDisplayed()));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .perform(SWIPE_UP_FROM_CENTER, SWIPE_UP_FROM_CENTER, SWIPE_UP_FROM_CENTER);
-        onView(withId(R.id.search_box)).check(matches(isDisplayed()));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.scroll_component_container))
+                .check(matches(isDisplayed()));
     }
 
     private void waitForTabModel() {
@@ -856,6 +936,64 @@ public class StartSurfaceTest {
                                    .getTabModelFilterProvider()
                                    .getCurrentTabModelFilter()
                                    .isTabModelRestored());
+    }
+
+    /**
+     * Tests that histograms are recorded only if the StartSurface is shown when Chrome is launched
+     * from cold start.
+     */
+    @Test
+    @MediumTest
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    // clang-format off
+    @EnableFeatures({ChromeFeatureList.TAB_SWITCHER_ON_RETURN + "<Study",
+            ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
+            ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
+    @CommandLineFlags.Add({BASE_PARAMS + "/single/show_last_active_tab_only/true"})
+    public void startSurfaceRecordHistogramsTest() {
+        // clang-format on
+        if (!mImmediateReturn) {
+            assertNotEquals(0, ReturnToChromeExperimentsUtil.TAB_SWITCHER_ON_RETURN_MS.getValue());
+            onView(withId(org.chromium.chrome.tab_ui.R.id.home_button)).perform(click());
+        } else {
+            assertEquals(0, ReturnToChromeExperimentsUtil.TAB_SWITCHER_ON_RETURN_MS.getValue());
+        }
+
+        Assert.assertEquals("single", StartSurfaceConfiguration.START_SURFACE_VARIATION.getValue());
+        Assert.assertTrue(StartSurfaceConfiguration.START_SURFACE_LAST_ACTIVE_TAB_ONLY.getValue());
+        Assert.assertFalse(
+                StartSurfaceConfiguration.START_SURFACE_SHOW_STACK_TAB_SWITCHER.getValue());
+        CriteriaHelper.pollUiThread(
+                ()
+                        -> mActivityTestRule.getActivity().getLayoutManager() != null
+                        && mActivityTestRule.getActivity().getLayoutManager().overviewVisible());
+        mActivityTestRule.waitForActivityNativeInitializationComplete();
+
+        CriteriaHelper.pollUiThread(
+                ()
+                        -> DeferredStartupHandler.getInstance().isDeferredStartupCompleteForApp(),
+                "Deferred startup never completed", 20000L,
+                CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+
+        boolean isInstantStart = TabUiFeatureUtilities.supportInstantStart(false);
+        int expectedRecordCount = mImmediateReturn ? 1 : 0;
+        // Histograms should be only recorded when StartSurface is shown immediately after
+        // launch.
+        Assert.assertEquals(expectedRecordCount,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        StartSurfaceConfiguration.getHistogramName(
+                                SingleTabSwitcherMediator.SINGLE_TAB_TITLE_AVAILABLE_TIME_UMA,
+                                isInstantStart)));
+        Assert.assertEquals(expectedRecordCount,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        StartSurfaceConfiguration.getHistogramName(
+                                FeedSurfaceCoordinator.FEED_CONTENT_FIRST_LOADED_TIME_MS_UMA,
+                                isInstantStart)));
+        Assert.assertEquals(isInstantReturn() ? 1 : 0,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        StartSurfaceConfiguration.getHistogramName(
+                                FeedLoadingCoordinator.FEEDS_LOADING_PLACEHOLDER_SHOWN_TIME_UMA,
+                                true)));
     }
 }
 

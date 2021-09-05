@@ -1,3 +1,7 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 # These are used for monitoring builders that have recently been migrated to
 # Goma RBE (See crbug.com/950413).
 luci.console_view(
@@ -1042,15 +1046,6 @@ luci.console_view(
             short_name = 'gpu',
         ),
         luci.console_view_entry(
-            builder = 'ci-m81/Win x64 Builder',
-            category = 'win|week5|stable',
-        ),
-        luci.console_view_entry(
-            builder = 'ci-m81/GPU Win x64 Builder',
-            category = 'win|week5|stable',
-            short_name = 'gpu',
-        ),
-        luci.console_view_entry(
             builder = 'ci/linux-chromeos-dbg',
             category = 'cros|week1',
             short_name = 'dbg',
@@ -1106,11 +1101,6 @@ luci.console_view(
             short_name = 'dbg',
         ),
         luci.console_view_entry(
-            builder = 'ci/chromeos-amd64-generic-rel-vm-tests',
-            category = 'cros|week3|amd64',
-            short_name = 'vmtests',
-        ),
-        luci.console_view_entry(
             builder = 'ci/chromeos-amd64-generic-asan-rel',
             category = 'cros|week3|amd64',
             short_name = 'asan',
@@ -1134,11 +1124,6 @@ luci.console_view(
             builder = 'ci/chromeos-kevin-rel',
             category = 'cros|week3|kevin',
             short_name = 'rel',
-        ),
-        luci.console_view_entry(
-            builder = 'ci/chromeos-kevin-rel-hw-tests',
-            category = 'cros|week3|kevin',
-            short_name = 'hwtests',
         ),
         luci.console_view_entry(
             builder = 'webrtc.fyi/WebRTC Chromium FYI ios-device',

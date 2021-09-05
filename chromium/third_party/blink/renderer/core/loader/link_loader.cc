@@ -104,7 +104,7 @@ class LinkLoader::FinishObserver final : public ResourceFinishObserver {
     resource_ = nullptr;
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(loader_);
     visitor->Trace(resource_);
     blink::ResourceFinishObserver::Trace(visitor);
@@ -234,7 +234,8 @@ void LinkLoader::LoadStylesheet(const LinkLoadParameters& params,
   mojom::FetchImportanceMode importance_mode =
       GetFetchImportanceAttributeValue(params.importance);
   DCHECK(importance_mode == mojom::FetchImportanceMode::kImportanceAuto ||
-         RuntimeEnabledFeatures::PriorityHintsEnabled(&document));
+         RuntimeEnabledFeatures::PriorityHintsEnabled(
+             document.GetExecutionContext()));
   resource_request.SetFetchImportanceMode(importance_mode);
 
   ResourceLoaderOptions options;
@@ -279,7 +280,7 @@ void LinkLoader::Abort() {
   }
 }
 
-void LinkLoader::Trace(Visitor* visitor) {
+void LinkLoader::Trace(Visitor* visitor) const {
   visitor->Trace(finish_observer_);
   visitor->Trace(client_);
   visitor->Trace(prerender_);

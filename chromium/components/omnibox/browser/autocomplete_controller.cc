@@ -43,6 +43,7 @@
 #include "components/omnibox/browser/search_provider.h"
 #include "components/omnibox/browser/shortcuts_provider.h"
 #include "components/omnibox/browser/zero_suggest_provider.h"
+#include "components/omnibox/browser/zero_suggest_verbatim_match_provider.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
 #include "components/search_engines/template_url.h"
@@ -268,6 +269,18 @@ AutocompleteController::AutocompleteController(
         ZeroSuggestProvider::Create(provider_client_.get(), this);
     if (zero_suggest_provider_)
       providers_.push_back(zero_suggest_provider_);
+#if defined(OS_ANDROID)
+    // Note: the need for the always-present verbatim match originates from the
+    // OmniboxSearchReadyIncognito feature.
+    // The feature aims at showing SRO in an Incognito mode, where the
+    // ZeroSuggestProvider intentionally never gets invoked.
+    // The gating flag here should be removed when the SRO Incognito is
+    // launched.
+    if (base::FeatureList::IsEnabled(omnibox::kOmniboxSearchReadyIncognito)) {
+      providers_.push_back(
+          new ZeroSuggestVerbatimMatchProvider(provider_client_.get()));
+    }
+#endif
   }
   if (provider_types & AutocompleteProvider::TYPE_ZERO_SUGGEST_LOCAL_HISTORY) {
     providers_.push_back(
@@ -668,9 +681,7 @@ void AutocompleteController::UpdateResult(
                                                      result_);
   }
 
-  if (zero_suggest_provider_) {
-    UpdateHeaders(&result_);
-  }
+  UpdateHeaders(&result_);
   UpdateKeywordDescriptions(&result_);
   UpdateAssociatedKeywords(&result_);
   UpdateAssistedQueryStats(&result_);
@@ -762,27 +773,45 @@ void AutocompleteController::UpdateAssociatedKeywords(
 void AutocompleteController::UpdateHeaders(AutocompleteResult* result) {
   DCHECK(result);
 
-  // Set the suggestion group ID to header mapping information.
-  result->set_headers_map(zero_suggest_provider_->headers_map());
+  // Currently, we only populate the AutocompleteResult's header labels from
+  // ZeroSuggestProvider. Even if another provider has header metadata, we
+  // currently ignore it. This means that as-you-type suggestions will NEVER
+  // show headers in the UI. For now, this is hacky, but intended.
+  //
+  // TODO(tommycli): Stop special casing ZeroSuggestProvider here.
+  if (zero_suggest_provider_)
+    result->set_headers_map(zero_suggest_provider_->headers_map());
+
+  for (AutocompleteMatch& match : *result) {
+    if (match.suggestion_group_id.has_value()) {
+      // Record header data into the additional_info field for chrome://omnibox.
+      // Note, to improve debugging, we record the original group ID sent by
+      // the server before stripping empty headers.
+      int group_id = match.suggestion_group_id.value();
+      match.RecordAdditionalInfo("suggestion_group_id", group_id);
+
+      const base::string16 header = result->GetHeaderForGroupId(group_id);
+      if (!header.empty()) {
+        match.RecordAdditionalInfo("header string", base::UTF16ToUTF8(header));
+      } else {
+        // Strip all match group IDs that don't have a header string. Otherwise,
+        // these matches will be shown at the bottom with an empty header row.
+        // They should be treated as an ordinary match with no group ID.
+        match.suggestion_group_id.reset();
+      }
+    }
+  }
 
   // Move all grouped matches to the bottom while maintaining the current order.
+  //
+  // TODO(tommycli): Currently, this pushes all suggestions with group IDs to
+  // the bottom, but doesn't group them together. That could lead to some
+  // awkward interleaving of groups.
   std::stable_sort(result->begin(), result->end(),
                    [](const auto& a, const auto& b) {
                      return !a.suggestion_group_id.has_value() &&
                             b.suggestion_group_id.has_value();
                    });
-
-  // Record header data into the additional_info field for chrome://omnibox.
-  for (AutocompleteMatch& match : *result) {
-    if (match.suggestion_group_id.has_value()) {
-      int group_id = match.suggestion_group_id.value();
-      const base::string16 header = result->GetHeaderForGroupId(group_id);
-      if (!header.empty()) {
-        match.RecordAdditionalInfo("suggestion_group_id", group_id);
-        match.RecordAdditionalInfo("header string", base::UTF16ToUTF8(header));
-      }
-    }
-  }
 }
 
 void AutocompleteController::UpdateKeywordDescriptions(

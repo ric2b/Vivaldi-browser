@@ -8,7 +8,6 @@
 
 #include "apps/launcher.h"
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
-#include "ash/public/cpp/arc_custom_tab.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/keyboard_shortcut_viewer.h"
 #include "ash/public/cpp/shelf_model.h"
@@ -17,6 +16,7 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
+#include "chrome/browser/chromeos/apps/apk_web_app_service.h"
 #include "chrome/browser/chromeos/apps/metrics/intent_handling_metrics.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/arc_web_contents_data.h"
@@ -53,6 +53,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
+#include "components/arc/intent_helper/custom_tab.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sessions/core/tab_restore_service_observer.h"
 #include "components/url_formatter/url_fixer.h"
@@ -99,8 +100,6 @@ constexpr std::pair<arc::mojom::ChromePage, const char*> kOSSettingsMapping[] =
       chromeos::settings::mojom::kMobileDataNetworksSubpagePath},
      {ChromePage::CHANGEPICTURE,
       chromeos::settings::mojom::kChangePictureSubpagePath},
-     {ChromePage::CROSTINIDISKRESIZE,
-      chromeos::settings::mojom::kCrostiniDiskResizeSubpagePath},
      {ChromePage::CONNECTEDDEVICES,
       chromeos::settings::mojom::kMultiDeviceFeaturesSubpagePath},
      {ChromePage::CROSTINISHAREDPATHS,
@@ -134,7 +133,7 @@ constexpr std::pair<arc::mojom::ChromePage, const char*> kOSSettingsMapping[] =
      {ChromePage::OSLANGUAGESINPUTMETHODS,
       chromeos::settings::mojom::kManageInputMethodsSubpagePath},
      {ChromePage::OSLANGUAGESSMARTINPUTS,
-      chromeos::settings::mojom::kSmartInputsSubagePath},
+      chromeos::settings::mojom::kSmartInputsSubpagePath},
      {ChromePage::LOCKSCREEN,
       chromeos::settings::mojom::kSecurityAndSignInSubpagePath},
      {ChromePage::MAIN, ""},
@@ -194,7 +193,8 @@ constexpr std::pair<arc::mojom::ChromePage, const char*> kAboutPagesMapping[] =
      {ChromePage::ABOUTHISTORY, "about:history"}};
 
 constexpr arc::mojom::ChromePage kDeprecatedPages[] = {
-    ChromePage::DEPRECATED_PLUGINVMDETAILS};
+    ChromePage::DEPRECATED_PLUGINVMDETAILS,
+    ChromePage::DEPRECATED_CROSTINIDISKRESIZE};
 
 // mojom::ChromePage::LAST returns the amount of valid entries - 1.
 static_assert(base::size(kOSSettingsMapping) +
@@ -485,6 +485,26 @@ void ChromeNewWindowClient::OpenWebAppFromArc(const GURL& url) {
   proxy->LaunchAppWithUrl(*app_id, event_flags, url,
                           apps::mojom::LaunchSource::kFromArc,
                           display::kInvalidDisplayId);
+
+  chromeos::ApkWebAppService* apk_web_app_service =
+      chromeos::ApkWebAppService::Get(profile);
+  if (!apk_web_app_service ||
+      !apk_web_app_service->IsWebAppInstalledFromArc(app_id.value())) {
+    return;
+  }
+
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile);
+  if (!prefs)
+    return;
+
+  base::Optional<std::string> package_name =
+      apk_web_app_service->GetPackageNameForWebApp(app_id.value());
+  if (!package_name.has_value())
+    return;
+
+  for (const auto& app_id : prefs->GetAppsForPackage(package_name.value())) {
+    proxy->StopApp(app_id);
+  }
 }
 
 void ChromeNewWindowClient::OpenArcCustomTab(
@@ -503,7 +523,7 @@ void ChromeNewWindowClient::OpenArcCustomTab(
   }
 
   auto custom_tab =
-      ash::ArcCustomTab::Create(arc_window, surface_id, top_margin);
+      std::make_unique<arc::CustomTab>(arc_window, surface_id, top_margin);
   auto web_contents = arc::CreateArcCustomTabWebContents(profile, url);
 
   // |custom_tab_browser| will be destroyed when its tab strip becomes empty,

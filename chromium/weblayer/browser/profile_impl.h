@@ -5,6 +5,8 @@
 #ifndef WEBLAYER_BROWSER_PROFILE_IMPL_H_
 #define WEBLAYER_BROWSER_PROFILE_IMPL_H_
 
+#include <set>
+
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -46,7 +48,22 @@ class ProfileImpl : public Profile {
   static ProfileImpl* FromBrowserContext(
       content::BrowserContext* browser_context);
 
-  content::BrowserContext* GetBrowserContext();
+  static std::set<ProfileImpl*> GetAllProfiles();
+
+  // Allows getting notified when profiles are created or destroyed.
+  class ProfileObserver {
+   public:
+    virtual void ProfileCreated(ProfileImpl* profile) {}
+    virtual void ProfileDestroyed(ProfileImpl* profile) {}
+
+   protected:
+    virtual ~ProfileObserver() = default;
+  };
+
+  static void AddProfileObserver(ProfileObserver* observer);
+  static void RemoveProfileObserver(ProfileObserver* observer);
+
+  BrowserContextImpl* GetBrowserContext();
 
   // Called when the download subsystem has finished initializing. By this point
   // information about downloads that were interrupted by a previous crash would
@@ -55,6 +72,7 @@ class ProfileImpl : public Profile {
 
   // Path data is stored at, empty if off-the-record.
   const base::FilePath& data_path() const { return info_.data_path; }
+  const std::string& name() const { return info_.name; }
   DownloadDelegate* download_delegate() { return download_delegate_; }
 
   // Profile implementation:
@@ -65,8 +83,14 @@ class ProfileImpl : public Profile {
   void SetDownloadDirectory(const base::FilePath& directory) override;
   void SetDownloadDelegate(DownloadDelegate* delegate) override;
   CookieManager* GetCookieManager() override;
+  void GetBrowserPersistenceIds(
+      base::OnceCallback<void(base::flat_set<std::string>)> callback) override;
+  void RemoveBrowserPersistenceStorage(
+      base::OnceCallback<void(bool)> done_callback,
+      base::flat_set<std::string> ids) override;
   void SetBooleanSetting(SettingType type, bool value) override;
   bool GetBooleanSetting(SettingType type) override;
+  void PrepareForPossibleCrossOriginNavigation() override;
 
 #if defined(OS_ANDROID)
   ProfileImpl(JNIEnv* env,
@@ -91,10 +115,16 @@ class ProfileImpl : public Profile {
   void EnsureBrowserContextInitialized(JNIEnv* env);
   void SetBooleanSetting(JNIEnv* env, jint j_type, jboolean j_value);
   jboolean GetBooleanSetting(JNIEnv* env, jint j_type);
+  void GetBrowserPersistenceIds(
+      JNIEnv* env,
+      const base::android::JavaRef<jobject>& j_callback);
+  void RemoveBrowserPersistenceStorage(
+      JNIEnv* env,
+      const base::android::JavaRef<jobjectArray>& j_ids,
+      const base::android::JavaRef<jobject>& j_callback);
+  void PrepareForPossibleCrossOriginNavigation(JNIEnv* env);
 #endif
 
-  void IncrementBrowserImplCount();
-  void DecrementBrowserImplCount();
   const base::FilePath& download_directory() { return download_directory_; }
 
   // Get the directory where BrowserPersister stores tab state data. This will
@@ -115,6 +145,9 @@ class ProfileImpl : public Profile {
   // Callback when the system locale has been updated.
   void OnLocaleChanged();
 
+  // Returns the number of Browsers with this profile.
+  int GetNumberOfBrowsers();
+
   ProfileInfo info_;
 
   std::unique_ptr<BrowserContextImpl> browser_context_;
@@ -126,10 +159,6 @@ class ProfileImpl : public Profile {
   std::unique_ptr<i18n::LocaleChangeSubscription> locale_change_subscription_;
 
   std::unique_ptr<CookieManagerImpl> cookie_manager_;
-
-  size_t num_browser_impl_ = 0u;
-
-  bool basic_safe_browsing_enabled_ = true;
 
 #if defined(OS_ANDROID)
   base::android::ScopedJavaGlobalRef<jobject> java_profile_;

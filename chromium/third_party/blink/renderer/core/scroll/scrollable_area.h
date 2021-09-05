@@ -478,7 +478,7 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
   // for layout movements (bit.ly/scroll-anchoring).
   virtual bool ShouldPerformScrollAnchoring() const { return false; }
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   virtual void ClearScrollableArea();
 
@@ -550,6 +550,10 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
   bool HasBeenDisposed() const { return has_been_disposed_; }
 
   virtual const Document* GetDocument() const;
+
+  // Resolves into un-zoomed physical pixels a scroll |delta| based on its
+  // ScrollGranularity units.
+  ScrollOffset ResolveScrollDelta(ScrollGranularity, const ScrollOffset& delta);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ScrollableAreaTest,

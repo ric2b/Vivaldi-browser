@@ -134,6 +134,7 @@ feedui::ZeroStateSlice::Type GetZeroStateType(LoadStreamStatus status) {
     case LoadStreamStatus::kProtoTranslationFailed:
     case LoadStreamStatus::kCannotLoadFromNetworkOffline:
     case LoadStreamStatus::kCannotLoadFromNetworkThrottled:
+    case LoadStreamStatus::kNetworkFetchFailed:
       return feedui::ZeroStateSlice::CANT_REFRESH;
     case LoadStreamStatus::kNoStatus:
     case LoadStreamStatus::kLoadedFromStore:
@@ -148,6 +149,8 @@ feedui::ZeroStateSlice::Type GetZeroStateType(LoadStreamStatus status) {
     case LoadStreamStatus::kLoadNotAllowedArticlesListHidden:
     case LoadStreamStatus::kCannotParseNetworkResponseBody:
     case LoadStreamStatus::kLoadMoreModelIsNotLoaded:
+    case LoadStreamStatus::kLoadNotAllowedDisabledByEnterprisePolicy:
+    case LoadStreamStatus::kCannotLoadMoreNoNextPageToken:
       break;
   }
   return feedui::ZeroStateSlice::NO_CARDS_AVAILABLE;

@@ -21,27 +21,21 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window_state.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/views/extensions/extension_keybinding_registry_views.h"
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/keep_alive_registry/keep_alive_registry.h"
 #include "components/prefs/pref_service.h"
-#include "components/zoom/page_zoom.h"
-#include "components/zoom/zoom_controller.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_view_host.h"
-#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/api/window/window_private_api.h"
-#include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/image_loader.h"
 #include "extensions/common/draggable_region.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
-#include "third_party/skia/include/core/SkRegion.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/image/image_family.h"
@@ -62,14 +56,7 @@
 #include "browser/win/vivaldi_utils.h"
 #endif  // defined(OS_WIN)
 
-using extensions::AppWindow;
-
 namespace {
-
-const int kMinPanelWidth = 100;
-const int kMinPanelHeight = 100;
-const int kDefaultPanelWidth = 200;
-const int kDefaultPanelHeight = 300;
 
 const int kLargeIconSizeViv = 256;
 const int kSmallIconSizeViv = 16;
@@ -82,28 +69,8 @@ struct AcceleratorMapping {
 
 // NOTE(daniel@vivaldi): Vivaldi handles ctrl+w and ctrl+shift+w by itself
 const AcceleratorMapping kAppWindowAcceleratorMap[] = {
-#if !defined(VIVALDI_BUILD)
-  { ui::VKEY_W, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN, IDC_CLOSE_WINDOW },
-  { ui::VKEY_W, ui::EF_CONTROL_DOWN, IDC_CLOSE_WINDOW },
-#endif
   { ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN, IDC_TASK_MANAGER },
   { ui::VKEY_F4, ui::EF_ALT_DOWN, IDC_CLOSE_WINDOW},
-};
-
-// These accelerators will only be available in kiosk mode. These allow the
-// user to manually zoom app windows. This is only necessary in kiosk mode
-// (in normal mode, the user can zoom via the screen magnifier).
-// TODO(xiyuan): Write a test for kiosk accelerators.
-const AcceleratorMapping kAppWindowKioskAppModeAcceleratorMap[] = {
-  { ui::VKEY_OEM_MINUS, ui::EF_CONTROL_DOWN, IDC_ZOOM_MINUS },
-  { ui::VKEY_OEM_MINUS, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN,
-    IDC_ZOOM_MINUS },
-  { ui::VKEY_SUBTRACT, ui::EF_CONTROL_DOWN, IDC_ZOOM_MINUS },
-  { ui::VKEY_OEM_PLUS, ui::EF_CONTROL_DOWN, IDC_ZOOM_PLUS },
-  { ui::VKEY_OEM_PLUS, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN, IDC_ZOOM_PLUS },
-  { ui::VKEY_ADD, ui::EF_CONTROL_DOWN, IDC_ZOOM_PLUS },
-  { ui::VKEY_0, ui::EF_CONTROL_DOWN, IDC_ZOOM_NORMAL },
-  { ui::VKEY_NUMPAD0, ui::EF_CONTROL_DOWN, IDC_ZOOM_NORMAL },
 };
 
 void AddAcceleratorsFromMapping(const AcceleratorMapping mapping[],
@@ -118,38 +85,52 @@ void AddAcceleratorsFromMapping(const AcceleratorMapping mapping[],
 const std::map<ui::Accelerator, int>& GetAcceleratorTable() {
   typedef std::map<ui::Accelerator, int> AcceleratorMap;
   static base::NoDestructor<AcceleratorMap> accelerators;
-  if (!chrome::IsRunningInForcedAppMode()) {
-    if (accelerators->empty()) {
-      AddAcceleratorsFromMapping(kAppWindowAcceleratorMap,
-                                 base::size(kAppWindowAcceleratorMap),
-                                 accelerators.get());
-    }
-    return *accelerators;
+  if (accelerators->empty()) {
+    AddAcceleratorsFromMapping(kAppWindowAcceleratorMap,
+                                base::size(kAppWindowAcceleratorMap),
+                                accelerators.get());
+  }
+  return *accelerators;
+}
+
+// This is based on GetInitialWindowBounds() from
+// chromium/extensions/browser/app_window/app_window.cc
+gfx::Rect GetInitialWindowBounds(
+    const VivaldiBrowserWindowParams& params,
+    const gfx::Insets& frame_insets) {
+  // Combine into a single window bounds.
+  gfx::Rect combined_bounds(VivaldiBrowserWindowParams::kUnspecifiedPosition,
+                            VivaldiBrowserWindowParams::kUnspecifiedPosition, 0,
+                            0);
+  if (params.content_bounds.x() !=
+      VivaldiBrowserWindowParams::kUnspecifiedPosition)
+    combined_bounds.set_x(params.content_bounds.x() - frame_insets.left());
+  if (params.content_bounds.y() !=
+      VivaldiBrowserWindowParams::kUnspecifiedPosition)
+    combined_bounds.set_y(params.content_bounds.y() - frame_insets.top());
+  if (params.content_bounds.width() > 0) {
+    combined_bounds.set_width(params.content_bounds.width() +
+                              frame_insets.width());
+  }
+  if (params.content_bounds.height() > 0) {
+    combined_bounds.set_height(
+        params.content_bounds.height() + frame_insets.height());
   }
 
-  static base::NoDestructor<AcceleratorMap> app_mode_accelerators;
-  if (app_mode_accelerators->empty()) {
-    AddAcceleratorsFromMapping(kAppWindowAcceleratorMap,
-                               base::size(kAppWindowAcceleratorMap),
-                               app_mode_accelerators.get());
-    AddAcceleratorsFromMapping(kAppWindowKioskAppModeAcceleratorMap,
-                               base::size(kAppWindowKioskAppModeAcceleratorMap),
-                               app_mode_accelerators.get());
-  }
-  return *app_mode_accelerators;
+  // Constrain the bounds.
+  gfx::Size size = combined_bounds.size();
+  size.SetToMax(params.minimum_size);
+  combined_bounds.set_size(size);
+
+  return combined_bounds;
 }
 
 }  // namespace
 
 VivaldiNativeAppWindowViews::VivaldiNativeAppWindowViews()
-    : has_frame_color_(false),
-      active_frame_color_(SK_ColorBLACK),
-      inactive_frame_color_(SK_ColorBLACK),
-      window_(NULL),
+    : window_(NULL),
       web_view_(NULL),
       widget_(NULL),
-      frameless_(false),
-      resizable_(false),
       weak_ptr_factory_(this) {
   }
 
@@ -157,27 +138,16 @@ VivaldiNativeAppWindowViews::~VivaldiNativeAppWindowViews() {
   web_view_->SetWebContents(NULL);
 }
 
-void VivaldiNativeAppWindowViews::OnBeforeWidgetInit(
-  const AppWindow::CreateParams& create_params,
-  views::Widget::InitParams* init_params,
-  views::Widget* widget) {
-}
-
-void VivaldiNativeAppWindowViews::OnBeforePanelWidgetInit(
-  views::Widget::InitParams* init_params,
-  views::Widget* widget) {
-}
-
 bool VivaldiNativeAppWindowViews::IsOnCurrentWorkspace() const {
   return true;
 }
 
 void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
-  const AppWindow::CreateParams& create_params) {
+  const VivaldiBrowserWindowParams& create_params) {
   views::Widget::InitParams init_params(views::Widget::InitParams::TYPE_WINDOW);
 
   init_params.delegate = this;
-  init_params.remove_standard_frame = IsFrameless() || has_frame_color_;
+  init_params.remove_standard_frame = frameless_;
   init_params.use_system_default_icon = false;
   if (create_params.alpha_enabled) {
     init_params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
@@ -186,14 +156,14 @@ void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
     // transparency and has no standard frame, don't show a shadow for it.
     // TODO(skuhne): If we run into an application which should have a shadow
     // but does not have, a new attribute has to be added.
-    if (IsFrameless())
+    if (frameless_)
       init_params.shadow_type =
           views::Widget::InitParams::ShadowType::kNone;
   }
   init_params.visible_on_all_workspaces =
-    create_params.visible_on_all_workspaces;
+      create_params.visible_on_all_workspaces;
 
-  OnBeforeWidgetInit(create_params, &init_params, widget());
+  OnBeforeWidgetInit(init_params);
   widget()->Init(std::move(init_params));
 
   // Stow a pointer to the browser's profile onto the window handle so that we
@@ -204,53 +174,30 @@ void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
   // The frame insets are required to resolve the bounds specifications
   // correctly. So we set the window bounds and constraints now.
   gfx::Insets frame_insets = GetFrameInsets();
-  gfx::Rect window_bounds = create_params.GetInitialWindowBounds(frame_insets);
-  SetContentSizeConstraints(create_params.GetContentMinimumSize(frame_insets),
-                            create_params.GetContentMaximumSize(frame_insets));
+
+  widget_->OnSizeConstraintsChanged();
+
+  gfx::Rect window_bounds = GetInitialWindowBounds(create_params, frame_insets);
   if (!window_bounds.IsEmpty()) {
-    using BoundsSpecification = AppWindow::BoundsSpecification;
     bool position_specified =
-      window_bounds.x() != BoundsSpecification::kUnspecifiedPosition &&
-      window_bounds.y() != BoundsSpecification::kUnspecifiedPosition;
+      window_bounds.x() != VivaldiBrowserWindowParams::kUnspecifiedPosition &&
+      window_bounds.y() != VivaldiBrowserWindowParams::kUnspecifiedPosition;
     if (!position_specified)
       widget()->CenterWindow(window_bounds.size());
     else
       widget()->SetBounds(window_bounds);
   }
 
-  // Register accelerators supported by app windows.
-  // TODO(jeremya/stevenjb): should these be registered for panels too?
   views::FocusManager* focus_manager = GetFocusManager();
   const std::map<ui::Accelerator, int>& accelerator_table =
     GetAcceleratorTable();
-  const bool is_kiosk_app_mode = chrome::IsRunningInForcedAppMode();
-
-  // Ensures that kiosk mode accelerators are enabled when in kiosk mode (to be
-  // future proof). This is needed because GetAcceleratorTable() uses a static
-  // to store data and only checks kiosk mode once. If a platform app is
-  // launched before kiosk mode starts, the kiosk accelerators will not be
-  // registered. This CHECK catches the case.
-  CHECK(!is_kiosk_app_mode ||
-        accelerator_table.size() ==
-            base::size(kAppWindowAcceleratorMap) +
-                base::size(kAppWindowKioskAppModeAcceleratorMap));
-
-  // Ensure there is a ZoomController in kiosk mode, otherwise the processing
-  // of the accelerators will cause a crash. Note CHECK here because DCHECK
-  // will not be noticed, as this could only be relevant on real hardware.
-  CHECK(!is_kiosk_app_mode ||
-        zoom::ZoomController::FromWebContents(web_view()->GetWebContents()));
-
   for (std::map<ui::Accelerator, int>::const_iterator iter =
        accelerator_table.begin();
        iter != accelerator_table.end(); ++iter) {
-    if (is_kiosk_app_mode &&
-        !chrome::IsCommandAllowedInAppMode(iter->second, false))
-      continue;
-
     focus_manager->RegisterAccelerator(
       iter->first, ui::AcceleratorManager::kNormalPriority, this);
   }
+
   std::vector<extensions::ImageLoader::ImageRepresentation> info_list;
   const extensions::Extension *extension = window_->extension();
   const ExtensionIconSet& icon_set = extensions::IconsInfo::GetIcons(extension);
@@ -272,53 +219,17 @@ void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
-void VivaldiNativeAppWindowViews::InitializePanelWindow(
-  const AppWindow::CreateParams& create_params) {
-  views::Widget::InitParams params(
-      views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-  params.delegate = this;
-
-  gfx::Rect initial_window_bounds =
-    create_params.GetInitialWindowBounds(gfx::Insets());
-  gfx::Size preferred_size =
-    gfx::Size(initial_window_bounds.width(), initial_window_bounds.height());
-  if (preferred_size.width() == 0)
-    preferred_size.set_width(kDefaultPanelWidth);
-  else if (preferred_size.width() < kMinPanelWidth)
-    preferred_size.set_width(kMinPanelWidth);
-
-  if (preferred_size.height() == 0)
-    preferred_size.set_height(kDefaultPanelHeight);
-  else if (preferred_size.height() < kMinPanelHeight)
-    preferred_size.set_height(kMinPanelHeight);
-  SetPreferredSize(preferred_size);
-
-  params.bounds = gfx::Rect(preferred_size);
-  OnBeforePanelWidgetInit(&params, widget());
-  widget()->Init(std::move(params));
-  widget()->set_focus_on_creation(create_params.focused);
-}
-
-views::NonClientFrameView*
-VivaldiNativeAppWindowViews::CreateStandardDesktopAppFrame() {
-  return views::WidgetDelegateView::CreateNonClientFrameView(widget());
-}
-
 void VivaldiNativeAppWindowViews::Init(
     VivaldiBrowserWindow* window,
-    const AppWindow::CreateParams& create_params) {
+    const VivaldiBrowserWindowParams& create_params) {
   window_ = window;
-  frameless_ = create_params.frame == AppWindow::FRAME_NONE;
-  resizable_ = create_params.resizable;
-  size_constraints_.set_minimum_size(
-      create_params.GetContentMinimumSize(gfx::Insets()));
-  size_constraints_.set_maximum_size(
-      create_params.GetContentMaximumSize(gfx::Insets()));
-  Observe(window_->web_contents());
+  frameless_ = !create_params.native_decorations;
+  minimum_size_ = create_params.minimum_size;
 
   widget_ = new views::Widget;
   widget_->AddObserver(this);
-  InitializeWindow(window, create_params);
+
+  InitializeDefaultWindow(create_params);
 
   OnViewWasResized();
 }
@@ -345,24 +256,10 @@ void VivaldiNativeAppWindowViews::OnCanHaveAlphaEnabledChanged() {
   window_->OnNativeWindowChanged();
 }
 
-void VivaldiNativeAppWindowViews::InitializeWindow(
-    VivaldiBrowserWindow* window,
-    const AppWindow::CreateParams& create_params) {
-  DCHECK(widget());
-  has_frame_color_ = create_params.has_frame_color;
-  active_frame_color_ = create_params.active_frame_color;
-  inactive_frame_color_ = create_params.inactive_frame_color;
-
-  InitializeDefaultWindow(create_params);
-
-  extension_keybinding_registry_.reset(new ExtensionKeybindingRegistryViews(
-    Profile::FromBrowserContext(window->browser()->profile()),
-    widget()->GetFocusManager(),
-    extensions::ExtensionKeybindingRegistry::PLATFORM_APPS_ONLY,
-    NULL));
+void VivaldiNativeAppWindowViews::OnViewWasResized() {
+  for (auto& observer : modal_dialog_host_.observers_)
+    observer.OnPositionRequiresUpdate();
 }
-
-// ui::BaseWindow implementation.
 
 bool VivaldiNativeAppWindowViews::IsActive() const {
   return widget_ ? widget_->IsActive() : false;
@@ -411,14 +308,6 @@ void VivaldiNativeAppWindowViews::Show() {
   }
 
   widget_->Show();
-  shown_ = true;
-}
-
-void VivaldiNativeAppWindowViews::ShowInactive() {
-  if (widget_->IsVisible())
-    return;
-
-  widget_->ShowInactive();
 }
 
 void VivaldiNativeAppWindowViews::Hide() {
@@ -461,36 +350,6 @@ gfx::NativeView VivaldiNativeAppWindowViews::GetNativeView() {
   return widget_->GetNativeView();
 }
 
-gfx::NativeView VivaldiNativeAppWindowViews::GetHostView() const {
-  return widget_->GetNativeView();
-}
-
-gfx::Point VivaldiNativeAppWindowViews::GetDialogPosition(
-    const gfx::Size& size) {
-  gfx::Size app_window_size = widget_->GetWindowBoundsInScreen().size();
-  return gfx::Point(app_window_size.width() / 2 - size.width() / 2,
-                    app_window_size.height() / 2 - size.height() / 2);
-}
-
-gfx::Size VivaldiNativeAppWindowViews::GetMaximumDialogSize() {
-  return widget_->GetWindowBoundsInScreen().size();
-}
-
-void VivaldiNativeAppWindowViews::AddObserver(
-    web_modal::ModalDialogHostObserver* observer) {
-  observer_list_.AddObserver(observer);
-}
-
-void VivaldiNativeAppWindowViews::RemoveObserver(
-    web_modal::ModalDialogHostObserver* observer) {
-  observer_list_.RemoveObserver(observer);
-}
-
-void VivaldiNativeAppWindowViews::OnViewWasResized() {
-  for (auto& observer : observer_list_)
-    observer.OnPositionRequiresUpdate();
-}
-
 // WidgetDelegate implementation.
 
 gfx::ImageSkia VivaldiNativeAppWindowViews::GetWindowAppIcon() {
@@ -528,12 +387,6 @@ void VivaldiNativeAppWindowViews::OnImagesLoaded(gfx::ImageFamily images) {
   widget_->UpdateWindowIcon();
 }
 
-views::NonClientFrameView*
-VivaldiNativeAppWindowViews::CreateNonClientFrameView(views::Widget* widget) {
-  return (IsFrameless() || has_frame_color_) ? CreateNonStandardAppFrame()
-                                             : CreateStandardDesktopAppFrame();
-}
-
 views::ClientView*
 VivaldiNativeAppWindowViews::CreateClientView(views::Widget* widget) {
   return new VivaldiAppWindowClientView(widget, GetContentsView(), window());
@@ -567,13 +420,11 @@ views::View* VivaldiNativeAppWindowViews::GetInitiallyFocusedView() {
 }
 
 bool VivaldiNativeAppWindowViews::CanResize() const {
-  return resizable_ && !size_constraints_.HasFixedSize() &&
-         !WidgetHasHitTestMask();
+  return true;
 }
 
 bool VivaldiNativeAppWindowViews::CanMaximize() const {
-  return resizable_ && !size_constraints_.HasMaximumSize() &&
-         !WidgetHasHitTestMask();
+  return true;
 }
 
 bool VivaldiNativeAppWindowViews::CanMinimize() const {
@@ -683,8 +534,11 @@ bool VivaldiNativeAppWindowViews::ExecuteWindowsCommand(int command_id) {
 }
 
 void VivaldiNativeAppWindowViews::HandleKeyboardCode(ui::KeyboardCode code) {
+  Browser* browser = window()->browser();
+  if (!browser)
+    return;
   extensions::WebViewGuest *current_webviewguest =
-      vivaldi::ui_tools::GetActiveWebViewGuest(this);
+      vivaldi::ui_tools::GetActiveWebGuestFromBrowser(browser);
   if (current_webviewguest) {
     content::NativeWebKeyboardEvent synth_event(
         blink::WebInputEvent::Type::kRawKeyDown,
@@ -699,10 +553,9 @@ void VivaldiNativeAppWindowViews::HandleKeyboardCode(ui::KeyboardCode code) {
 // WidgetObserver implementation.
 
 void VivaldiNativeAppWindowViews::OnWidgetDestroying(views::Widget* widget) {
-  for (auto& observer : observer_list_)
+  for (auto& observer : modal_dialog_host_.observers_) {
     observer.OnHostDestroying();
-
-  extension_keybinding_registry_.reset(nullptr);
+  }
 }
 
 void VivaldiNativeAppWindowViews::OnWidgetVisibilityChanged(
@@ -728,23 +581,6 @@ void VivaldiNativeAppWindowViews::OnWidgetDestroyed(views::Widget* widget) {
   }
 }
 
-// WebContentsObserver implementation.
-void VivaldiNativeAppWindowViews::RenderViewCreated(
-    content::RenderViewHost* render_view_host) {
-  content::RenderWidgetHostView* view =
-    render_view_host->GetWidget()->GetView();
-  DCHECK(view);
-  if (window_->requested_alpha_enabled() && CanHaveAlphaEnabled()) {
-    view->SetBackgroundColor(SK_ColorTRANSPARENT);
-  }
-}
-
-void VivaldiNativeAppWindowViews::RenderViewHostChanged(
-    content::RenderViewHost* old_host,
-    content::RenderViewHost* new_host) {
-  OnViewWasResized();
-}
-
 // views::View implementation.
 
 bool VivaldiNativeAppWindowViews::AcceleratorPressed(
@@ -761,18 +597,6 @@ bool VivaldiNativeAppWindowViews::AcceleratorPressed(
     return true;
   case IDC_TASK_MANAGER:
     chrome::OpenTaskManager(NULL);
-    return true;
-
-  case IDC_ZOOM_MINUS:
-    zoom::PageZoom::Zoom(web_view()->GetWebContents(),
-                         content::PAGE_ZOOM_OUT);
-    return true;
-  case IDC_ZOOM_NORMAL:
-    zoom::PageZoom::Zoom(web_view()->GetWebContents(),
-                         content::PAGE_ZOOM_RESET);
-    return true;
-  case IDC_ZOOM_PLUS:
-    zoom::PageZoom::Zoom(web_view()->GetWebContents(), content::PAGE_ZOOM_IN);
     return true;
   default:
     NOTREACHED() << "Unknown accelerator sent to app window.";
@@ -796,11 +620,11 @@ void VivaldiNativeAppWindowViews::ViewHierarchyChanged(
 }
 
 gfx::Size VivaldiNativeAppWindowViews::GetMinimumSize() const {
-  return size_constraints_.GetMinimumSize();
+  return minimum_size_;
 }
 
 gfx::Size VivaldiNativeAppWindowViews::GetMaximumSize() const {
-  return size_constraints_.GetMaximumSize();
+  return gfx::Size();
 }
 
 void VivaldiNativeAppWindowViews::OnFocus() {
@@ -809,19 +633,12 @@ void VivaldiNativeAppWindowViews::OnFocus() {
 
 // NativeAppWindow implementation.
 
-void VivaldiNativeAppWindowViews::SetFullscreen(int fullscreen_types) {
-  // Stub implementation. See also ChromeNativeAppWindowViews.
-  widget()->SetFullscreen(fullscreen_types != AppWindow::FULLSCREEN_TYPE_NONE);
+void VivaldiNativeAppWindowViews::SetFullscreen(bool is_fullscreen) {
+  widget()->SetFullscreen(is_fullscreen);
 }
 
 bool VivaldiNativeAppWindowViews::IsFullscreenOrPending() const {
   return widget()->IsFullscreen();
-}
-
-void VivaldiNativeAppWindowViews::UpdateShape(
-    std::unique_ptr<ShapeRects> rects) {
-  widget()->SetShape(nullptr);
-  widget()->OnSizeConstraintsChanged();
 }
 
 void VivaldiNativeAppWindowViews::UpdateWindowIcon() {
@@ -838,34 +655,18 @@ void VivaldiNativeAppWindowViews::UpdateDraggableRegions(
   if (!frameless_)
     return;
 
-  draggable_region_.reset(AppWindow::RawDraggableRegionsToSkRegion(regions));
+  // This is based on RawDraggableRegionsToSkRegion from
+  // chromium/extensions/browser/app_window/app_window.cc
+  draggable_region_ = std::make_unique<SkRegion>();
+  for (auto iter = regions.cbegin(); iter != regions.cend(); ++iter) {
+    const extensions::DraggableRegion& region = *iter;
+    draggable_region_->op(
+        SkIRect::MakeLTRB(region.bounds.x(), region.bounds.y(),
+                          region.bounds.right(), region.bounds.bottom()),
+        region.draggable ? SkRegion::kUnion_Op : SkRegion::kDifference_Op);
+  }
+
   OnViewWasResized();
-}
-
-SkRegion* VivaldiNativeAppWindowViews::GetDraggableRegion() {
-  return draggable_region_.get();
-}
-
-bool VivaldiNativeAppWindowViews::HandleKeyboardEvent(
-    const content::NativeWebKeyboardEvent& event) {
-  return unhandled_keyboard_event_handler_.HandleKeyboardEvent(event,
-                                                        GetFocusManager());
-}
-
-bool VivaldiNativeAppWindowViews::IsFrameless() const {
-  return frameless_;
-}
-
-bool VivaldiNativeAppWindowViews::HasFrameColor() const {
-  return has_frame_color_;
-}
-
-SkColor VivaldiNativeAppWindowViews::ActiveFrameColor() const {
-  return active_frame_color_;
-}
-
-SkColor VivaldiNativeAppWindowViews::InactiveFrameColor() const {
-  return inactive_frame_color_;
 }
 
 gfx::Insets VivaldiNativeAppWindowViews::GetFrameInsets() const {
@@ -881,22 +682,6 @@ gfx::Insets VivaldiNativeAppWindowViews::GetFrameInsets() const {
   gfx::Rect window_bounds =
       widget_->non_client_view()->GetWindowBoundsForClientBounds(client_bounds);
   return window_bounds.InsetsFrom(client_bounds);
-}
-
-gfx::Size VivaldiNativeAppWindowViews::GetContentMinimumSize() const {
-  return size_constraints_.GetMinimumSize();
-}
-
-gfx::Size VivaldiNativeAppWindowViews::GetContentMaximumSize() const {
-  return size_constraints_.GetMaximumSize();
-}
-
-void VivaldiNativeAppWindowViews::SetContentSizeConstraints(
-    const gfx::Size& min_size,
-    const gfx::Size& max_size) {
-  size_constraints_.set_minimum_size(min_size);
-  size_constraints_.set_maximum_size(max_size);
-  widget_->OnSizeConstraintsChanged();
 }
 
 bool VivaldiNativeAppWindowViews::CanHaveAlphaEnabled() const {
@@ -1050,4 +835,45 @@ bool VivaldiAppWindowClientView::CanClose() {
     return false;
   }
   return true;
+}
+
+// ModalDialogHost methods
+
+VivaldiNativeAppWindowViews::ModalDialogHost::ModalDialogHost(
+    VivaldiNativeAppWindowViews* views)
+    : views_(views) {}
+
+VivaldiNativeAppWindowViews::ModalDialogHost::~ModalDialogHost() = default;
+
+gfx::NativeView VivaldiNativeAppWindowViews::ModalDialogHost::GetHostView()
+    const {
+  if (!views_->widget())
+    return nullptr;
+  return views_->widget()->GetNativeView();
+}
+
+gfx::Point VivaldiNativeAppWindowViews::ModalDialogHost::GetDialogPosition(
+    const gfx::Size& size) {
+  if (!views_->widget())
+    return gfx::Point();
+  gfx::Size app_window_size =
+      views_->widget()->GetWindowBoundsInScreen().size();
+  return gfx::Point(app_window_size.width() / 2 - size.width() / 2,
+                    app_window_size.height() / 2 - size.height() / 2);
+}
+
+gfx::Size VivaldiNativeAppWindowViews::ModalDialogHost::GetMaximumDialogSize() {
+  if (!views_->widget())
+    return gfx::Size();
+  return views_->widget()->GetWindowBoundsInScreen().size();
+}
+
+void VivaldiNativeAppWindowViews::ModalDialogHost::AddObserver(
+    web_modal::ModalDialogHostObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void VivaldiNativeAppWindowViews::ModalDialogHost::RemoveObserver(
+    web_modal::ModalDialogHostObserver* observer) {
+  observers_.RemoveObserver(observer);
 }

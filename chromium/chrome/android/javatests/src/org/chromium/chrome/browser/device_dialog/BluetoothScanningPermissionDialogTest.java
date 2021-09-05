@@ -5,10 +5,11 @@
 package org.chromium.chrome.browser.device_dialog;
 
 import android.app.Dialog;
-import android.support.test.filters.LargeTest;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ListView;
+
+import androidx.test.filters.LargeTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -66,7 +67,7 @@ public class BluetoothScanningPermissionDialogTest {
 
     private BluetoothScanningPermissionDialog createDialog() {
         return TestThreadUtils.runOnUiThreadBlockingNoException(() -> {
-            mWindowAndroid = new ActivityWindowAndroid(mActivityTestRule.getActivity());
+            mWindowAndroid = mActivityTestRule.getActivity().getWindowAndroid();
             BluetoothScanningPermissionDialog dialog = new BluetoothScanningPermissionDialog(
                     mWindowAndroid, "https://origin.example.com/", ConnectionSecurityLevel.SECURE,
                     /*nativeBluetoothScanningPermissionDialogPtr=*/42);

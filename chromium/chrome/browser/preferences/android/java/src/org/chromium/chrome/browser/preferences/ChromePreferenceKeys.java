@@ -211,6 +211,15 @@ public final class ChromePreferenceKeys {
     public static final String CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS_CLICKED =
             "Chrome.ContextMenu.SearchWithGoogleLensClicked";
 
+    public static final String CONTEXT_MENU_SHOP_SIMILAR_PRODUCTS_CLICKED =
+            "Chrome.ContextMenu.ShopSimilarProductsClicked";
+
+    public static final String CONTEXT_MENU_SHOP_IMAGE_WITH_GOOGLE_LENS_CLICKED =
+            "Chrome.ContextMenu.ShopImageWithGoogleLensClicked";
+
+    public static final String CONTEXT_MENU_SEARCH_SIMILAR_PRODUCTS_CLICKED =
+            "Chrome.ContextMenu.SearchSimilarProductsClicked";
+
     public static final String CRASH_UPLOAD_FAILURE_BROWSER = "browser_crash_failure_upload";
     public static final String CRASH_UPLOAD_FAILURE_GPU = "gpu_crash_failure_upload";
     public static final String CRASH_UPLOAD_FAILURE_OTHER = "other_crash_failure_upload";
@@ -279,6 +288,20 @@ public final class ChromePreferenceKeys {
     public static final String DATA_REDUCTION_SITE_BREAKDOWN_ALLOWED_DATE =
             "data_reduction_site_breakdown_allowed_date";
 
+    /**
+     * Keys used to save whether it is ready to promo.
+     */
+    public static final String DEFAULT_BROWSER_PROMO_SESSION_COUNT =
+            "Chrome.DefaultBrowserPromo.SessionCount";
+    public static final String DEFAULT_BROWSER_PROMO_PROMOED_COUNT =
+            "Chrome.DefaultBrowserPromo.PromoedCount";
+    public static final String DEFAULT_BROWSER_PROMO_LAST_DEFAULT_STATE =
+            "Chrome.DefaultBrowserPromo.LastDefaultState";
+    public static final String DEFAULT_BROWSER_PROMO_LAST_PROMO_TIME =
+            "Chrome.DefaultBrowserPromo.LastPromoTime";
+    public static final String DEFAULT_BROWSER_PROMO_PROMOED_BY_SYSTEM_SETTINGS =
+            "Chrome.DefaultBrowserPromo.PromoedBySystemSettings";
+
     public static final String DOWNLOAD_AUTO_RESUMPTION_ATTEMPT_LEFT = "ResumptionAttemptLeft";
     public static final String DOWNLOAD_FOREGROUND_SERVICE_OBSERVERS = "ForegroundServiceObservers";
     public static final String DOWNLOAD_IS_DOWNLOAD_HOME_ENABLED =
@@ -295,6 +318,12 @@ public final class ChromePreferenceKeys {
      */
     public static final String EXPLORE_OFFLINE_CONTENT_AVAILABILITY_STATUS =
             "Chrome.NTPExploreOfflineCard.HasExploreOfflineContent";
+
+    /**
+     * The Feed articles visibility. This value is used as a pre-native cache and should be kept
+     * consistent with {@link Pref.ARTICLES_LIST_VISIBLE}.
+     */
+    public static final String FEED_ARTICLES_LIST_VISIBLE = "Chrome.Feed.ArticlesListVisible";
 
     public static final String FIRST_RUN_CACHED_TOS_ACCEPTED = "first_run_tos_accepted";
     public static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";
@@ -547,6 +576,13 @@ public final class ChromePreferenceKeys {
     public static final String SEARCH_ENGINE_CHOICE_REQUESTED_TIMESTAMP =
             "search_engine_choice_requested_timestamp";
 
+    public static final String SEARCH_WIDGET_IS_VOICE_SEARCH_AVAILABLE =
+            "org.chromium.chrome.browser.searchwidget.IS_VOICE_SEARCH_AVAILABLE";
+    public static final String SEARCH_WIDGET_NUM_CONSECUTIVE_CRASHES =
+            "org.chromium.chrome.browser.searchwidget.NUM_CONSECUTIVE_CRASHES";
+    public static final String SEARCH_WIDGET_SEARCH_ENGINE_SHORTNAME =
+            "org.chromium.chrome.browser.searchwidget.SEARCH_ENGINE_SHORTNAME";
+
     // Tracks which GUIDs there is an active notification for.
     public static final String SEND_TAB_TO_SELF_ACTIVE_NOTIFICATIONS =
             "send_tab_to_self.notification.active";
@@ -753,8 +789,17 @@ public final class ChromePreferenceKeys {
                 CONTEXT_MENU_OPEN_IMAGE_IN_EPHEMERAL_TAB_CLICKED,
                 CONTEXT_MENU_OPEN_IN_EPHEMERAL_TAB_CLICKED,
                 CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS_CLICKED,
+                CONTEXT_MENU_SHOP_IMAGE_WITH_GOOGLE_LENS_CLICKED,
+                CONTEXT_MENU_SHOP_SIMILAR_PRODUCTS_CLICKED,
+                CONTEXT_MENU_SEARCH_SIMILAR_PRODUCTS_CLICKED,
                 CRYPTID_LAST_RENDER_TIMESTAMP,
+                DEFAULT_BROWSER_PROMO_LAST_DEFAULT_STATE,
+                DEFAULT_BROWSER_PROMO_LAST_PROMO_TIME,
+                DEFAULT_BROWSER_PROMO_PROMOED_BY_SYSTEM_SETTINGS,
+                DEFAULT_BROWSER_PROMO_PROMOED_COUNT,
+                DEFAULT_BROWSER_PROMO_SESSION_COUNT,
                 EXPLORE_OFFLINE_CONTENT_AVAILABILITY_STATUS,
+                FEED_ARTICLES_LIST_VISIBLE,
                 FLAGS_CACHED.pattern(),
                 FLAGS_CACHED_DUET_TABSTRIP_INTEGRATION_ANDROID_ENABLED,
                 FLAGS_FIELD_TRIAL_PARAM_CACHED.pattern(),

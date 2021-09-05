@@ -157,6 +157,9 @@ class ExtensionInstalledBubbleView : public BubbleSyncPromoDelegate,
 void ExtensionInstalledBubbleView::Show(
     Browser* browser,
     std::unique_ptr<ExtensionInstalledBubbleModel> model) {
+  if (vivaldi::IsVivaldiRunning()) {
+    return;
+  }
   auto delegate =
       std::make_unique<ExtensionInstalledBubbleView>(browser, std::move(model));
   auto* weak_delegate = delegate.get();

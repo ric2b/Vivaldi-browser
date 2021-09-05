@@ -19,6 +19,7 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/http_user_agent_settings.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_isolation_key.h"
 #include "net/cert/cert_verifier.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/host_resolver_manager.h"
@@ -67,10 +68,8 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
   options.SetPath({"QUIC", "connection_options"}, base::Value("TIME,TBBR,REJ"));
   options.SetPath(
       {"QUIC", "set_quic_flags"},
-      base::Value(
-          "FLAGS_quic_max_aggressive_retransmittable_on_wire_ping_count=5,"
-          "FLAGS_quic_reloadable_flag_quic_enable_version_t050_v2=true,"
-          "FLAGS_quic_reloadable_flag_quic_enable_version_draft_27=true"));
+      base::Value("FLAGS_quic_reloadable_flag_quic_testonly_default_false=true,"
+                  "FLAGS_quic_restart_flag_quic_testonly_default_true=false"));
   options.SetPath({"AsyncDNS", "enable"}, base::Value(true));
   options.SetPath({"NetworkErrorLogging", "enable"}, base::Value(true));
   options.SetPath({"NetworkErrorLogging", "preloaded_report_to_headers"},
@@ -142,9 +141,8 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
   EXPECT_TRUE(base::JSONWriter::Write(options, &options_json));
 
   // Initialize QUIC flags set by the config.
-  FLAGS_quic_max_aggressive_retransmittable_on_wire_ping_count = 0;
-  FLAGS_quic_reloadable_flag_quic_enable_version_t050_v2 = false;
-  FLAGS_quic_reloadable_flag_quic_enable_version_draft_27 = false;
+  FLAGS_quic_reloadable_flag_quic_testonly_default_false = false;
+  FLAGS_quic_restart_flag_quic_testonly_default_true = true;
 
   URLRequestContextConfig config(
       // Enable QUIC.
@@ -195,9 +193,9 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
   quic_connection_options.push_back(quic::kREJ);
   EXPECT_EQ(quic_connection_options, quic_params->connection_options);
 
-  EXPECT_EQ(FLAGS_quic_max_aggressive_retransmittable_on_wire_ping_count, 5);
-  EXPECT_TRUE(FLAGS_quic_reloadable_flag_quic_enable_version_t050_v2);
-  EXPECT_TRUE(FLAGS_quic_reloadable_flag_quic_enable_version_draft_27);
+  // Check QUIC flags.
+  EXPECT_TRUE(FLAGS_quic_reloadable_flag_quic_testonly_default_false);
+  EXPECT_FALSE(FLAGS_quic_restart_flag_quic_testonly_default_true);
 
   // Check Custom QUIC User Agent Id.
   EXPECT_EQ("Custom QUIC UAID", quic_params->user_agent_id);
@@ -285,9 +283,9 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
 
   // All host resolution expected to be mapped to an immediately-resolvable IP.
   std::unique_ptr<net::HostResolver::ResolveHostRequest> resolve_request =
-      context->host_resolver()->CreateRequest(net::HostPortPair("abcde", 80),
-                                              net::NetLogWithSource(),
-                                              base::nullopt);
+      context->host_resolver()->CreateRequest(
+          net::HostPortPair("abcde", 80), net::NetworkIsolationKey(),
+          net::NetLogWithSource(), base::nullopt);
   EXPECT_EQ(net::OK, resolve_request->Start(
                          base::BindOnce([](int error) { NOTREACHED(); })));
 
@@ -296,8 +294,16 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
 }
 
 TEST(URLRequestContextConfigTest, SetSupportedQuicVersion) {
+  // Note that this test covers the legacy mechanism which relies on
+  // QuicVersionToString. We should now be using ALPNs instead.
   base::test::TaskEnvironment task_environment_(
       base::test::TaskEnvironment::MainThreadType::IO);
+
+  quic::ParsedQuicVersion version =
+      quic::AllSupportedVersionsWithQuicCrypto().front();
+  std::string experimental_options =
+      "{\"QUIC\":{\"quic_version\":\"" +
+      quic::QuicVersionToString(version.transport_version) + "\"}}";
 
   URLRequestContextConfig config(
       // Enable QUIC.
@@ -322,7 +328,7 @@ TEST(URLRequestContextConfigTest, SetSupportedQuicVersion) {
       // User-Agent request header field.
       "fake agent",
       // JSON encoded experimental options.
-      "{\"QUIC\":{\"quic_version\":\"QUIC_VERSION_46\"}}",
+      experimental_options,
       // MockCertVerifier to use for testing purposes.
       std::unique_ptr<net::CertVerifier>(),
       // Enable network quality estimator.
@@ -341,15 +347,17 @@ TEST(URLRequestContextConfigTest, SetSupportedQuicVersion) {
   std::unique_ptr<net::URLRequestContext> context(builder.Build());
   const net::QuicParams* quic_params = context->quic_context()->params();
   EXPECT_EQ(quic_params->supported_versions.size(), 1u);
-  EXPECT_EQ(quic_params->supported_versions[0],
-            quic::ParsedQuicVersion(quic::PROTOCOL_QUIC_CRYPTO,
-                                    quic::QUIC_VERSION_46));
+  EXPECT_EQ(quic_params->supported_versions[0], version);
 }
 
 TEST(URLRequestContextConfigTest, SetSupportedQuicVersionByAlpn) {
   base::test::TaskEnvironment task_environment_(
       base::test::TaskEnvironment::MainThreadType::IO);
 
+  quic::ParsedQuicVersion version = quic::AllSupportedVersions().front();
+  std::string experimental_options =
+      "{\"QUIC\":{\"quic_version\":\"" + quic::AlpnForVersion(version) + "\"}}";
+
   URLRequestContextConfig config(
       // Enable QUIC.
       true,
@@ -373,7 +381,7 @@ TEST(URLRequestContextConfigTest, SetSupportedQuicVersionByAlpn) {
       // User-Agent request header field.
       "fake agent",
       // JSON encoded experimental options.
-      "{\"QUIC\":{\"quic_version\":\"h3-T050\"}}",
+      experimental_options,
       // MockCertVerifier to use for testing purposes.
       std::unique_ptr<net::CertVerifier>(),
       // Enable network quality estimator.
@@ -392,9 +400,7 @@ TEST(URLRequestContextConfigTest, SetSupportedQuicVersionByAlpn) {
   std::unique_ptr<net::URLRequestContext> context(builder.Build());
   const net::QuicParams* quic_params = context->quic_context()->params();
   EXPECT_EQ(quic_params->supported_versions.size(), 1u);
-  EXPECT_EQ(
-      quic_params->supported_versions[0],
-      quic::ParsedQuicVersion(quic::PROTOCOL_TLS1_3, quic::QUIC_VERSION_50));
+  EXPECT_EQ(quic_params->supported_versions[0], version);
 }
 
 TEST(URLRequestContextConfigTest, SetUnsupportedQuicVersion) {
@@ -424,7 +430,7 @@ TEST(URLRequestContextConfigTest, SetUnsupportedQuicVersion) {
       // User-Agent request header field.
       "fake agent",
       // JSON encoded experimental options.
-      "{\"QUIC\":{\"quic_version\":\"QUIC_VERSION_33\"}}",
+      "{\"QUIC\":{\"quic_version\":\"h3-Q047\"}}",
       // MockCertVerifier to use for testing purposes.
       std::unique_ptr<net::CertVerifier>(),
       // Enable network quality estimator.
@@ -444,8 +450,7 @@ TEST(URLRequestContextConfigTest, SetUnsupportedQuicVersion) {
   const net::QuicParams* quic_params = context->quic_context()->params();
   EXPECT_EQ(quic_params->supported_versions.size(), 1u);
   EXPECT_EQ(quic_params->supported_versions[0],
-            quic::ParsedQuicVersion(quic::PROTOCOL_QUIC_CRYPTO,
-                                    quic::QUIC_VERSION_46));
+            net::kDefaultSupportedQuicVersion);
 }
 
 TEST(URLRequestContextConfigTest, SetQuicServerMigrationOptions) {

@@ -19,6 +19,10 @@ var ACCELERATOR_DEVICE_REQUISITION = '3';
 var cr;
 cr.ui = {};
 
+cr.ui.login = {};
+
+cr.ui.login.invokePolymerMethod = function(element, name, ...args) {};
+
 cr.define = function(name, constructor_function) {};
 
 /** @interface */
@@ -42,6 +46,16 @@ class Oobe {
    * @param {DisplayManagerScreenAttributes} attributes
    */
   registerScreen(el, attributes) {}
+
+  /**
+   * @param {Object} params
+   */
+  showScreen(params) {}
+
+  /**
+   * @param {boolean} forceOnline
+   */
+  resetSigninUI(forceOnline) {}
 
   /**
    * @return {?OobeTypes.OobeConfiguration}

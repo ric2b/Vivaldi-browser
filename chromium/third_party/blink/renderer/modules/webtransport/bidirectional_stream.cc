@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/check.h"
-#include "base/logging.h"
 #include "third_party/blink/renderer/modules/webtransport/quic_transport.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -64,11 +63,12 @@ void BidirectionalStream::SendFin() {
 
 void BidirectionalStream::OnOutgoingStreamAbort() {
   DCHECK(!sent_fin_);
+  quic_transport_->AbortStream(stream_id_);
   quic_transport_->ForgetStream(stream_id_);
   incoming_stream_->Reset();
 }
 
-void BidirectionalStream::Trace(Visitor* visitor) {
+void BidirectionalStream::Trace(Visitor* visitor) const {
   visitor->Trace(outgoing_stream_);
   visitor->Trace(incoming_stream_);
   visitor->Trace(quic_transport_);

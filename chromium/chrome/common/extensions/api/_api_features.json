@@ -61,9 +61,6 @@
     "dependencies": ["manifest:action"],
     "contexts": ["blessed_extension"]
   },
-  "action.setIcon": {
-    "disallow_for_service_workers": true
-  },
   "activityLogPrivate": [{
     "dependencies": ["permission:activityLogPrivate"],
     "contexts": ["blessed_extension"]
@@ -191,22 +188,6 @@
   },
   "cast.channel": {
     "dependencies": ["permission:cast"],
-    "contexts": ["blessed_extension"]
-  },
-  "cast.streaming.rtpStream": {
-    "dependencies": ["permission:cast.streaming"],
-    "contexts": ["blessed_extension"]
-  },
-  "cast.streaming.receiverSession": {
-    "dependencies": ["permission:cast.streaming"],
-    "contexts": ["blessed_extension"]
-  },
-  "cast.streaming.session": {
-    "dependencies": ["permission:cast.streaming"],
-    "contexts": ["blessed_extension"]
-  },
-  "cast.streaming.udpTransport": {
-    "dependencies": ["permission:cast.streaming"],
     "contexts": ["blessed_extension"]
   },
   "certificateProvider": {
@@ -359,6 +340,10 @@
   },
   "enterprise.deviceAttributes": {
     "dependencies": ["permission:enterprise.deviceAttributes"],
+    "contexts": ["blessed_extension"]
+  },
+  "enterprise.networkingAttributes": {
+    "dependencies": ["permission:enterprise.networkingAttributes"],
     "contexts": ["blessed_extension"]
   },
   "enterprise.platformKeys": {

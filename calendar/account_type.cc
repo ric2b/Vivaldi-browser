@@ -19,6 +19,7 @@ AccountRow::AccountRow(const AccountRow& account)
       url(account.url),
       username(account.username),
       account_type(account.account_type),
+      interval(account.interval),
       updateFields(account.updateFields) {}
 
 }  // namespace calendar

@@ -15,11 +15,6 @@ namespace {
 
 // Returns true if the prefs were migrated.
 bool MaybeMigratePreferences(PrefService* prefs) {
-  // SplitSyncConsent has its own OOBE flow to enable OS sync, so it doesn't
-  // need this migration.
-  if (chromeos::features::IsSplitSyncConsentEnabled())
-    return false;
-
   // Migration code can be removed when SplitSettingsSync has been fully
   // deployed to stable channel, likely in July 2020. When doing this, change
   // the pref kOsSyncFeatureEnabled to default to true and delete the pref
@@ -28,18 +23,12 @@ bool MaybeMigratePreferences(PrefService* prefs) {
     // Reset the migration flag because this might be a rollback of the feature.
     // We want migration to happen again when the feature is enabled.
     prefs->SetBoolean(syncer::prefs::kOsSyncPrefsMigrated, false);
-
-    // Reset the OS sync feature just to be safe.
-    prefs->SetBoolean(syncer::prefs::kOsSyncFeatureEnabled, false);
     return false;
   }
 
   // Don't migrate more than once.
   if (prefs->GetBoolean(syncer::prefs::kOsSyncPrefsMigrated))
     return false;
-
-  // Browser sync-the-feature is always enabled on Chrome OS, so OS sync is too.
-  prefs->SetBoolean(syncer::prefs::kOsSyncFeatureEnabled, true);
 
   // OS sync model types get their initial state from the corresponding browser
   // model types.

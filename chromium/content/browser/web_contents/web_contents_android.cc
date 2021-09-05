@@ -445,12 +445,6 @@ void WebContentsAndroid::SetAudioMuted(JNIEnv* env,
   web_contents_->SetAudioMuted(mute);
 }
 
-jboolean WebContentsAndroid::IsShowingInterstitialPage(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj) {
-  return web_contents_->ShowingInterstitialPage();
-}
-
 jboolean WebContentsAndroid::FocusLocationBarByDefault(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
@@ -471,7 +465,7 @@ void WebContentsAndroid::ExitFullscreen(JNIEnv* env,
 void WebContentsAndroid::ScrollFocusedEditableNodeIntoView(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  auto* input_handler = web_contents_->GetFocusedFrameInputHandler();
+  auto* input_handler = web_contents_->GetFocusedFrameWidgetInputHandler();
   if (!input_handler)
     return;
   input_handler->ScrollFocusedEditableNodeIntoRect(gfx::Rect());
@@ -488,7 +482,7 @@ void WebContentsAndroid::SelectWordAroundCaretAck(bool did_select,
 void WebContentsAndroid::SelectWordAroundCaret(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  auto* input_handler = web_contents_->GetFocusedFrameInputHandler();
+  auto* input_handler = web_contents_->GetFocusedFrameWidgetInputHandler();
   if (!input_handler)
     return;
   input_handler->SelectWordAroundCaret(
@@ -510,7 +504,7 @@ bool WebContentsAndroid::InitializeRenderFrameForJavaScript() {
   if (!web_contents_->GetFrameTree()
            ->root()
            ->render_manager()
-           ->InitializeRenderFrameForImmediateUse()) {
+           ->InitializeMainRenderFrameForImmediateUse()) {
     LOG(ERROR) << "Failed to initialize RenderFrame to evaluate javascript";
     return false;
   }

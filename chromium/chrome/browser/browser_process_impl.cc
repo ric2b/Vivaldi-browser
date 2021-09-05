@@ -25,7 +25,6 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread.h"
@@ -93,6 +92,8 @@
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/timer_update_scheduler.h"
 #include "components/crash/core/common/crash_key.h"
+#include "components/federated_learning/floc_blocklist_service.h"
+#include "components/federated_learning/floc_constants.h"
 #include "components/gcm_driver/gcm_driver.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -562,8 +563,8 @@ void RequestProxyResolvingSocketFactoryOnUIThread(
 void RequestProxyResolvingSocketFactory(
     mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>
         receiver) {
-  base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(&RequestProxyResolvingSocketFactoryOnUIThread,
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&RequestProxyResolvingSocketFactoryOnUIThread,
                                 std::move(receiver)));
 }
 #endif
@@ -1005,6 +1006,14 @@ BrowserProcessImpl::subresource_filter_ruleset_service() {
   return subresource_filter_ruleset_service_.get();
 }
 
+federated_learning::FlocBlocklistService*
+BrowserProcessImpl::floc_blocklist_service() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!floc_blocklist_service_)
+    CreateFlocBlocklistService();
+  return floc_blocklist_service_.get();
+}
+
 optimization_guide::OptimizationGuideService*
 BrowserProcessImpl::optimization_guide_service() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1307,6 +1316,12 @@ void BrowserProcessImpl::CreateSubresourceFilterRulesetService() {
           blocking_task_runner);
 }
 
+void BrowserProcessImpl::CreateFlocBlocklistService() {
+  DCHECK(!floc_blocklist_service_);
+  floc_blocklist_service_ =
+      std::make_unique<federated_learning::FlocBlocklistService>();
+}
+
 void BrowserProcessImpl::CreateOptimizationGuideService() {
   DCHECK(!created_optimization_guide_service_);
   DCHECK(!optimization_guide_service_);
@@ -1317,7 +1332,7 @@ void BrowserProcessImpl::CreateOptimizationGuideService() {
 
   optimization_guide_service_ =
       std::make_unique<optimization_guide::OptimizationGuideService>(
-          base::CreateSingleThreadTaskRunner({content::BrowserThread::UI}));
+          content::GetUIThreadTaskRunner({}));
 }
 
 void BrowserProcessImpl::CreateGCMDriver() {
@@ -1344,8 +1359,7 @@ void BrowserProcessImpl::CreateGCMDriver() {
       system_network_context_manager()->GetSharedURLLoaderFactory(),
       content::GetNetworkConnectionTracker(), chrome::GetChannel(),
       gcm::GetProductCategoryForSubtypes(local_state()),
-      base::CreateSingleThreadTaskRunner({content::BrowserThread::UI}),
-      base::CreateSingleThreadTaskRunner({content::BrowserThread::IO}),
+      content::GetUIThreadTaskRunner({}), content::GetIOThreadTaskRunner({}),
       blocking_task_runner);
 #endif  // defined(OS_ANDROID)
 }

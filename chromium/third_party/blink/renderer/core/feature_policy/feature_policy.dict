@@ -6,6 +6,8 @@
 "ambient-light-sensor"
 "autoplay"
 "camera"
+"clipboard-read"
+"clipboard-write"
 "document-domain"
 "document-write"
 "encrypted-media"

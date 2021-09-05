@@ -8,12 +8,15 @@
 #include <vector>
 
 #include "ash/ambient/ambient_controller.h"
+#include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ash/public/cpp/ambient/ambient_client.h"
 #include "ash/public/cpp/ambient/ambient_prefs.h"
+#include "ash/public/cpp/ambient/common/ambient_settings.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "base/base64.h"
 #include "base/guid.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "chromeos/assistant/internal/proto/google3/backdrop/backdrop.pb.h"
 #include "components/prefs/pref_service.h"
@@ -117,21 +120,20 @@ class BackdropURLLoader {
   ~BackdropURLLoader() = default;
 
   // Starts downloading the proto. |request_body| is a serialized proto and
-  // will be used as the upload body.
+  // will be used as the upload body if it is a POST request.
   void Start(std::unique_ptr<network::ResourceRequest> resource_request,
-             const std::string& request_body,
+             const base::Optional<std::string>& request_body,
              const net::NetworkTrafficAnnotationTag& traffic_annotation,
              network::SimpleURLLoader::BodyAsStringCallback callback) {
     // No ongoing downloading task.
     DCHECK(!simple_loader_);
 
     loader_factory_ = AmbientClient::Get()->GetURLLoaderFactory();
-
-    // TODO(b/148818448): This will reset previous request without callback
-    // called. Handle parallel/sequential requests to server.
     simple_loader_ = network::SimpleURLLoader::Create(
         std::move(resource_request), traffic_annotation);
-    simple_loader_->AttachStringForUpload(request_body, kProtoMimeType);
+    if (request_body)
+      simple_loader_->AttachStringForUpload(*request_body, kProtoMimeType);
+
     // |base::Unretained| is safe because this instance outlives
     // |simple_loader_|.
     simple_loader_->DownloadToString(
@@ -176,12 +178,11 @@ AmbientBackendControllerImpl::AmbientBackendControllerImpl() = default;
 AmbientBackendControllerImpl::~AmbientBackendControllerImpl() = default;
 
 void AmbientBackendControllerImpl::FetchScreenUpdateInfo(
+    int num_topics,
     OnScreenUpdateInfoFetchedCallback callback) {
-  // Consolidate the functions of FetchScreenUpdateInfoInternal,
-  // StartToGetSettings, and StartToUpdateSettings after this is done.
   Shell::Get()->ambient_controller()->RequestAccessToken(base::BindOnce(
       &AmbientBackendControllerImpl::FetchScreenUpdateInfoInternal,
-      weak_factory_.GetWeakPtr(), std::move(callback)));
+      weak_factory_.GetWeakPtr(), num_topics, std::move(callback)));
 }
 
 void AmbientBackendControllerImpl::GetSettings(GetSettingsCallback callback) {
@@ -191,22 +192,35 @@ void AmbientBackendControllerImpl::GetSettings(GetSettingsCallback callback) {
 }
 
 void AmbientBackendControllerImpl::UpdateSettings(
-    AmbientModeTopicSource topic_source,
+    const AmbientSettings& settings,
     UpdateSettingsCallback callback) {
   Shell::Get()->ambient_controller()->RequestAccessToken(base::BindOnce(
       &AmbientBackendControllerImpl::StartToUpdateSettings,
-      weak_factory_.GetWeakPtr(), topic_source, std::move(callback)));
+      weak_factory_.GetWeakPtr(), settings, std::move(callback)));
+}
+
+void AmbientBackendControllerImpl::FetchPersonalAlbums(
+    int banner_width,
+    int banner_height,
+    int num_albums,
+    const std::string& resume_token,
+    OnPersonalAlbumsFetchedCallback callback) {
+  Shell::Get()->ambient_controller()->RequestAccessToken(
+      base::BindOnce(&AmbientBackendControllerImpl::FetchPersonalAlbumsInternal,
+                     weak_factory_.GetWeakPtr(), banner_width, banner_height,
+                     num_albums, resume_token, std::move(callback)));
 }
 
 void AmbientBackendControllerImpl::SetPhotoRefreshInterval(
     base::TimeDelta interval) {
   Shell::Get()
       ->ambient_controller()
-      ->ambient_backend_model()
+      ->GetAmbientBackendModel()
       ->SetPhotoRefreshInterval(interval);
 }
 
 void AmbientBackendControllerImpl::FetchScreenUpdateInfoInternal(
+    int num_topics,
     OnScreenUpdateInfoFetchedCallback callback,
     const std::string& gaia_id,
     const std::string& access_token) {
@@ -220,7 +234,7 @@ void AmbientBackendControllerImpl::FetchScreenUpdateInfoInternal(
   std::string client_id = GetClientId();
   BackdropClientConfig::Request request =
       backdrop_client_config_.CreateFetchScreenUpdateRequest(
-          gaia_id, access_token, client_id);
+          num_topics, gaia_id, access_token, client_id);
   auto resource_request = CreateResourceRequest(request);
 
   auto backdrop_url_loader = std::make_unique<BackdropURLLoader>();
@@ -279,15 +293,16 @@ void AmbientBackendControllerImpl::OnGetSettings(
     std::unique_ptr<std::string> response) {
   DCHECK(backdrop_url_loader);
 
-  int topic_source = BackdropClientConfig::ParseGetSettingsResponse(*response);
-  if (topic_source == -1)
+  auto settings = BackdropClientConfig::ParseGetSettingsResponse(*response);
+  // |art_settings| should not be empty if parsed successfully.
+  if (settings.art_settings.empty())
     std::move(callback).Run(base::nullopt);
   else
-    std::move(callback).Run(static_cast<AmbientModeTopicSource>(topic_source));
+    std::move(callback).Run(settings);
 }
 
 void AmbientBackendControllerImpl::StartToUpdateSettings(
-    AmbientModeTopicSource topic_source,
+    const AmbientSettings& settings,
     UpdateSettingsCallback callback,
     const std::string& gaia_id,
     const std::string& access_token) {
@@ -298,8 +313,8 @@ void AmbientBackendControllerImpl::StartToUpdateSettings(
 
   std::string client_id = GetClientId();
   BackdropClientConfig::Request request =
-      backdrop_client_config_.CreateUpdateSettingsRequest(
-          gaia_id, access_token, client_id, static_cast<int>(topic_source));
+      backdrop_client_config_.CreateUpdateSettingsRequest(gaia_id, access_token,
+                                                          client_id, settings);
   auto resource_request = CreateResourceRequest(request);
 
   auto backdrop_url_loader = std::make_unique<BackdropURLLoader>();
@@ -320,6 +335,51 @@ void AmbientBackendControllerImpl::OnUpdateSettings(
   const bool success =
       BackdropClientConfig::ParseUpdateSettingsResponse(*response);
   std::move(callback).Run(success);
+}
+
+void AmbientBackendControllerImpl::FetchPersonalAlbumsInternal(
+    int banner_width,
+    int banner_height,
+    int num_albums,
+    const std::string& resume_token,
+    OnPersonalAlbumsFetchedCallback callback,
+    const std::string& gaia_id,
+    const std::string& access_token) {
+  if (gaia_id.empty() || access_token.empty()) {
+    LOG(ERROR) << "Failed to fetch access token";
+    // Returns a dummy instance to indicate the failure.
+    std::move(callback).Run(ash::PersonalAlbums());
+    return;
+  }
+
+  BackdropClientConfig::Request request =
+      backdrop_client_config_.CreateFetchPersonalAlbumsRequest(
+          banner_width, banner_height, num_albums, resume_token, gaia_id,
+          access_token);
+  std::unique_ptr<network::ResourceRequest> resource_request =
+      CreateResourceRequest(request);
+  auto backdrop_url_loader = std::make_unique<BackdropURLLoader>();
+  auto* loader_ptr = backdrop_url_loader.get();
+  loader_ptr->Start(
+      std::move(resource_request), /*request_body=*/base::nullopt,
+      NO_TRAFFIC_ANNOTATION_YET,
+      base::BindOnce(&AmbientBackendControllerImpl::OnPersonalAlbumsFetched,
+                     weak_factory_.GetWeakPtr(), std::move(callback),
+                     std::move(backdrop_url_loader)));
+}
+
+void AmbientBackendControllerImpl::OnPersonalAlbumsFetched(
+    OnPersonalAlbumsFetchedCallback callback,
+    std::unique_ptr<BackdropURLLoader> backdrop_url_loader,
+    std::unique_ptr<std::string> response) {
+  DCHECK(backdrop_url_loader);
+
+  // Parse the |PersonalAlbumsResponse| out from the response string.
+  // Note that the |personal_albums| can be a dummy instance if the parsing has
+  // failed.
+  ash::PersonalAlbums personal_albums =
+      BackdropClientConfig::ParsePersonalAlbumsResponse(*response);
+  std::move(callback).Run(std::move(personal_albums));
 }
 
 }  // namespace ash

@@ -162,29 +162,84 @@ class HostResolver : public proxy_resolver::ProxyHostResolver {
 
 class Bindings : public proxy_resolver::ProxyResolverV8Tracing::Bindings {
  public:
+  Bindings(AwPacProcessor* processor) : processor_(processor) {}
+
   void Alert(const base::string16& message) override {}
 
   void OnError(int line_number, const base::string16& message) override {}
 
   proxy_resolver::ProxyHostResolver* GetHostResolver() override {
-    return AwPacProcessor::Get()->host_resolver();
+    return processor_->host_resolver();
   }
 
   net::NetLogWithSource GetNetLogWithSource() override {
     return net::NetLogWithSource();
   }
+
+ private:
+  AwPacProcessor* processor_;
 };
+
+scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() {
+  struct ThreadHolder {
+    base::Thread thread_;
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+
+    ThreadHolder() : thread_("AwPacProcessor") {
+      thread_.Start();
+      task_runner_ = thread_.task_runner();
+    }
+  };
+  static ThreadHolder thread_holder;
+
+  return thread_holder.task_runner_;
+}
+
+proxy_resolver::ProxyResolverV8TracingFactory* GetProxyResolverFactory() {
+  static std::unique_ptr<proxy_resolver::ProxyResolverV8TracingFactory>
+      factory = proxy_resolver::ProxyResolverV8TracingFactory::Create();
+
+  return factory.get();
+}
 
 }  // namespace
 
+// Public methods of AwPacProcessor may be called on multiple threads.
+// ProxyResolverV8TracingFactory/ProxyResolverV8Tracing
+// expects its public interface to always be called on the same thread with
+// Chromium task runner so it can post it back to that thread
+// with the result of the queries.
+//
+// Job and its subclasses wrap queries from public methods of AwPacProcessor,
+// post them on a special thread and blocks on WaitableEvent
+// until the query is finished. |OnSignal| is passed to
+// ProxyResolverV8TracingFactory/ProxyResolverV8Tracing methods.
+// This callback is called once the request is processed and,
+// it signals WaitableEvent and returns result to the calling thread.
+//
+// ProxyResolverV8TracingFactory/ProxyResolverV8Tracing behaviour is the
+// following: if the corresponding request is destroyed,
+// the query is cancelled and the callback is never called.
+// That means that we need to signal WaitableEvent to unblock calling thread
+// when we cancel Job. We keep track of unfinished Jobs in |jobs_|. This field
+// is always accessed on the same thread.
+//
+// All Jobs must be cancelled prior to destruction of |proxy_resolver_| since
+// its destructor asserts there are no pending requests.
 class Job {
  public:
   virtual ~Job() = default;
 
   bool ExecSync() {
-    AwPacProcessor::Get()->task_runner_->PostTask(FROM_HERE, std::move(task_));
+    GetTaskRunner()->PostTask(
+        FROM_HERE, base::BindOnce(&Job::Exec, base::Unretained(this)));
     event_.Wait();
     return net_error_ == net::OK;
+  }
+
+  void Exec() {
+    processor_->jobs_.insert(this);
+    std::move(task_).Run();
   }
 
   virtual void Cancel() = 0;
@@ -198,24 +253,29 @@ class Job {
     // Reset them here on the correct thread when the job is already finished
     // so no cancellation occurs.
     Cancel();
-    event_.Signal();
   }
 
   base::OnceClosure task_;
-  int net_error_;
+  int net_error_ = net::ERR_ABORTED;
   base::WaitableEvent event_;
+  AwPacProcessor* processor_;
 };
 
 class SetProxyScriptJob : public Job {
  public:
-  SetProxyScriptJob(std::string script) {
+  SetProxyScriptJob(AwPacProcessor* processor, std::string script) {
+    processor_ = processor;
     task_ = base::BindOnce(
-        &AwPacProcessor::SetProxyScriptNative,
-        base::Unretained(AwPacProcessor::Get()), &request_, std::move(script),
+        &AwPacProcessor::SetProxyScriptNative, base::Unretained(processor_),
+        &request_, std::move(script),
         base::BindOnce(&SetProxyScriptJob::OnSignal, base::Unretained(this)));
   }
 
-  void Cancel() override { request_.reset(); }
+  void Cancel() override {
+    processor_->jobs_.erase(this);
+    request_.reset();
+    event_.Signal();
+  }
 
  private:
   std::unique_ptr<net::ProxyResolverFactory::Request> request_;
@@ -223,14 +283,20 @@ class SetProxyScriptJob : public Job {
 
 class MakeProxyRequestJob : public Job {
  public:
-  MakeProxyRequestJob(std::string url) {
+  MakeProxyRequestJob(AwPacProcessor* processor, std::string url) {
+    processor_ = processor;
     task_ = base::BindOnce(
-        &AwPacProcessor::MakeProxyRequestNative,
-        base::Unretained(AwPacProcessor::Get()), &request_, std::move(url),
-        &proxy_info_,
+        &AwPacProcessor::MakeProxyRequestNative, base::Unretained(processor_),
+        &request_, std::move(url), &proxy_info_,
         base::BindOnce(&MakeProxyRequestJob::OnSignal, base::Unretained(this)));
   }
-  void Cancel() override { request_.reset(); }
+
+  void Cancel() override {
+    processor_->jobs_.erase(this);
+    request_.reset();
+    event_.Signal();
+  }
+
   net::ProxyInfo proxy_info() { return proxy_info_; }
 
  private:
@@ -238,30 +304,43 @@ class MakeProxyRequestJob : public Job {
   std::unique_ptr<net::ProxyResolver::Request> request_;
 };
 
-// static
-AwPacProcessor* AwPacProcessor::Get() {
-  static base::NoDestructor<AwPacProcessor> instance;
-  return instance.get();
-}
-
-AwPacProcessor::AwPacProcessor() : thread_("AwPacResolver") {
-  thread_.Start();
-  task_runner_ = thread_.task_runner();
-
-  proxy_resolver_factory_ =
-      proxy_resolver::ProxyResolverV8TracingFactory::Create();
+AwPacProcessor::AwPacProcessor() {
   host_resolver_ = std::make_unique<HostResolver>();
 }
 
-AwPacProcessor::~AwPacProcessor() = default;
+AwPacProcessor::~AwPacProcessor() {
+  base::WaitableEvent event;
+  // |proxy_resolver_| must be destroyed on the same thread it is created.
+  GetTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&AwPacProcessor::Destroy, base::Unretained(this),
+                     base::Unretained(&event)));
+  event.Wait();
+}
+
+void AwPacProcessor::Destroy(base::WaitableEvent* event) {
+  // Cancel all unfinished jobs to unblock calling thread.
+  for (auto* job : jobs_) {
+    job->Cancel();
+  }
+
+  proxy_resolver_.reset();
+  event->Signal();
+}
+
+void AwPacProcessor::DestroyNative(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  delete this;
+}
 
 void AwPacProcessor::SetProxyScriptNative(
     std::unique_ptr<net::ProxyResolverFactory::Request>* request,
     const std::string& script,
     net::CompletionOnceCallback complete) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-  proxy_resolver_factory_->CreateProxyResolverV8Tracing(
-      net::PacFileData::FromUTF8(script), std::make_unique<Bindings>(),
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
+  GetProxyResolverFactory()->CreateProxyResolverV8Tracing(
+      net::PacFileData::FromUTF8(script), std::make_unique<Bindings>(this),
       &proxy_resolver_, std::move(complete), request);
 }
 
@@ -270,20 +349,21 @@ void AwPacProcessor::MakeProxyRequestNative(
     const std::string& url,
     net::ProxyInfo* proxy_info,
     net::CompletionOnceCallback complete) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
 
   if (proxy_resolver_) {
     proxy_resolver_->GetProxyForURL(GURL(url), net::NetworkIsolationKey(),
                                     proxy_info, std::move(complete), request,
-                                    std::make_unique<Bindings>());
+                                    std::make_unique<Bindings>(this));
   } else {
     std::move(complete).Run(net::ERR_FAILED);
   }
 }
 
 bool AwPacProcessor::SetProxyScript(std::string script) {
-  SetProxyScriptJob job(script);
+  SetProxyScriptJob job(this, script);
   bool success = job.ExecSync();
+
   DCHECK(proxy_resolver_);
   return success;
 }
@@ -296,7 +376,7 @@ jboolean AwPacProcessor::SetProxyScript(JNIEnv* env,
 }
 
 std::string AwPacProcessor::MakeProxyRequest(std::string url) {
-  MakeProxyRequestJob job(url);
+  MakeProxyRequestJob job(this, url);
   bool success = job.ExecSync();
   return success ? job.proxy_info().ToPacString() : nullptr;
 }
@@ -309,8 +389,9 @@ ScopedJavaLocalRef<jstring> AwPacProcessor::MakeProxyRequest(
   return ConvertUTF8ToJavaString(env, MakeProxyRequest(url));
 }
 
-static jlong JNI_AwPacProcessor_GetDefaultPacProcessor(JNIEnv* env) {
-  return reinterpret_cast<intptr_t>(AwPacProcessor::Get());
+static jlong JNI_AwPacProcessor_CreateNativePacProcessor(JNIEnv* env) {
+  AwPacProcessor* processor = new AwPacProcessor();
+  return reinterpret_cast<intptr_t>(processor);
 }
 
 static void JNI_AwPacProcessor_InitializeEnvironment(JNIEnv* env) {

@@ -108,10 +108,12 @@ class AppListTestViewDelegate : public AppListViewDelegate,
       const base::string16& raw_query,
       const ash::SearchResultIdWithPositionIndices& results,
       int position_index) override;
+  void MaybeIncreasePrivacyInfoShownCounts() override;
   bool IsAssistantAllowedAndEnabled() const override;
   bool ShouldShowAssistantPrivacyInfo() const override;
-  void MaybeIncreaseAssistantPrivacyInfoShownCount() override;
   void MarkAssistantPrivacyInfoDismissed() override;
+  bool ShouldShowSuggestedContentInfo() const override;
+  void MarkSuggestedContentInfoDismissed() override;
   void OnStateTransitionAnimationCompleted(
       ash::AppListViewState state) override;
   void OnViewStateChanged(AppListViewState state) override;
@@ -119,6 +121,7 @@ class AppListTestViewDelegate : public AppListViewDelegate,
       AppLaunchedMetricParams* metric_params) override;
   gfx::Rect SnapBoundsToDisplayEdge(const gfx::Rect& bounds) override;
   int GetShelfSize() override;
+  bool AppListTargetVisibility() const override;
   bool IsInTabletMode() override;
   AppListNotifier* GetNotifier() override;
 

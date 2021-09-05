@@ -64,8 +64,10 @@ class IntentGeneratorTest : public testing::Test {
     intent_generator_->SetLanguageDetectorForTesting(
         std::move(mock_language_detector_));
 
-    scoped_feature_list_.InitAndEnableFeature(
-        chromeos::features::kQuickAnswersTextAnnotator);
+    scoped_feature_list_.InitWithFeatures(
+        {chromeos::features::kQuickAnswersTextAnnotator,
+         chromeos::features::kQuickAnswersTranslation},
+        {});
   }
 
   void TearDown() override { intent_generator_.reset(); }
@@ -142,6 +144,24 @@ TEST_F(IntentGeneratorTest, TranslationIntentTextLengthAboveThreshold) {
 }
 
 TEST_F(IntentGeneratorTest, TranslationIntentNotEnabled) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {chromeos::features::kQuickAnswersTextAnnotator},
+      {chromeos::features::kQuickAnswersTranslation});
+  UseFakeServiceConnection();
+
+  QuickAnswersRequest request;
+  request.selected_text = "quick answers";
+  request.context.device_properties.language = "es";
+  intent_generator_->GenerateIntent(request);
+
+  task_environment_.RunUntilIdle();
+
+  EXPECT_EQ(IntentType::kUnknown, intent_type_);
+  EXPECT_EQ("quick answers", intent_text_);
+}
+
+TEST_F(IntentGeneratorTest, TranslationIntentDeviceLanguageNotSet) {
   UseFakeServiceConnection();
 
   QuickAnswersRequest request;
@@ -183,7 +203,38 @@ TEST_F(IntentGeneratorTest, TextAnnotationDefinitionIntent) {
   EXPECT_EQ("unfathomable", intent_text_);
 }
 
-TEST_F(IntentGeneratorTest, TextAnnotationDefinitionIntentExtraChars) {
+TEST_F(IntentGeneratorTest,
+       TextAnnotationDefinitionIntentExtraCharsBelowThreshold) {
+  std::unique_ptr<QuickAnswersRequest> quick_answers_request =
+      std::make_unique<QuickAnswersRequest>();
+  quick_answers_request->selected_text = "“unfathomable”";
+
+  // Create the test annotations.
+  std::vector<TextEntityPtr> entities;
+  entities.emplace_back(
+      TextEntity::New("dictionary",             // Entity name.
+                      1.0,                      // Confidence score.
+                      TextEntityData::New()));  // Data extracted.
+
+  auto dictionary_annotation = TextAnnotation::New(1,   // Start offset.
+                                                   13,  // End offset.
+                                                   std::move(entities));
+
+  std::vector<TextAnnotationPtr> annotations;
+  annotations.push_back(dictionary_annotation->Clone());
+
+  UseFakeServiceConnection(annotations);
+
+  intent_generator_->GenerateIntent(*quick_answers_request);
+
+  task_environment_.RunUntilIdle();
+
+  EXPECT_EQ(IntentType::kDictionary, intent_type_);
+  EXPECT_EQ("unfathomable", intent_text_);
+}
+
+TEST_F(IntentGeneratorTest,
+       TextAnnotationDefinitionIntentExtraCharsAboveThreshold) {
   std::unique_ptr<QuickAnswersRequest> quick_answers_request =
       std::make_unique<QuickAnswersRequest>();
   quick_answers_request->selected_text = "the unfathomable";

@@ -9,33 +9,66 @@
 #include <string>
 #include <utility>
 
-#include "apps/ui/views/app_window_frame_view.h"
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "chrome/browser/ui/views/apps/app_window_easy_resize_window_targeter.h"
-#include "chrome/browser/ui/views/apps/shaped_app_window_targeter.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/views/vivaldi_window_frame_view_aura.h"
 #include "ui/views/widget/widget.h"
 #include "ui/vivaldi_browser_window.h"
+#include "ui/wm/core/easy_resize_window_targeter.h"
 
 #if defined(OS_LINUX)
 #include "chrome/browser/shell_integration_linux.h"
 #endif
 
-using extensions::AppWindow;
+namespace {
+// The class is copied from app_window_easy_resize_window_targeter.cc
+// in chromium/chrome/browser/ui/views/apps.
+// An EasyResizeEventTargeter whose behavior depends on the state of the app
+// window.
+class VivaldiWindowEasyResizeWindowTargeter
+    : public wm::EasyResizeWindowTargeter {
+ public:
+  VivaldiWindowEasyResizeWindowTargeter(const gfx::Insets& insets,
+                                        VivaldiBrowserWindow* window)
+      : wm::EasyResizeWindowTargeter(insets, insets),
+        window_(window) {}
 
-VivaldiNativeAppWindowViewsAura::VivaldiNativeAppWindowViewsAura() {
-}
+  ~VivaldiWindowEasyResizeWindowTargeter() override = default;
 
-VivaldiNativeAppWindowViewsAura::~VivaldiNativeAppWindowViewsAura() {
-}
+ protected:
+  // aura::WindowTargeter:
+  bool GetHitTestRects(aura::Window* window,
+                       gfx::Rect* rect_mouse,
+                       gfx::Rect* rect_touch) const override {
+    // EasyResizeWindowTargeter intercepts events landing at the edges of the
+    // window. Since maximized and fullscreen windows can't be resized anyway,
+    // skip EasyResizeWindowTargeter so that the web contents receive all mouse
+    // events.
+    if (window_->IsMaximized() || window_->IsFullscreen())
+      return WindowTargeter::GetHitTestRects(window, rect_mouse, rect_touch);
 
-ui::WindowShowState
-VivaldiNativeAppWindowViewsAura::GetRestorableState(
+    return EasyResizeWindowTargeter::GetHitTestRects(window, rect_mouse,
+                                                     rect_touch);
+  }
+
+ private:
+  VivaldiBrowserWindow* window_;
+
+  DISALLOW_COPY_AND_ASSIGN(VivaldiWindowEasyResizeWindowTargeter);
+};
+
+}  // namespace
+
+VivaldiNativeAppWindowViewsAura::VivaldiNativeAppWindowViewsAura() {}
+
+VivaldiNativeAppWindowViewsAura::~VivaldiNativeAppWindowViewsAura() {}
+
+ui::WindowShowState VivaldiNativeAppWindowViewsAura::GetRestorableState(
     const ui::WindowShowState restore_state) const {
   // Whitelist states to return so that invalid and transient states
   // are not saved and used to restore windows when they are recreated.
@@ -56,42 +89,35 @@ VivaldiNativeAppWindowViewsAura::GetRestorableState(
 }
 
 void VivaldiNativeAppWindowViewsAura::OnBeforeWidgetInit(
-    const AppWindow::CreateParams& create_params,
-    views::Widget::InitParams* init_params,
-    views::Widget* widget) {
+    views::Widget::InitParams& init_params) {
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  init_params->wm_class_name =
-      shell_integration_linux::GetProgramClassName();
-  init_params->wm_class_class =
-      shell_integration_linux::GetProgramClassClass();
+  init_params.wm_class_name = shell_integration_linux::GetProgramClassName();
+  init_params.wm_class_class = shell_integration_linux::GetProgramClassClass();
   const char kX11WindowRoleBrowser[] = "browser";
   const char kX11WindowRolePopup[] = "pop-up";
-  init_params->wm_role_name =
+  init_params.wm_role_name =
       window()->type() == VivaldiBrowserWindow::WindowType::SETTINGS
-                            ? std::string(kX11WindowRolePopup)
-                            : std::string(kX11WindowRoleBrowser);
+          ? std::string(kX11WindowRolePopup)
+          : std::string(kX11WindowRoleBrowser);
 #endif
-
-  VivaldiNativeAppWindowViews::OnBeforeWidgetInit(create_params, init_params,
-                                                  widget);
 }
 
-views::NonClientFrameView*
-VivaldiNativeAppWindowViewsAura::CreateNonStandardAppFrame() {
-  apps::AppWindowFrameView* frame =
-      new apps::AppWindowFrameView(widget(), this, HasFrameColor(),
-                                   ActiveFrameColor(), InactiveFrameColor());
-  frame->Init();
+  views::NonClientFrameView* VivaldiNativeAppWindowViewsAura::CreateNonClientFrameView(
+      views::Widget* widget) {
+  if (!is_frameless())
+    return views::WidgetDelegateView::CreateNonClientFrameView(widget);
+
+  VivaldiWindowFrameViewAura* frame = new VivaldiWindowFrameViewAura(this);
 
   // Install an easy resize window targeter, which ensures that the root window
   // (not the app) receives mouse events on the edges.
-  aura::Window* window = widget()->GetNativeWindow();
-  // Add the AppWindowEasyResizeWindowTargeter on the window, not its root
+  aura::Window* native_window = widget->GetNativeWindow();
+  // Add the VivaldiWindowEasyResizeWindowTargeter on the window, not its root
   // window. The root window does not have a delegate, which is needed to
   // handle the event in Linux.
-  window->SetEventTargeter(
-      std::unique_ptr<aura::WindowTargeter>(new AppWindowEasyResizeWindowTargeter(
-          gfx::Insets(frame->resize_inside_bounds_size()), this)));
+  native_window->SetEventTargeter(
+      std::make_unique<VivaldiWindowEasyResizeWindowTargeter>(
+          gfx::Insets(frame->resize_inside_bounds_size()), window()));
 
   return frame;
 }
@@ -107,9 +133,4 @@ ui::WindowShowState VivaldiNativeAppWindowViewsAura::GetRestoredState() const {
   ui::WindowShowState restore_state = widget()->GetNativeWindow()->GetProperty(
       aura::client::kPreMinimizedShowStateKey);
   return GetRestorableState(restore_state);
-}
-
-void VivaldiNativeAppWindowViewsAura::UpdateShape(
-    std::unique_ptr<ShapeRects> rects) {
-  // Not used in Vivaldi.
 }

@@ -106,8 +106,6 @@ static_library("common") {
     "chrome_descriptors.h",
     "chrome_isolated_world_ids.h",
     "chrome_result_codes.h",
-    "chrome_ui_features_prefs.cc",
-    "chrome_ui_features_prefs.h",
     "common_message_generator.cc",
     "common_message_generator.h",
     "component_flash_hint_file_linux.cc",
@@ -140,8 +138,6 @@ static_library("common") {
     "pdf_util.h",
     "pref_names_util.cc",
     "pref_names_util.h",
-    "prerender_messages.h",
-    "prerender_types.h",
     "prerender_url_loader_throttle.cc",
     "prerender_url_loader_throttle.h",
     "prerender_util.cc",
@@ -152,8 +148,8 @@ static_library("common") {
     "search/instant_types.cc",
     "search/instant_types.h",
     "search/ntp_logging_events.h",
-    "secure_origin_whitelist.cc",
-    "secure_origin_whitelist.h",
+    "secure_origin_allowlist.cc",
+    "secure_origin_allowlist.h",
     "ssl_insecure_content.cc",
     "ssl_insecure_content.h",
     "url_constants.cc",
@@ -161,8 +157,6 @@ static_library("common") {
     "web_application_info.cc",
     "web_application_info.h",
     "web_application_info_provider_param_traits.h",
-    "web_components_prefs.cc",
-    "web_components_prefs.h",
     "webui_url_constants.cc",
     "webui_url_constants.h",
   ]
@@ -184,11 +178,13 @@ static_library("common") {
     "//base",
     "//base:base_static",
     "//base:i18n",
+    "//base/util/values:values_util",
     "//chrome:resources",
     "//chrome:strings",
     "//chrome/app/theme:theme_resources",
     "//chrome/common:constants",
     "//chrome/common/net",
+    "//chrome/common/privacy_budget",
     "//chrome/common/profiler",
     "//chrome/common/qr_code_generator",
     "//chrome/common/search:mojo_bindings",
@@ -267,6 +263,8 @@ static_library("common") {
     "//components/google/core/common",
     "//components/metrics:call_stack_profile_builder",
     "//components/page_load_metrics/common:common",
+    "//components/prerender/common",
+    "//components/prerender/common:mojo_bindings",
   ]
 
   if (enable_plugins) {
@@ -698,13 +696,14 @@ mojom("mojo_bindings") {
     "media/webrtc_logging.mojom",
     "metrics.mojom",
     "navigation_corrector.mojom",
+    "net/net_error_page_support.mojom",
     "net_benchmarking.mojom",
     "network_diagnostics.mojom",
     "network_easter_egg.mojom",
     "open_search_description_document_handler.mojom",
     "plugin.mojom",
-    "prerender_canceler.mojom",
     "renderer_configuration.mojom",
+    "subresource_redirect_service.mojom",
     "sync_encryption_keys_extension.mojom",
   ]
 
@@ -727,6 +726,7 @@ mojom("mojo_bindings") {
   if (enable_offline_pages) {
     sources += [ "mhtml_page_notifier.mojom" ]
     deps += [ "//third_party/blink/public/mojom:mojom_mhtml_load_result" ]
+    enabled_features = [ "enable_offline_pages" ]
   }
 
   public_deps = [

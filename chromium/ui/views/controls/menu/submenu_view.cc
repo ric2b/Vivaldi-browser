@@ -16,6 +16,7 @@
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/menu/menu_config.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_host.h"
@@ -396,8 +397,12 @@ void SubmenuView::ShowAt(Widget* parent,
     host_->InitMenuHost(parent, bounds, scroll_view_container_, do_capture);
   }
 
-  GetScrollViewContainer()->NotifyAccessibilityEvent(
-      ax::mojom::Event::kMenuStart, true);
+  // Only fire kMenuStart for the top level menu, not for each submenu.
+  if (!GetMenuItem()->GetParentMenuItem()) {
+    GetScrollViewContainer()->NotifyAccessibilityEvent(
+        ax::mojom::Event::kMenuStart, true);
+  }
+  // Fire kMenuPopupStart for each menu/submenu that is shown.
   NotifyAccessibilityEvent(ax::mojom::Event::kMenuPopupStart, true);
 }
 
@@ -408,14 +413,6 @@ void SubmenuView::Reposition(const gfx::Rect& bounds) {
 
 void SubmenuView::Close() {
   if (host_) {
-    // We send the event to the ScrollViewContainer first because the View
-    // accessibility delegate sets up a focus override when receiving the
-    // kMenuStart event that we want to be disabled when we send the
-    // kMenuPopupEnd event in order to access the previously focused node.
-    GetScrollViewContainer()->NotifyAccessibilityEvent(
-        ax::mojom::Event::kMenuEnd, true);
-    NotifyAccessibilityEvent(ax::mojom::Event::kMenuPopupEnd, true);
-
     host_->DestroyMenuHost();
     host_ = nullptr;
   }
@@ -423,8 +420,22 @@ void SubmenuView::Close() {
 
 void SubmenuView::Hide() {
   if (host_) {
+    /// -- Fire accessibility events ----
+    // Both of these must be fired before HideMenuHost().
+    // Only fire kMenuStart for as top levels menu closes, not for each submenu.
+    // This is sent before kMenuPopupEnd to allow ViewAXPlatformNodeDelegate to
+    // remove its focus override before AXPlatformNodeAuraLinux needs to access
+    // the previously-focused node while handling kMenuPopupEnd.
+    if (!GetMenuItem()->GetParentMenuItem()) {
+      GetScrollViewContainer()->NotifyAccessibilityEvent(
+          ax::mojom::Event::kMenuEnd, true);
+      GetViewAccessibility().EndPopupFocusOverride();
+    }
+    // Fire these kMenuPopupEnd for each menu/submenu that closes/hides.
+    if (host_->IsVisible())
+      NotifyAccessibilityEvent(ax::mojom::Event::kMenuPopupEnd, true);
+
     host_->HideMenuHost();
-    NotifyAccessibilityEvent(ax::mojom::Event::kMenuPopupHide, true);
   }
 
   if (scroll_animator_->is_scrolling())

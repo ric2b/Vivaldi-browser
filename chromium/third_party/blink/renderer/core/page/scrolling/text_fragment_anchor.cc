@@ -113,7 +113,7 @@ TextFragmentAnchor* TextFragmentAnchor::TryCreateFragmentDirective(
     bool same_document_navigation,
     bool should_scroll) {
   DCHECK(RuntimeEnabledFeatures::TextFragmentIdentifiersEnabled(
-      frame.GetDocument()));
+      frame.DomWindow()));
 
   if (!frame.GetDocument()->GetFragmentDirective())
     return nullptr;
@@ -166,11 +166,38 @@ TextFragmentAnchor::TextFragmentAnchor(
 }
 
 bool TextFragmentAnchor::Invoke() {
+  // Wait until the page has been made visible before searching.
+  if (!frame_->GetPage()->IsPageVisible() && !page_has_been_visible_)
+    return true;
+  else
+    page_has_been_visible_ = true;
+
+  // We need to keep this TextFragmentAnchor alive if we're proxying an
+  // element fragment anchor.
   if (element_fragment_anchor_) {
     DCHECK(search_finished_);
-    // We need to keep this TextFragmentAnchor alive if we're proxying an
-    // element fragment anchor.
     return true;
+  }
+
+  // Only invoke once, and then a second time once the document is loaded.
+  // Otherwise page load performance could be significantly
+  // degraded, since TextFragmentFinder has O(n) performance. The reason
+  // for invoking twice is to give client-side rendered sites more opportunity
+  // to add text that can participate in text fragment invocation.
+  if (!frame_->GetDocument()->IsLoadCompleted()) {
+    // When parsing is complete the following sequence happens:
+    // 1. Invoke with beforematch_state_ == kNoMatchFound. This runs a match and
+    //    causes beforematch_state_ to be set to kEventQueued, and queues
+    //    a task to set beforematch_state_ to be set to kFiredEvent.
+    // 2. (maybe) Invoke with beforematch_state_ == kEventQueued.
+    // 3. Invoke with beforematch_state_ == kFiredEvent. This runs a match and
+    //    causes text_searched_after_parsing_finished_ to become true.
+    // 4. Any future calls to Invoke before loading are ignored.
+    //
+    // TODO(chrishtr): if layout is not dirtied, we don't need to re-run
+    // the text finding again and again for each of the above steps.
+    if (has_performed_first_text_search_ && beforematch_state_ != kEventQueued)
+      return true;
   }
 
   // If we're done searching, return true if this hasn't been dismissed yet so
@@ -188,6 +215,10 @@ bool TextFragmentAnchor::Invoke() {
   if (user_scrolled_ && !did_scroll_into_view_)
     metrics_->ScrollCancelled();
 
+  if (!did_find_match_) {
+    metrics_->DidStartSearch();
+  }
+
   first_match_needs_scroll_ = should_scroll_ && !user_scrolled_;
 
   {
@@ -199,6 +230,9 @@ bool TextFragmentAnchor::Invoke() {
     for (auto& finder : text_fragment_finders_)
       finder.FindMatch(*frame_->GetDocument());
   }
+
+  if (beforematch_state_ != kEventQueued)
+    has_performed_first_text_search_ = true;
 
   // Stop searching for matching text once the load event has fired. This may
   // cause ScrollToTextFragment to not work on pages which dynamically load
@@ -216,10 +250,18 @@ bool TextFragmentAnchor::Invoke() {
 void TextFragmentAnchor::Installed() {}
 
 void TextFragmentAnchor::DidScroll(mojom::blink::ScrollType type) {
-  if (!IsExplicitScrollType(type))
+  if (type != mojom::blink::ScrollType::kUser &&
+      type != mojom::blink::ScrollType::kCompositor) {
     return;
+  }
 
+  Dismiss();
   user_scrolled_ = true;
+
+  if (did_non_zero_scroll_ &&
+      frame_->View()->GetScrollableArea()->GetScrollOffset().IsZero()) {
+    metrics_->DidScrollToTop();
+  }
 }
 
 void TextFragmentAnchor::PerformPreRafActions() {
@@ -231,7 +273,7 @@ void TextFragmentAnchor::PerformPreRafActions() {
   }
 }
 
-void TextFragmentAnchor::Trace(Visitor* visitor) {
+void TextFragmentAnchor::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
   visitor->Trace(element_fragment_anchor_);
   visitor->Trace(metrics_);
@@ -337,6 +379,7 @@ void TextFragmentAnchor::DidFindMatch(
     // main document scroll.
     if (!frame_->View()->GetScrollableArea()->GetScrollOffset().IsZero() ||
         scrolled_bounding_box.offset != bounding_box.offset) {
+      did_non_zero_scroll_ = true;
       metrics_->DidNonZeroScroll();
     }
   }
@@ -344,6 +387,12 @@ void TextFragmentAnchor::DidFindMatch(
       EphemeralRange(ToPositionInDOMTree(range.StartPosition()),
                      ToPositionInDOMTree(range.EndPosition()));
   frame_->GetDocument()->Markers().AddTextFragmentMarker(dom_range);
+
+  // Set the sequential focus navigation to the start of selection.
+  // Even if this element isn't focusable, "Tab" press will
+  // start the search to find the next focusable element from this element.
+  frame_->GetDocument()->SetSequentialFocusNavigationStartingPoint(
+      range.StartPosition().NodeAsRangeFirstNode());
 }
 
 void TextFragmentAnchor::DidFindAmbiguousMatch() {
@@ -409,6 +458,11 @@ void TextFragmentAnchor::FireBeforeMatchEvent(Element* element) {
   if (RuntimeEnabledFeatures::BeforeMatchEventEnabled())
     element->DispatchEvent(*Event::Create(event_type_names::kBeforematch));
   beforematch_state_ = kFiredEvent;
+}
+
+void TextFragmentAnchor::SetTickClockForTesting(
+    const base::TickClock* tick_clock) {
+  metrics_->SetTickClockForTesting(tick_clock);
 }
 
 }  // namespace blink

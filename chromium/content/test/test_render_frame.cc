@@ -20,7 +20,6 @@
 #include "content/public/common/navigation_policy.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/mock_render_thread.h"
-#include "content/renderer/input/frame_input_handler_impl.h"
 #include "content/renderer/loader/web_url_loader_impl.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -109,6 +108,10 @@ class MockFrameHost : public mojom::FrameHost {
     return request_overlay_routing_token_called_;
   }
 
+  bool is_page_state_updated() const { return is_page_state_updated_; }
+
+  bool is_url_opened() const { return is_url_opened_; }
+
   void RequestOverlayRoutingToken(
       media::RoutingTokenCallback callback) override {
     request_overlay_routing_token_called_++;
@@ -135,7 +138,6 @@ class MockFrameHost : public mojom::FrameHost {
   }
 
   bool CreateNewWidget(
-      mojo::PendingRemote<::content::mojom::Widget> widget,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget,
@@ -147,7 +149,6 @@ class MockFrameHost : public mojom::FrameHost {
   }
 
   void CreateNewWidget(
-      mojo::PendingRemote<mojom::Widget> widget,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget,
@@ -156,7 +157,6 @@ class MockFrameHost : public mojom::FrameHost {
   }
 
   void CreateNewFullscreenWidget(
-      mojo::PendingRemote<mojom::Widget> widget,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget,
@@ -216,6 +216,14 @@ class MockFrameHost : public mojom::FrameHost {
 
   void FrameSizeChanged(const gfx::Size& frame_size) override {}
 
+  void UpdateState(const PageState& state) override {
+    is_page_state_updated_ = true;
+  }
+
+  void OpenURL(mojom::OpenURLParamsPtr params) override {
+    is_url_opened_ = true;
+  }
+
   void DidAddMessageToConsole(blink::mojom::ConsoleMessageLevel log_level,
                               const base::string16& msg,
                               int32_t line_number,
@@ -242,6 +250,10 @@ class MockFrameHost : public mojom::FrameHost {
 
   size_t request_overlay_routing_token_called_ = 0;
   base::Optional<base::UnguessableToken> overlay_routing_token_;
+
+  bool is_page_state_updated_ = false;
+
+  bool is_url_opened_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(MockFrameHost);
 };
@@ -279,17 +291,17 @@ void TestRenderFrame::Navigate(network::mojom::URLResponseHeadPtr head,
     BindNavigationClient(
         mock_navigation_client_
             .BindNewEndpointAndPassDedicatedReceiverForTesting());
-    CommitPerNavigationMojoInterfaceNavigation(
-        std::move(common_params), std::move(commit_params), std::move(head),
-        mojo::ScopedDataPipeConsumerHandle(),
-        network::mojom::URLLoaderClientEndpointsPtr(),
-        std::make_unique<blink::PendingURLLoaderFactoryBundle>(), base::nullopt,
-        blink::mojom::ControllerServiceWorkerInfoPtr(),
-        blink::mojom::ServiceWorkerProviderInfoForClientPtr(),
-        mojo::NullRemote() /* prefetch_loader_factory */,
-        base::UnguessableToken::Create(),
-        base::BindOnce(&MockFrameHost::DidCommitProvisionalLoad,
-                       base::Unretained(mock_frame_host_.get())));
+    CommitNavigation(std::move(common_params), std::move(commit_params),
+                     std::move(head), mojo::ScopedDataPipeConsumerHandle(),
+                     network::mojom::URLLoaderClientEndpointsPtr(),
+                     std::make_unique<blink::PendingURLLoaderFactoryBundle>(),
+                     base::nullopt,
+                     blink::mojom::ControllerServiceWorkerInfoPtr(),
+                     blink::mojom::ServiceWorkerContainerInfoForClientPtr(),
+                     mojo::NullRemote() /* prefetch_loader_factory */,
+                     base::UnguessableToken::Create(),
+                     base::BindOnce(&MockFrameHost::DidCommitProvisionalLoad,
+                                    base::Unretained(mock_frame_host_.get())));
 }
 
 void TestRenderFrame::Navigate(mojom::CommonNavigationParamsPtr common_params,
@@ -322,34 +334,6 @@ void TestRenderFrame::Unload(
     const FrameReplicationState& replicated_frame_state,
     const base::UnguessableToken& frame_token) {
   OnUnload(proxy_routing_id, is_loading, replicated_frame_state, frame_token);
-}
-
-void TestRenderFrame::SetEditableSelectionOffsets(int start, int end) {
-  GetFrameInputHandler()->SetEditableSelectionOffsets(start, end);
-}
-
-void TestRenderFrame::ExtendSelectionAndDelete(int before, int after) {
-  GetFrameInputHandler()->ExtendSelectionAndDelete(before, after);
-}
-
-void TestRenderFrame::DeleteSurroundingText(int before, int after) {
-  GetFrameInputHandler()->DeleteSurroundingText(before, after);
-}
-
-void TestRenderFrame::DeleteSurroundingTextInCodePoints(int before, int after) {
-  GetFrameInputHandler()->DeleteSurroundingTextInCodePoints(before, after);
-}
-
-void TestRenderFrame::CollapseSelection() {
-  GetFrameInputHandler()->CollapseSelection();
-}
-
-void TestRenderFrame::SetCompositionFromExistingText(
-    int start,
-    int end,
-    const std::vector<ui::ImeTextSpan>& ime_text_spans) {
-  GetFrameInputHandler()->SetCompositionFromExistingText(start, end,
-                                                         ime_text_spans);
 }
 
 void TestRenderFrame::BeginNavigation(
@@ -427,6 +411,14 @@ size_t TestRenderFrame::RequestOverlayRoutingTokenCalled() {
   return mock_frame_host_->request_overlay_routing_token_called();
 }
 
+bool TestRenderFrame::IsPageStateUpdated() const {
+  return mock_frame_host_->is_page_state_updated();
+}
+
+bool TestRenderFrame::IsURLOpened() const {
+  return mock_frame_host_->is_url_opened();
+}
+
 mojom::FrameHost* TestRenderFrame::GetFrameHost() {
   // Need to mock this interface directly without going through a binding,
   // otherwise calling its sync methods could lead to a deadlock.
@@ -451,17 +443,6 @@ mojom::FrameHost* TestRenderFrame::GetFrameHost() {
   // a message loop already, pumping messags before 1.2 would constitute a
   // nested message loop and is therefore undesired.
   return mock_frame_host_.get();
-}
-
-mojom::FrameInputHandler* TestRenderFrame::GetFrameInputHandler() {
-  if (!frame_input_handler_) {
-    mojo::PendingReceiver<mojom::FrameInputHandler>
-        frame_input_handler_receiver =
-            frame_input_handler_.BindNewPipeAndPassReceiver();
-    FrameInputHandlerImpl::CreateMojoService(
-        weak_factory_.GetWeakPtr(), std::move(frame_input_handler_receiver));
-  }
-  return frame_input_handler_.get();
 }
 
 }  // namespace content

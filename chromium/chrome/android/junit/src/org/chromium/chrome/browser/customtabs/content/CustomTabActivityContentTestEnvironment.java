@@ -32,9 +32,11 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.WebContentsFactory;
+import org.chromium.chrome.browser.app.tab_activity_glue.ReparentingTask;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.customtabs.CloseButtonNavigator;
 import org.chromium.chrome.browser.customtabs.CustomTabDelegateFactory;
+import org.chromium.chrome.browser.customtabs.CustomTabIncognitoManager;
 import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.CustomTabNavigationEventObserver;
 import org.chromium.chrome.browser.customtabs.CustomTabObserver;
@@ -48,7 +50,6 @@ import org.chromium.chrome.browser.init.StartupTabPreloader;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabImpl;
-import org.chromium.chrome.browser.tab_activity_glue.ReparentingTask;
 import org.chromium.chrome.browser.tabmodel.AsyncTabParamsManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
@@ -94,6 +95,7 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
     @Mock public ChromeBrowserInitializer browserInitializer;
     @Mock public ChromeFullscreenManager fullscreenManager;
     @Mock public StartupTabPreloader startupTabPreloader;
+    @Mock public CustomTabIncognitoManager customTabIncognitoManager;
     // clang-format on
 
     public final CustomTabActivityTabProvider tabProvider = new CustomTabActivityTabProvider();
@@ -109,6 +111,10 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
     @Override
     protected void starting(Description description) {
         MockitoAnnotations.initMocks(this);
+
+        // There are a number of places that call CustomTabsConnection.getInstance(), which would
+        // otherwise result in a real CustomTabsConnection being created.
+        CustomTabsConnection.setInstanceForTesting(connection);
 
         tabFromFactory = prepareTab();
 
@@ -143,7 +149,8 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
                 connection, intentDataProvider, activityTabProvider, tabObserverRegistrar,
                 () -> compositorViewHolder, lifecycleDispatcher, warmupManager,
                 tabPersistencePolicy, tabFactory, () -> customTabObserver, webContentsFactory,
-                navigationEventObserver, tabProvider, startupTabPreloader, reparentingTaskProvider);
+                navigationEventObserver, tabProvider, startupTabPreloader, reparentingTaskProvider,
+                () -> customTabIncognitoManager);
     }
     // clang-format on
 
@@ -190,7 +197,7 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
     public void reachNativeInit(CustomTabActivityTabController tabController) {
         tabController.onPreInflationStartup();
         tabController.onPostInflationStartup();
-        tabController.onFinishNativeInitialization();
+        tabController.finishNativeInitialization();
     }
 
     public WebContents prepareTransferredWebcontents() {

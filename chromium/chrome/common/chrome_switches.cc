@@ -55,6 +55,12 @@ const char kApp[]                           = "app";
 // according to its configuration.
 const char kAppId[]                         = "app-id";
 
+// Overrides the launch url of an app with the specified url. This is used
+// along with kAppId to launch a given app with the url corresponding to an item
+// in the app's shortcuts menu.
+const char kAppLaunchUrlForShortcutsMenuItem[] =
+    "app-launch-url-for-shortcuts-menu-item";
+
 // Value of GAIA auth code for --force-app-mode.
 const char kAppModeAuthCode[]               = "app-mode-auth-code";
 
@@ -230,11 +236,6 @@ const char kDisablePromptOnRepost[]         = "disable-prompt-on-repost";
 // Disables showing the search geolocation disclosure UI. Used for perf testing.
 const char kDisableSearchGeolocationDisclosure[] =
     "disable-search-geolocation-disclosure";
-
-// Disables prompting the user for consent before fulfilling WebXR's
-// requestSession(). Use only when absolutely necessary, such as for perf tests.
-const char kDisableXrDeviceConsentPromptForTesting[] =
-    "disable-xr-device-consent-prompt-for-testing";
 
 // Some tests seem to require the application to close when the last
 // browser window is closed. Thus, we need a switch to force this behavior

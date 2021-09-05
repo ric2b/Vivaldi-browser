@@ -54,6 +54,8 @@ class COMPONENT_EXPORT(SHILL_CLIENT) ShillManagerClient {
     virtual void RemoveTechnology(const std::string& type) = 0;
     virtual void SetTechnologyInitializing(const std::string& type,
                                            bool initializing) = 0;
+    virtual void SetTechnologyProhibited(const std::string& type,
+                                         bool prohibited) = 0;
     virtual void AddGeoNetwork(const std::string& technology,
                                const base::DictionaryValue& network) = 0;
 
@@ -75,6 +77,9 @@ class COMPONENT_EXPORT(SHILL_CLIENT) ShillManagerClient {
                                    bool notify_observers) = 0;
     virtual void RemoveManagerService(const std::string& service_path) = 0;
     virtual void ClearManagerServices() = 0;
+
+    // Returns all enabled services in the given property.
+    virtual base::Value GetEnabledServiceList() const = 0;
 
     // Called by ShillServiceClient when a service's State property changes,
     // before notifying observers. Sets the DefaultService property to empty

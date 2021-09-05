@@ -26,12 +26,12 @@
 #include "content/public/common/previews_state.h"
 #include "content/public/common/window_container_type.mojom-forward.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
+#include "third_party/blink/public/common/page/web_drag_operation.h"
 #include "third_party/blink/public/common/security/security_style.h"
 #include "third_party/blink/public/mojom/choosers/color_chooser.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom-forward.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
-#include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -72,6 +72,12 @@ struct NativeWebKeyboardEvent;
 struct Referrer;
 struct SecurityStyleExplanations;
 }  // namespace content
+
+namespace device {
+namespace mojom {
+class GeolocationContext;
+}
+}  // namespace device
 
 namespace gfx {
 class Rect;
@@ -469,12 +475,9 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual bool EmbedsFullscreenWidget();
 
   // Called when the renderer puts a tab into fullscreen mode.
-  // |origin| is the origin of the initiating frame inside the |web_contents|.
-  // |origin| can be empty in which case the |web_contents| last committed
-  // URL's origin should be used.
+  // |requesting_frame| is the specific content frame requesting fullscreen.
   virtual void EnterFullscreenModeForTab(
-      WebContents* web_contents,
-      const GURL& origin,
+      RenderFrameHost* requesting_frame,
       const blink::mojom::FullscreenOptions& options) {}
 
   // Called when the renderer puts a tab out of fullscreen mode.
@@ -752,6 +755,12 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Invoked when media playback is interrupted or completed.
   virtual void MediaWatchTimeChanged(const MediaPlayerWatchTime& watch_time) {}
+
+  // Returns a  InstalledWebappGeolocationContext if this web content is running
+  // in a installed webapp and geolocation should be deleagted from the
+  // installed webapp; otherwise returns nullptr.
+  virtual device::mojom::GeolocationContext*
+  GetInstalledWebappGeolocationContext();
 
   // Returns a weak ptr to the web contents delegate.
   virtual base::WeakPtr<WebContentsDelegate> GetDelegateWeakPtr();

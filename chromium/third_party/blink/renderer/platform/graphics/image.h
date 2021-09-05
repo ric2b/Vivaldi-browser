@@ -57,7 +57,6 @@ class ImageDecodeCache;
 
 namespace blink {
 
-class DarkModeImageClassifier;
 class FloatRect;
 class GraphicsContext;
 class Image;
@@ -88,9 +87,11 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
       InterpolationQuality = kInterpolationNone);
 
   virtual bool IsSVGImage() const { return false; }
+  virtual bool IsSVGImageForContainer() const { return false; }
   virtual bool IsBitmapImage() const { return false; }
   virtual bool IsStaticBitmapImage() const { return false; }
   virtual bool IsPlaceholderImage() const { return false; }
+  virtual bool IsGradientGeneratedImage() const { return false; }
 
   virtual bool CurrentFrameKnownToBeOpaque() = 0;
 
@@ -259,36 +260,10 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
     return nullptr;
   }
 
-  // This function is implemented by the derived classes which might
-  // have certain conditions or default classification decisions which
-  // need to be checked before the classification algorithms are applied
-  // on the image.
-  virtual DarkModeClassification CheckTypeSpecificConditionsForDarkMode(
-      const FloatRect& dest_rect,
-      DarkModeImageClassifier* classifier) {
-    return DarkModeClassification::kDoNotApplyFilter;
-  }
-
-  // This function returns true if it can create the bitmap of the
-  // image using |src_rect| for the location and dimensions of the image.
-  // For Bitmap and SVG (and any other type) images the implementation
-  // of this function differs when it comes to the implementation of
-  // PaintImageForCurrentFrame(). Once the PaintImage is available,
-  // the method used to extract the bitmap is the same for any image.
-  bool GetBitmap(const FloatRect& src_rect, SkBitmap* bitmap);
-
   PaintImage::Id paint_image_id() const { return stable_image_id_; }
 
   // Returns an SkBitmap that is a copy of the image's current frame.
   SkBitmap AsSkBitmapForCurrentFrame(RespectImageOrientationEnum);
-
-  DarkModeClassification GetDarkModeClassification(const FloatRect& src_rect);
-
-  // Dark mode classification result is cached to be consistent and have
-  // higher performance for future paints.
-  void AddDarkModeClassification(
-      const FloatRect& src_rect,
-      const DarkModeClassification dark_mode_classification);
 
  protected:
   Image(ImageObserver* = nullptr, bool is_multipart = false);
@@ -308,9 +283,6 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
 
   // Whether or not size is available yet.
   virtual bool IsSizeAvailable() { return true; }
-
-  typedef FloatPoint ClassificationKey;
-  HashMap<ClassificationKey, DarkModeClassification> dark_mode_classifications_;
 
  private:
   bool image_observer_disabled_;

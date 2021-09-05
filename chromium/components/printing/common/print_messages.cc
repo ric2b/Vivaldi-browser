@@ -66,6 +66,7 @@ namespace IPC {
 PrintMsg_Print_Params::PrintMsg_Print_Params()
     : margin_top(0),
       margin_left(0),
+      page_orientation(printing::mojom::PageOrientation::kUpright),
       scale_factor(1.0f),
       rasterize_pdf(false),
       document_cookie(0),
@@ -74,11 +75,11 @@ PrintMsg_Print_Params::PrintMsg_Print_Params()
       preview_ui_id(-1),
       preview_request_id(0),
       is_first_request(false),
-      print_scaling_option(blink::kWebPrintScalingOptionSourceSize),
+      print_scaling_option(printing::mojom::PrintScalingOption::kSourceSize),
       print_to_pdf(false),
       display_header_footer(false),
       should_print_backgrounds(false),
-      printed_doc_type(printing::SkiaDocumentType::PDF),
+      printed_doc_type(printing::mojom::SkiaDocumentType::kPDF),
       prefer_css_page_size(false),
       pages_per_sheet(1) {}
 
@@ -93,6 +94,7 @@ void PrintMsg_Print_Params::Reset() {
   printable_area = gfx::Rect();
   margin_top = 0;
   margin_left = 0;
+  page_orientation = printing::mojom::PageOrientation::kUpright;
   dpi = gfx::Size();
   scale_factor = 1.0f;
   rasterize_pdf = false;
@@ -102,7 +104,7 @@ void PrintMsg_Print_Params::Reset() {
   preview_ui_id = -1;
   preview_request_id = 0;
   is_first_request = false;
-  print_scaling_option = blink::kWebPrintScalingOptionSourceSize;
+  print_scaling_option = printing::mojom::PrintScalingOption::kSourceSize;
   print_to_pdf = false;
   display_header_footer = false;
   title = base::string16();
@@ -110,7 +112,7 @@ void PrintMsg_Print_Params::Reset() {
   header_template = base::string16();
   footer_template = base::string16();
   should_print_backgrounds = false;
-  printed_doc_type = printing::SkiaDocumentType::PDF;
+  printed_doc_type = printing::mojom::SkiaDocumentType::kPDF;
   prefer_css_page_size = false;
   pages_per_sheet = 1;
 }

@@ -28,8 +28,8 @@ class PasswordFormManagerForUI {
  public:
   virtual ~PasswordFormManagerForUI() = default;
 
-  // Returns origin of the initially observed form.
-  virtual const GURL& GetOrigin() const = 0;
+  // Returns URL of the initially observed form.
+  virtual const GURL& GetURL() const = 0;
 
   // Returns the best saved matches for the observed form.
   virtual const std::vector<const autofill::PasswordForm*>& GetBestMatches()
@@ -62,6 +62,9 @@ class PasswordFormManagerForUI {
 
   // Determines if the user opted to 'never remember' passwords for this form.
   virtual bool IsBlacklisted() const = 0;
+
+  // Checks if the user unblacklisted the origin of the form for saving.
+  virtual bool WasUnblacklisted() const = 0;
 
   // Determines whether the submitted credentials returned by
   // GetPendingCredentials() can be moved to the signed in account store.

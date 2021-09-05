@@ -10,6 +10,7 @@
 <translation id="1201402288615127009">اگلا</translation>
 <translation id="1242008676835033345"><ph name="WEBSITE_URL" /> پر سرایت کردہ</translation>
 <translation id="1272079795634619415">روکیں</translation>
+<translation id="1289742167380433257">‏آپ کے ڈیٹا کو محفوظ کرنے کیلئے، اس صفحہ کی تصاویر Google کے ذریعے بہتر بنائی گئی ہیں۔</translation>
 <translation id="129382876167171263">ویب سائٹس کے ذریعے محفوظ کردہ فائلز یہاں ظاہر ہوں گی</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" /> - <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">سائٹ <ph name="SITE_NAME" /> شامل کی گئی</translation>
@@ -42,6 +43,7 @@
 <translation id="2182457891543959921">‏سائٹس کو اپنے اطراف کا 3D نقشہ تخلیق یا کیمرے کی پوزیشن ٹریک کرنے کی اجازت دینے سے پہلے پوچھیں (تجویز کردہ)</translation>
 <translation id="2212565012507486665">کوکیز کی اجازت دیں</translation>
 <translation id="2289270750774289114">اس وقت پوچھیں جب کسی سائٹ میں قریبی بلوٹوتھ آلات کو دریافت کرنا مقصود ہو (تجویز کردہ)</translation>
+<translation id="2315043854645842844">کلائنٹ سائڈ سرٹیفکیٹ کا انتخاب آپریٹنگ سسٹم کے ذریعہ تعاون یافتہ نہیں ہے۔</translation>
 <translation id="2359808026110333948">جاری رکھیں</translation>
 <translation id="2402980924095424747">‎<ph name="MEGABYTES" /> MB</translation>
 <translation id="2434158240863470628">ڈاؤن لوڈ مکمل ہو گیا <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -61,10 +63,12 @@
 <translation id="2704606927547763573">کاپی کیا</translation>
 <translation id="2822354292072154809">کیا آپ واقعی <ph name="CHOSEN_OBJECT_NAME" /> کے لیے سائٹ کی سبھی اجازتوں کو دوبارہ ترتیب دینا چاہتے ہیں؟</translation>
 <translation id="2870560284913253234">سائٹ</translation>
+<translation id="2874939134665556319">پچھلا ٹریک</translation>
 <translation id="2910701580606108292">سائٹس کو محفوظ مواد چلانے کی اجازت دینے سے پہلے پوچھیں</translation>
 <translation id="2913331724188855103">سائٹس کو کوکی ڈیٹا کو محفوظ کرنے اور پڑھنے کی اجازت دیں (تجویز کردہ)</translation>
 <translation id="2968755619301702150">سرٹیفیکیٹ ناظر</translation>
 <translation id="300526633675317032">اس سے ویب سائٹ اسٹوریج کا کُل <ph name="SIZE_IN_KB" /> صاف ہو جائے گا۔</translation>
+<translation id="301521992641321250">خود کار طور پر مسدود ہو گيا</translation>
 <translation id="3115898365077584848">معلومات دکھائیں</translation>
 <translation id="3123473560110926937">بعض سائٹس پر مسدود ہے</translation>
 <translation id="3190152372525844641">‏<ph name="BEGIN_LINK" />Android ترتیبات<ph name="END_LINK" /> میں Chrome کیلئے اجازتیں آن کریں۔</translation>
@@ -83,16 +87,19 @@
 <translation id="3744111561329211289">پس منظر کی مطابقت پذیری</translation>
 <translation id="3822502789641063741">سائٹ کا اسٹوریج صاف کریں؟</translation>
 <translation id="385051799172605136">پیچھے</translation>
+<translation id="3859306556332390985">آگے لے جائیں</translation>
 <translation id="3955193568934677022">سائٹس کو محفوظ کردہ مواد چلانے کی اجازت دیں (تجویز کردہ)</translation>
 <translation id="3987993985790029246">لنک کاپی کریں</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">عنوان</translation>
 <translation id="4008040567710660924">مخصوص سائٹ کے لیے کوکیز کی اجازت دیں۔</translation>
+<translation id="4046123991198612571">اگلا ٹریک</translation>
 <translation id="4165986682804962316">سائٹ کی ترتیبات</translation>
 <translation id="4226663524361240545">اطلاعات آلہ کو وائبریٹ کر سکتی ہیں</translation>
 <translation id="4242533952199664413">ترتیبات کھولیں</translation>
 <translation id="4259722352634471385">نیویگیشن مسدود ہے: <ph name="URL" /></translation>
 <translation id="4278390842282768270">اجازت یافتہ</translation>
+<translation id="429312253194641664">سائٹ پر میڈیا چل رہا ہے</translation>
 <translation id="4433925000917964731">‏Google کی طرف سے فراہم کردہ لائٹ صفحہ</translation>
 <translation id="4434045419905280838">پوپ اپس اور ری ڈائریکٹس</translation>
 <translation id="445467742685312942">سائٹس کو محفوظ مواد چلانے کی اجازت دیں</translation>
@@ -107,6 +114,7 @@
 <translation id="4962975101802056554">آلہ کے لیے سبھی اجازتوں کو کالعدم کریں</translation>
 <translation id="4964199952259983386">‏Chrome کو AR کا استعمال کرنے دینے کے لیے، <ph name="BEGIN_LINK" />Android ترتیبات<ph name="END_LINK" /> میں بھی کیمرا آن کریں۔</translation>
 <translation id="497421865427891073">آگے جائیں</translation>
+<translation id="4996978546172906250">اشتراک کریں بذریعہ</translation>
 <translation id="5039804452771397117">اجازت دیں</translation>
 <translation id="5048398596102334565">سائٹس کو موشن سینسرز تک رسائی حاصل کرنے کی اجازت دیں (تجویز کردہ)</translation>
 <translation id="5063480226653192405">استعمال</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">صاف کریں</translation>
 <translation id="6697925417670533197">فعال ڈاؤن لوڈز</translation>
 <translation id="6746124502594467657">نیچے منتقل کریں</translation>
+<translation id="6766622839693428701">بند کرنے کے لئے نیچے سوائپ کریں۔</translation>
 <translation id="6782111308708962316">فریق ثالث ویب سائٹس کو کوکی ڈیٹا محفوظ کرنے اور پڑھنے سے روکیں</translation>
+<translation id="6790428901817661496">چلائیں</translation>
 <translation id="6818926723028410516">آئٹمز منتخب کریں</translation>
 <translation id="6864395892908308021">‏یہ آلہ NFC کو نہیں پڑھ سکتا</translation>
 <translation id="6910211073230771657">حذف کردہ</translation>
@@ -197,6 +207,7 @@
 <translation id="7804248752222191302">ایک سائٹ آپ کا کیمرا استعمال کر رہی ہے</translation>
 <translation id="7817023149356982970">ایک آپ اس سائٹ سے سائن آؤٹ ہو جائیں گے۔</translation>
 <translation id="7828557259026017104">کوکیز ایسی فائلز ہوتی ہیں جنہیں آپ کی ملاحظہ کی جانے والی ویب سائٹس تخلیق کرتی ہیں۔ سائٹس آپ کی ترجیحات کو یاد رکھنے کیلئے ان کا استعمال کرتی ہیں۔ فریق ثالث کوکیز دیگر سائٹس کے ذریعے تخلیق کی جاتی ہیں۔ یہ سائٹس کچھ مواد کی مالک ہوتی ہیں، جیسے اشتہارات یا تصاویر جنہیں آپ ملاحظہ کی جانے والی ویب صفحہ پر دیکھتے ہیں۔</translation>
+<translation id="7835852323729233924">میڈیا کو چلایا جا رہا ہے</translation>
 <translation id="7846076177841592234">انتخاب منسوخ کریں</translation>
 <translation id="7846621471902887024">آپ سبھی سائٹس سے سائن آؤٹ ہو جائیں گے۔</translation>
 <translation id="7882806643839505685">کسی مخصوص سائٹ کیلئے آواز کی اجازت دیں۔</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">کیا آپ واقعی کوکیز سمیت سبھی مقامی ڈيٹا صاف کرنا اور اس ویب سائٹ کیلئے سبھی اجازتیں دوبارہ ترتیب دینا چاہتے ہیں؟</translation>
 <translation id="8007176423574883786">اس آلے کیلئے آف کر دیا گیا</translation>
 <translation id="802154636333426148">ڈاؤن لوڈ ناکام ہوگیا</translation>
+<translation id="8068648041423924542">سرٹیفکیٹ منتخب کرنے سے قاصر ہے۔</translation>
 <translation id="8087000398470557479">‏یہ مواد <ph name="DOMAIN_NAME" /> کی جانب سے ہے، جسے Google نے ڈیلیور کیا ہے۔</translation>
 <translation id="8116925261070264013">‏خاموش کردہ</translation>
 <translation id="8131740175452115882">تصدیق کریں</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">ایک سائٹ آپ کا کیمرا اور مائیکروفون استعمال کر رہی ہے</translation>
 <translation id="8380167699614421159">یہ سائٹ دخل انداز یا گمراہ کن اشتہارات دکھاتی ہے</translation>
 <translation id="8394832520002899662">سائٹ پر واپس جانے کے لیے تھپتھپائیں</translation>
+<translation id="8425213833346101688">تبدیل کریں</translation>
+<translation id="8441146129660941386">پیچھے لے جائیں</translation>
 <translation id="8447861592752582886">آلہ کی اجازت کالعدم کریں</translation>
 <translation id="8463851957836045671">سائٹ تیز ہے</translation>
 <translation id="851751545965956758">سائٹس کو آلات سے منسلک ہونے سے مسدود کریں</translation>
@@ -236,6 +250,7 @@
 <translation id="8958424370300090006">کسی مخصوص سائٹ کے لیے کوکیز مسدود کریں۔</translation>
 <translation id="8959122750345127698">نیویگیشن ناقابل رسائی ہے: <ph name="URL" /></translation>
 <translation id="9019902583201351841">آپ کے والدین کے زیر انتظام</translation>
+<translation id="9074739597929991885">بلوٹوتھ</translation>
 <translation id="945632385593298557">اپنے مائیکروفون تک رسائی حاصل کریں</translation>
 <translation id="965817943346481315">اگر سائٹ دخل انداز یا گمراہ کن اشتہارات دکھاتی ہے تو مسدود کریں (تجویز کردہ)</translation>
 </translationbundle>

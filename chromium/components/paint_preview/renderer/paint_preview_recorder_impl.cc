@@ -155,9 +155,13 @@ void PaintPreviewRecorderImpl::CapturePaintPreviewInternal(
     bounds = gfx::Rect(params->clip_rect.size());
   }
 
-  cc::PaintRecorder recorder;
   auto tracker = std::make_unique<PaintPreviewTracker>(
       params->guid, frame->GetEmbeddingToken(), is_main_frame_);
+  auto size = frame->GetScrollOffset();
+  tracker->SetScrollForFrame(SkISize::Make(size.width, size.height));
+  response->scroll_offsets = gfx::Size(size.width, size.height);
+
+  cc::PaintRecorder recorder;
   cc::PaintCanvas* canvas =
       recorder.beginRecording(bounds.width(), bounds.height());
   canvas->SetPaintPreviewTracker(tracker.get());
@@ -169,7 +173,8 @@ void PaintPreviewRecorderImpl::CapturePaintPreviewInternal(
   //    slow).
   base::TimeTicks start_time = base::TimeTicks::Now();
   TRACE_EVENT_BEGIN0("paint_preview", "WebLocalFrame::CapturePaintPreview");
-  bool success = frame->CapturePaintPreview(bounds, canvas);
+  bool success = frame->CapturePaintPreview(
+      bounds, canvas, /*include_linked_destinations=*/true);
   TRACE_EVENT_END0("paint_preview", "WebLocalFrame::CapturePaintPreview");
   base::TimeDelta capture_time = base::TimeTicks::Now() - start_time;
   response->blink_recording_time = capture_time;
@@ -202,18 +207,12 @@ void PaintPreviewRecorderImpl::CapturePaintPreviewInternal(
     return;
   }
 
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-      base::BindOnce(&FinishRecording, recorder.finishRecordingAsPicture(),
-                     bounds, std::move(tracker), std::move(params->file),
-                     params->max_capture_size, std::move(response)),
-      base::BindOnce(
-          [](CapturePaintPreviewCallback callback,
-             FinishedRecording recording) {
-            std::move(callback).Run(recording.status,
-                                    std::move(recording.response));
-          },
-          std::move(callback)));
+  // This cannot be done async if the recording contains a GPU accelerated
+  // image.
+  FinishedRecording recording = FinishRecording(
+      recorder.finishRecordingAsPicture(), bounds, std::move(tracker),
+      std::move(params->file), params->max_capture_size, std::move(response));
+  std::move(callback).Run(recording.status, std::move(recording.response));
 }
 
 }  // namespace paint_preview

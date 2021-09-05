@@ -42,6 +42,10 @@ class NativeInputMethodEngine : public InputMethodEngine {
   // Returns whether this is connected to the input engine.
   bool IsConnectedForTesting() const;
 
+  AssistiveSuggester* get_assistive_suggester_for_testing() {
+    return assistive_suggester_;
+  }
+
  private:
   class ImeObserver : public InputMethodEngineBase::Observer,
                       public ime::mojom::InputChannel {
@@ -76,9 +80,13 @@ class NativeInputMethodEngine : public InputMethodEngine {
         const std::string& component_id,
         int candidate_id,
         InputMethodEngineBase::MouseButtonEvent button) override;
+    void OnAssistiveWindowButtonClicked(
+        const ui::ime::AssistiveWindowButton& button) override;
     void OnMenuItemActivated(const std::string& component_id,
                              const std::string& menu_id) override;
     void OnScreenProjectionChanged(bool is_projected) override;
+    void OnSuggestionsChanged(
+        const std::vector<std::string>& suggestions) override;
 
     // mojom::InputChannel:
     void ProcessMessage(const std::vector<uint8_t>& message,
@@ -120,6 +128,7 @@ class NativeInputMethodEngine : public InputMethodEngine {
   };
 
   ImeObserver* GetNativeObserver() const;
+  AssistiveSuggester* assistive_suggester_;
 };
 
 }  // namespace chromeos

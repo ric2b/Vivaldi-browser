@@ -199,10 +199,9 @@ ResourceRequest FrameLoader::ResourceRequestForReload(
   // was initiated by something in the current document and should therefore
   // show the current document's url as the referrer.
   if (client_redirect_policy == ClientRedirectPolicy::kClientRedirect) {
+    LocalDOMWindow* window = frame_->DomWindow();
     Referrer referrer = SecurityPolicy::GenerateReferrer(
-        frame_->GetDocument()->GetReferrerPolicy(),
-        frame_->GetDocument()->Url(),
-        frame_->GetDocument()->OutgoingReferrer());
+        window->GetReferrerPolicy(), window->Url(), window->OutgoingReferrer());
     request.SetReferrerString(referrer.referrer);
     request.SetReferrerPolicy(referrer.referrer_policy);
   }
@@ -232,7 +231,7 @@ FrameLoader::~FrameLoader() {
   DCHECK(detached_);
 }
 
-void FrameLoader::Trace(Visitor* visitor) {
+void FrameLoader::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
   visitor->Trace(progress_tracker_);
   visitor->Trace(document_loader_);
@@ -263,8 +262,8 @@ void FrameLoader::Init() {
   // Suppress finish notifications for initial empty documents, since they don't
   // generate start notifications.
   document_loader_->SetSentDidFinishLoad();
-  if (frame_->GetPage()->Paused())
-    frame_->SetLifecycleState(mojom::FrameLifecycleState::kPaused);
+  // Ensure that the frame sees the correct page lifecycle state.
+  frame_->OnPageLifecycleStateUpdated();
 
   TakeObjectSnapshot();
 }
@@ -440,8 +439,7 @@ Frame* FrameLoader::Opener() {
 
 void FrameLoader::SetOpener(LocalFrame* opener) {
   // If the frame is already detached, the opener has already been cleared.
-  if (Client())
-    Client()->SetOpener(opener);
+  frame_->SetOpener(opener);
 }
 
 bool FrameLoader::AllowPlugins(ReasonForCallingAllowPlugins reason) {
@@ -795,13 +793,15 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
   // Check for non-escaped new lines in the url.
   if (url.PotentiallyDanglingMarkup() && url.ProtocolIsInHTTPFamily()) {
     Deprecation::CountDeprecation(
-        origin_document, WebFeature::kCanRequestURLHTTPContainingNewline);
+        origin_document ? origin_document->GetExecutionContext() : nullptr,
+        WebFeature::kCanRequestURLHTTPContainingNewline);
     return;
   }
 
   if (url.ProtocolIsJavaScript()) {
     if (!origin_document ||
-        origin_document->CanExecuteScripts(kAboutToExecuteScript)) {
+        origin_document->GetExecutionContext()->CanExecuteScripts(
+            kAboutToExecuteScript)) {
       frame_->GetDocument()->ProcessJavaScriptUrl(
           url, request.ShouldCheckMainWorldContentSecurityPolicy());
     }
@@ -1029,16 +1029,13 @@ void FrameLoader::CommitNavigation(
   TakeObjectSnapshot();
 }
 
-bool FrameLoader::WillStartNavigation(const WebNavigationInfo& info,
-                                      bool is_history_navigation_in_new_frame) {
+bool FrameLoader::WillStartNavigation(const WebNavigationInfo& info) {
   if (!CancelProvisionalLoaderForNewNavigation())
     return false;
 
   progress_tracker_->ProgressStarted();
   client_navigation_ = std::make_unique<ClientNavigationState>();
   client_navigation_->url = info.url_request.Url();
-  client_navigation_->is_history_navigation_in_new_frame =
-      is_history_navigation_in_new_frame;
   frame_->GetFrameScheduler()->DidStartProvisionalLoad(frame_->IsMainFrame());
   probe::DidStartProvisionalLoad(frame_);
   virtual_time_pauser_.PauseVirtualTime();
@@ -1046,7 +1043,7 @@ bool FrameLoader::WillStartNavigation(const WebNavigationInfo& info,
   return true;
 }
 
-void FrameLoader::StopAllLoaders() {
+void FrameLoader::StopAllLoaders(bool abort_client) {
   if (!frame_->IsNavigationAllowed() ||
       frame_->GetDocument()->PageDismissalEventBeingDispatched() !=
           Document::kNoDismissal) {
@@ -1060,13 +1057,16 @@ void FrameLoader::StopAllLoaders() {
   for (Frame* child = frame_->Tree().FirstChild(); child;
        child = child->Tree().NextSibling()) {
     if (auto* child_local_frame = DynamicTo<LocalFrame>(child))
-      child_local_frame->Loader().StopAllLoaders();
+      child_local_frame->Loader().StopAllLoaders(abort_client);
   }
 
   frame_->GetDocument()->CancelParsing();
   if (document_loader_)
     document_loader_->StopLoading();
-  CancelClientNavigation();
+  if (abort_client)
+    CancelClientNavigation();
+  else
+    ClearClientNavigation();
   frame_->CancelFormSubmission();
   DidFinishNavigation(FrameLoader::NavigationFinishState::kSuccess);
 
@@ -1211,7 +1211,7 @@ void FrameLoader::CommitDocumentLoader(
 }
 
 void FrameLoader::RestoreScrollPositionAndViewState() {
-  if (RuntimeEnabledFeatures::ForceLoadAtTopEnabled(frame_->GetDocument()) ||
+  if (RuntimeEnabledFeatures::ForceLoadAtTopEnabled(frame_->DomWindow()) ||
       !frame_->GetPage() || !GetDocumentLoader() ||
       !GetDocumentLoader()->GetHistoryItem() ||
       !GetDocumentLoader()->GetHistoryItem()->GetViewState() ||
@@ -1335,24 +1335,45 @@ void FrameLoader::ProcessFragment(const KURL& url,
   if (auto* boundary_local_frame = DynamicTo<LocalFrame>(boundary_frame))
     boundary_local_frame->View()->SetSafeToPropagateScrollToParent(false);
 
-  // If scroll position is restored from history fragment or scroll
-  // restoration type is manual, then we should not override it unless this
-  // is a same document reload.
-  bool should_scroll_to_fragment =
-      !RuntimeEnabledFeatures::ForceLoadAtTopEnabled(frame_->GetDocument()) &&
-      GetDocumentLoader()->NavigationScrollAllowed() &&
-      ((load_start_type == kNavigationWithinSameDocument &&
-        !IsBackForwardLoadType(frame_load_type)) ||
-       (!GetDocumentLoader()
-             ->GetInitialScrollState()
-             .did_restore_from_history &&
-        !(GetDocumentLoader()->GetHistoryItem() &&
-          GetDocumentLoader()->GetHistoryItem()->ScrollRestorationType() ==
-              kScrollRestorationManual)));
+  const bool is_same_document_navigation =
+      load_start_type == kNavigationWithinSameDocument;
 
-  view->ProcessUrlFragment(url,
-                           load_start_type == kNavigationWithinSameDocument,
-                           should_scroll_to_fragment);
+  // Pages can opt-in to manual scroll restoration so the page will handle
+  // restoring the past scroll offset during a history navigation. In these
+  // cases we assume the scroll was restored from history (by the page).
+  const bool uses_manual_scroll_restoration =
+      GetDocumentLoader()->GetHistoryItem() &&
+      GetDocumentLoader()->GetHistoryItem()->ScrollRestorationType() ==
+          kScrollRestorationManual;
+
+  // If we restored a scroll position from history, we shouldn't clobber it
+  // with the fragment.
+  const bool will_restore_scroll_from_history =
+      GetDocumentLoader()->GetInitialScrollState().did_restore_from_history ||
+      uses_manual_scroll_restoration;
+
+  // Scrolling at load can be blocked by document policy (or the equivalent
+  // ForceLoadAtTop REF currently in origin trial). This policy applies only to
+  // cross-document navigations.
+  const bool blocked_by_policy =
+      !is_same_document_navigation &&
+      (RuntimeEnabledFeatures::ForceLoadAtTopEnabled(frame_->DomWindow()) ||
+       !GetDocumentLoader()->NavigationScrollAllowed());
+
+  // We should avoid scrolling the fragment if it would clobber a history
+  // restored scroll state but still allow it on same document navigations
+  // after (i.e. if we navigate back and restore the scroll position, the user
+  // should still be able to click on a same-document fragment link and have it
+  // jump to the anchor).
+  const bool is_same_document_non_history_nav =
+      is_same_document_navigation && !IsBackForwardLoadType(frame_load_type);
+
+  const bool block_fragment_scroll =
+      blocked_by_policy ||
+      (will_restore_scroll_from_history && !is_same_document_non_history_nav);
+
+  view->ProcessUrlFragment(url, is_same_document_navigation,
+                           !block_fragment_scroll);
 
   if (auto* boundary_local_frame = DynamicTo<LocalFrame>(boundary_frame))
     boundary_local_frame->View()->SetSafeToPropagateScrollToParent(true);
@@ -1408,6 +1429,15 @@ bool FrameLoader::ShouldClose(bool is_reload) {
     }
   }
 
+  // Now that none of the unloading frames canceled the BeforeUnload, tell each
+  // of them so they can advance to the appropriate load state.
+  frame_->GetDocument()->BeforeUnloadDoneWillUnload();
+  for (Member<LocalFrame>& descendant_frame : descendant_frames) {
+    if (!descendant_frame->Tree().IsDescendantOf(frame_))
+      continue;
+    descendant_frame->GetDocument()->BeforeUnloadDoneWillUnload();
+  }
+
   return true;
 }
 
@@ -1430,39 +1460,6 @@ void FrameLoader::DidDropNavigation() {
     // Forcibly instantiate WindowProxy.
     frame_->GetScriptController().WindowProxy(DOMWrapperWorld::MainWorld());
   }
-}
-
-void FrameLoader::MarkAsLoading() {
-  // This should only be called for initial history navigation in child frame.
-  DCHECK(!client_navigation_);
-  DCHECK(frame_->GetDocument()->IsLoadCompleted());
-  DCHECK(frame_->GetDocument()->HasFinishedParsing());
-  progress_tracker_->ProgressStarted();
-}
-
-bool FrameLoader::ShouldReuseDefaultView(
-    const scoped_refptr<const SecurityOrigin>& origin,
-    const ContentSecurityPolicy* csp) {
-  // Secure transitions can only happen when navigating from the initial empty
-  // document.
-  if (!state_machine_.IsDisplayingInitialEmptyDocument())
-    return false;
-
-  // The Window object should only be re-used if it is same-origin.
-  // Since sandboxing turns the origin into an opaque origin it needs to also
-  // be considered when deciding whether to reuse it.
-  // Spec:
-  // https://html.spec.whatwg.org/C/#initialise-the-document-object
-  if ((csp && (csp->GetSandboxMask() &
-               network::mojom::blink::WebSandboxFlags::kOrigin) !=
-                  network::mojom::blink::WebSandboxFlags::kNone) ||
-      ((EffectiveSandboxFlags() &
-        network::mojom::blink::WebSandboxFlags::kOrigin) !=
-       network::mojom::blink::WebSandboxFlags::kNone)) {
-    return false;
-  }
-
-  return frame_->GetDocument()->GetSecurityOrigin()->CanAccess(origin.get());
 }
 
 bool FrameLoader::CancelProvisionalLoaderForNewNavigation() {
@@ -1538,7 +1535,6 @@ void FrameLoader::SetFrameOwnerSandboxFlags(
 }
 
 void FrameLoader::DispatchDidClearDocumentOfWindowObject() {
-  DCHECK(frame_->GetDocument());
   if (state_machine_.CreatingInitialEmptyDocument())
     return;
 
@@ -1548,7 +1544,7 @@ void FrameLoader::DispatchDidClearDocumentOfWindowObject() {
     frame_->GetScriptController().WindowProxy(DOMWrapperWorld::MainWorld());
   }
   probe::DidClearDocumentOfWindowObject(frame_);
-  if (!frame_->GetDocument()->CanExecuteScripts(kNotAboutToExecuteScript))
+  if (!frame_->DomWindow()->CanExecuteScripts(kNotAboutToExecuteScript))
     return;
 
   if (dispatching_did_clear_window_object_in_main_world_)
@@ -1561,8 +1557,7 @@ void FrameLoader::DispatchDidClearDocumentOfWindowObject() {
 }
 
 void FrameLoader::DispatchDidClearWindowObjectInMainWorld() {
-  DCHECK(frame_->GetDocument());
-  if (!frame_->GetDocument()->CanExecuteScripts(kNotAboutToExecuteScript))
+  if (!frame_->DomWindow()->CanExecuteScripts(kNotAboutToExecuteScript))
     return;
 
   if (dispatching_did_clear_window_object_in_main_world_)
@@ -1732,11 +1727,6 @@ inline void FrameLoader::TakeObjectSnapshot() const {
                                       ToTracedValue());
 }
 
-bool FrameLoader::IsClientNavigationInitialHistoryLoad() {
-  return client_navigation_ &&
-         client_navigation_->is_history_navigation_in_new_frame;
-}
-
 ContentSecurityPolicy* FrameLoader::CreateCSPForInitialEmptyDocument() const {
   ContentSecurityPolicy* csp = MakeGarbageCollected<ContentSecurityPolicy>();
 
@@ -1802,13 +1792,6 @@ ContentSecurityPolicy* FrameLoader::CreateCSP(
   if (origin_policy)
     ApplyOriginPolicy(csp, origin_policy.value());
 
-  // Check CSP frame-ancestor:
-  if (!base::FeatureList::IsEnabled(
-          network::features::kOutOfBlinkFrameAncestors)) {
-    if (!csp->AllowAncestors(frame_, response.CurrentRequestUrl()))
-      return nullptr;  // Document blocked.
-  }
-
   // Plugin inherits plugin's CSP from their navigation initiator.
   DocumentInit::Type document_type =
       DocumentInit::ComputeDocumentType(frame_, url, response.MimeType());
@@ -1835,8 +1818,10 @@ ContentSecurityPolicy* FrameLoader::CreateCSP(
   // See:
   // - https://w3c.github.io/webappsec-cspee/#required-csp-header
   // - https://w3c.github.io/webappsec-cspee/#allow-csp-from-header
-  if (RequiredCSP().IsEmpty())
+  if (RequiredCSP().IsEmpty() ||
+      base::FeatureList::IsEnabled(network::features::kOutOfBlinkCSPEE)) {
     return csp;
+  }
 
   const SecurityOrigin* parent_security_origin =
       frame_->Tree().Parent()->GetSecurityContext()->GetSecurityOrigin();

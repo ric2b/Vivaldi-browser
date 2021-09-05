@@ -1523,8 +1523,7 @@ bool V4L2VideoDecodeAccelerator::EnqueueOutputRecord(
       ret = std::move(buffer).QueueMMap();
       break;
     case V4L2_MEMORY_DMABUF:
-      ret = std::move(buffer).QueueDMABuf(
-          output_record.output_frame->DmabufFds());
+      ret = std::move(buffer).QueueDMABuf(output_record.output_frame);
       break;
     default:
       NOTREACHED();
@@ -1880,6 +1879,10 @@ bool V4L2VideoDecodeAccelerator::StartDevicePoll() {
     NOTIFY_ERROR(PLATFORM_FAILURE);
     return false;
   }
+  cancelable_service_device_task_.Reset(base::BindRepeating(
+      &V4L2VideoDecodeAccelerator::ServiceDeviceTask, base::Unretained(this)));
+  cancelable_service_device_task_callback_ =
+      cancelable_service_device_task_.callback();
   device_poll_thread_.task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&V4L2VideoDecodeAccelerator::DevicePollTask,
                                 base::Unretained(this), 0));
@@ -1901,6 +1904,10 @@ bool V4L2VideoDecodeAccelerator::StopDevicePoll() {
     return false;
   }
   device_poll_thread_.Stop();
+  // Must be done after the Stop() above to ensure
+  // |cancelable_service_device_task_callback_| is not copied.
+  cancelable_service_device_task_.Cancel();
+  cancelable_service_device_task_callback_ = {};
   // Clear the interrupt now, to be sure.
   if (!device_->ClearDevicePollInterrupt()) {
     PLOG(ERROR) << "ClearDevicePollInterrupt: failed";
@@ -2027,8 +2034,8 @@ void V4L2VideoDecodeAccelerator::DevicePollTask(bool poll_device) {
   // All processing should happen on ServiceDeviceTask(), since we shouldn't
   // touch decoder state from this thread.
   decoder_thread_.task_runner()->PostTask(
-      FROM_HERE, base::BindOnce(&V4L2VideoDecodeAccelerator::ServiceDeviceTask,
-                                base::Unretained(this), event_pending));
+      FROM_HERE,
+      base::BindOnce(cancelable_service_device_task_callback_, event_pending));
 }
 
 bool V4L2VideoDecodeAccelerator::IsDestroyPending() {
@@ -2314,9 +2321,9 @@ bool V4L2VideoDecodeAccelerator::CreateImageProcessor() {
 
   image_processor_ = v4l2_vda_helpers::CreateImageProcessor(
       *output_format_fourcc_, *egl_image_format_fourcc_, coded_size_,
-      egl_image_size_, visible_size_, output_buffer_map_.size(),
-      image_processor_device_, image_processor_output_mode,
-      decoder_thread_.task_runner(),
+      egl_image_size_, visible_size_, VideoFrame::StorageType::STORAGE_DMABUFS,
+      output_buffer_map_.size(), image_processor_device_,
+      image_processor_output_mode, decoder_thread_.task_runner(),
       // Unretained(this) is safe for ErrorCB because |decoder_thread_| is owned
       // by this V4L2VideoDecodeAccelerator and |this| must be valid when
       // ErrorCB is executed.

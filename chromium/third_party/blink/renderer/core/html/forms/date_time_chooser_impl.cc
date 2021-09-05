@@ -69,7 +69,7 @@ DateTimeChooserImpl::DateTimeChooserImpl(
 
 DateTimeChooserImpl::~DateTimeChooserImpl() = default;
 
-void DateTimeChooserImpl::Trace(Visitor* visitor) {
+void DateTimeChooserImpl::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
   visitor->Trace(client_);
   DateTimeChooser::Trace(visitor);
@@ -125,7 +125,7 @@ void DateTimeChooserImpl::WriteDocument(SharedBuffer* data) {
 
   AddString(
       "<!DOCTYPE html><head><meta charset='UTF-8'><meta name='color-scheme' "
-      "content='light,dark'><style>\n",
+      "content='light dark'><style>\n",
       data);
 
   data->Append(ChooserResourceLoader::GetPickerCommonStyleSheet());

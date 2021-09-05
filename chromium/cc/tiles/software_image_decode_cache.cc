@@ -82,7 +82,7 @@ class SoftwareImageDecodeTaskImpl : public TileTask {
     const ImageType image_type =
         image_metadata ? image_metadata->image_type : ImageType::kInvalid;
     devtools_instrumentation::ScopedImageDecodeTask image_decode_task(
-        paint_image_.GetSkImage().get(),
+        paint_image_.GetRasterSkImage().get(),
         devtools_instrumentation::ScopedImageDecodeTask::kSoftware,
         ImageDecodeCache::ToScopedTaskType(tracing_info_.task_type),
         ImageDecodeCache::ToScopedImageType(image_type));
@@ -132,24 +132,6 @@ SkFilterQuality GetDecodedFilterQuality(
     const SoftwareImageDecodeCache::CacheKey& key) {
   return key.is_nearest_neighbor() ? kNone_SkFilterQuality
                                    : kLow_SkFilterQuality;
-}
-
-void RecordLockExistingCachedImageHistogram(TilePriority::PriorityBin bin,
-                                            bool success) {
-  switch (bin) {
-    case TilePriority::NOW:
-      UMA_HISTOGRAM_BOOLEAN("Renderer4.LockExistingCachedImage.Software.NOW",
-                            success);
-      break;
-    case TilePriority::SOON:
-      UMA_HISTOGRAM_BOOLEAN("Renderer4.LockExistingCachedImage.Software.SOON",
-                            success);
-      break;
-    case TilePriority::EVENTUALLY:
-      UMA_HISTOGRAM_BOOLEAN(
-          "Renderer4.LockExistingCachedImage.Software.EVENTUALLY", success);
-      break;
-  }
 }
 
 }  // namespace
@@ -357,9 +339,6 @@ SoftwareImageDecodeCache::DecodeImageIfNecessary(const CacheKey& key,
       return TaskProcessingResult::kLockOnly;
 
     bool lock_succeeded = entry->Lock();
-    // TODO(vmpstr): Deprecate the prepaint split, since it doesn't matter.
-    RecordLockExistingCachedImageHistogram(TilePriority::NOW, lock_succeeded);
-
     if (lock_succeeded)
       return TaskProcessingResult::kLockOnly;
   }

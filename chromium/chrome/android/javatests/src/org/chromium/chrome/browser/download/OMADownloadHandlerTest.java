@@ -8,8 +8,9 @@ import android.app.DownloadManager;
 import android.content.Context;
 import android.content.Intent;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Matchers;
 import org.junit.Assert;
@@ -22,7 +23,6 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.download.DownloadManagerBridge.DownloadQueryResult;
 import org.chromium.chrome.browser.download.OMADownloadHandler.OMAInfo;
@@ -307,7 +307,6 @@ public class OMADownloadHandlerTest {
      */
     @Test
     @MediumTest
-    @RetryOnFailure
     @Feature({"Download"})
     public void testClearPendingOMADownloads() {
         Context context = getTestContext();

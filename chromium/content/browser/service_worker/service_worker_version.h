@@ -32,7 +32,6 @@
 #include "content/browser/frame_host/back_forward_cache_metrics.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
-#include "content/browser/service_worker/service_worker_client_info.h"
 #include "content/browser/service_worker/service_worker_client_utils.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/service_worker/service_worker_ping_controller.h"
@@ -41,6 +40,8 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/global_routing_id.h"
+#include "content/public/browser/service_worker_client_info.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
@@ -66,8 +67,8 @@ namespace content {
 
 class ServiceWorkerContainerHost;
 class ServiceWorkerContextCore;
+class ServiceWorkerHost;
 class ServiceWorkerInstalledScriptsSender;
-class ServiceWorkerProviderHost;
 class ServiceWorkerRegistration;
 struct ServiceWorkerVersionInfo;
 
@@ -109,9 +110,9 @@ namespace service_worker_registration_unittest {
 class ServiceWorkerActivationTest;
 }  // namespace service_worker_registration_unittest
 
-namespace service_worker_navigation_loader_unittest {
-class ServiceWorkerNavigationLoaderTest;
-}  // namespace service_worker_navigation_loader_unittest
+namespace service_worker_main_resource_loader_unittest {
+class ServiceWorkerMainResourceLoaderTest;
+}  // namespace service_worker_main_resource_loader_unittest
 
 // This class corresponds to a specific version of a ServiceWorker
 // script for a given scope. When a script is upgraded, there may be
@@ -270,9 +271,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // subresources).
   bool OnRequestTermination();
 
-  // Skips waiting and forces this version to become activated.
-  void SkipWaitingFromDevTools();
-
   // Schedules an update to be run 'soon'.
   void ScheduleUpdate();
 
@@ -341,13 +339,16 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // code and the dispatch time. See service_worker.mojom.
   SimpleEventCallback CreateSimpleEventCallback(int request_id);
 
-  // This must be called when the worker is running.
+  // This must be called when is_endpoint_ready() returns true, which is after
+  // InitializeGlobalScope() is called.
   blink::mojom::ServiceWorker* endpoint() {
     DCHECK(running_status() == EmbeddedWorkerStatus::STARTING ||
            running_status() == EmbeddedWorkerStatus::RUNNING);
     DCHECK(service_worker_remote_.is_bound());
     return service_worker_remote_.get();
   }
+
+  bool is_endpoint_ready() const { return is_endpoint_ready_; }
 
   // Returns the 'controller' interface ptr of this worker. It is expected that
   // the worker is already starting or running, or is going to be started soon.
@@ -365,6 +366,12 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Adds and removes the specified host as a controllee of this service worker.
   void AddControllee(ServiceWorkerContainerHost* container_host);
   void RemoveControllee(const std::string& client_uuid);
+
+  // Called when the navigation for a window client commits to a render frame
+  // host.
+  void OnControlleeNavigationCommitted(const std::string& client_uuid,
+                                       int process_id,
+                                       int frame_id);
 
   // Called when a controllee goes into back-forward cache.
   void MoveControlleeToBackForwardCacheMap(const std::string& client_uuid);
@@ -395,11 +402,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
       ServiceWorkerContainerHost* controllee,
       BackForwardCacheMetrics::NotRestoredReason reason);
 
-  // The provider host hosting this version. Only valid while the version is
+  // The worker host hosting this version. Only valid while the version is
   // running.
-  ServiceWorkerProviderHost* provider_host() {
-    DCHECK(provider_host_);
-    return provider_host_.get();
+  content::ServiceWorkerHost* worker_host() {
+    DCHECK(worker_host_);
+    return worker_host_.get();
   }
 
   base::WeakPtr<ServiceWorkerContextCore> context() const { return context_; }
@@ -532,9 +539,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   //
   // On each request that dispatches a fetch event to this worker (or would
   // have, in the case of a no-fetch event worker), this count is incremented.
-  // When the browser-side provider host receives a hint from the renderer that
+  // When the browser-side worker host receives a hint from the renderer that
   // it is a good time to update the service worker, the count is decremented.
-  // It is also decremented when if the provider host is destroyed before
+  // It is also decremented when if the worker host is destroyed before
   // receiving the hint.
   //
   // When the count transitions from 1 to 0, update is scheduled.
@@ -595,8 +602,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
   friend class ServiceWorkerVersionBrowserTest;
   friend class ServiceWorkerActivationTest;
   friend class service_worker_version_unittest::ServiceWorkerVersionTest;
-  friend class service_worker_navigation_loader_unittest::
-      ServiceWorkerNavigationLoaderTest;
+  friend class service_worker_main_resource_loader_unittest::
+      ServiceWorkerMainResourceLoaderTest;
 
   FRIEND_TEST_ALL_PREFIXES(service_worker_controllee_request_handler_unittest::
                                ServiceWorkerControlleeRequestHandlerTest,
@@ -855,6 +862,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void NotifyControlleeAdded(const std::string& uuid,
                              const ServiceWorkerClientInfo& info);
   void NotifyControlleeRemoved(const std::string& uuid);
+  void NotifyControlleeNavigationCommitted(
+      const std::string& uuid,
+      GlobalFrameRoutingId render_frame_host_id);
 
   void GetClientOnExecutionReady(const std::string& client_uuid,
                                  GetClientCallback callback,
@@ -866,9 +876,10 @@ class CONTENT_EXPORT ServiceWorkerVersion
       std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
           subresource_loader_factories);
 
-  // Update the idle delay if the worker is starting or running and we don't
+  // When ServiceWorkerTerminationOnNoControlle is enabled and there's no
+  // controllee, update the idle delay if the worker is running and we don't
   // have to terminate the worker ASAP (e.g. for activation).
-  void UpdateIdleDelayIfNeeded(base::TimeDelta delay);
+  void MaybeUpdateIdleDelayForTerminationOnNoControllee(base::TimeDelta delay);
 
   const int64_t version_id_;
   const int64_t registration_id_;
@@ -902,6 +913,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   Status status_ = NEW;
   std::unique_ptr<EmbeddedWorkerInstance> embedded_worker_;
+  // True if endpoint() is ready to dispatch events, which means
+  // InitializeGlobalScope() is already called.
+  bool is_endpoint_ready_ = false;
   std::vector<StatusCallback> start_callbacks_;
   std::vector<base::OnceClosure> stop_callbacks_;
   std::vector<base::OnceClosure> status_change_callbacks_;
@@ -954,10 +968,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // (e.g. activation).
   bool needs_to_be_terminated_asap_ = false;
 
-  // Keeps track of the provider hosting this running service worker for this
-  // version. |provider_host_| is always valid as long as this version is
-  // running.
-  std::unique_ptr<ServiceWorkerProviderHost> provider_host_;
+  // The host for this version's running service worker. |worker_host_| is
+  // always valid as long as this version is running.
+  std::unique_ptr<content::ServiceWorkerHost> worker_host_;
 
   // |controllee_map_| and |bfcached_controllee_map_| should not share the same
   // controllee.

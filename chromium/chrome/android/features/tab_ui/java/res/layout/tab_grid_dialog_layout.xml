@@ -3,7 +3,7 @@
      Use of this source code is governed by a BSD-style license that can be
      found in the LICENSE file. -->
 
-<FrameLayout
+<org.chromium.chrome.browser.tasks.tab_management.TabGridDialogView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -13,6 +13,8 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:id="@+id/dialog_container_view"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
         android:background="@drawable/tab_grid_dialog_background">
         <!-- Ignore useless parents here for two reasons:
         1. Content recyclerView and toolbar view will be added programmatically later.
@@ -58,4 +60,4 @@
         android:alpha="0.0">
         <include layout="@layout/tab_grid_card_item"/>
     </FrameLayout>
-</FrameLayout>
+</org.chromium.chrome.browser.tasks.tab_management.TabGridDialogView>

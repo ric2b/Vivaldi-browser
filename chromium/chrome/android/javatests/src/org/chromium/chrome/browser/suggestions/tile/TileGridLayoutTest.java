@@ -16,13 +16,13 @@ import static org.chromium.chrome.test.util.browser.suggestions.mostvisited.Fake
 import android.app.Activity;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
-import android.support.test.espresso.matcher.ViewMatchers;
-import android.support.test.filters.MediumTest;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import androidx.annotation.Nullable;
+import androidx.test.espresso.matcher.ViewMatchers;
+import androidx.test.filters.MediumTest;
 
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -37,7 +37,6 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -167,7 +166,6 @@ public class TileGridLayoutTest {
     @Test
     //@MediumTest
     @DisabledTest(message = "crbug.com/771648")
-    @RetryOnFailure
     @Feature({"NewTabPage", "RenderTest"})
     public void testModernTileGridAppearance_Two()
             throws IOException, InterruptedException {

@@ -26,6 +26,8 @@
 #include "components/autofill_assistant/browser/overlay_state.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/user_action.h"
+#include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/web_contents_observer.h"
 
 namespace autofill_assistant {
 struct ClientSettings;
@@ -85,9 +87,10 @@ class UiControllerAndroid : public ControllerObserver {
   // If action_index != -1, execute that action as close/cancel. Otherwise
   // execute the default close or cancel action.
   void CloseOrCancel(int action_index,
-                     std::unique_ptr<TriggerContext> trigger_context);
+                     std::unique_ptr<TriggerContext> trigger_context,
+                     Metrics::DropOutReason dropout_reason);
 
-  // Overrides UiController:
+  // Overrides ControllerObserver:
   void OnStateChanged(AutofillAssistantState new_state) override;
   void OnStatusMessageChanged(const std::string& message) override;
   void OnBubbleMessageChanged(const std::string& message) override;
@@ -100,7 +103,12 @@ class UiControllerAndroid : public ControllerObserver {
   void OnDetailsChanged(const Details* details) override;
   void OnInfoBoxChanged(const InfoBox* info_box) override;
   void OnProgressChanged(int progress) override;
+  void OnProgressActiveStepChanged(int active_step) override;
   void OnProgressVisibilityChanged(bool visible) override;
+  void OnProgressBarErrorStateChanged(bool error) override;
+  void OnStepProgressBarConfigurationChanged(
+      const ShowProgressBarProto::StepProgressBarConfiguration& configuration)
+      override;
   void OnTouchableAreaChanged(
       const RectF& visual_viewport,
       const std::vector<RectF>& touchable_areas,
@@ -149,6 +157,10 @@ class UiControllerAndroid : public ControllerObserver {
   void OnDateTimeRangeEndTimeSlotCleared();
   void OnKeyValueChanged(const std::string& key, const ValueProto& value);
   void OnTextFocusLost();
+  bool IsContactComplete(autofill::AutofillProfile* contact);
+  bool IsShippingAddressComplete(autofill::AutofillProfile* address);
+  bool IsPaymentInstrumentComplete(autofill::CreditCard* card,
+                                   autofill::AutofillProfile* address);
 
   // Called by AssistantFormDelegate:
   void OnCounterChanged(int input_index, int counter_index, int value);
@@ -191,6 +203,21 @@ class UiControllerAndroid : public ControllerObserver {
                   jboolean visible);
 
  private:
+  class SelfDestructObserver : private content::WebContentsObserver {
+   public:
+    SelfDestructObserver(content::WebContents* web_contents,
+                         UiControllerAndroid* ui_controller,
+                         int64_t navigation_id_to_ignore);
+    ~SelfDestructObserver() override;
+
+    void DidStartNavigation(
+        content::NavigationHandle* navigation_handle) override;
+
+   private:
+    UiControllerAndroid* ui_controller_;
+    int64_t navigation_id_to_ignore_;
+  };
+
   // A pointer to the client. nullptr until Attach() is called.
   Client* client_ = nullptr;
 
@@ -215,6 +242,7 @@ class UiControllerAndroid : public ControllerObserver {
   base::android::ScopedJavaLocalRef<jobject> GetGenericUiModel();
 
   void SetOverlayState(OverlayState state);
+  void AllowShowingSoftKeyboard(bool enabled);
   void ShowContentAndExpandBottomSheet();
   void SetSpinPoodle(bool enabled);
   std::string GetDebugContext();
@@ -233,7 +261,9 @@ class UiControllerAndroid : public ControllerObserver {
                     const std::string& message,
                     base::OnceCallback<void()> action);
 
-  void OnCancel(int action_index, std::unique_ptr<TriggerContext> context);
+  void OnCancel(int action_index,
+                std::unique_ptr<TriggerContext> context,
+                Metrics::DropOutReason dropout_reason);
 
   // Updates the state of the UI to reflect the UIDelegate's state.
   void SetupForState();
@@ -260,6 +290,9 @@ class UiControllerAndroid : public ControllerObserver {
   std::unique_ptr<GenericUiControllerAndroid> generic_ui_controller_;
 
   OverlayState desired_overlay_state_ = OverlayState::FULL;
+
+  std::unique_ptr<SelfDestructObserver> self_destruct_observer_;
+
   base::WeakPtrFactory<UiControllerAndroid> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(UiControllerAndroid);

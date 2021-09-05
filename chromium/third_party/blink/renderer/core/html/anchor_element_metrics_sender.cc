@@ -98,7 +98,7 @@ AnchorElementMetricsSender::GetAnchorElements() const {
   return anchor_elements_;
 }
 
-void AnchorElementMetricsSender::Trace(Visitor* visitor) {
+void AnchorElementMetricsSender::Trace(Visitor* visitor) const {
   visitor->Trace(anchor_elements_);
   visitor->Trace(metrics_host_);
   Supplement<Document>::Trace(visitor);
@@ -113,7 +113,7 @@ bool AnchorElementMetricsSender::AssociateInterface() {
   if (!document->GetFrame())
     return false;
 
-  document->GetBrowserInterfaceBroker().GetInterface(
+  document->GetFrame()->GetBrowserInterfaceBroker().GetInterface(
       metrics_host_.BindNewPipeAndPassReceiver(
           document->GetExecutionContext()->GetTaskRunner(
               TaskType::kInternalDefault)));

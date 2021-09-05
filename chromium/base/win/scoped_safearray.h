@@ -8,7 +8,8 @@
 #include <objbase.h>
 
 #include "base/base_export.h"
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/macros.h"
 
 namespace base {
 namespace win {

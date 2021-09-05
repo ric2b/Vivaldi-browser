@@ -55,15 +55,18 @@
 
 namespace blink {
 
-ExecutionContext::ExecutionContext(v8::Isolate* isolate)
+ExecutionContext::ExecutionContext(v8::Isolate* isolate, Agent* agent)
     : isolate_(isolate),
+      agent_(agent),
       circular_sequential_id_(0),
       in_dispatch_error_event_(false),
       lifecycle_state_(mojom::FrameLifecycleState::kRunning),
       is_context_destroyed_(false),
       csp_delegate_(MakeGarbageCollected<ExecutionContextCSPDelegate>(*this)),
       window_interaction_tokens_(0),
-      referrer_policy_(network::mojom::ReferrerPolicy::kDefault) {}
+      referrer_policy_(network::mojom::ReferrerPolicy::kDefault) {
+  DCHECK(agent_);
+}
 
 ExecutionContext::~ExecutionContext() = default;
 
@@ -91,7 +94,8 @@ ExecutionContext* ExecutionContext::ForRelevantRealm(
 }
 
 void ExecutionContext::SetLifecycleState(mojom::FrameLifecycleState state) {
-  DCHECK(lifecycle_state_ != state);
+  if (lifecycle_state_ == state)
+    return;
   lifecycle_state_ = state;
   context_lifecycle_observer_list_.ForEachObserver(
       [&](ContextLifecycleObserver* observer) {
@@ -151,6 +155,11 @@ unsigned ExecutionContext::ContextLifecycleStateObserverCountForTesting()
   return lifecycle_state_observers;
 }
 
+bool ExecutionContext::IsCrossOriginIsolated() const {
+  // TODO(yhirano): Take cross-origin isolated permission into account.
+  return Agent::IsCrossOriginIsolated();
+}
+
 void ExecutionContext::AddConsoleMessageImpl(mojom::ConsoleMessageSource source,
                                              mojom::ConsoleMessageLevel level,
                                              const String& message,
@@ -199,7 +208,7 @@ bool ExecutionContext::DispatchErrorEventInternal(
 }
 
 bool ExecutionContext::IsContextPaused() const {
-  return lifecycle_state_ != mojom::FrameLifecycleState::kRunning;
+  return lifecycle_state_ == mojom::blink::FrameLifecycleState::kPaused;
 }
 
 int ExecutionContext::CircularSequentialID() {
@@ -327,7 +336,8 @@ void ExecutionContext::RemoveURLFromMemoryCache(const KURL& url) {
   GetMemoryCache()->RemoveURLFromCache(url);
 }
 
-void ExecutionContext::Trace(Visitor* visitor) {
+void ExecutionContext::Trace(Visitor* visitor) const {
+  visitor->Trace(agent_);
   visitor->Trace(public_url_manager_);
   visitor->Trace(pending_exceptions_);
   visitor->Trace(csp_delegate_);

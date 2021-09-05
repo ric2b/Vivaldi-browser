@@ -9,8 +9,8 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
-#include "chrome/browser/ui/exclusive_access/fullscreen_controller_test.h"
 #include "chrome/browser/ui/permission_bubble/permission_bubble_browser_test_util.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/permission_bubble/permission_prompt_impl.h"
@@ -59,7 +59,7 @@ IN_PROC_BROWSER_TEST_F(PermissionBubbleBrowserTest,
   {
     FullscreenNotificationObserver fullscreen_observer(browser());
     controller->EnterFullscreenModeForTab(
-        browser()->tab_strip_model()->GetActiveWebContents(), GURL());
+        browser()->tab_strip_model()->GetActiveWebContents()->GetMainFrame());
     fullscreen_observer.Wait();
   }
   EXPECT_TRUE(controller->IsTabFullscreen());

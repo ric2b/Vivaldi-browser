@@ -163,6 +163,7 @@ constexpr device::mojom::XRSessionFeature kARCoreDeviceFeatures[] = {
     device::mojom::XRSessionFeature::DOM_OVERLAY,
     device::mojom::XRSessionFeature::LIGHT_ESTIMATION,
     device::mojom::XRSessionFeature::ANCHORS,
+    device::mojom::XRSessionFeature::CAMERA_ACCESS,
 };
 
 #if BUILDFLAG(ENABLE_OPENVR)
@@ -212,9 +213,11 @@ bool ContainsFeature(
 
 BrowserXRRuntimeImpl::BrowserXRRuntimeImpl(
     device::mojom::XRDeviceId id,
+    device::mojom::XRDeviceDataPtr device_data,
     mojo::PendingRemote<device::mojom::XRRuntime> runtime,
     device::mojom::VRDisplayInfoPtr display_info)
     : id_(id),
+      device_data_(std::move(device_data)),
       runtime_(std::move(runtime)),
       display_info_(ValidateVRDisplayInfo(display_info.get(), id)) {
   DVLOG(2) << __func__ << ": id=" << id;
@@ -231,7 +234,6 @@ BrowserXRRuntimeImpl::BrowserXRRuntimeImpl(
 
   if (integration_client) {
     install_helper_ = integration_client->GetInstallHelper(id_);
-    consent_helper_ = integration_client->GetConsentHelper(id_);
   }
 }
 
@@ -493,22 +495,6 @@ void BrowserXRRuntimeImpl::OnRequestSessionResult(
   }
 }
 
-void BrowserXRRuntimeImpl::ShowConsentPrompt(
-    int render_process_id,
-    int render_frame_id,
-    content::XrConsentPromptLevel consent_level,
-    content::OnXrUserConsentCallback consent_callback) {
-  // It is the responsibility of the consent prompt to ensure that the callback
-  // is run in the event that we get removed (and it gets destroyed).
-  if (consent_helper_) {
-    consent_helper_->ShowConsentPrompt(render_process_id, render_frame_id,
-                                       consent_level,
-                                       std::move(consent_callback));
-  } else {
-    std::move(consent_callback).Run(consent_level, false);
-  }
-}
-
 void BrowserXRRuntimeImpl::EnsureInstalled(
     int render_process_id,
     int render_frame_id,
@@ -573,5 +559,11 @@ void BrowserXRRuntimeImpl::BeforeRuntimeRemoved() {
   // any immersive session we may be currently responsible for.
   StopImmersiveSession(base::DoNothing());
 }
+
+#if defined(OS_WIN)
+base::Optional<LUID> BrowserXRRuntimeImpl::GetLuid() const {
+  return device_data_->luid;
+}
+#endif
 
 }  // namespace content

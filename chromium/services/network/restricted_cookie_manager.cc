@@ -84,9 +84,32 @@ net::CookieOptions MakeOptionsForGet(
   return options;
 }
 
-}  // namespace
+void MarkSameSiteCompatPairs(std::vector<net::CookieWithStatus>& cookie_list,
+                             const net::CookieOptions& options) {
+  // If the context is same-site then there cannot be any SameSite-by-default
+  // warnings, so the compat pair warning is irrelevant.
+  if (options.same_site_cookie_context().GetContextForCookieInclusion() >
+      net::CookieOptions::SameSiteCookieContext::ContextType::
+          SAME_SITE_LAX_METHOD_UNSAFE) {
+    return;
+  }
+  if (cookie_list.size() < 2)
+    return;
+  for (size_t i = 0; i < cookie_list.size() - 1; ++i) {
+    const net::CanonicalCookie& c1 = cookie_list[i].cookie;
+    for (size_t j = i + 1; j < cookie_list.size(); ++j) {
+      const net::CanonicalCookie& c2 = cookie_list[j].cookie;
+      if (net::cookie_util::IsSameSiteCompatPair(c1, c2, options)) {
+        cookie_list[i].status.AddWarningReason(
+            net::CookieInclusionStatus::WARN_SAMESITE_COMPAT_PAIR);
+        cookie_list[j].status.AddWarningReason(
+            net::CookieInclusionStatus::WARN_SAMESITE_COMPAT_PAIR);
+      }
+    }
+  }
+}
 
-using CookieInclusionStatus = net::CanonicalCookie::CookieInclusionStatus;
+}  // namespace
 
 class RestrictedCookieManager::Listener : public base::LinkNode<Listener> {
  public:
@@ -129,7 +152,7 @@ class RestrictedCookieManager::Listener : public base::LinkNode<Listener> {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     if (!change.cookie
              .IncludeForRequestURL(url_, options_, change.access_semantics)
-             .IsInclude()) {
+             .status.IsInclude()) {
       return;
     }
 
@@ -238,22 +261,28 @@ void RestrictedCookieManager::CookieListToGetAllForUrlCallback(
     const net::CookieOptions& net_options,
     mojom::CookieManagerGetOptionsPtr options,
     GetAllForUrlCallback callback,
-    const net::CookieStatusList& cookie_list,
-    const net::CookieStatusList& excluded_cookies) {
+    const net::CookieAccessResultList& cookie_list,
+    const net::CookieAccessResultList& excluded_cookies) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   bool blocked = !cookie_settings_->IsCookieAccessAllowed(
       url, site_for_cookies.RepresentativeUrl(), top_frame_origin);
 
-  std::vector<net::CanonicalCookie> result;
+  std::vector<net::CookieWithAccessResult> result;
   std::vector<net::CookieWithStatus> result_with_status;
 
   // TODO(https://crbug.com/977040): Remove once samesite tightening up is
   // rolled out.
-  for (const auto& cookie_and_status : excluded_cookies) {
-    if (cookie_and_status.status.ShouldWarn()) {
+  // |result_with_status| is populated with excluded cookies here based on
+  // warnings present before WARN_SAMESITE_COMPAT_PAIR can be applied by
+  // MarkSameSiteCompatPairs(). This is ok because WARN_SAMESITE_COMPAT_PAIR is
+  // irrelevant unless WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT is already
+  // present.
+  for (const auto& cookie_and_access_result : excluded_cookies) {
+    if (cookie_and_access_result.access_result.status.ShouldWarn()) {
       result_with_status.push_back(
-          {cookie_and_status.cookie, cookie_and_status.status});
+          {cookie_and_access_result.cookie,
+           cookie_and_access_result.access_result.status});
     }
   }
 
@@ -262,9 +291,9 @@ void RestrictedCookieManager::CookieListToGetAllForUrlCallback(
   mojom::CookieMatchType match_type = options->match_type;
   const std::string& match_name = options->name;
   // TODO(https://crbug.com/993843): Use the statuses passed in |cookie_list|.
-  for (size_t i = 0; i < cookie_list.size(); ++i) {
-    const net::CanonicalCookie& cookie = cookie_list[i].cookie;
-    CookieInclusionStatus status = cookie_list[i].status;
+  for (const net::CookieWithAccessResult& cookie_item : cookie_list) {
+    const net::CanonicalCookie& cookie = cookie_item.cookie;
+    net::CookieInclusionStatus status = cookie_item.access_result.status;
     const std::string& cookie_name = cookie.Name();
 
     if (match_type == mojom::CookieMatchType::EQUALS) {
@@ -281,14 +310,18 @@ void RestrictedCookieManager::CookieListToGetAllForUrlCallback(
 
     if (blocked) {
       status.AddExclusionReason(
-          CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+          net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
     } else {
-      result.push_back(cookie);
+      result.push_back(cookie_item);
     }
     result_with_status.push_back({cookie, status});
   }
 
   if (cookie_observer_) {
+    // Mark the CookieInclusionStatuses of items in |result_with_status| if they
+    // are part of a presumed SameSite compatibility pair.
+    MarkSameSiteCompatPairs(result_with_status, net_options);
+
     cookie_observer_->OnCookiesAccessed(mojom::CookieAccessDetails::New(
         mojom::CookieAccessDetails::Type::kRead, url, site_for_cookies,
         result_with_status, base::nullopt));
@@ -319,21 +352,24 @@ void RestrictedCookieManager::SetCanonicalCookie(
   bool blocked = !cookie_settings_->IsCookieAccessAllowed(
       url, site_for_cookies.RepresentativeUrl(), top_frame_origin);
 
-  CookieInclusionStatus status;
+  net::CookieInclusionStatus status;
   if (blocked)
-    status.AddExclusionReason(CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+    status.AddExclusionReason(
+        net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
 
   // Don't allow URLs with leading dots like https://.some-weird-domain.com
   // This probably never happens.
   if (!net::cookie_util::DomainIsHostOnly(url.host()))
-    status.AddExclusionReason(CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN);
+    status.AddExclusionReason(
+        net::CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN);
 
   // Don't allow setting cookies on other domains.
   // TODO(crbug.com/996786): This should never happen. This should eventually
   // result in a renderer kill, but for now just log metrics.
   bool domain_match = cookie.IsDomainMatch(url.host());
   if (!domain_match)
-    status.AddExclusionReason(CookieInclusionStatus::EXCLUDE_DOMAIN_MISMATCH);
+    status.AddExclusionReason(
+        net::CookieInclusionStatus::EXCLUDE_DOMAIN_MISMATCH);
   UMA_HISTOGRAM_BOOLEAN(
       "Net.RestrictedCookieManager.SetCanonicalCookieDomainMatch",
       domain_match);
@@ -384,12 +420,12 @@ void RestrictedCookieManager::SetCanonicalCookieResult(
     const net::CanonicalCookie& cookie,
     const net::CookieOptions& net_options,
     SetCanonicalCookieCallback user_callback,
-    net::CanonicalCookie::CookieInclusionStatus status) {
+    net::CookieInclusionStatus status) {
   std::vector<net::CookieWithStatus> notify;
   // TODO(https://crbug.com/977040): Only report pure INCLUDE once samesite
   // tightening up is rolled out.
   DCHECK(!status.HasExclusionReason(
-      CookieInclusionStatus::EXCLUDE_USER_PREFERENCES));
+      net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES));
 
   if (status.IsInclude() || status.ShouldWarn()) {
     if (cookie_observer_) {
@@ -474,7 +510,7 @@ void RestrictedCookieManager::GetCookiesString(
                std::move(match_options),
                base::BindOnce(
                    [](GetCookiesStringCallback user_callback,
-                      const std::vector<net::CanonicalCookie>& cookies) {
+                      const std::vector<net::CookieWithAccessResult>& cookies) {
                      std::move(user_callback)
                          .Run(net::CanonicalCookie::BuildCookieLine(cookies));
                    },

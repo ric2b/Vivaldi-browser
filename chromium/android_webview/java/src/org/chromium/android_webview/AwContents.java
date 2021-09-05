@@ -520,11 +520,13 @@ public class AwContents implements SmartClipProvider {
                 long nativeAwContents, WindowAndroidWrapper windowAndroid) {
             mNativeAwContents = nativeAwContents;
             mWindowAndroid = windowAndroid;
+            mWindowAndroid.incrementRefFromDestroyRunnable();
         }
 
         @Override
         public void run() {
             AwContentsJni.get().destroy(mNativeAwContents);
+            mWindowAndroid.decrementRefFromDestroyRunnable();
         }
     }
 
@@ -797,11 +799,6 @@ public class AwContents implements SmartClipProvider {
 
         @Override
         public void onScaleLimitsChanged(float minPageScaleFactor, float maxPageScaleFactor) {
-            mZoomControls.updateZoomControls();
-        }
-
-        @Override
-        public void onScrollOffsetOrExtentChanged(int scrollOffsetY, int scrollExtentY) {
             mZoomControls.updateZoomControls();
         }
     }
@@ -1131,6 +1128,11 @@ public class AwContents implements SmartClipProvider {
         private final WindowAndroid mWindowAndroid;
         private final CleanupReference mCleanupReference;
 
+        // This ref-counts is used only to destroy WindowAndroid eagerly
+        // when AwContents is destroyed. The CleanupReference is still used
+        // if a Wrapper is created without any AwContents.
+        private int mRefFromAwContentsDestroyRunnable;
+
         private static final class DestroyRunnable implements Runnable {
             private final WindowAndroid mWindowAndroid;
             private DestroyRunnable(WindowAndroid windowAndroid) {
@@ -1152,6 +1154,26 @@ public class AwContents implements SmartClipProvider {
 
         public WindowAndroid getWindowAndroid() {
             return mWindowAndroid;
+        }
+
+        public void incrementRefFromDestroyRunnable() {
+            mRefFromAwContentsDestroyRunnable++;
+        }
+
+        public void decrementRefFromDestroyRunnable() {
+            assert mRefFromAwContentsDestroyRunnable > 0;
+            mRefFromAwContentsDestroyRunnable--;
+            maybeCleanupEarly();
+        }
+
+        private void maybeCleanupEarly() {
+            if (mRefFromAwContentsDestroyRunnable != 0) return;
+
+            Context context = mWindowAndroid.getContext().get();
+            if (context != null && sContextWindowMap.get(context) != this) return;
+
+            mCleanupReference.cleanupNow();
+            if (context != null) sContextWindowMap.remove(context);
         }
     }
     private static WeakHashMap<Context, WindowAndroidWrapper> sContextWindowMap;
@@ -1441,7 +1463,8 @@ public class AwContents implements SmartClipProvider {
     /**
      * Deletes the native counterpart of this object.
      */
-    private void destroyNatives() {
+    @VisibleForTesting
+    public void destroyNatives() {
         if (mCleanupReference != null) {
             assert mNativeAwContents != 0;
 
@@ -2492,7 +2515,7 @@ public class AwContents implements SmartClipProvider {
      *                                  jsObjectName and allowedOriginRules is {@code null}.
      * @return A {@link ScriptReference} for removing the script.
      */
-    public ScriptReference addDocumentStartJavascript(
+    public ScriptReference addDocumentStartJavaScript(
             @NonNull String script, @NonNull String[] allowedOriginRules) {
         if (script == null) {
             throw new IllegalArgumentException("script shouldn't be null.");
@@ -2506,12 +2529,12 @@ public class AwContents implements SmartClipProvider {
         }
 
         return new ScriptReference(AwContents.this,
-                AwContentsJni.get().addDocumentStartJavascript(
+                AwContentsJni.get().addDocumentStartJavaScript(
                         mNativeAwContents, AwContents.this, script, allowedOriginRules));
     }
 
-    /* package */ void removeDocumentStartJavascript(int scriptId) {
-        AwContentsJni.get().removeDocumentStartJavascript(
+    /* package */ void removeDocumentStartJavaScript(int scriptId) {
+        AwContentsJni.get().removeDocumentStartJavaScript(
                 mNativeAwContents, AwContents.this, scriptId);
     }
 
@@ -2702,7 +2725,7 @@ public class AwContents implements SmartClipProvider {
                 // application callback is executed without any native code on the stack. This
                 // so that any exception thrown by the application callback won't have to be
                 // propagated through a native call stack.
-                AwThreadUtils.postToCurrentLooper(() -> callback.onResult(jsonResult));
+                AwThreadUtils.postToCurrentLooper(callback.bind(jsonResult));
             };
         }
 
@@ -3088,12 +3111,17 @@ public class AwContents implements SmartClipProvider {
     }
 
     /**
-     * @see android.webkit.WebView#clearFormData()
+     * @see android.webkit.WebView#clearFormData().
+     *
+     * The popup shall also be hidden on the WebView detached from window.
      */
     public void hideAutofillPopup() {
         if (TRACE) Log.i(TAG, "%s hideAutofillPopup", this);
         if (mAwAutofillClient != null) {
             mAwAutofillClient.hideAutofillPopup();
+        }
+        if (mAutofillProvider != null) {
+            mAutofillProvider.hidePopup();
         }
     }
 
@@ -3498,7 +3526,7 @@ public class AwContents implements SmartClipProvider {
         if (path == null || isDestroyed(WARN)) {
             if (callback == null) return;
 
-            PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> callback.onResult(null));
+            PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, callback.bind(null));
         } else {
             AwContentsJni.get().generateMHTML(mNativeAwContents, AwContents.this, path, callback);
         }
@@ -4065,9 +4093,9 @@ public class AwContents implements SmartClipProvider {
         void grantFileSchemeAccesstoChildProcess(long nativeAwContents, AwContents caller);
         void resumeLoadingCreatedPopupWebContents(long nativeAwContents, AwContents caller);
         AwRenderProcess getRenderProcess(long nativeAwContents, AwContents caller);
-        int addDocumentStartJavascript(long nativeAwContents, AwContents caller, String script,
+        int addDocumentStartJavaScript(long nativeAwContents, AwContents caller, String script,
                 String[] allowedOriginRules);
-        void removeDocumentStartJavascript(long nativeAwContents, AwContents caller, int scriptId);
+        void removeDocumentStartJavaScript(long nativeAwContents, AwContents caller, int scriptId);
         String addWebMessageListener(long nativeAwContents, AwContents caller,
                 WebMessageListenerHolder listener, String jsObjectName, String[] allowedOrigins);
         void removeWebMessageListener(

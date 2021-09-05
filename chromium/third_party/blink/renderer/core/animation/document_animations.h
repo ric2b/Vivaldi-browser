@@ -68,8 +68,12 @@ class CORE_EXPORT DocumentAnimations final
   void MarkAnimationsCompositorPending();
 
   HeapVector<Member<Animation>> getAnimations(const TreeScope&);
+  const HeapHashSet<WeakMember<AnimationTimeline>>& GetTimelinesForTesting()
+      const {
+    return timelines_;
+  }
   uint64_t current_transition_generation_;
-  void Trace(Visitor*);
+  void Trace(Visitor*) const;
 
  private:
   Member<Document> document_;

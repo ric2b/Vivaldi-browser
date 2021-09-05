@@ -1,66 +1,91 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/chromeos/local_search_service/test_utils.h"
 
-#include "base/strings/string16.h"
-#include "base/strings/utf_string_conversions.h"
-#include "testing/gtest/include/gtest/gtest.h"
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace local_search_service {
 
 namespace {
 
-std::vector<base::string16> MultiUTF8ToUTF16(
-    const std::vector<std::string>& input) {
-  std::vector<base::string16> output;
-  for (const auto& str : input) {
-    output.push_back(base::UTF8ToUTF16(str));
-  }
-  return output;
-}
+// (content-id, content).
+using ContentWithId = std::pair<std::string, std::string>;
+
+// (content-id, content, weight).
+using WeightedContentWithId = std::tuple<std::string, std::string, float>;
 
 }  // namespace
 
 std::vector<Data> CreateTestData(
-    const std::map<std::string, std::vector<std::string>>& input) {
+    const std::map<std::string, std::vector<ContentWithId>>& input) {
   std::vector<Data> output;
   for (const auto& item : input) {
-    const std::vector<base::string16> tags = MultiUTF8ToUTF16(item.second);
-    const Data data(item.first, tags);
+    Data data;
+    data.id = item.first;
+    // Hardcode to "en" because it's unclear what config locale will be when
+    // running a test.
+    // TODO(jiameng): allow locale to be passed in if there's a need to use
+    // non-en data in tests.
+    data.locale = "en";
+    std::vector<Content>& contents = data.contents;
+    for (const auto& content_with_id : item.second) {
+      const Content content(content_with_id.first,
+                            base::UTF8ToUTF16(content_with_id.second));
+      contents.push_back(content);
+    }
     output.push_back(data);
   }
   return output;
 }
 
-void FindAndCheck(Index* index,
-                  std::string query,
-                  int32_t max_results,
-                  ResponseStatus expected_status,
-                  const std::vector<std::string>& expected_result_ids) {
-  DCHECK(index);
-
-  std::vector<Result> results;
-  auto status = index->Find(base::UTF8ToUTF16(query), max_results, &results);
-
-  EXPECT_EQ(status, expected_status);
-
-  if (!results.empty()) {
-    // If results are returned, check size and values match the expected.
-    EXPECT_EQ(results.size(), expected_result_ids.size());
-    for (size_t i = 0; i < results.size(); ++i) {
-      EXPECT_EQ(results[i].id, expected_result_ids[i]);
-      // Scores should be non-increasing.
-      if (i < results.size() - 1) {
-        EXPECT_GE(results[i].score, results[i + 1].score);
-      }
+std::vector<Data> CreateTestData(
+    const std::map<std::string,
+                   std::vector<std::tuple<std::string, std::string, float>>>&
+        input) {
+  std::vector<Data> output;
+  for (const auto& item : input) {
+    Data data;
+    data.id = item.first;
+    // Hardcode to "en" because it's unclear what config locale will be when
+    // running a test.
+    // TODO(jiameng): allow locale to be passed in if there's a need to use
+    // non-en data in tests.
+    data.locale = "en";
+    std::vector<Content>& contents = data.contents;
+    for (const auto& weighted_content_with_id : item.second) {
+      const Content content(
+          std::get<0>(weighted_content_with_id),
+          base::UTF8ToUTF16(std::get<1>(weighted_content_with_id)),
+          std::get<2>(weighted_content_with_id));
+      contents.push_back(content);
     }
-    return;
+    output.push_back(data);
   }
+  return output;
+}
 
-  // If no results are returned, expected ids should be empty.
-  EXPECT_TRUE(expected_result_ids.empty());
+void CheckResult(const Result& result,
+                 const std::string& expected_id,
+                 float expected_score,
+                 size_t expected_number_positions) {
+  EXPECT_EQ(result.id, expected_id);
+  EXPECT_NEAR(result.score, expected_score, 0.001);
+  EXPECT_EQ(result.positions.size(), expected_number_positions);
+}
+
+float TfIdfScore(size_t num_docs,
+                 size_t num_docs_with_term,
+                 float weighted_num_term_occurrence_in_doc,
+                 size_t doc_length) {
+  const float idf = 1.0 + log((1.0 + num_docs) / (1.0 + num_docs_with_term));
+
+  const float tf = weighted_num_term_occurrence_in_doc / doc_length;
+  return tf * idf;
 }
 
 }  // namespace local_search_service

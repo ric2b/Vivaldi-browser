@@ -16,10 +16,10 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#import "chrome/updater/app/server/mac/service_protocol.h"
+#import "chrome/updater/app/server/mac/update_service_wrappers.h"
 #import "chrome/updater/mac/setup/info_plist.h"
 #import "chrome/updater/mac/xpc_service_names.h"
-#import "chrome/updater/server/mac/service_protocol.h"
-#import "chrome/updater/server/mac/update_service_wrappers.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_version.h"
 #include "components/update_client/update_client_errors.h"
@@ -141,7 +141,7 @@ using base::SysUTF8ToNSString;
 }
 
 - (void)haltForUpdateToVersion:(NSString* _Nonnull)version
-                         reply:(void (^_Nonnull)(bool shouldUpdate))reply {
+                         reply:(void (^_Nonnull)(BOOL shouldUpdate))reply {
   auto errorHandler = ^(NSError* xpcError) {
     LOG(ERROR) << "XPC connection failed: "
                << base::SysNSStringToUTF8([xpcError description]);

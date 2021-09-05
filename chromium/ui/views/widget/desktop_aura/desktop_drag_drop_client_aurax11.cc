@@ -11,7 +11,6 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/drag_drop_client.h"
@@ -24,6 +23,7 @@
 #include "ui/base/dragdrop/os_exchange_data_provider_x11.h"
 #include "ui/base/layout.h"
 #include "ui/base/x/selection_utils.h"
+#include "ui/base/x/x11_cursor.h"
 #include "ui/base/x/x11_drag_context.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/base/x/x11_whole_screen_move_loop.h"
@@ -32,6 +32,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/x/x11.h"
+#include "ui/gfx/x/xproto.h"
 #include "ui/platform_window/x11/x11_topmost_window_finder.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/widget/desktop_aura/desktop_native_cursor_manager.h"
@@ -115,9 +116,8 @@ DesktopDragDropClientAuraX11*
 DesktopDragDropClientAuraX11::DesktopDragDropClientAuraX11(
     aura::Window* root_window,
     views::DesktopNativeCursorManager* cursor_manager,
-    ::Display* display,
-    XID window)
-    : XDragDropClient(this, display, window),
+    x11::Window window)
+    : XDragDropClient(this, window),
       root_window_(root_window),
       cursor_manager_(cursor_manager) {}
 
@@ -140,9 +140,6 @@ int DesktopDragDropClientAuraX11::StartDragAndDrop(
     const gfx::Point& /*screen_location*/,
     int operation,
     ui::DragDropTypes::DragEventSource source) {
-  UMA_HISTOGRAM_ENUMERATION("Event.DragDrop.Start", source,
-                            ui::DragDropTypes::DRAG_EVENT_SOURCE_COUNT);
-
   DCHECK(!g_current_drag_drop_client);
   g_current_drag_drop_client = this;
 
@@ -171,28 +168,24 @@ int DesktopDragDropClientAuraX11::StartDragAndDrop(
   // Windows has a specific method, DoDragDrop(), which performs the entire
   // drag. We have to emulate this, so we spin off a nested runloop which will
   // track all cursor movement and reroute events to a specific handler.
+  auto* last_cursor = static_cast<ui::X11Cursor*>(
+      source_window->GetHost()->last_cursor().platform());
   move_loop_->RunMoveLoop(
       !source_window->HasCapture(),
-      source_window->GetHost()->last_cursor().platform(),
-      cursor_manager_->GetInitializedCursor(ui::mojom::CursorType::kGrabbing)
-          .platform());
+      last_cursor ? last_cursor->xcursor() : x11::None,
+      static_cast<ui::X11Cursor*>(
+          cursor_manager_
+              ->GetInitializedCursor(ui::mojom::CursorType::kGrabbing)
+              .platform())
+          ->xcursor());
 
   if (alive) {
     auto resulting_operation = negotiated_operation();
-    if (resulting_operation == ui::DragDropTypes::DRAG_NONE) {
-      UMA_HISTOGRAM_ENUMERATION("Event.DragDrop.Cancel", source,
-                                ui::DragDropTypes::DRAG_EVENT_SOURCE_COUNT);
-    } else {
-      UMA_HISTOGRAM_ENUMERATION("Event.DragDrop.Drop", source,
-                                ui::DragDropTypes::DRAG_EVENT_SOURCE_COUNT);
-    }
     drag_widget_.reset();
     g_current_drag_drop_client = nullptr;
     CleanupDrag();
     return resulting_operation;
   }
-  UMA_HISTOGRAM_ENUMERATION("Event.DragDrop.Cancel", source,
-                            ui::DragDropTypes::DRAG_EVENT_SOURCE_COUNT);
   return ui::DragDropTypes::DRAG_NONE;
 }
 
@@ -214,12 +207,13 @@ void DesktopDragDropClientAuraX11::RemoveObserver(
   NOTIMPLEMENTED();
 }
 
-bool DesktopDragDropClientAuraX11::DispatchXEvent(XEvent* event) {
-  if (!target_current_context() ||
-      event->xany.window != target_current_context()->source_window()) {
+bool DesktopDragDropClientAuraX11::DispatchXEvent(x11::Event* event) {
+  auto* prop = event->As<x11::PropertyNotifyEvent>();
+  if (!target_current_context() || !prop ||
+      prop->window != target_current_context()->source_window()) {
     return false;
   }
-  return target_current_context()->DispatchXEvent(event);
+  return target_current_context()->DispatchPropertyNotifyEvent(*prop);
 }
 
 void DesktopDragDropClientAuraX11::OnWindowDestroyed(aura::Window* window) {
@@ -339,13 +333,8 @@ int DesktopDragDropClientAuraX11::UpdateDrag(const gfx::Point& screen_point) {
   std::unique_ptr<ui::DropTargetEvent> drop_target_event;
   DragDropDelegate* delegate = nullptr;
   DragTranslate(screen_point, &data, &drop_target_event, &delegate);
-  int drag_operation =
-      delegate ? drag_operation = delegate->OnDragUpdated(*drop_target_event)
-               : ui::DragDropTypes::DRAG_NONE;
-  UMA_HISTOGRAM_BOOLEAN("Event.DragDrop.AcceptDragUpdate",
-                        drag_operation != ui::DragDropTypes::DRAG_NONE);
-
-  return drag_operation;
+  return delegate ? delegate->OnDragUpdated(*drop_target_event)
+                  : ui::DragDropTypes::DRAG_NONE;
 }
 
 void DesktopDragDropClientAuraX11::UpdateCursor(
@@ -366,10 +355,12 @@ void DesktopDragDropClientAuraX11::UpdateCursor(
       break;
   }
   move_loop_->UpdateCursor(
-      cursor_manager_->GetInitializedCursor(cursor_type).platform());
+      static_cast<ui::X11Cursor*>(
+          cursor_manager_->GetInitializedCursor(cursor_type).platform())
+          ->xcursor());
 }
 
-void DesktopDragDropClientAuraX11::OnBeginForeignDrag(XID window) {
+void DesktopDragDropClientAuraX11::OnBeginForeignDrag(x11::Window window) {
   DCHECK(target_current_context());
   DCHECK(!target_current_context()->source_client());
 
@@ -413,10 +404,6 @@ int DesktopDragDropClientAuraX11::PerformDrop() {
         drop_event.set_flags(ui::XGetMaskAsEventFlags());
       }
 
-      if (!IsDragDropInProgress()) {
-        UMA_HISTOGRAM_COUNTS_1M("Event.DragDrop.ExternalOriginDrop", 1);
-      }
-
       drag_operation = delegate->OnPerformDrop(drop_event, std::move(data));
     }
 
@@ -426,7 +413,7 @@ int DesktopDragDropClientAuraX11::PerformDrop() {
   return drag_operation;
 }
 
-void DesktopDragDropClientAuraX11::EndMoveLoop() {
+void DesktopDragDropClientAuraX11::EndDragLoop() {
   move_loop_->EndMoveLoop();
 }
 

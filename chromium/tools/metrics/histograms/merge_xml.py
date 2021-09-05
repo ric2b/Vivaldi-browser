@@ -6,10 +6,14 @@
 """A script to merge multiple source xml files into a single histograms.xml."""
 
 import argparse
+import os
+import sys
 import xml.dom.minidom
 
 import expand_owners
 import extract_histograms
+import histograms_print_style
+import populate_enums
 
 
 def GetElementsByTagName(trees, tag):
@@ -23,6 +27,32 @@ def GetElementsByTagName(trees, tag):
   """
   iterator = extract_histograms.IterElementsWithTag
   return list(e for t in trees for e in iterator(t, tag, 2))
+
+
+def GetEnumsNodes(doc, trees):
+  """Gets all enums from a set of DOM trees.
+
+  If trees contain ukm events, populates a list of ints to the
+  "UkmEventNameHash" enum where each value is a ukm event name hash truncated
+  to 31 bits and each label is the corresponding event name.
+
+  Args:
+    doc: The document to create the node in.
+    trees: A list of DOM trees.
+  Returns:
+    A list of enums DOM nodes.
+  """
+  enums_list = GetElementsByTagName(trees, 'enums')
+  ukm_events = GetElementsByTagName(
+      GetElementsByTagName(trees, 'ukm-configuration'), 'event')
+  # Early return if there are not ukm events provided. MergeFiles have callers
+  # that do not pass ukm events so, in that case, we don't need to iterate
+  # the enum list.
+  if not ukm_events:
+    return enums_list
+  for enums in enums_list:
+    populate_enums.PopulateEnumsWithUkmEvents(doc, enums, ukm_events)
+  return enums_list
 
 
 def MakeNodeWithChildren(doc, tag, children):
@@ -55,22 +85,29 @@ def MergeTrees(trees):
   doc.appendChild(MakeNodeWithChildren(doc, 'histogram-configuration',
     # This can result in the merged document having multiple <enums> and
     # similar sections, but scripts ignore these anyway.
-    GetElementsByTagName(trees, 'enums') +
+    GetEnumsNodes(doc, trees) +
     GetElementsByTagName(trees, 'histograms') +
     GetElementsByTagName(trees, 'histogram_suffixes_list')))
   return doc
 
 
-def MergeFiles(filenames):
+def MergeFiles(filenames=[], files=[]):
   """Merges a list of histograms.xml files.
 
   Args:
     filenames: A list of histograms.xml filenames.
+    files: A list of histograms.xml file-like objects.
   Returns:
     A merged DOM tree.
   """
-  trees = [xml.dom.minidom.parse(open(f)) for f in filenames]
+  all_files = files + [open(f) for f in filenames]
+  trees = [xml.dom.minidom.parse(f) for f in all_files]
   return MergeTrees(trees)
+
+
+def PrettyPrintMergedFiles(filenames=[], files=[]):
+  return histograms_print_style.GetPrintStyle().PrettyPrintXml(
+      MergeFiles(filenames=filenames, files=files))
 
 
 def main():
@@ -78,7 +115,8 @@ def main():
   parser.add_argument('inputs', nargs="+")
   parser.add_argument('--output', required=True)
   args = parser.parse_args()
-  MergeFiles(args.inputs).writexml(open(args.output, 'w'))
+  with open(args.output, 'w') as f:
+    f.write(PrettyPrintMergedFiles(args.inputs))
 
 
 if __name__ == '__main__':

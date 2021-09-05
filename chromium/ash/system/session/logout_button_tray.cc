@@ -129,6 +129,10 @@ base::string16 LogoutButtonTray::GetAccessibleNameForTray() {
   return button_->GetText();
 }
 
+void LogoutButtonTray::HandleLocaleChange() {
+  UpdateButtonTextAndImage();
+}
+
 void LogoutButtonTray::UpdateVisibility() {
   LoginStatus login_status = shelf()->GetStatusAreaWidget()->login_status();
   SetVisiblePreferred(show_logout_button_in_tray_ &&
@@ -147,12 +151,13 @@ void LogoutButtonTray::UpdateButtonTextAndImage() {
   } else {
     button_->SetText(base::string16());
     button_->SetAccessibleName(title);
-    button_->SetImage(views::Button::STATE_NORMAL,
-                      gfx::CreateVectorIcon(
-                          kShelfLogoutIcon,
-                          AshColorProvider::Get()->GetContentLayerColor(
-                              AshColorProvider::ContentLayerType::kIconPrimary,
-                              AshColorProvider::AshColorMode::kDark)));
+    button_->SetImage(
+        views::Button::STATE_NORMAL,
+        gfx::CreateVectorIcon(
+            kShelfLogoutIcon,
+            AshColorProvider::Get()->GetContentLayerColor(
+                AshColorProvider::ContentLayerType::kIconColorPrimary,
+                AshColorProvider::AshColorMode::kDark)));
     button_->SetMinSize(gfx::Size(kTrayItemSize, kTrayItemSize));
   }
   UpdateVisibility();

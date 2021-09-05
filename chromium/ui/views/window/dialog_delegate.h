@@ -64,6 +64,11 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
     // dialog. It's legal for a button to be marked enabled that isn't present
     // in |buttons| (see above).
     int enabled_buttons = ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL;
+
+    // The view that should receive initial focus in the dialog. If not set, the
+    // default button will receive initial focus. If explicitly set to nullptr,
+    // no view will receive focus.
+    base::Optional<View*> initially_focused_view;
   };
 
   DialogDelegate();
@@ -192,8 +197,23 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   void SetButtons(int buttons);
   void SetButtonLabel(ui::DialogButton button, base::string16 label);
   void SetButtonEnabled(ui::DialogButton button, bool enabled);
+  void SetInitiallyFocusedView(View* view);
+
+  // Called when the user presses the dialog's "OK" button or presses the dialog
+  // accept accelerator, if there is one.
   void SetAcceptCallback(base::OnceClosure callback);
+
+  // Called when the user presses the dialog's "Cancel" button or presses the
+  // dialog close accelerator (which is always VKEY_ESCAPE).
   void SetCancelCallback(base::OnceClosure callback);
+
+  // Called when:
+  // * The user presses the dialog's close button, if it has one
+  // * The dialog's widget is closed via Widget::Close()
+  // NOT called when the dialog's widget is closed via Widget::CloseNow() - in
+  // that case, the normal widget close path is skipped, so no orderly teardown
+  // of the dialog's widget happens. The main way that can happen in production
+  // use is if the dialog's parent widget is closed.
   void SetCloseCallback(base::OnceClosure callback);
 
   // Returns ownership of the extra view for this dialog, if one was provided

@@ -31,7 +31,7 @@ void SortAndCheckPositions(const std::vector<SortEntry>& test_entries) {
   for (const SortEntry& entry : test_entries) {
     auto form = std::make_unique<autofill::PasswordForm>();
     form->signon_realm = entry.origin;
-    form->origin = GURL(entry.origin);
+    form->url = GURL(entry.origin);
     form->blacklisted_by_user = entry.is_blacklisted;
     if (!entry.is_blacklisted) {
       form->username_value = base::ASCIIToUTF16(entry.username);
@@ -56,7 +56,7 @@ void SortAndCheckPositions(const std::vector<SortEntry>& test_entries) {
     if (entry.expected_position >= 0) {
       SCOPED_TRACE(testing::Message("position in sorted list: ")
                    << entry.expected_position);
-      EXPECT_EQ(GURL(entry.origin), list[entry.expected_position]->origin);
+      EXPECT_EQ(GURL(entry.origin), list[entry.expected_position]->url);
       if (!entry.is_blacklisted) {
         EXPECT_EQ(base::ASCIIToUTF16(entry.username),
                   list[entry.expected_position]->username_value);
@@ -187,6 +187,20 @@ TEST(PasswordListSorterTest, Sorting_SpecialCharacters) {
       {"https://xn--ndalk.com/", "user_a", "pwd", nullptr, nullptr, false, 5},
   };
   SortAndCheckPositions(test_cases);
+}
+
+TEST(PasswordListSorterTest, EntriesDifferingByStoreShouldMapToSameKey) {
+  autofill::PasswordForm account_form;
+  account_form.signon_realm = "https://g.com/";
+  account_form.url = GURL(account_form.signon_realm);
+  account_form.blacklisted_by_user = false;
+  account_form.in_store = autofill::PasswordForm::Store::kAccountStore;
+
+  autofill::PasswordForm profile_form(account_form);
+  profile_form.in_store = autofill::PasswordForm::Store::kProfileStore;
+
+  EXPECT_EQ(CreateSortKey(account_form, IgnoreStore(true)),
+            CreateSortKey(profile_form, IgnoreStore(true)));
 }
 
 }  // namespace password_manager

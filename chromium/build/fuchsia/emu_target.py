@@ -8,6 +8,7 @@ import amber_repo
 import boot_data
 import logging
 import os
+import runner_logs
 import subprocess
 import sys
 import target
@@ -34,6 +35,9 @@ class EmuTarget(target.Target):
     """Build the command that will be run to start Fuchsia in the emulator."""
     pass
 
+  def _SetEnv(self):
+    return os.environ.copy()
+
   # Used by the context manager to ensure that the emulator is killed when
   # the Python process exits.
   def __exit__(self, exc_type, exc_val, exc_tb):
@@ -52,27 +56,28 @@ class EmuTarget(target.Target):
 
     # Zircon sends debug logs to serial port (see kernel.serial=legacy flag
     # above). Serial port is redirected to a file through emulator stdout.
-    # Unless a |_system_log_file| is explicitly set, we output the kernel serial
-    # log to a temporary file, and print that out if we are unable to connect to
+    # Unless runner_pogs are enabled, we output the kernel serial log
+    # to a temporary file, and print that out if we are unable to connect to
     # the emulator guest, to make it easier to diagnose connectivity issues.
-    temporary_system_log_file = None
-    if self._system_log_file:
-      stdout = self._system_log_file
-      stderr = subprocess.STDOUT
+    temporary_log_file = None
+    if runner_logs.IsEnabled():
+      stdout = runner_logs.FileStreamFor('serial_log')
     else:
-      temporary_system_log_file = tempfile.NamedTemporaryFile('w')
-      stdout = temporary_system_log_file
-      stderr = sys.stderr
+      temporary_log_file = tempfile.NamedTemporaryFile('w')
+      stdout = temporary_log_file
 
-    self._emu_process = subprocess.Popen(emu_command, stdin=open(os.devnull),
-                                          stdout=stdout, stderr=stderr)
+    self._emu_process = subprocess.Popen(emu_command,
+                                         stdin=open(os.devnull),
+                                         stdout=stdout,
+                                         stderr=subprocess.STDOUT,
+                                         env=self._SetEnv())
 
     try:
-      self._WaitUntilReady();
+      self._WaitUntilReady()
     except target.FuchsiaTargetException:
-      if temporary_system_log_file:
+      if temporary_log_file:
         logging.info('Kernel logs:\n' +
-                     open(temporary_system_log_file.name, 'r').read())
+                     open(temporary_log_file.name, 'r').read())
       raise
 
   def GetAmberRepo(self):
@@ -86,15 +91,18 @@ class EmuTarget(target.Target):
       logging.error('%s did not start' % (self._GetEmulatorName()))
       return
     returncode = self._emu_process.poll()
-    if returncode:
-      logging.error('%s quit unexpectedly with exit code %d' %
-                    (self._GetEmulatorName(), returncode))
+    if returncode == None:
+      logging.info('Shutting down %s' % (self._GetEmulatorName()))
+      self._emu_process.kill()
     elif returncode == 0:
       logging.info('%s quit unexpectedly without errors' %
                    self._GetEmulatorName())
+    elif returncode < 0:
+      logging.error('%s was terminated by signal %d' %
+                    (self._GetEmulatorName(), -returncode))
     else:
-      logging.info('Shutting down %s' % (self._GetEmulatorName()))
-      self._emu_process.kill()
+      logging.error('%s quit unexpectedly with exit code %d' %
+                    (self._GetEmulatorName(), returncode))
 
   def _IsEmuStillRunning(self):
     if not self._emu_process:

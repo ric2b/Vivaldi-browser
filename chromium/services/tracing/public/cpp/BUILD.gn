@@ -2,10 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//base/trace_event/features.gni")
 import("//build/buildflag_header.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/compiler/compiler.gni")
+import("//build_overrides/build.gni")
 import("//services/tracing/public/cpp/stack_sampling/loader_lock_sampling.gni")
 
 buildflag_header("buildflags") {
@@ -40,8 +40,9 @@ if (!is_nacl && !is_ios) {
 
 target(tracing_lib_type, "cpp") {
   sources = [
+    "perfetto/flow_event_utils.cc",
+    "perfetto/flow_event_utils.h",
     "perfetto/macros.h",
-    "perfetto/macros_internal.h",
   ]
 
   defines = [ "IS_TRACING_CPP_IMPL" ]
@@ -49,14 +50,11 @@ target(tracing_lib_type, "cpp") {
 
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
-  public_deps = [
-    "//base",
-    "//third_party/perfetto:libperfetto",
-  ]
+  public_deps = [ "//base" ]
 
   deps = [ "//third_party/perfetto/include/perfetto/protozero" ]
 
-  all_dependent_configs = [ "//third_party/perfetto/gn:public_config" ]
+  all_dependent_configs = []
 
   if (!is_nacl && !is_ios) {
     sources += [
@@ -64,8 +62,6 @@ target(tracing_lib_type, "cpp") {
       "base_agent.h",
       "perfetto/dummy_producer.cc",
       "perfetto/dummy_producer.h",
-      "perfetto/flow_event_utils.cc",
-      "perfetto/flow_event_utils.h",
       "perfetto/interning_index.h",
       "perfetto/java_heap_profiler/hprof_buffer_android.cc",
       "perfetto/java_heap_profiler/hprof_buffer_android.h",
@@ -76,7 +72,6 @@ target(tracing_lib_type, "cpp") {
       "perfetto/java_heap_profiler/hprof_parser_android.h",
       "perfetto/java_heap_profiler/java_heap_profiler_android.cc",
       "perfetto/java_heap_profiler/java_heap_profiler_android.h",
-      "perfetto/macros_internal.cc",
       "perfetto/perfetto_config.cc",
       "perfetto/perfetto_config.h",
       "perfetto/perfetto_producer.cc",
@@ -100,12 +95,14 @@ target(tracing_lib_type, "cpp") {
       "perfetto/traced_value_proto_writer.h",
       "perfetto/track_event_thread_local_event_sink.cc",
       "perfetto/track_event_thread_local_event_sink.h",
+      "stack_sampling/reached_code_data_source_android.cc",
+      "stack_sampling/reached_code_data_source_android.h",
       "stack_sampling/tracing_sampler_profiler.cc",
       "stack_sampling/tracing_sampler_profiler.h",
       "trace_event_agent.cc",
       "trace_event_agent.h",
-      "trace_event_args_whitelist.cc",
-      "trace_event_args_whitelist.h",
+      "trace_event_args_allowlist.cc",
+      "trace_event_args_allowlist.h",
       "trace_startup.cc",
       "trace_startup.h",
       "traced_process_impl.cc",
@@ -139,10 +136,6 @@ target(tracing_lib_type, "cpp") {
         "perfetto/posix_system_producer.cc",
         "perfetto/posix_system_producer.h",
       ]
-    }
-
-    if (is_linux && !is_fuchsia) {
-      deps += [ "//components/crash/core/app:app" ]
     }
 
     if (is_android && can_unwind_with_cfi_table && is_official_build) {

@@ -20,10 +20,16 @@ class ASH_EXPORT FakeAmbientBackendControllerImpl
 
   // AmbientBackendController:
   void FetchScreenUpdateInfo(
+      int num_topics,
       OnScreenUpdateInfoFetchedCallback callback) override;
   void GetSettings(GetSettingsCallback callback) override;
-  void UpdateSettings(AmbientModeTopicSource topic_source,
+  void UpdateSettings(const AmbientSettings& settings,
                       UpdateSettingsCallback callback) override;
+  void FetchPersonalAlbums(int banner_width,
+                           int banner_height,
+                           int num_albums,
+                           const std::string& resume_token,
+                           OnPersonalAlbumsFetchedCallback callback) override;
   void SetPhotoRefreshInterval(base::TimeDelta interval) override;
 
  private:

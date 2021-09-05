@@ -37,13 +37,14 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       chromeos::settings::mojom::kMultiDeviceSectionPath,
       chromeos::settings::mojom::kMultiDeviceFeaturesSubpagePath,
       chromeos::settings::mojom::kSmartLockSubpagePath,
+      chromeos::settings::mojom::kNearbyShareSubpagePath,
 
       // People section.
       chromeos::settings::mojom::kPeopleSectionPath,
       chromeos::settings::mojom::kMyAccountsSubpagePath,
       chromeos::settings::mojom::kSyncSubpagePath,
       chromeos::settings::mojom::kSecurityAndSignInSubpagePath,
-      chromeos::settings::mojom::kFingerprintSubpathPath,
+      chromeos::settings::mojom::kFingerprintSubpagePath,
       chromeos::settings::mojom::kManageOtherPeopleSubpagePath,
       chromeos::settings::mojom::kKerberosSubpagePath,
 
@@ -82,7 +83,6 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       chromeos::settings::mojom::kCrostiniBackupAndRestoreSubpagePath,
       chromeos::settings::mojom::kCrostiniDevelopAndroidAppsSubpagePath,
       chromeos::settings::mojom::kCrostiniPortForwardingSubpagePath,
-      chromeos::settings::mojom::kCrostiniDiskResizeSubpagePath,
 
       // Date and Time section.
       chromeos::settings::mojom::kDateAndTimeSectionPath,
@@ -95,7 +95,8 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       chromeos::settings::mojom::kLanguagesAndInputSectionPath,
       chromeos::settings::mojom::kLanguagesAndInputDetailsSubpagePath,
       chromeos::settings::mojom::kManageInputMethodsSubpagePath,
-      chromeos::settings::mojom::kSmartInputsSubagePath,
+      chromeos::settings::mojom::kSmartInputsSubpagePath,
+      chromeos::settings::mojom::kInputMethodOptionsSubpagePath,
 
       // Files section.
       chromeos::settings::mojom::kFilesSectionPath,

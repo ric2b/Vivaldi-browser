@@ -53,12 +53,12 @@ class ManagePasswordsState {
   // Move to CREDENTIAL_REQUEST_STATE.
   void OnRequestCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
-      const GURL& origin);
+      const url::Origin& origin);
 
   // Move to AUTO_SIGNIN_STATE. |local_forms| can't be empty.
   void OnAutoSignin(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-      const GURL& origin);
+      const url::Origin& origin);
 
   // Move to CONFIRMATION_STATE.
   void OnAutomaticPasswordSave(
@@ -71,7 +71,7 @@ class ManagePasswordsState {
   // federated credentials to show to the user as well.
   void OnPasswordAutofilled(
       const std::vector<const autofill::PasswordForm*>& password_forms,
-      GURL origin,
+      url::Origin origin,
       const std::vector<const autofill::PasswordForm*>* federated_matches);
 
   // Move to INACTIVE_STATE.
@@ -84,6 +84,7 @@ class ManagePasswordsState {
 
   // Moves the object to |state| without resetting the internal data. Allowed:
   // * -> MANAGE_STATE
+  // * -> PASSWORD_UPDATED_*
   void TransitionToState(password_manager::ui::State state);
 
   // Updates the internal state applying |changes|.
@@ -102,7 +103,7 @@ class ManagePasswordsState {
   const std::vector<autofill::PasswordForm>& unsynced_credentials() const {
     return unsynced_credentials_;
   }
-  const GURL& origin() const { return origin_; }
+  const url::Origin& origin() const { return origin_; }
   password_manager::PasswordFormManagerForUI* form_manager() const {
     return form_manager_.get();
   }
@@ -111,6 +112,13 @@ class ManagePasswordsState {
   }
   void set_credentials_callback(const CredentialsCallback& callback) {
     credentials_callback_ = callback;
+  }
+
+  bool auth_for_account_storage_opt_in_failed() const {
+    return auth_for_account_storage_opt_in_failed_;
+  }
+  void set_auth_for_account_storage_opt_in_failed(bool failed) {
+    auth_for_account_storage_opt_in_failed_ = failed;
   }
 
   // Current local forms. ManagePasswordsState is responsible for the forms.
@@ -130,7 +138,7 @@ class ManagePasswordsState {
 
   // The origin of the current page for which the state is stored. It's used to
   // determine which PasswordStore changes are applicable to the internal state.
-  GURL origin_;
+  url::Origin origin_;
 
   // Contains the password that was submitted.
   std::unique_ptr<password_manager::PasswordFormManagerForUI> form_manager_;
@@ -149,6 +157,10 @@ class ManagePasswordsState {
 
   // The client used for logging.
   password_manager::PasswordManagerClient* client_;
+
+  // Whether the last attempt to authenticate to opt-in using password account
+  // storage failed.
+  bool auth_for_account_storage_opt_in_failed_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ManagePasswordsState);
 };

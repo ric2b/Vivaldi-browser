@@ -44,7 +44,6 @@ class OffTheRecordProfileImpl : public Profile {
 
   // Profile implementation.
   std::string GetProfileUserName() const override;
-  ProfileType GetProfileType() const override;
   // TODO(https://crbug.com/1033903): Remove the default value.
   Profile* GetOffTheRecordProfile(
       const OTRProfileID& otr_profile_id = OTRProfileID::PrimaryID()) override;
@@ -74,7 +73,7 @@ class OffTheRecordProfileImpl : public Profile {
   policy::UserCloudPolicyManager* GetUserCloudPolicyManager() override;
 #endif  // defined(OS_CHROMEOS)
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
-  bool IsSameProfile(Profile* profile) override;
+  bool IsSameOrParent(Profile* profile) override;
   base::Time GetStartTime() const override;
   ProfileKey* GetProfileKey() const override;
   policy::ProfilePolicyConnector* GetProfilePolicyConnector() override;

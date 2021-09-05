@@ -29,7 +29,6 @@
 #include "chrome/browser/media/router/media_router_dialog_controller.h"  // nogncheck
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/media_router_metrics.h"
-#include "chrome/browser/platform_util.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_service_factory.h"
@@ -397,11 +396,8 @@ int GetContentRestrictions(const Browser* browser) {
     NavigationEntry* last_committed_entry =
         current_tab->GetController().GetLastCommittedEntry();
     if (!content::IsSavableURL(
-            last_committed_entry ? last_committed_entry->GetURL() : GURL()) ||
-        current_tab->ShowingInterstitialPage())
+            last_committed_entry ? last_committed_entry->GetURL() : GURL()))
       content_restrictions |= CONTENT_RESTRICTION_SAVE;
-    if (current_tab->ShowingInterstitialPage())
-      content_restrictions |= CONTENT_RESTRICTION_PRINT;
   }
   return content_restrictions;
 }
@@ -469,13 +465,8 @@ void GoBack(Browser* browser, WindowOpenDisposition disposition) {
   base::RecordAction(UserMetricsAction("Back"));
 
   if (CanGoBack(browser)) {
-    WebContents* current_tab =
-        browser->tab_strip_model()->GetActiveWebContents();
     WebContents* new_tab = GetTabAndRevertIfNecessary(browser, disposition);
-    // If we are on an interstitial page and clone the tab, it won't be copied
-    // to the new tab, so we don't need to go back.
-    if ((new_tab == current_tab) || !current_tab->ShowingInterstitialPage())
-      new_tab->GetController().GoBack();
+    new_tab->GetController().GoBack();
   }
 }
 
@@ -787,12 +778,23 @@ void MoveTabsToNewWindow(Browser* browser,
 
   base::Optional<tab_groups::TabGroupId> new_group = base::nullopt;
   if (group.has_value()) {
+    // Recreate the group in the new window with a different ID but the same
+    // title and color. Also ensure that the group is not collapsed. This is
+    // consistent with the behavior when dragging a group out of a window.
+
     new_group = tab_groups::TabGroupId::GenerateNew();
+
+    const tab_groups::TabGroupVisualData* old_visual_data =
+        browser->tab_strip_model()
+            ->group_model()
+            ->GetTabGroup(group.value())
+            ->visual_data();
+    tab_groups::TabGroupVisualData new_visual_data(old_visual_data->title(),
+                                                   old_visual_data->color(),
+                                                   false /* is_collapsed */);
+
     new_browser->tab_strip_model()->group_model()->AddTabGroup(
-        new_group.value(), *browser->tab_strip_model()
-                                ->group_model()
-                                ->GetTabGroup(group.value())
-                                ->visual_data());
+        new_group.value(), new_visual_data);
   }
 
   int indices_size = tab_indices.size();
@@ -872,11 +874,7 @@ WebContents* DuplicateTabAt(Browser* browser, int index) {
 
 bool CanDuplicateTabAt(const Browser* browser, int index) {
   WebContents* contents = browser->tab_strip_model()->GetWebContentsAt(index);
-  // If an interstitial is showing, do not allow tab duplication, since
-  // the last committed entry is what would get duplicated and is not
-  // what the user expects to duplicate.
-  return contents && !contents->ShowingInterstitialPage() &&
-         contents->GetController().GetLastCommittedEntry();
+  return contents && contents->GetController().GetLastCommittedEntry();
 }
 
 void MoveTabsToExistingWindow(Browser* source,
@@ -1062,14 +1060,15 @@ void MigrateLocalCards(Browser* browser) {
 void MaybeShowSaveLocalCardSignInPromo(Browser* browser) {
   WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
-  autofill::SaveCardBubbleControllerImpl::CreateForWebContents(web_contents);
   autofill::SaveCardBubbleControllerImpl* controller =
       autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents);
 
-  // The sign in promo will only be shown when 1) The user is signed out or 2)
-  // The user is signed in through DICe, but did not turn on syncing. Otherwise
-  // early returns.
-  controller->MaybeShowBubbleForSignInPromo();
+  // If controller does not exist for the tab, don't show the sign-in promo.
+  if (controller) {
+    // The sign in promo will only be shown when 1) The user is signed out or 2)
+    // The user is signed in through DICe, but did not turn on syncing.
+    controller->MaybeShowBubbleForSignInPromo();
+  }
 }
 
 void CloseSaveLocalCardSignInPromo(Browser* browser) {
@@ -1220,27 +1219,6 @@ void RouteMediaInvokedFromAppMenu(Browser* browser) {
 
   dialog_controller->ShowMediaRouterDialog(
       media_router::MediaRouterDialogOpenOrigin::APP_MENU);
-}
-
-void EmailPageLocation(Browser* browser) {
-  base::RecordAction(UserMetricsAction("EmailPageLocation"));
-  WebContents* wc = browser->tab_strip_model()->GetActiveWebContents();
-  DCHECK(wc);
-
-  std::string title =
-      net::EscapeQueryParamValue(base::UTF16ToUTF8(wc->GetTitle()), false);
-  std::string page_url = net::EscapeQueryParamValue(wc->GetURL().spec(), false);
-  std::string mailto = std::string("mailto:?subject=Fwd:%20") + title +
-                       "&body=%0A%0A" + page_url;
-  platform_util::OpenExternal(browser->profile(), GURL(mailto));
-}
-
-bool CanEmailPageLocation(const Browser* browser) {
-  return browser->location_bar_model()->ShouldDisplayURL() &&
-         browser->tab_strip_model()
-             ->GetActiveWebContents()
-             ->GetURL()
-             .is_valid();
 }
 
 void CutCopyPaste(Browser* browser, int command_id) {
@@ -1493,7 +1471,6 @@ void CopyURL(Browser* browser) {
 }
 
 Browser* OpenInChrome(Browser* hosted_app_browser) {
-  DCHECK(hosted_app_browser->app_controller());
   // Find a non-incognito browser.
   Browser* target_browser =
       chrome::FindTabbedBrowser(hosted_app_browser->profile(), false);

@@ -19,7 +19,6 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/metrics/subprocess_metrics_provider.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_database_helper.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
@@ -75,7 +74,7 @@ using subresource_filter::kActivationConsoleMessage;
 using subresource_filter::kAdTagging;
 using subresource_filter::ScopedThreadTimers;
 using subresource_filter::testing::CreateSuffixRule;
-using subresource_filter::testing::CreateWhitelistRuleForDocument;
+using subresource_filter::testing::CreateAllowlistSuffixRule;
 using subresource_filter::testing::TestRulesetPair;
 
 namespace {
@@ -438,7 +437,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
-                       CrossSiteSubFrameActivationWithoutWhitelist) {
+                       CrossSiteSubFrameActivationWithoutAllowlist) {
   GURL a_url(embedded_test_server()->GetURL(
       "a.com", "/subresource_filter/frame_cross_site_set.html"));
   ConfigureAsSubresourceFilterOnlyURL(a_url);
@@ -450,13 +449,13 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
-                       CrossSiteSubFrameActivationWithWhitelist) {
+                       CrossSiteSubFrameActivationWithAllowlist) {
   GURL a_url(embedded_test_server()->GetURL(
       "a.com", "/subresource_filter/frame_cross_site_set.html"));
   ConfigureAsSubresourceFilterOnlyURL(a_url);
   ASSERT_NO_FATAL_FAILURE(SetRulesetWithRules(
       {subresource_filter::testing::CreateSuffixRule("included_script.js"),
-       subresource_filter::testing::CreateWhitelistRuleForDocument("c.com")}));
+       subresource_filter::testing::CreateAllowlistRuleForDocument("c.com")}));
   ui_test_utils::NavigateToURL(browser(), a_url);
   ExpectParsedScriptElementLoadedStatusInFrames(
       std::vector<const char*>{"b", "d"}, {false, true});

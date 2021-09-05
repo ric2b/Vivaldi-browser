@@ -20,11 +20,9 @@ class PaintCanvas;
 }
 
 namespace blink {
+class AssociatedInterfaceProvider;
 class IntRect;
-class LocalFrame;
-class MessageEvent;
 class ResourceRequest;
-class SecurityOrigin;
 class WebLocalFrame;
 
 class RemoteFrameClient : public FrameClient {
@@ -41,13 +39,6 @@ class RemoteFrameClient : public FrameClient {
                         const base::Optional<WebImpression>& impression) = 0;
   unsigned BackForwardLength() override = 0;
 
-  // Forwards a postMessage for a remote frame.
-  virtual void ForwardPostMessage(
-      MessageEvent*,
-      scoped_refptr<const SecurityOrigin> target,
-      base::Optional<base::UnguessableToken> cluster_id,
-      LocalFrame* source_frame) const = 0;
-
   // Forwards a change to the rects of a remote frame. |local_frame_rect| is the
   // size of the frame in its parent's coordinate space prior to applying CSS
   // transforms. |screen_space_rect| is in the screen's coordinate space, after
@@ -58,9 +49,9 @@ class RemoteFrameClient : public FrameClient {
   virtual void UpdateRemoteViewportIntersection(
       const ViewportIntersectionState& intersection_state) = 0;
 
-  virtual void AdvanceFocus(mojom::blink::FocusType, LocalFrame* source) = 0;
-
   virtual uint32_t Print(const IntRect&, cc::PaintCanvas*) const = 0;
+
+  virtual AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() = 0;
 };
 
 }  // namespace blink

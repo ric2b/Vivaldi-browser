@@ -34,9 +34,9 @@ import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.ProfileManagerUtils;
-import org.chromium.chrome.browser.share.ShareImageFileUtils;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.translate.TranslateBridge;
+import org.chromium.components.browser_ui.share.ShareImageFileUtils;
 import org.chromium.ui.base.ResourceBundle;
 
 import java.util.Locale;
@@ -236,13 +236,13 @@ public class ChromeActivitySessionTracker {
                 Settings.System.getInt(ContextUtils.getApplicationContext().getContentResolver(),
                         Settings.System.TEXT_SHOW_PASSWORD, 1)
                 == 1;
-        if (PrefServiceBridge.getInstance().getBoolean(Pref.WEBKIT_PASSWORD_ECHO_ENABLED)
+        if (PrefServiceBridge.getInstance().getBoolean(Pref.WEB_KIT_PASSWORD_ECHO_ENABLED)
                 == systemEnabled) {
             return;
         }
 
         PrefServiceBridge.getInstance().setBoolean(
-                Pref.WEBKIT_PASSWORD_ECHO_ENABLED, systemEnabled);
+                Pref.WEB_KIT_PASSWORD_ECHO_ENABLED, systemEnabled);
     }
 
     /**

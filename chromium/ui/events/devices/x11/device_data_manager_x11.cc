@@ -35,9 +35,9 @@
 // Multi-touch support was introduced in XI 2.2. Add XI event types here
 // for backward-compatibility with older versions of XInput.
 #if !defined(XI_TouchBegin)
-#define XI_TouchBegin  18
+#define XI_TouchBegin 18
 #define XI_TouchUpdate 19
-#define XI_TouchEnd    20
+#define XI_TouchEnd 20
 #endif
 
 // Copied from xserver-properties.h
@@ -46,21 +46,21 @@
 
 // CMT specific timings
 #define AXIS_LABEL_PROP_ABS_DBL_START_TIME "Abs Dbl Start Timestamp"
-#define AXIS_LABEL_PROP_ABS_DBL_END_TIME   "Abs Dbl End Timestamp"
+#define AXIS_LABEL_PROP_ABS_DBL_END_TIME "Abs Dbl End Timestamp"
 
 // Ordinal values
-#define AXIS_LABEL_PROP_ABS_DBL_ORDINAL_X   "Abs Dbl Ordinal X"
-#define AXIS_LABEL_PROP_ABS_DBL_ORDINAL_Y   "Abs Dbl Ordinal Y"
+#define AXIS_LABEL_PROP_ABS_DBL_ORDINAL_X "Abs Dbl Ordinal X"
+#define AXIS_LABEL_PROP_ABS_DBL_ORDINAL_Y "Abs Dbl Ordinal Y"
 
 // Fling properties
-#define AXIS_LABEL_PROP_ABS_DBL_FLING_VX   "Abs Dbl Fling X Velocity"
-#define AXIS_LABEL_PROP_ABS_DBL_FLING_VY   "Abs Dbl Fling Y Velocity"
-#define AXIS_LABEL_PROP_ABS_FLING_STATE   "Abs Fling State"
+#define AXIS_LABEL_PROP_ABS_DBL_FLING_VX "Abs Dbl Fling X Velocity"
+#define AXIS_LABEL_PROP_ABS_DBL_FLING_VY "Abs Dbl Fling Y Velocity"
+#define AXIS_LABEL_PROP_ABS_FLING_STATE "Abs Fling State"
 
-#define AXIS_LABEL_PROP_ABS_FINGER_COUNT   "Abs Finger Count"
+#define AXIS_LABEL_PROP_ABS_FINGER_COUNT "Abs Finger Count"
 
 // Cros metrics gesture from touchpad
-#define AXIS_LABEL_PROP_ABS_METRICS_TYPE      "Abs Metrics Type"
+#define AXIS_LABEL_PROP_ABS_METRICS_TYPE "Abs Metrics Type"
 #define AXIS_LABEL_PROP_ABS_DBL_METRICS_DATA1 "Abs Dbl Metrics Data 1"
 #define AXIS_LABEL_PROP_ABS_DBL_METRICS_DATA2 "Abs Dbl Metrics Data 2"
 
@@ -68,11 +68,11 @@
 #define AXIS_LABEL_ABS_MT_TOUCH_MAJOR "Abs MT Touch Major"
 #define AXIS_LABEL_ABS_MT_TOUCH_MINOR "Abs MT Touch Minor"
 #define AXIS_LABEL_ABS_MT_ORIENTATION "Abs MT Orientation"
-#define AXIS_LABEL_ABS_MT_PRESSURE    "Abs MT Pressure"
-#define AXIS_LABEL_ABS_MT_POSITION_X  "Abs MT Position X"
-#define AXIS_LABEL_ABS_MT_POSITION_Y  "Abs MT Position Y"
+#define AXIS_LABEL_ABS_MT_PRESSURE "Abs MT Pressure"
+#define AXIS_LABEL_ABS_MT_POSITION_X "Abs MT Position X"
+#define AXIS_LABEL_ABS_MT_POSITION_Y "Abs MT Position Y"
 #define AXIS_LABEL_ABS_MT_TRACKING_ID "Abs MT Tracking ID"
-#define AXIS_LABEL_TOUCH_TIMESTAMP    "Touch Timestamp"
+#define AXIS_LABEL_TOUCH_TIMESTAMP "Touch Timestamp"
 
 // When you add new data types, please make sure the order here is aligned
 // with the order in the DataType enum in the header file because we assume
@@ -135,6 +135,21 @@ bool IsHighPrecisionScrollingDisabled() {
       kDisableHighPrecisionScrolling);
 }
 
+// Identical to double_to_fp3232 from xserver's inpututils.c
+x11::Input::Fp3232 DoubleToFp3232(double in) {
+  x11::Input::Fp3232 ret;
+
+  double tmp = floor(in);
+  int32_t integral = tmp;
+
+  tmp = (in - integral) * (1ULL << 32);
+  uint32_t frac_d = tmp;
+
+  ret.integral = integral;
+  ret.frac = frac_d;
+  return ret;
+}
+
 }  // namespace
 
 bool DeviceDataManagerX11::IsCMTDataType(const int type) {
@@ -173,15 +188,14 @@ DeviceDataManagerX11::DeviceDataManagerX11()
   UpdateButtonMap();
 }
 
-DeviceDataManagerX11::~DeviceDataManagerX11() {
-}
+DeviceDataManagerX11::~DeviceDataManagerX11() = default;
 
 bool DeviceDataManagerX11::InitializeXInputInternal() {
   // Check if XInput is available on the system.
   xi_opcode_ = -1;
   int opcode, event, error;
-  if (!XQueryExtension(
-      gfx::GetXDisplay(), "XInputExtension", &opcode, &event, &error)) {
+  if (!XQueryExtension(gfx::GetXDisplay(), "XInputExtension", &opcode, &event,
+                       &error)) {
     VLOG(1) << "X Input extension not available: error=" << error;
     return false;
   }
@@ -194,7 +208,7 @@ bool DeviceDataManagerX11::InitializeXInputInternal() {
   }
   if (major < 2 || (major == 2 && minor < 2)) {
     DVLOG(1) << "XI version on server is " << major << "." << minor << ". "
-            << "But 2.2 is required.";
+             << "But 2.2 is required.";
     return false;
   }
 
@@ -240,9 +254,9 @@ void DeviceDataManagerX11::UpdateDeviceList(Display* display) {
   // Find all the touchpad devices.
   const XDeviceList& dev_list =
       ui::DeviceListCacheX11::GetInstance()->GetXDeviceList(display);
-  Atom xi_touchpad = gfx::GetAtom(XI_TOUCHPAD);
+  x11::Atom xi_touchpad = gfx::GetAtom(XI_TOUCHPAD);
   for (int i = 0; i < dev_list.count; ++i)
-    if (dev_list[i].type == xi_touchpad)
+    if (static_cast<x11::Atom>(dev_list[i].type) == xi_touchpad)
       touchpads_[dev_list[i].id] = true;
 
   if (!IsXInput2Available())
@@ -251,7 +265,7 @@ void DeviceDataManagerX11::UpdateDeviceList(Display* display) {
   // Update the structs with new valuator information
   const XIDeviceList& info_list =
       ui::DeviceListCacheX11::GetInstance()->GetXI2DeviceList(display);
-  Atom atoms[DT_LAST_ENTRY];
+  x11::Atom atoms[DT_LAST_ENTRY];
   for (int data_type = 0; data_type < DT_LAST_ENTRY; ++data_type)
     atoms[data_type] = gfx::GetAtom(kCachedAtoms[data_type]);
 
@@ -281,8 +295,8 @@ void DeviceDataManagerX11::UpdateDeviceList(Display* display) {
       continue;
 
     valuator_lookup_[deviceid].resize(DT_LAST_ENTRY);
-    data_type_lookup_[deviceid].resize(
-        valuator_count_[deviceid], DT_LAST_ENTRY);
+    data_type_lookup_[deviceid].resize(valuator_count_[deviceid],
+                                       DT_LAST_ENTRY);
     for (int j = 0; j < kMaxSlotNum; j++)
       last_seen_valuator_[deviceid][j].resize(DT_LAST_ENTRY, 0);
     for (int j = 0; j < info.num_classes; ++j) {
@@ -311,8 +325,10 @@ bool DeviceDataManagerX11::GetSlotNumber(const XIDeviceEvent* xiev, int* slot) {
   return factory->QuerySlotForTrackingID(xiev->detail, slot);
 }
 
-void DeviceDataManagerX11::GetEventRawData(const XEvent& xev, EventData* data) {
-  if (xev.type != GenericEvent)
+void DeviceDataManagerX11::GetEventRawData(const x11::Event& x11_event,
+                                           EventData* data) {
+  const XEvent& xev = x11_event.xlib_event();
+  if (xev.type != x11::GeGenericEvent::opcode)
     return;
 
   XIDeviceEvent* xiev = static_cast<XIDeviceEvent*>(xev.xcookie.data);
@@ -339,9 +355,11 @@ void DeviceDataManagerX11::GetEventRawData(const XEvent& xev, EventData* data) {
   }
 }
 
-bool DeviceDataManagerX11::GetEventData(const XEvent& xev,
-    const DataType type, double* value) {
-  if (xev.type != GenericEvent)
+bool DeviceDataManagerX11::GetEventData(const x11::Event& x11_event,
+                                        const DataType type,
+                                        double* value) {
+  const XEvent& xev = x11_event.xlib_event();
+  if (xev.type != x11::GeGenericEvent::opcode)
     return false;
 
   XIDeviceEvent* xiev = static_cast<XIDeviceEvent*>(xev.xcookie.data);
@@ -356,8 +374,7 @@ bool DeviceDataManagerX11::GetEventData(const XEvent& xev,
   if (type == DT_TOUCH_TRACKING_ID) {
     // With XInput2 MT, Tracking ID is provided in the detail field for touch
     // events.
-    if (xiev->evtype == XI_TouchBegin ||
-        xiev->evtype == XI_TouchEnd ||
+    if (xiev->evtype == XI_TouchBegin || xiev->evtype == XI_TouchEnd ||
         xiev->evtype == XI_TouchUpdate) {
       *value = xiev->detail;
     } else {
@@ -390,14 +407,18 @@ bool DeviceDataManagerX11::GetEventData(const XEvent& xev,
   return false;
 }
 
-bool DeviceDataManagerX11::IsXIDeviceEvent(const XEvent& xev) const {
-  if (xev.type != GenericEvent || xev.xcookie.extension != xi_opcode_)
+bool DeviceDataManagerX11::IsXIDeviceEvent(const x11::Event& x11_event) const {
+  const XEvent& xev = x11_event.xlib_event();
+  if (xev.type != x11::GeGenericEvent::opcode ||
+      xev.xcookie.extension != xi_opcode_)
     return false;
   return xi_device_event_types_[xev.xcookie.evtype];
 }
 
-bool DeviceDataManagerX11::IsTouchpadXInputEvent(const XEvent& xev) const {
-  if (xev.type != GenericEvent)
+bool DeviceDataManagerX11::IsTouchpadXInputEvent(
+    const x11::Event& x11_event) const {
+  const XEvent& xev = x11_event.xlib_event();
+  if (xev.type != x11::GeGenericEvent::opcode)
     return false;
 
   XIDeviceEvent* xievent = static_cast<XIDeviceEvent*>(xev.xcookie.data);
@@ -407,8 +428,9 @@ bool DeviceDataManagerX11::IsTouchpadXInputEvent(const XEvent& xev) const {
   return touchpads_[xievent->sourceid];
 }
 
-bool DeviceDataManagerX11::IsCMTDeviceEvent(const XEvent& xev) const {
-  if (xev.type != GenericEvent)
+bool DeviceDataManagerX11::IsCMTDeviceEvent(const x11::Event& x11_event) const {
+  const XEvent& xev = x11_event.xlib_event();
+  if (xev.type != x11::GeGenericEvent::opcode)
     return false;
 
   XIDeviceEvent* xievent = static_cast<XIDeviceEvent*>(xev.xcookie.data);
@@ -418,8 +440,10 @@ bool DeviceDataManagerX11::IsCMTDeviceEvent(const XEvent& xev) const {
   return cmt_devices_[xievent->sourceid];
 }
 
-int DeviceDataManagerX11::GetScrollClassEventDetail(const XEvent& xev) const {
-  if (xev.type != GenericEvent)
+int DeviceDataManagerX11::GetScrollClassEventDetail(
+    const x11::Event& x11_event) const {
+  const XEvent& xev = x11_event.xlib_event();
+  if (xev.type != x11::GeGenericEvent::opcode)
     return SCROLL_TYPE_NO_SCROLL;
 
   XIDeviceEvent* xievent = static_cast<XIDeviceEvent*>(xev.xcookie.data);
@@ -436,8 +460,10 @@ int DeviceDataManagerX11::GetScrollClassEventDetail(const XEvent& xev) const {
               : 0);
 }
 
-int DeviceDataManagerX11::GetScrollClassDeviceDetail(const XEvent& xev) const {
-  if (xev.type != GenericEvent)
+int DeviceDataManagerX11::GetScrollClassDeviceDetail(
+    const x11::Event& x11_event) const {
+  const XEvent& xev = x11_event.xlib_event();
+  if (xev.type != x11::GeGenericEvent::opcode)
     return SCROLL_TYPE_NO_SCROLL;
 
   XIDeviceEvent* xiev = static_cast<XIDeviceEvent*>(xev.xcookie.data);
@@ -449,12 +475,12 @@ int DeviceDataManagerX11::GetScrollClassDeviceDetail(const XEvent& xev) const {
          (device_data.horizontal.number >= 0 ? SCROLL_TYPE_HORIZONTAL : 0);
 }
 
-bool DeviceDataManagerX11::IsCMTGestureEvent(const XEvent& xev) const {
+bool DeviceDataManagerX11::IsCMTGestureEvent(const x11::Event& xev) const {
   return (IsScrollEvent(xev) || IsFlingEvent(xev) || IsCMTMetricsEvent(xev));
 }
 
-bool DeviceDataManagerX11::HasEventData(
-    const XIDeviceEvent* xiev, const DataType type) const {
+bool DeviceDataManagerX11::HasEventData(const XIDeviceEvent* xiev,
+                                        const DataType type) const {
   CHECK_GE(xiev->sourceid, 0);
   if (xiev->sourceid >= kMaxDeviceNum)
     return false;
@@ -464,8 +490,9 @@ bool DeviceDataManagerX11::HasEventData(
   return (idx >= 0) && XIMaskIsSet(xiev->valuators.mask, idx);
 }
 
-bool DeviceDataManagerX11::IsScrollEvent(const XEvent& xev) const {
-  if (!IsCMTDeviceEvent(xev))
+bool DeviceDataManagerX11::IsScrollEvent(const x11::Event& x11_event) const {
+  const XEvent& xev = x11_event.xlib_event();
+  if (!IsCMTDeviceEvent(x11_event))
     return false;
 
   XIDeviceEvent* xiev = static_cast<XIDeviceEvent*>(xev.xcookie.data);
@@ -473,8 +500,9 @@ bool DeviceDataManagerX11::IsScrollEvent(const XEvent& xev) const {
           HasEventData(xiev, DT_CMT_SCROLL_Y));
 }
 
-bool DeviceDataManagerX11::IsFlingEvent(const XEvent& xev) const {
-  if (!IsCMTDeviceEvent(xev))
+bool DeviceDataManagerX11::IsFlingEvent(const x11::Event& x11_event) const {
+  const XEvent& xev = x11_event.xlib_event();
+  if (!IsCMTDeviceEvent(x11_event))
     return false;
 
   XIDeviceEvent* xiev = static_cast<XIDeviceEvent*>(xev.xcookie.data);
@@ -483,8 +511,10 @@ bool DeviceDataManagerX11::IsFlingEvent(const XEvent& xev) const {
           HasEventData(xiev, DT_CMT_FLING_STATE));
 }
 
-bool DeviceDataManagerX11::IsCMTMetricsEvent(const XEvent& xev) const {
-  if (!IsCMTDeviceEvent(xev))
+bool DeviceDataManagerX11::IsCMTMetricsEvent(
+    const x11::Event& x11_event) const {
+  const XEvent& xev = x11_event.xlib_event();
+  if (!IsCMTDeviceEvent(x11_event))
     return false;
 
   XIDeviceEvent* xiev = static_cast<XIDeviceEvent*>(xev.xcookie.data);
@@ -493,8 +523,9 @@ bool DeviceDataManagerX11::IsCMTMetricsEvent(const XEvent& xev) const {
           HasEventData(xiev, DT_CMT_METRICS_DATA2));
 }
 
-bool DeviceDataManagerX11::HasGestureTimes(const XEvent& xev) const {
-  if (!IsCMTDeviceEvent(xev))
+bool DeviceDataManagerX11::HasGestureTimes(const x11::Event& x11_event) const {
+  const XEvent& xev = x11_event.xlib_event();
+  if (!IsCMTDeviceEvent(x11_event))
     return false;
 
   XIDeviceEvent* xiev = static_cast<XIDeviceEvent*>(xev.xcookie.data);
@@ -502,7 +533,7 @@ bool DeviceDataManagerX11::HasGestureTimes(const XEvent& xev) const {
           HasEventData(xiev, DT_CMT_END_TIME));
 }
 
-void DeviceDataManagerX11::GetScrollOffsets(const XEvent& xev,
+void DeviceDataManagerX11::GetScrollOffsets(const x11::Event& xev,
                                             float* x_offset,
                                             float* y_offset,
                                             float* x_offset_ordinal,
@@ -529,15 +560,16 @@ void DeviceDataManagerX11::GetScrollOffsets(const XEvent& xev,
     *finger_count = static_cast<int>(data[DT_CMT_FINGER_COUNT]);
 }
 
-void DeviceDataManagerX11::GetScrollClassOffsets(const XEvent& xev,
+void DeviceDataManagerX11::GetScrollClassOffsets(const x11::Event& x11_event,
                                                  double* x_offset,
                                                  double* y_offset) {
-  DCHECK_NE(SCROLL_TYPE_NO_SCROLL, GetScrollClassDeviceDetail(xev));
+  const XEvent& xev = x11_event.xlib_event();
+  DCHECK_NE(SCROLL_TYPE_NO_SCROLL, GetScrollClassDeviceDetail(x11_event));
 
   *x_offset = 0;
   *y_offset = 0;
 
-  if (xev.type != GenericEvent)
+  if (xev.type != x11::GeGenericEvent::opcode)
     return;
 
   XIDeviceEvent* xiev = static_cast<XIDeviceEvent*>(xev.xcookie.data);
@@ -565,9 +597,9 @@ void DeviceDataManagerX11::GetScrollClassOffsets(const XEvent& xev,
 
 void DeviceDataManagerX11::InvalidateScrollClasses(int device_id) {
   if (device_id == kAllDevices) {
-    for (int i = 0; i < kMaxDeviceNum; i++) {
-      scroll_data_[i].horizontal.seen = false;
-      scroll_data_[i].vertical.seen = false;
+    for (auto& i : scroll_data_) {
+      i.horizontal.seen = false;
+      i.vertical.seen = false;
     }
   } else {
     CHECK(device_id >= 0 && device_id < kMaxDeviceNum);
@@ -576,7 +608,7 @@ void DeviceDataManagerX11::InvalidateScrollClasses(int device_id) {
   }
 }
 
-void DeviceDataManagerX11::GetFlingData(const XEvent& xev,
+void DeviceDataManagerX11::GetFlingData(const x11::Event& xev,
                                         float* vx,
                                         float* vy,
                                         float* vx_ordinal,
@@ -603,7 +635,7 @@ void DeviceDataManagerX11::GetFlingData(const XEvent& xev,
     *vy_ordinal = data[DT_CMT_ORDINAL_Y];
 }
 
-void DeviceDataManagerX11::GetMetricsData(const XEvent& xev,
+void DeviceDataManagerX11::GetMetricsData(const x11::Event& xev,
                                           GestureMetricsType* type,
                                           float* data1,
                                           float* data2) {
@@ -628,8 +660,8 @@ void DeviceDataManagerX11::GetMetricsData(const XEvent& xev,
 }
 
 int DeviceDataManagerX11::GetMappedButton(int button) {
-  return button > 0 && button <= button_map_count_ ? button_map_[button - 1] :
-                                                     button;
+  return button > 0 && button <= button_map_count_ ? button_map_[button - 1]
+                                                   : button;
 }
 
 void DeviceDataManagerX11::UpdateButtonMap() {
@@ -637,7 +669,7 @@ void DeviceDataManagerX11::UpdateButtonMap() {
                                          base::size(button_map_));
 }
 
-void DeviceDataManagerX11::GetGestureTimes(const XEvent& xev,
+void DeviceDataManagerX11::GetGestureTimes(const x11::Event& xev,
                                            double* start_time,
                                            double* end_time) {
   *start_time = 0;
@@ -713,23 +745,50 @@ void DeviceDataManagerX11::SetDeviceListForTest(
   }
 }
 
-void DeviceDataManagerX11::SetValuatorDataForTest(XIDeviceEvent* xievent,
-                                                  DataType type,
-                                                  double value) {
-  int index = valuator_lookup_[xievent->deviceid][type].number;
-  CHECK(!XIMaskIsSet(xievent->valuators.mask, index));
-  CHECK(index >= 0 && index < valuator_count_[xievent->deviceid]);
-  XISetMask(xievent->valuators.mask, index);
+void DeviceDataManagerX11::SetValuatorDataForTest(
+    XIDeviceEvent* xievent,
+    x11::Input::DeviceEvent* devev,
+    DataType type,
+    double value) {
+  // Modify |xievent|.
+  {
+    int index = valuator_lookup_[xievent->deviceid][type].number;
+    CHECK(!XIMaskIsSet(xievent->valuators.mask, index));
+    CHECK(index >= 0 && index < valuator_count_[xievent->deviceid]);
+    XISetMask(xievent->valuators.mask, index);
 
-  double* valuators = xievent->valuators.values;
-  for (int i = 0; i < index; ++i) {
-    if (XIMaskIsSet(xievent->valuators.mask, i))
-      valuators++;
+    double* valuators = xievent->valuators.values;
+    for (int i = 0; i < index; ++i) {
+      if (XIMaskIsSet(xievent->valuators.mask, i))
+        valuators++;
+    }
+    for (int i = DT_LAST_ENTRY - 1; i > valuators - xievent->valuators.values;
+         --i) {
+      xievent->valuators.values[i] = xievent->valuators.values[i - 1];
+    }
+    *valuators = value;
   }
-  for (int i = DT_LAST_ENTRY - 1; i > valuators - xievent->valuators.values;
-       --i)
-    xievent->valuators.values[i] = xievent->valuators.values[i - 1];
-  *valuators = value;
+
+  // Modify |devev|.
+  {
+    uint16_t device = static_cast<uint16_t>(devev->deviceid);
+    int index = valuator_lookup_[device][type].number;
+    CHECK(!XIMaskIsSet(devev->valuator_mask.data(), index));
+    CHECK(index >= 0 && index < valuator_count_[device]);
+    XISetMask(devev->valuator_mask.data(), index);
+
+    x11::Input::Fp3232* valuators = devev->axisvalues.data();
+    for (int i = 0; i < index; ++i) {
+      if (XIMaskIsSet(devev->valuator_mask.data(), i))
+        valuators++;
+    }
+    for (int i = DT_LAST_ENTRY - 1; i > valuators - devev->axisvalues.data();
+         --i) {
+      devev->axisvalues[i] = devev->axisvalues[i - 1];
+    }
+
+    *valuators = DoubleToFp3232(value);
+  }
 }
 
 void DeviceDataManagerX11::InitializeValuatorsForTest(int deviceid,
@@ -753,11 +812,12 @@ void DeviceDataManagerX11::InitializeValuatorsForTest(int deviceid,
 
 bool DeviceDataManagerX11::UpdateValuatorClassDevice(
     XIValuatorClassInfo* valuator_class_info,
-    Atom* atoms,
+    x11::Atom* atoms,
     int deviceid) {
   DCHECK(deviceid >= 0 && deviceid < kMaxDeviceNum);
-  Atom* label =
-      std::find(atoms, atoms + DT_LAST_ENTRY, valuator_class_info->label);
+  x11::Atom* label =
+      std::find(atoms, atoms + DT_LAST_ENTRY,
+                static_cast<x11::Atom>(valuator_class_info->label));
   if (label == atoms + DT_LAST_ENTRY) {
     return false;
   }
@@ -810,8 +870,7 @@ double DeviceDataManagerX11::ExtractAndUpdateScrollOffset(
 
 void DeviceDataManagerX11::SetDisabledKeyboardAllowedKeys(
     std::unique_ptr<std::set<KeyboardCode>> excepted_keys) {
-  DCHECK(!excepted_keys.get() ||
-         !blocked_keyboard_allowed_keys_.get());
+  DCHECK(!excepted_keys.get() || !blocked_keyboard_allowed_keys_.get());
   blocked_keyboard_allowed_keys_ = std::move(excepted_keys);
 }
 
@@ -844,9 +903,10 @@ bool DeviceDataManagerX11::IsDeviceEnabled(int device_id) const {
   return blocked_devices_.test(device_id);
 }
 
-bool DeviceDataManagerX11::IsEventBlocked(const XEvent& xev) {
+bool DeviceDataManagerX11::IsEventBlocked(const x11::Event& x11_event) {
+  const XEvent& xev = x11_event.xlib_event();
   // Only check XI2 events which have a source device id.
-  if (xev.type != GenericEvent)
+  if (xev.type != x11::GeGenericEvent::opcode)
     return false;
 
   XIDeviceEvent* xievent = static_cast<XIDeviceEvent*>(xev.xcookie.data);

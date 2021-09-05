@@ -55,7 +55,7 @@ public class ContextualSearchSelectionController {
             + "([\\w_-]+(?:(?:\\.[\\w_-]+)+))([\\w.,@?^=%&:/~+#-]*[\\w@?^=%&/~+#-])?");
 
     // Max selection length must be limited or the entire request URL can go past the 2K limit.
-    private static final int MAX_SELECTION_LENGTH = 100;
+    private static final int MAX_SELECTION_LENGTH = 1000;
 
     private static final int INVALID_DURATION = -1;
     // A default tap duration value when we can't compute it.
@@ -217,6 +217,11 @@ public class ContextualSearchSelectionController {
         return mSelectedText;
     }
 
+    /** @return whether the selection was established with a Tap gesture. */
+    boolean isTapSelection() {
+        return mSelectionType == SelectionType.TAP;
+    }
+
     /**
      * Overrides the current internal setting that tracks the selection.
      *
@@ -324,6 +329,7 @@ public class ContextualSearchSelectionController {
                 SelectionPopupController controller = getSelectionPopupController();
                 if (controller != null) mSelectedText = controller.getSelectedText();
                 mIsAdjustedSelection = false;
+                ContextualSearchUma.logSelectionEstablished();
                 break;
             case SelectionEventType.SELECTION_HANDLES_CLEARED:
                 // Selection handles have been hidden, but there may still be a selection.
@@ -334,6 +340,7 @@ public class ContextualSearchSelectionController {
             case SelectionEventType.SELECTION_HANDLE_DRAG_STOPPED:
                 shouldHandleSelection = true;
                 mIsAdjustedSelection = true;
+                ContextualSearchUma.logSelectionAdjusted(mSelectedText);
                 break;
             default:
         }
@@ -413,7 +420,7 @@ public class ContextualSearchSelectionController {
             mY = y;
             mFontSizeDips = fontSizeDips;
             mTextRunLength = textRunLength;
-            mHandler.handleValidTap();
+            mHandler.handleValidTap(x, y);
         } else {
             // Long press, or long-press selection handles shown; reset last tap state.
             mLastTapState = null;
@@ -513,6 +520,7 @@ public class ContextualSearchSelectionController {
             mDidExpandSelection = true;
             basePageWebContents.adjustSelectionByCharacterOffset(
                     selectionStartAdjust, selectionEndAdjust, /* showSelectionMenu= */ false);
+            ContextualSearchUma.logSelectionExpanded(isTapSelection());
         }
     }
 

@@ -9,7 +9,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -26,13 +27,11 @@ import java.util.concurrent.CountDownLatch;
 
 /**
  * Tests for {@link AccountManagerFacade}. See also {@link AccountManagerFacadeRobolectricTest}.
- * TODO(https://crbug.com/1064565): Move this test to Robolectric test set
  */
 @RunWith(BaseJUnit4ClassRunner.class)
 public class AccountManagerFacadeTest {
     private FakeAccountManagerDelegate mDelegate =
-            new FakeAccountManagerDelegate(FakeAccountManagerDelegate.DISABLE_PROFILE_DATA_SOURCE,
-                    FakeAccountManagerDelegate.ENABLE_BLOCK_GET_ACCOUNTS);
+            new FakeAccountManagerDelegate(FakeAccountManagerDelegate.ENABLE_BLOCK_GET_ACCOUNTS);
 
     @Before
     public void setUp() {

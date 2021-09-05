@@ -235,8 +235,8 @@ void Navigator::DidNavigate(
   frame_tree_node->render_manager()->DidNavigateFrame(
       render_frame_host, params.gesture == NavigationGestureUser,
       is_same_document_navigation,
-      navigation_request
-          ->require_coop_browsing_instance_swap() /* clear_proxies_on_commit */,
+      navigation_request->coop_status()
+          .require_browsing_instance_swap /* clear_proxies_on_commit */,
       pending_frame_policy);
 
   // Save the new page's origin and other properties, and replicate them to
@@ -258,10 +258,24 @@ void Navigator::DidNavigate(
     render_frame_host->ResetContentSecurityPolicies();
     frame_tree_node->ResetForNavigation();
 
-    // Save the new document's embedding token and propagate to any parent
-    // document that embeds it. A token is only assigned to cross-process
-    // child frames.
-    render_frame_host->SetEmbeddingToken(params.embedding_token);
+    // Back-forward cache navigations should not update the embedding token.
+    //
+    // |was_within_same_document| (controlled by the renderer) also needs
+    // to be considered: in some cases, the browser and renderer can disagree.
+    // While this is usually a bad message kill, there are some situations
+    // where this can legitimately happen. When a new frame is created (e.g.
+    // with <iframe src="...">), the initial about:blank document doesn't have
+    // a corresponding entry in the browser process. As a result, the browser
+    // process incorrectly determines that the navigation is cross-document
+    // when in reality it's same-document.
+    if (!navigation_request->IsServedFromBackForwardCache() &&
+        !was_within_same_document) {
+      DCHECK(params.embedding_token.has_value());
+      // Save the new document's embedding token and propagate to any parent
+      // document that embeds it. A token exists for all navigations creating a
+      // new document.
+      render_frame_host->SetEmbeddingToken(params.embedding_token.value());
+    }
   }
 
   // Update the site of the SiteInstance if it doesn't have one yet, unless
@@ -285,8 +299,11 @@ void Navigator::DidNavigate(
   // TODO(nasko): Verify the correctness of the above comment, since some of the
   // code doesn't exist anymore. Also, move this code in the
   // PageTransitionIsMainFrame code block above.
-  if (ui::PageTransitionIsMainFrame(params.transition) && delegate_)
-    delegate_->SetMainFrameMimeType(params.contents_mime_type);
+  if (ui::PageTransitionIsMainFrame(params.transition) && delegate_) {
+    RenderViewHostImpl* rvh = static_cast<RenderViewHostImpl*>(
+        render_frame_host->GetRenderViewHost());
+    rvh->SetContentsMimeType(params.contents_mime_type);
+  }
 
   int old_entry_count = controller_->GetEntryCount();
   LoadCommittedDetails details;
@@ -610,7 +627,7 @@ void Navigator::OnBeginNavigation(
     // Try to find a FrameNavigationEntry that matches this frame instead, based
     // on the frame's unique name.  If this can't be found, fall back to the
     // default path below.
-    if (frame_tree_node->navigator()->StartHistoryNavigationInNewSubframe(
+    if (frame_tree_node->navigator().StartHistoryNavigationInNewSubframe(
             frame_tree_node->current_frame_host(), &navigation_client)) {
       return;
     }
@@ -805,12 +822,6 @@ Navigator::GetNavigationEntryForRendererInitiatedNavigation(
   if (renderer_provisional_load_to_pending_url)
     return nullptr;
 
-  // If there is a transient entry, creating a new pending entry will result
-  // in deleting it, which leads to inconsistent state.
-  bool has_transient_entry = !!controller_->GetTransientEntry();
-  if (has_transient_entry)
-    return nullptr;
-
   // Since GetNavigationEntryForRendererInitiatedNavigation is called from
   // OnBeginNavigation, we can assume that no frame proxies are involved and
   // therefore that |current_site_instance| is also the |source_site_instance|.
@@ -826,7 +837,8 @@ Navigator::GetNavigationEntryForRendererInitiatedNavigation(
               ui::PAGE_TRANSITION_LINK, true /* is_renderer_initiated */,
               std::string() /* extra_headers */,
               controller_->GetBrowserContext(),
-              nullptr /* blob_url_loader_factory */));
+              nullptr /* blob_url_loader_factory */,
+              common_params.should_replace_current_entry));
 
   controller_->SetPendingEntry(std::move(entry));
   if (delegate_)

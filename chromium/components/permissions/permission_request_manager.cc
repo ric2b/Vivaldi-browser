@@ -15,7 +15,6 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
-#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/permissions/features.h"
@@ -47,6 +46,20 @@ const char kAbusiveNotificationRequestsWarningMessage[] =
     "mislead, trick, or force users into allowing notifications. You should "
     "fix the issues as soon as possible and submit your site for another "
     "review. Learn more at https://support.google.com/webtools/answer/9799048.";
+
+constexpr char kAbusiveNotificationContentEnforcementMessage[] =
+    "Chrome is blocking notification permission requests on this site because "
+    "the site tends to show notifications with content that mislead or trick "
+    "users. You should fix the issues as soon as possible and submit your site "
+    "for another review. Learn more at "
+    "https://support.google.com/webtools/answer/9799048";
+
+constexpr char kAbusiveNotificationContentWarningMessage[] =
+    "Chrome might start blocking notification permission requests on this site "
+    "in the future because the site tends to show notifications with content "
+    "that mislead or trick users. You should fix the issues as soon as "
+    "possible and submit your site for another review. Learn more at "
+    "https://support.google.com/webtools/answer/9799048";
 
 namespace {
 
@@ -358,8 +371,8 @@ PermissionRequestManager::PermissionRequestManager(
 
 void PermissionRequestManager::ScheduleShowBubble() {
   base::RecordAction(base::UserMetricsAction("PermissionBubbleRequest"));
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(&PermissionRequestManager::ShowBubble,
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&PermissionRequestManager::ShowBubble,
                                 weak_factory_.GetWeakPtr()));
 }
 
@@ -421,18 +434,30 @@ void PermissionRequestManager::ShowBubble() {
     PermissionUmaUtil::PermissionPromptShown(requests_);
 
     if (ShouldCurrentRequestUseQuietUI()) {
-      if (ReasonForUsingQuietUi() ==
-          QuietUiReason::kTriggeredDueToAbusiveRequests) {
-        LogWarningToConsole(kAbusiveNotificationRequestsEnforcementMessage);
+      switch (ReasonForUsingQuietUi()) {
+        case QuietUiReason::kEnabledInPrefs:
+        case QuietUiReason::kTriggeredByCrowdDeny:
+          break;
+        case QuietUiReason::kTriggeredDueToAbusiveRequests:
+          LogWarningToConsole(kAbusiveNotificationRequestsEnforcementMessage);
+          break;
+        case QuietUiReason::kTriggeredDueToAbusiveContent:
+          LogWarningToConsole(kAbusiveNotificationContentEnforcementMessage);
+          break;
       }
       base::RecordAction(base::UserMetricsAction(
           "Notifications.Quiet.PermissionRequestShown"));
     }
 
-    if (current_request_ui_to_use_->warning_reason &&
-        *(current_request_ui_to_use_->warning_reason) ==
-            WarningReason::kAbusiveRequests) {
-      LogWarningToConsole(kAbusiveNotificationRequestsWarningMessage);
+    if (current_request_ui_to_use_->warning_reason) {
+      switch (*(current_request_ui_to_use_->warning_reason)) {
+        case WarningReason::kAbusiveRequests:
+          LogWarningToConsole(kAbusiveNotificationRequestsWarningMessage);
+          break;
+        case WarningReason::kAbusiveContent:
+          LogWarningToConsole(kAbusiveNotificationContentWarningMessage);
+          break;
+      }
     }
   }
   current_request_view_shown_to_user_ = true;

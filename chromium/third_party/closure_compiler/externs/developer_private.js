@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,9 +11,7 @@
 
 /** @fileoverview Externs generated from namespace: developerPrivate */
 
-/**
- * @const
- */
+/** @const */
 chrome.developerPrivate = {};
 
 /**
@@ -222,7 +220,6 @@ chrome.developerPrivate.ExtensionView;
  */
 chrome.developerPrivate.ControllerType = {
   POLICY: 'POLICY',
-  SUPERVISED_USER_CUSTODIAN: 'SUPERVISED_USER_CUSTODIAN',
 };
 
 /**
@@ -570,7 +567,7 @@ chrome.developerPrivate.DeleteExtensionErrorsProperties;
 
 /**
  * Runs auto update for extensions and apps immediately.
- * @param {function():void=} callback Called after update check completes.
+ * @param {function(): void=} callback Called after update check completes.
  */
 chrome.developerPrivate.autoUpdate = function(callback) {};
 
@@ -578,7 +575,7 @@ chrome.developerPrivate.autoUpdate = function(callback) {};
  * Returns information of all the extensions and apps installed.
  * @param {!chrome.developerPrivate.GetExtensionsInfoOptions=} options Options
  *     to restrict the items returned.
- * @param {function(!Array<!chrome.developerPrivate.ExtensionInfo>):void=}
+ * @param {function(!Array<!chrome.developerPrivate.ExtensionInfo>): void=}
  *     callback Called with extensions info.
  */
 chrome.developerPrivate.getExtensionsInfo = function(options, callback) {};
@@ -586,7 +583,7 @@ chrome.developerPrivate.getExtensionsInfo = function(options, callback) {};
 /**
  * Returns information of a particular extension.
  * @param {string} id The id of the extension.
- * @param {function(!chrome.developerPrivate.ExtensionInfo):void=} callback
+ * @param {function(!chrome.developerPrivate.ExtensionInfo): void=} callback
  *     Called with the result.
  */
 chrome.developerPrivate.getExtensionInfo = function(id, callback) {};
@@ -594,7 +591,7 @@ chrome.developerPrivate.getExtensionInfo = function(id, callback) {};
 /**
  * Returns the size of a particular extension on disk (already formatted).
  * @param {string} id The id of the extension.
- * @param {function(string):void} callback Called with the result.
+ * @param {function(string): void} callback Called with the result.
  */
 chrome.developerPrivate.getExtensionSize = function(id, callback) {};
 
@@ -602,7 +599,7 @@ chrome.developerPrivate.getExtensionSize = function(id, callback) {};
  * Returns information of all the extensions and apps installed.
  * @param {boolean} includeDisabled include disabled items.
  * @param {boolean} includeTerminated include terminated items.
- * @param {function(!Array<!chrome.developerPrivate.ItemInfo>):void} callback
+ * @param {function(!Array<!chrome.developerPrivate.ItemInfo>): void} callback
  *     Called with items info.
  * @deprecated Use getExtensionsInfo
  */
@@ -610,7 +607,7 @@ chrome.developerPrivate.getItemsInfo = function(includeDisabled, includeTerminat
 
 /**
  * Returns the current profile's configuration.
- * @param {function(!chrome.developerPrivate.ProfileInfo):void} callback
+ * @param {function(!chrome.developerPrivate.ProfileInfo): void} callback
  */
 chrome.developerPrivate.getProfileConfiguration = function(callback) {};
 
@@ -619,14 +616,14 @@ chrome.developerPrivate.getProfileConfiguration = function(callback) {};
  * @param {!chrome.developerPrivate.ProfileConfigurationUpdate} update The
  *     parameters for updating the profile's configuration.  Any     properties
  *     omitted from |update| will not be changed.
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  */
 chrome.developerPrivate.updateProfileConfiguration = function(update, callback) {};
 
 /**
  * Opens a permissions dialog.
  * @param {string} extensionId The id of the extension to show permissions for.
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  */
 chrome.developerPrivate.showPermissionsDialog = function(extensionId, callback) {};
 
@@ -635,7 +632,7 @@ chrome.developerPrivate.showPermissionsDialog = function(extensionId, callback) 
  * @param {string} extensionId The id of the extension to reload.
  * @param {!chrome.developerPrivate.ReloadOptions=} options Additional
  *     configuration parameters.
- * @param {function((!chrome.developerPrivate.LoadError|undefined)):void=}
+ * @param {function((!chrome.developerPrivate.LoadError|undefined)): void=}
  *     callback
  */
 chrome.developerPrivate.reload = function(extensionId, options, callback) {};
@@ -645,7 +642,7 @@ chrome.developerPrivate.reload = function(extensionId, options, callback) {};
  * @param {!chrome.developerPrivate.ExtensionConfigurationUpdate} update The
  *     parameters for updating the extension's configuration.     Any properties
  *     omitted from |update| will not be changed.
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  */
 chrome.developerPrivate.updateExtensionConfiguration = function(update, callback) {};
 
@@ -653,14 +650,14 @@ chrome.developerPrivate.updateExtensionConfiguration = function(update, callback
  * Loads a user-selected unpacked item.
  * @param {!chrome.developerPrivate.LoadUnpackedOptions=} options Additional
  *     configuration parameters.
- * @param {function((!chrome.developerPrivate.LoadError|undefined)):void=}
+ * @param {function((!chrome.developerPrivate.LoadError|undefined)): void=}
  *     callback
  */
 chrome.developerPrivate.loadUnpacked = function(options, callback) {};
 
 /**
  * Installs the file that was dragged and dropped onto the associated page.
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  */
 chrome.developerPrivate.installDroppedFile = function(callback) {};
 
@@ -672,8 +669,8 @@ chrome.developerPrivate.notifyDragInstallInProgress = function() {};
 
 /**
  * Loads an extension / app.
- * @param {Object} directory The directory to load the extension from.
- * @param {function(string):void} callback
+ * @param {DirectoryEntry} directory The directory to load the extension from.
+ * @param {function(string): void} callback
  */
 chrome.developerPrivate.loadDirectory = function(directory, callback) {};
 
@@ -684,7 +681,7 @@ chrome.developerPrivate.loadDirectory = function(directory, callback) {};
  * @param {!chrome.developerPrivate.FileType} fileType Required file type. For
  *     example, pem type is for private key and load type is for an unpacked
  *     item.
- * @param {function(string):void} callback called with selected item's path.
+ * @param {function(string): void} callback called with selected item's path.
  */
 chrome.developerPrivate.choosePath = function(selectType, fileType, callback) {};
 
@@ -693,14 +690,14 @@ chrome.developerPrivate.choosePath = function(selectType, fileType, callback) {}
  * @param {string} path
  * @param {string=} privateKeyPath The path of the private key, if one is given.
  * @param {number=} flags Special flags to apply to the loading process, if any.
- * @param {function(!chrome.developerPrivate.PackDirectoryResponse):void=}
+ * @param {function(!chrome.developerPrivate.PackDirectoryResponse): void=}
  *     callback called with the success result string.
  */
 chrome.developerPrivate.packDirectory = function(path, privateKeyPath, flags, callback) {};
 
 /**
  * Returns true if the profile is managed.
- * @param {function(boolean):void} callback
+ * @param {function(boolean): void} callback
  */
 chrome.developerPrivate.isProfileManaged = function(callback) {};
 
@@ -708,7 +705,7 @@ chrome.developerPrivate.isProfileManaged = function(callback) {};
  * Reads and returns the contents of a file related to an extension which caused
  * an error.
  * @param {!chrome.developerPrivate.RequestFileSourceProperties} properties
- * @param {function(!chrome.developerPrivate.RequestFileSourceResponse):void}
+ * @param {function(!chrome.developerPrivate.RequestFileSourceResponse): void}
  *     callback
  */
 chrome.developerPrivate.requestFileSource = function(properties, callback) {};
@@ -716,7 +713,7 @@ chrome.developerPrivate.requestFileSource = function(properties, callback) {};
 /**
  * Open the developer tools to focus on a particular error.
  * @param {!chrome.developerPrivate.OpenDevToolsProperties} properties
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  */
 chrome.developerPrivate.openDevTools = function(properties, callback) {};
 
@@ -724,14 +721,14 @@ chrome.developerPrivate.openDevTools = function(properties, callback) {};
  * Delete reported extension errors.
  * @param {!chrome.developerPrivate.DeleteExtensionErrorsProperties} properties
  *     The properties specifying the errors to remove.
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  */
 chrome.developerPrivate.deleteExtensionErrors = function(properties, callback) {};
 
 /**
  * Repairs the extension specified.
  * @param {string} extensionId The id of the extension to repair.
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  */
 chrome.developerPrivate.repairExtension = function(extensionId, callback) {};
 
@@ -739,14 +736,14 @@ chrome.developerPrivate.repairExtension = function(extensionId, callback) {};
  * Shows the options page for the extension specified.
  * @param {string} extensionId The id of the extension to show the options page
  *     for.
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  */
 chrome.developerPrivate.showOptions = function(extensionId, callback) {};
 
 /**
  * Shows the path of the extension specified.
  * @param {string} extensionId The id of the extension to show the path for.
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  */
 chrome.developerPrivate.showPath = function(extensionId, callback) {};
 
@@ -754,7 +751,7 @@ chrome.developerPrivate.showPath = function(extensionId, callback) {};
  * (Un)suspends global shortcut handling.
  * @param {boolean} isSuspended Whether or not shortcut handling should be
  *     suspended.
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  */
 chrome.developerPrivate.setShortcutHandlingSuspended = function(isSuspended, callback) {};
 
@@ -762,7 +759,7 @@ chrome.developerPrivate.setShortcutHandlingSuspended = function(isSuspended, cal
  * Updates an extension command.
  * @param {!chrome.developerPrivate.ExtensionCommandUpdate} update The
  *     parameters for updating the extension command.
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  */
 chrome.developerPrivate.updateExtensionCommand = function(update, callback) {};
 
@@ -771,7 +768,7 @@ chrome.developerPrivate.updateExtensionCommand = function(update, callback) {};
  * access to the host if it is within the requested permissions.
  * @param {string} extensionId The id of the extension to modify.
  * @param {string} host The host to add.
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  */
 chrome.developerPrivate.addHostPermission = function(extensionId, host, callback) {};
 
@@ -780,14 +777,14 @@ chrome.developerPrivate.addHostPermission = function(extensionId, host, callback
  * a host that the extension has access to.
  * @param {string} extensionId The id of the extension to modify.
  * @param {string} host The host to remove.
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  */
 chrome.developerPrivate.removeHostPermission = function(extensionId, host, callback) {};
 
 /**
  * @param {string} id
  * @param {boolean} enabled
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  * @deprecated Use management.setEnabled
  */
 chrome.developerPrivate.enable = function(id, enabled, callback) {};
@@ -795,7 +792,7 @@ chrome.developerPrivate.enable = function(id, enabled, callback) {};
 /**
  * @param {string} extensionId
  * @param {boolean} allow
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  * @deprecated Use updateExtensionConfiguration
  */
 chrome.developerPrivate.allowIncognito = function(extensionId, allow, callback) {};
@@ -803,14 +800,14 @@ chrome.developerPrivate.allowIncognito = function(extensionId, allow, callback) 
 /**
  * @param {string} extensionId
  * @param {boolean} allow
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  * @deprecated Use updateExtensionConfiguration
  */
 chrome.developerPrivate.allowFileAccess = function(extensionId, allow, callback) {};
 
 /**
  * @param {!chrome.developerPrivate.InspectOptions} options
- * @param {function():void=} callback
+ * @param {function(): void=} callback
  * @deprecated Use openDevTools
  */
 chrome.developerPrivate.inspect = function(options, callback) {};

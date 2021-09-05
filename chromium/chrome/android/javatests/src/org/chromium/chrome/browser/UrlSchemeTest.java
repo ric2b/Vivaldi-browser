@@ -8,7 +8,8 @@ import android.content.Context;
 import android.net.Uri;
 import android.os.Environment;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -19,7 +20,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.TestFileUtil;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -38,7 +38,6 @@ import java.net.URLEncoder;
 
 /** Test suite for different Android URL schemes. */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@RetryOnFailure
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class UrlSchemeTest {
     @Rule

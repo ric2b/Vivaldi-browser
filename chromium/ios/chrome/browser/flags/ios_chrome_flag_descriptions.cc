@@ -11,6 +11,12 @@
 
 namespace flag_descriptions {
 
+const char kAddWebContentDropInteractionName[] =
+    "Add Web Content Drop Interaction";
+const char kAddWebContentDropInteractionDescription[] =
+    "When enabled, adds ability to drop a URL on the web content area to "
+    "navigate to that URL.";
+
 const char kAutofillCacheQueryResponsesName[] =
     "Cache Autofill Query Responses";
 const char kAutofillCacheQueryResponsesDescription[] =
@@ -26,8 +32,14 @@ const char kAutofillCreditCardUploadDescription[] =
 const char kAutofillEnableCardNicknameManagementName[] =
     "Enable Autofill card nickname management";
 const char kAutofillEnableCardNicknameManagementDescription[] =
+    "When enabled, nicknames for credit cards will be able to be modified "
+    "locally.";
+
+const char kAutofillEnableCardNicknameUpstreamName[] =
+    "Enable Autofill card nickname upstream";
+const char kAutofillEnableCardNicknameUpstreamDescription[] =
     "When enabled, nicknames for credit cards will be able to be uploaded to "
-    "Payments or modified locally.";
+    "Payments.";
 
 const char kAutofillEnableCompanyNameName[] =
     "Enable Autofill Company Name field";
@@ -39,6 +51,12 @@ const char kAutofillEnableGoogleIssuedCardName[] =
 const char kAutofillEnableGoogleIssuedCardDescription[] =
     "When enabled, Google-issued cards will be available in the autofill "
     "suggestions.";
+
+const char kAutofillEnableOffersInDownstreamName[] =
+    "Enable Autofill offers in downstream";
+const char kAutofillEnableOffersInDownstreamDescription[] =
+    "When enabled, offer data will be retrieved during downstream and shown in "
+    "the dropdown list.";
 
 const char kAutofillEnableSurfacingServerCardNicknameName[] =
     "Enable surfacing masked server card nicknames";
@@ -68,12 +86,6 @@ const char kAutofillIOSDelayBetweenFieldsName[] = "Autofill delay";
 const char kAutofillIOSDelayBetweenFieldsDescription[] =
     "Delay between the different fields of a form being autofilled. In "
     "milliseconds.";
-
-const char kAutofillNoLocalSaveOnUnmaskSuccessName[] =
-    "Remove the option to save local copies of unmasked server cards";
-const char kAutofillNoLocalSaveOnUnmaskSuccessDescription[] =
-    "When enabled, the server card unmask prompt will not include the checkbox "
-    "to also save the card locally on the current device upon success.";
 
 const char kAutofillPruneSuggestionsName[] = "Autofill Prune Suggestions";
 const char kAutofillPruneSuggestionsDescription[] =
@@ -131,12 +143,6 @@ const char kBreakpadNoDelayInitialUploadDescription[] =
     "disabled, initial upload is delayed until deferred initialization. This "
     "does not affect recovery mode.";
 
-const char kClearSyncedDataName[] = "Clear Synced Data on Sign Out";
-const char kClearSyncedDataDescription[] =
-    "When enabled users signed in with a non-managed account will be "
-    "presented with the option to clear synced data from the local "
-    "device when signing out.";
-
 extern const char kChangeTabSwitcherPositionName[] =
     "Change tab switcher button position";
 extern const char kChangeTabSwitcherPositionDescription[] =
@@ -185,10 +191,14 @@ const char kDetectMainThreadFreezeDescription[] =
     "A crash report will be uploaded if the main thread is frozen more than "
     "the time specified by this flag.";
 
-const char kDisableAnimationOnLowBatteryName[] =
-    "Disable animations on low battery";
-const char kDisableAnimationOnLowBatteryDescription[] =
-    "Disable animations when battery level goes below 20%";
+const char kDisableProgressBarAnimationName[] =
+    "Disable page load progress bar animation";
+const char kDisableProgressBarAnimationDescription[] =
+    "Disable progress bar animation when a page loads.";
+
+const char kDiscoverFeedInNtpName[] = "Enable Discover feed in new tab page";
+const char kDiscoverFeedInNtpDescription[] =
+    "When enabled, replaces articles feed with Discover feed in new tab page.";
 
 const char kDownloadInfobarMessagesUIName[] = "Download Infobars Messages UI";
 const char kDownloadInfobarMessagesUIDescription[] =
@@ -212,21 +222,25 @@ const char kEnableAutofillCacheServerCardInfoDescription[] =
     "If enabled, when a server card is unmasked, its info will be cached until "
     "page navigation to simplify consecutive fills on the same page.";
 
-const char kEnableAutofillCreditCardUploadEditableExpirationDateName[] =
-    "Make expiration date editable in dialog during credit card upload";
-const char kEnableAutofillCreditCardUploadEditableExpirationDateDescription[] =
-    "If enabled, if a credit card's expiration date was not detected when "
-    "offering card upload to Google Payments, the offer-to-save dialog "
-    "displays an expiration date selector.";
-
 const char kEnableClipboardProviderImageSuggestionsName[] =
     "Enable copied image provider";
 const char kEnableClipboardProviderImageSuggestionsDescription[] =
     "Enable suggesting a search for the image copied to the clipboard";
 
+const char kEnableIOSManagedSettingsUIName[] = "Enable IOS Managed Settings UI";
+const char kEnableIOSManagedSettingsUIDescription[] =
+    "Enable showing a different UI when the setting is managed by an "
+    "enterprise policy on iOS.";
+
 const char kEnableMyGoogleName[] = "Enable MyGoogle UI";
 const char kEnableMyGoogleDescription[] =
     "Enable MyGoogle account management UI in iOS Settings";
+
+const char kEnableNativeContextMenusName[] =
+    "Enable Context Menus in Native UI";
+const char kEnableNativeContextMenusDescription[] =
+    "Enables the new iOS 13 context menus on various pieces of UI in native "
+    "Chrome (e.g. History, Bookmarks).";
 
 const char kEnablePersistentDownloadsName[] = "Enable persistent downloads";
 const char kEnablePersistentDownloadsDescription[] =
@@ -237,9 +251,10 @@ const char kEnableSyncTrustedVaultName[] =
 const char kEnableSyncTrustedVaultDescription[] =
     "Enables the new, experimental passphrase type for sync data";
 
-const char kEnableSyncUSSNigoriName[] = "Enable USS for sync encryption keys";
-const char kEnableSyncUSSNigoriDescription[] =
-    "Enables the new, experimental implementation of sync encryption keys";
+const char kExpandedTabStripName[] = "Enable expanded tabstrip";
+const char kExpandedTabStripDescription[] =
+    "Enables the new expanded tabstrip. Activated by swiping down the tabstrip"
+    " or the toolbar";
 
 const char kForceStartupSigninPromoName[] = "Display the startup sign-in promo";
 const char kForceStartupSigninPromoDescription[] =
@@ -260,6 +275,10 @@ const char kFullscreenControllerBrowserScopedName[] =
 const char kFullscreenControllerBrowserScopedDescription[] =
     "When enabled, FullscreenController will be stored and retrieved using the "
     "Browser.";
+
+const char kIllustratedEmptyStatesName[] = "Illustrated empty states";
+const char kIllustratedEmptyStatesDescription[] =
+    "Display new illustrations and layout on empty states.";
 
 const char kInfobarOverlayUIName[] = "Use OverlayPresenter for infobars";
 const char kInfobarOverlayUIDescription[] =
@@ -305,11 +324,6 @@ const char kMobileGoogleSRPDescription[] =
     "Request the Mobile version of Google SRP by default when the desktop mode "
     "is requested by default.";
 
-const char kNewSigninArchitectureName[] = "Enable new sign-in architecture";
-const char kNewSigninArchitectureDescription[] =
-    "When enabled uses the new sign-in architecture based on core Bling "
-    "design paradigms.";
-
 const char kOmniboxPreserveDefaultMatchAgainstAsyncUpdateName[] =
     "Omnibox Preserve Default Match Against Async Update";
 const char kOmniboxPreserveDefaultMatchAgainstAsyncUpdateDescription[] =
@@ -353,6 +367,10 @@ const char kImprovedCookieControlsName[] = "Third-party cookie blocking UI";
 const char kImprovedCookieControlsDescription[] =
     "Allows user to manage third-party cookie blocking.";
 
+const char kPasswordCheckName[] = "Bulk Password Check";
+const char kPasswordCheckDescription[] =
+    "Enables the Bulk Password Check feature for signed-in users.";
+
 const char kPageInfoRefactoringName[] = "New design of the page info";
 const char kPageInfoRefactoringDescription[] =
     "Uses the new design for the page security info.";
@@ -377,6 +395,11 @@ const char kSafeBrowsingAvailableDescription[] =
     "When enabled, navigation URLs are compared to Safe Browsing blocklists, "
     "subject to an opt-out preference.";
 
+const char kSafetyCheckIOSName[] = "Enable safety check on iOS";
+const char kSafetyCheckIOSDescription[] =
+    "When enabled, the iOS version of safety check is available in Chrome "
+    "settings.";
+
 const char kSaveCardInfobarMessagesUIName[] = "Save Card Infobar Messages UI";
 const char kSaveCardInfobarMessagesUIDescription[] =
     "When enabled, Save Card Infobar uses the new Messages UI.";
@@ -395,6 +418,12 @@ const char kSettingsRefreshName[] = "Enable the UI Refresh for Settings";
 const char kSettingsRefreshDescription[] =
     "Change the UI appearance of the settings to have something in phase with "
     "UI Refresh.";
+
+const char kSharedHighlightingIOSName[] = "Enable Shared Highlighting features";
+const char kSharedHighlightingIOSDescription[] =
+    "Enables support for Text Fragments (scroll-to-text based on URL "
+    "directive) and a Link to Text option in the Edit Menu which generates "
+    "these URLs.";
 
 const char kShowAutofillTypePredictionsName[] = "Show Autofill predictions";
 const char kShowAutofillTypePredictionsDescription[] =
@@ -444,12 +473,17 @@ const char kWalletServiceUseSandboxName[] = "Use Google Payments sandbox";
 const char kWalletServiceUseSandboxDescription[] =
     "Uses the sandbox service for Google Payments API calls.";
 
+const char kWebPageDefaultZoomFromDynamicTypeName[] =
+    "Use dynamic type size for default text zoom level";
+const char kWebPageDefaultZoomFromDynamicTypeDescription[] =
+    "When enabled, the default text zoom level for a website comes from the "
+    "current dynamic type setting.";
+
 const char kWebPageTextAccessibilityName[] =
     "Enable text accessibility in web pages";
 const char kWebPageTextAccessibilityDescription[] =
     "When enabled, text in web pages will respect the user's Dynamic Type "
     "setting.";
-
 // Please insert your name/description above in alphabetical order.
 
 }  // namespace flag_descriptions

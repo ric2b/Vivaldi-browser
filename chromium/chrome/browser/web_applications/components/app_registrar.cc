@@ -47,6 +47,18 @@ void AppRegistrar::NotifyWebAppInstalled(const AppId& app_id) {
   // the WebappInstallSource in this event.
 }
 
+void AppRegistrar::NotifyWebAppManifestUpdated(const AppId& app_id,
+                                               base::StringPiece old_name) {
+  for (AppRegistrarObserver& observer : observers_)
+    observer.OnWebAppManifestUpdated(app_id, old_name);
+}
+
+void AppRegistrar::NotifyWebAppsWillBeUpdatedFromSync(
+    const std::vector<const WebApp*>& new_apps_state) {
+  for (AppRegistrarObserver& observer : observers_)
+    observer.OnWebAppsWillBeUpdatedFromSync(new_apps_state);
+}
+
 void AppRegistrar::NotifyWebAppUninstalled(const AppId& app_id) {
   for (AppRegistrarObserver& observer : observers_)
     observer.OnWebAppUninstalled(app_id);
@@ -64,6 +76,18 @@ void AppRegistrar::NotifyWebAppDisabledStateChanged(const AppId& app_id,
                                                     bool is_disabled) {
   for (AppRegistrarObserver& observer : observers_)
     observer.OnWebAppDisabledStateChanged(app_id, is_disabled);
+}
+
+void AppRegistrar::NotifyWebAppLastLaunchTimeChanged(const AppId& app_id,
+                                                     const base::Time& time) {
+  for (AppRegistrarObserver& observer : observers_)
+    observer.OnWebAppLastLaunchTimeChanged(app_id, time);
+}
+
+void AppRegistrar::NotifyWebAppInstallTimeChanged(const AppId& app_id,
+                                                  const base::Time& time) {
+  for (AppRegistrarObserver& observer : observers_)
+    observer.OnWebAppInstallTimeChanged(app_id, time);
 }
 
 void AppRegistrar::NotifyWebAppProfileWillBeDeleted(const AppId& app_id) {

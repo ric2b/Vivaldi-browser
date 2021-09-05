@@ -19,6 +19,7 @@
 #include "components/request_filter/adblock_filter/adblock_rule_service_storage.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_manager.h"
 #include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
+#include "components/request_filter/adblock_filter/adblock_resources.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -66,6 +67,9 @@ class RuleServiceImpl : public RuleService {
   std::vector<std::string> GetExceptions(RuleGroup group,
                                          ExceptionsList list) const override;
   bool IsExemptOfFiltering(RuleGroup group, url::Origin origin) const override;
+  bool IsDocumentBlocked(RuleGroup group,
+                         content::RenderFrameHost* frame,
+                         const GURL& url) const override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
   std::string GetRulesIndexChecksum(RuleGroup group) override;
@@ -115,6 +119,7 @@ class RuleServiceImpl : public RuleService {
 
   base::Optional<BlockedUrlsReporter> blocked_urls_reporter_;
   base::Optional<RuleServiceStorage> state_store_;
+  base::Optional<Resources> resources_;
 
   bool is_loaded_ = false;
   base::Optional<KnownRuleSourcesHandler> known_sources_handler_;

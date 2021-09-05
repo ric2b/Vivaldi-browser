@@ -12,7 +12,6 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
@@ -44,6 +43,7 @@
 
 #if defined(USE_X11)
 #include "content/browser/gpu/gpu_memory_buffer_manager_singleton_x11.h"  // nogncheck
+#include "ui/base/ui_base_features.h"
 #endif
 
 namespace content {
@@ -54,15 +54,29 @@ namespace {
 void TimedOut() {
   LOG(FATAL) << "Timed out waiting for GPU channel.";
 }
+
+void DumpGpuStackOnIO() {
+  GpuProcessHost* host =
+      GpuProcessHost::Get(GPU_PROCESS_KIND_SANDBOXED, /*force_create=*/false);
+  if (host) {
+    host->DumpProcessStack();
+  }
+  GetUIThreadTaskRunner({})->PostTask(FROM_HERE, base::BindOnce(&TimedOut));
+}
+
+void TimerFired() {
+  GetIOThreadTaskRunner({})->PostTask(FROM_HERE,
+                                      base::BindOnce(&DumpGpuStackOnIO));
+}
 #endif  // OS_ANDROID
 
 GpuMemoryBufferManagerSingleton* CreateGpuMemoryBufferManagerSingleton(
     int gpu_client_id) {
 #if defined(USE_X11)
-  return new GpuMemoryBufferManagerSingletonX11(gpu_client_id);
-#else
-  return new GpuMemoryBufferManagerSingleton(gpu_client_id);
+  if (!features::IsUsingOzonePlatform())
+    return new GpuMemoryBufferManagerSingletonX11(gpu_client_id);
 #endif
+  return new GpuMemoryBufferManagerSingleton(gpu_client_id);
 }
 
 }  // namespace
@@ -116,8 +130,8 @@ BrowserGpuChannelHostFactory::EstablishRequest::Create(
   scoped_refptr<EstablishRequest> establish_request =
       new EstablishRequest(gpu_client_id, gpu_client_tracing_id);
   // PostTask outside the constructor to ensure at least one reference exists.
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(
           &BrowserGpuChannelHostFactory::EstablishRequest::EstablishOnIO,
           establish_request));
@@ -180,8 +194,8 @@ void BrowserGpuChannelHostFactory::EstablishRequest::OnEstablishedOnIO(
         base::BindOnce(
             &BrowserGpuChannelHostFactory::EstablishRequest::RestartTimeout,
             this));
-    base::PostTask(
-        FROM_HERE, {BrowserThread::IO},
+    GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(
             &BrowserGpuChannelHostFactory::EstablishRequest::EstablishOnIO,
             this));
@@ -290,8 +304,8 @@ BrowserGpuChannelHostFactory::BrowserGpuChannelHostFactory()
     base::FilePath cache_dir =
         GetContentClient()->browser()->GetShaderDiskCacheDirectory();
     if (!cache_dir.empty()) {
-      base::PostTask(
-          FROM_HERE, {BrowserThread::IO},
+      GetIOThreadTaskRunner({})->PostTask(
+          FROM_HERE,
           base::BindOnce(
               &BrowserGpuChannelHostFactory::InitializeShaderDiskCacheOnIO,
               gpu_client_id_, cache_dir));
@@ -304,8 +318,8 @@ BrowserGpuChannelHostFactory::BrowserGpuChannelHostFactory()
       base::FilePath gr_cache_dir =
           GetContentClient()->browser()->GetGrShaderDiskCacheDirectory();
       if (!gr_cache_dir.empty()) {
-        base::PostTask(
-            FROM_HERE, {BrowserThread::IO},
+        GetIOThreadTaskRunner({})->PostTask(
+            FROM_HERE,
             base::BindOnce(
                 &BrowserGpuChannelHostFactory::InitializeGrShaderDiskCacheOnIO,
                 gr_cache_dir));
@@ -437,7 +451,7 @@ void BrowserGpuChannelHostFactory::RestartTimeout() {
 #endif
   timeout_.Start(FROM_HERE,
                  base::TimeDelta::FromSeconds(kGpuChannelTimeoutInSeconds),
-                 base::BindOnce(&TimedOut));
+                 base::BindOnce(&TimerFired));
 #endif  // OS_ANDROID
 }
 

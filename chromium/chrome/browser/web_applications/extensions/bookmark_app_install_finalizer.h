@@ -35,9 +35,6 @@ class BookmarkAppInstallFinalizer : public web_app::InstallFinalizer {
   void FinalizeInstall(const WebApplicationInfo& web_app_info,
                        const FinalizeOptions& options,
                        InstallFinalizedCallback callback) override;
-  void FinalizeFallbackInstallAfterSync(
-      const web_app::AppId& app_id,
-      InstallFinalizedCallback callback) override;
   void FinalizeUninstallAfterSync(const web_app::AppId& app_id,
                                   UninstallWebAppCallback callback) override;
   void FinalizeUpdate(const WebApplicationInfo& web_app_info,
@@ -77,6 +74,7 @@ class BookmarkAppInstallFinalizer : public web_app::InstallFinalizer {
                             const base::Optional<CrxInstallError>& error);
 
   void OnExtensionUpdated(const web_app::AppId& expected_app_id,
+                          const std::string& old_name,
                           InstallFinalizedCallback callback,
                           scoped_refptr<CrxInstaller> crx_installer,
                           const base::Optional<CrxInstallError>& error);

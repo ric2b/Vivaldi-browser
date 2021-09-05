@@ -23,7 +23,10 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.app.tab_activity_glue.ActivityTabWebContentsDelegateAndroid;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.browserservices.permissiondelegation.TrustedWebActivityPermissionManager;
+import org.chromium.chrome.browser.browserservices.ui.controller.Verifier;
 import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabCoordinator;
 import org.chromium.chrome.browser.contextmenu.ChromeContextMenuPopulator;
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulator;
@@ -41,7 +44,6 @@ import org.chromium.chrome.browser.tab.TabDelegateFactory;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
-import org.chromium.chrome.browser.tab_activity_glue.ActivityTabWebContentsDelegateAndroid;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.document.AsyncTabCreationParams;
@@ -56,7 +58,6 @@ import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate
 import org.chromium.components.browser_ui.util.ComposedBrowserControlsVisibilityDelegate;
 import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndroid;
 import org.chromium.components.embedder_support.util.UrlUtilities;
-import org.chromium.components.external_intents.ExternalNavigationDelegate.StartActivityIfNeededResult;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.BrowserControlsState;
@@ -64,6 +65,8 @@ import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 
 import javax.inject.Inject;
+
+import dagger.Lazy;
 
 /**
  * A {@link TabDelegateFactory} class to be used in all {@link Tab} owned
@@ -82,7 +85,7 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         private static final String TAG = "customtabs";
         private final String mClientPackageName;
         private final ExternalAuthUtils mExternalAuthUtils;
-        private final ExternalIntentsPolicyProvider mExternalIntentsPolicyProvider;
+        private final Verifier mVerifier;
         private final @ActivityType int mActivityType;
 
         private boolean mHasActivityStarted;
@@ -90,13 +93,12 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         /**
          * Constructs a new instance of {@link CustomTabNavigationDelegate}.
          */
-        CustomTabNavigationDelegate(Tab tab, ExternalAuthUtils authUtils,
-                ExternalIntentsPolicyProvider externalIntentsPolicyProvider,
+        CustomTabNavigationDelegate(Tab tab, ExternalAuthUtils authUtils, Verifier verifier,
                 @ActivityType int activityType) {
             super(tab);
             mClientPackageName = TabAssociatedApp.from(tab).getAppId();
             mExternalAuthUtils = authUtils;
-            mExternalIntentsPolicyProvider = externalIntentsPolicyProvider;
+            mVerifier = verifier;
             mActivityType = activityType;
         }
 
@@ -183,8 +185,7 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         public boolean shouldDisableExternalIntentRequestsForUrl(String url) {
             // http://crbug.com/647569 : Do not forward URL requests to external intents for URLs
             // within the Webapp/TWA's scope.
-            return mExternalIntentsPolicyProvider != null 
-                && mExternalIntentsPolicyProvider.shouldIgnoreExternalIntentHandlers(url);
+            return mVerifier != null && mVerifier.shouldIgnoreExternalIntentHandlers(url);
         }
     }
 
@@ -326,6 +327,18 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         public boolean canShowAppBanners() {
             return mActivityType == ActivityType.CUSTOM_TAB;
         }
+
+        @Override
+        protected boolean isInstalledWebappDelegateGeolocation() {
+            if ((mActivity instanceof CustomTabActivity)
+                    && ((CustomTabActivity) mActivity).isInTwaMode()) {
+                // Whether the corresponding TWA client app enrolled in location delegation.
+                return TrustedWebActivityPermissionManager.hasAndroidLocationPermission(
+                               ((CustomTabActivity) mActivity).getTwaPackage())
+                        != null;
+            }
+            return false;
+        }
     }
 
     private final ChromeActivity<?> mActivity;
@@ -340,11 +353,11 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
     private final ExternalAuthUtils mExternalAuthUtils;
     private final MultiWindowUtils mMultiWindowUtils;
     private final PendingIntent mFocusIntent;
-    private ExternalIntentsPolicyProvider mExternalIntentsPolicyProvider;
+    private final Verifier mVerifier;
 
     private TabWebContentsDelegateAndroid mWebContentsDelegateAndroid;
     private ExternalNavigationDelegateImpl mNavigationDelegate;
-    private EphemeralTabCoordinator mEphemeralTabCoordinator;
+    private Lazy<EphemeralTabCoordinator> mEphemeralTabCoordinator;
 
     /**
      * @param activity {@link ChromeActivity} instance.
@@ -359,13 +372,16 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
      * @param authUtils To determine whether apps are Google signed.
      * @param multiWindowUtils To use to determine which ChromeTabbedActivity to open new tabs in.
      * @param focusIntent A PendingIntent to launch to focus the client.
+     * @param verifier Decides how to handle navigation to a new URL.
+     * @param ephemeralTabCoordinatorSupplier A provider of {@link EphemeralTabCoordinator} that
+     *                                        shows preview tab.
      */
     private CustomTabDelegateFactory(ChromeActivity<?> activity, boolean shouldHideBrowserControls,
             boolean isOpenedByChrome, @Nullable String webApkScopeUrl,
             @WebDisplayMode int displayMode, boolean shouldEnableEmbeddedMediaExperience,
             BrowserControlsVisibilityDelegate visibilityDelegate, ExternalAuthUtils authUtils,
             MultiWindowUtils multiWindowUtils, @Nullable PendingIntent focusIntent,
-            ExternalIntentsPolicyProvider externalIntentsPolicyProvider) {
+            Verifier verifier, Lazy<EphemeralTabCoordinator> ephemeralTabCoordinator) {
         mActivity = activity;
         mShouldHideBrowserControls = shouldHideBrowserControls;
         mIsOpenedByChrome = isOpenedByChrome;
@@ -377,21 +393,22 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         mExternalAuthUtils = authUtils;
         mMultiWindowUtils = multiWindowUtils;
         mFocusIntent = focusIntent;
-        mExternalIntentsPolicyProvider = externalIntentsPolicyProvider;
+        mVerifier = verifier;
+        mEphemeralTabCoordinator = ephemeralTabCoordinator;
     }
 
     @Inject
     public CustomTabDelegateFactory(ChromeActivity<?> activity,
             BrowserServicesIntentDataProvider intentDataProvider,
             CustomTabBrowserControlsVisibilityDelegate visibilityDelegate,
-            ExternalAuthUtils authUtils, MultiWindowUtils multiWindowUtils,
-            ExternalIntentsPolicyProvider externalIntentsPolicyProvider) {
+            ExternalAuthUtils authUtils, MultiWindowUtils multiWindowUtils, Verifier verifier,
+            Lazy<EphemeralTabCoordinator> ephemeralTabCoordinator) {
         this(activity, intentDataProvider.shouldEnableUrlBarHiding(),
                 intentDataProvider.isOpenedByChrome(), getWebApkScopeUrl(intentDataProvider),
                 getDisplayMode(intentDataProvider),
                 intentDataProvider.shouldEnableEmbeddedMediaExperience(), visibilityDelegate,
-                authUtils, multiWindowUtils, intentDataProvider.getFocusIntent(),
-                externalIntentsPolicyProvider);
+                authUtils, multiWindowUtils, intentDataProvider.getFocusIntent(), verifier,
+                ephemeralTabCoordinator);
     }
 
     /**
@@ -400,7 +417,7 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
      */
     static CustomTabDelegateFactory createDummy() {
         return new CustomTabDelegateFactory(null, false, false, null, WebDisplayMode.BROWSER, false,
-                null, null, null, null, null);
+                null, null, null, null, null, () -> null);
     }
 
     @Override
@@ -441,7 +458,7 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
             mNavigationDelegate = new ExternalNavigationDelegateImpl(tab);
         } else {
             mNavigationDelegate = new CustomTabNavigationDelegate(
-                    tab, mExternalAuthUtils, mExternalIntentsPolicyProvider, mActivityType);
+                    tab, mExternalAuthUtils, mVerifier, mActivityType);
         }
         return new ExternalNavigationHandler(mNavigationDelegate);
     }
@@ -452,16 +469,12 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         int contextMenuMode = getContextMenuMode(mActivityType);
         Supplier<ShareDelegate> shareDelegateSupplier =
                 mActivity == null ? null : mActivity.getShareDelegateSupplier();
-        if (EphemeralTabCoordinator.isSupported() && mActivity != null) {
-            mEphemeralTabCoordinator = new EphemeralTabCoordinator(mActivity,
-                    mActivity.getWindowAndroid(), mActivity.getWindow().getDecorView(),
-                    mActivity.getActivityTabProvider(), mActivity::getCurrentTabCreator,
-                    mActivity::getBottomSheetController, () -> false);
-        }
         TabModelSelector tabModelSelector =
                 mActivity != null ? mActivity.getTabModelSelector() : null;
-        return new ChromeContextMenuPopulator(new TabContextMenuItemDelegate(tab, tabModelSelector,
-                                                      () -> mEphemeralTabCoordinator),
+        return new ChromeContextMenuPopulator(
+                new TabContextMenuItemDelegate(tab, tabModelSelector,
+                        EphemeralTabCoordinator.isSupported() ? mEphemeralTabCoordinator::get
+                                                              : () -> null),
                 shareDelegateSupplier, contextMenuMode, ExternalAuthUtils.getInstance());
     }
 

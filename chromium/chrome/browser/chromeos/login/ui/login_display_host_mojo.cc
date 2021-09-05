@@ -18,6 +18,7 @@
 #include "chrome/browser/chromeos/certificate_provider/pin_dialog_manager.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/mojo_system_info_dispatcher.h"
+#include "chrome/browser/chromeos/login/reauth_stats.h"
 #include "chrome/browser/chromeos/login/screens/chrome_user_selection_screen.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
 #include "chrome/browser/chromeos/login/ui/login_display_mojo.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/ui/ash/login_screen_client.h"
 #include "chrome/browser/ui/ash/system_tray_client.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
+#include "chrome/browser/ui/webui/chromeos/login/gaia_password_changed_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -72,6 +74,9 @@ LoginDisplayHostMojo::LoginDisplayHostMojo()
   // Preload webui-based OOBE for add user, kiosk apps, etc.
   LoadOobeDialog();
 
+  // Should be created after OobeUI loaded with the dialog.
+  wizard_controller_ = std::make_unique<WizardController>();
+
   GetLoginScreenCertProviderService()->pin_dialog_manager()->AddPinDialogHost(
       &security_token_pin_dialog_host_ash_impl_);
 }
@@ -97,29 +102,33 @@ void LoginDisplayHostMojo::OnDialogDestroyed(
   }
 }
 
-void LoginDisplayHostMojo::SetUsers(const user_manager::UserList& users) {
-  users_ = users;
+void LoginDisplayHostMojo::SetUserCount(int user_count) {
+  const bool was_zero_users = (user_count_ == 0);
+  user_count_ = user_count;
   if (GetOobeUI())
-    GetOobeUI()->SetLoginUserCount(users_.size());
+    GetOobeUI()->SetLoginUserCount(user_count_);
+
+  // Hide Gaia dialog in case empty list of users switched to a non-empty one.
+  // And if the dialog shows login screen.
+  if (was_zero_users && user_count_ != 0 && dialog_ && dialog_->IsVisible() &&
+      (!wizard_controller_->is_initialized() ||
+       wizard_controller_->login_screen_started())) {
+    HideOobeDialog();
+  }
 }
 
-void LoginDisplayHostMojo::ShowPasswordChangedDialog(bool show_password_error,
-                                                     const std::string& email) {
+void LoginDisplayHostMojo::ShowPasswordChangedDialog(
+    bool show_password_error,
+    const AccountId& account_id) {
   DCHECK(GetOobeUI());
-  GetOobeUI()->signin_screen_handler()->ShowPasswordChangedDialog(
-      show_password_error, email);
+  wizard_controller_->ShowGaiaPasswordChangedScreen(account_id,
+                                                    show_password_error);
   ShowDialog();
 }
 
 void LoginDisplayHostMojo::ShowWhitelistCheckFailedError() {
   DCHECK(GetOobeUI());
   GetOobeUI()->signin_screen_handler()->ShowWhitelistCheckFailedError();
-  ShowDialog();
-}
-
-void LoginDisplayHostMojo::ShowErrorScreen(LoginDisplay::SigninError error_id) {
-  DCHECK(GetOobeUI());
-  GetOobeUI()->signin_screen_handler()->ShowErrorScreen(error_id);
   ShowDialog();
 }
 
@@ -188,8 +197,11 @@ void LoginDisplayHostMojo::StartWizard(OobeScreenId first_screen) {
   // screens to show.
   ObserveOobeUI();
 
-  if (features::IsOobeScreensPriorityEnabled() && wizard_controller_) {
-    wizard_controller_->AdvanceToScreen(first_screen);
+  if (features::IsOobeScreensPriorityEnabled()) {
+    if (wizard_controller_->is_initialized())
+      wizard_controller_->AdvanceToScreen(first_screen);
+    else
+      wizard_controller_->Init(first_screen);
   } else {
     wizard_controller_ = std::make_unique<WizardController>();
     wizard_controller_->Init(first_screen);
@@ -270,6 +282,11 @@ void LoginDisplayHostMojo::OnBrowserCreated() {
 void LoginDisplayHostMojo::ShowGaiaDialog(const AccountId& prefilled_account) {
   DCHECK(GetOobeUI());
 
+  if (prefilled_account.is_valid()) {
+    gaia_reauth_account_id_ = prefilled_account;
+  } else {
+    gaia_reauth_account_id_.reset();
+  }
   ShowGaiaDialogCommon(prefilled_account);
 
   ShowDialog();
@@ -285,7 +302,7 @@ void LoginDisplayHostMojo::HideOobeDialog() {
   // reload it to ensure that no state is persisted between hide and
   // subsequent show.
   const bool no_users =
-      !login_display_->IsSigninInProgress() && users_.empty();
+      !login_display_->IsSigninInProgress() && user_count_ == 0;
   if (no_users || GetOobeUI()->current_screen() == GaiaView::kScreenId) {
     GetOobeUI()->GetView<GaiaScreenHandler>()->ShowGaiaAsync(EmptyAccountId());
     if (no_users)
@@ -300,10 +317,6 @@ void LoginDisplayHostMojo::HideOobeDialog() {
 void LoginDisplayHostMojo::UpdateOobeDialogState(ash::OobeDialogState state) {
   if (dialog_)
     dialog_->SetState(state);
-}
-
-const user_manager::UserList LoginDisplayHostMojo::GetUsers() {
-  return users_;
 }
 
 void LoginDisplayHostMojo::ShowFeedback() {
@@ -361,19 +374,6 @@ void LoginDisplayHostMojo::HandleAuthenticateUserWithPasswordOrPin(
   }
 
   existing_user_controller_->Login(user_context, chromeos::SigninSpecifics());
-}
-
-void LoginDisplayHostMojo::HandleAuthenticateUserWithExternalBinary(
-    const AccountId& account_id,
-    base::OnceCallback<void(bool)> callback) {
-  // Authenticating with an external binary is not supported for login.
-  std::move(callback).Run(false);
-}
-
-void LoginDisplayHostMojo::HandleEnrollUserWithExternalBinary(
-    base::OnceCallback<void(bool)> callback) {
-  // Enroll in external binary auth system is not supported for login.
-  std::move(callback).Run(false);
 }
 
 void LoginDisplayHostMojo::HandleAuthenticateUserWithEasyUnlock(
@@ -453,9 +453,21 @@ void LoginDisplayHostMojo::OnAuthSuccess(const UserContext& user_context) {
     std::move(pending_auth_state_->callback).Run(true);
     pending_auth_state_.reset();
   }
+
+  if (gaia_reauth_account_id_.has_value()) {
+    SendReauthReason(gaia_reauth_account_id_.value(),
+                     false /* password changed */);
+    gaia_reauth_account_id_.reset();
+  }
 }
 
-void LoginDisplayHostMojo::OnPasswordChangeDetected() {}
+void LoginDisplayHostMojo::OnPasswordChangeDetected(
+    const UserContext& user_context) {
+  if (user_context.GetAccountId().is_valid()) {
+    SendReauthReason(user_context.GetAccountId(), true /* password changed */);
+  }
+  gaia_reauth_account_id_.reset();
+}
 
 void LoginDisplayHostMojo::OnOldEncryptionDetected(
     const UserContext& user_context,
@@ -521,6 +533,7 @@ void LoginDisplayHostMojo::HideDialog() {
   // with hidden error screens).
   StopObservingOobeUI();
   dialog_->Hide();
+  gaia_reauth_account_id_.reset();
 }
 
 void LoginDisplayHostMojo::ObserveOobeUI() {

@@ -119,8 +119,11 @@ class FeedStream : public FeedStreamApi,
       std::vector<feedstore::DataOperation> operations) override;
   EphemeralChangeId CreateEphemeralChange(
       std::vector<feedstore::DataOperation> operations) override;
+  EphemeralChangeId CreateEphemeralChangeFromPackedData(
+      base::StringPiece data) override;
   bool CommitEphemeralChange(EphemeralChangeId id) override;
   bool RejectEphemeralChange(EphemeralChangeId id) override;
+  void ProcessThereAndBackAgain(base::StringPiece data) override;
   DebugStreamData GetDebugStreamData() override;
   void ForceRefreshForDebugging() override;
   std::string DumpStateForDebugging() override;
@@ -140,6 +143,7 @@ class FeedStream : public FeedStreamApi,
   void ReportManageInterestsAction() override;
   void ReportContextMenuOpened() override;
   void ReportStreamScrolled(int distance_dp) override;
+  void ReportStreamScrollStart() override;
 
   // offline_pages::TaskQueue::Delegate.
   void OnTaskQueueIsIdle() override;
@@ -194,8 +198,11 @@ class FeedStream : public FeedStreamApi,
 
   // Determines if a FeedQuery request can be made. If successful,
   // returns |LoadStreamStatus::kNoStatus| and acquires throttler quota.
-  // Otherwise returns the reason.
-  LoadStreamStatus ShouldMakeFeedQueryRequest(bool is_load_more = false);
+  // Otherwise returns the reason. If |consume_quota| is false, no quota is
+  // consumed. This can be used to predict the likely result on a subsequent
+  // call.
+  LoadStreamStatus ShouldMakeFeedQueryRequest(bool is_load_more = false,
+                                              bool consume_quota = true);
 
   // Unloads the model. Surfaces are not updated, and will remain frozen until a
   // model load is requested.
@@ -229,15 +236,25 @@ class FeedStream : public FeedStreamApi,
 
  private:
   class ModelStoreChangeMonitor;
+
+  base::WeakPtr<FeedStream> GetWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
+
   // A single function task to delete stored feed data and force a refresh.
   // To only be called from within a |Task|.
   void ForceRefreshForDebuggingTask();
+
+  void AddUnloadModelIfNoSurfacesAttachedTask(int sequence_number);
+  void UnloadModelIfNoSurfacesAttachedTask();
 
   void InitialStreamLoadComplete(LoadStreamTask::Result result);
   void LoadMoreComplete(LoadMoreTask::Result result);
   void BackgroundRefreshComplete(LoadStreamTask::Result result);
 
   void ClearAll();
+
+  bool IsFeedEnabledByEnterprisePolicy();
 
   // Unowned.
 
@@ -268,9 +285,12 @@ class FeedStream : public FeedStreamApi,
   base::TimeTicks suppress_refreshes_until_;
   std::vector<base::OnceCallback<void(bool)>> load_more_complete_callbacks_;
   Metadata metadata_;
+  int unload_on_detach_sequence_number_ = 0;
 
   // To allow tests to wait on task queue idle.
   base::RepeatingClosure idle_callback_;
+
+  base::WeakPtrFactory<FeedStream> weak_ptr_factory_{this};
 };
 
 }  // namespace feed

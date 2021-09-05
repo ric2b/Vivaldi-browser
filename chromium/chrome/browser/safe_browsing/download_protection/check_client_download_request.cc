@@ -53,12 +53,16 @@ namespace {
 void MaybeOverrideDlpScanResult(DownloadCheckResultReason reason,
                                 CheckDownloadRepeatingCallback callback,
                                 DownloadCheckResult deep_scan_result) {
-  if (reason == REASON_DOWNLOAD_DANGEROUS) {
+  if (reason == REASON_DOWNLOAD_DANGEROUS ||
+      reason == REASON_DOWNLOAD_DANGEROUS_HOST) {
     switch (deep_scan_result) {
       case DownloadCheckResult::UNKNOWN:
       case DownloadCheckResult::SENSITIVE_CONTENT_WARNING:
       case DownloadCheckResult::DEEP_SCANNED_SAFE:
-        callback.Run(DownloadCheckResult::DANGEROUS);
+        if (reason == REASON_DOWNLOAD_DANGEROUS)
+          callback.Run(DownloadCheckResult::DANGEROUS);
+        else
+          callback.Run(DownloadCheckResult::DANGEROUS_HOST);
         return;
 
       case DownloadCheckResult::ASYNC_SCANNING:
@@ -259,27 +263,40 @@ void CheckClientDownloadRequest::MaybeStorePingsForDownload(
       result, upload_requested, item_, request_data, response_body);
 }
 
-bool CheckClientDownloadRequest::ShouldUploadBinary(
+base::Optional<enterprise_connectors::AnalysisSettings>
+CheckClientDownloadRequest::ShouldUploadBinary(
     DownloadCheckResultReason reason) {
   // If the download was destroyed, we can't upload it.
   if (reason == REASON_DOWNLOAD_DESTROYED)
-    return false;
+    return base::nullopt;
 
-  return DeepScanningRequest::ShouldUploadItemByPolicy(item_);
+  auto settings = DeepScanningRequest::ShouldUploadBinary(item_);
+  if (settings && (reason == REASON_DOWNLOAD_DANGEROUS ||
+                   reason == REASON_DOWNLOAD_DANGEROUS_HOST ||
+                   reason == REASON_WHITELISTED_URL)) {
+    settings->tags.erase("malware");
+    if (settings->tags.empty())
+      return base::nullopt;
+  }
+
+  return settings;
 }
 
 void CheckClientDownloadRequest::UploadBinary(
-    DownloadCheckResultReason reason) {
-  if (reason == REASON_DOWNLOAD_DANGEROUS || reason == REASON_WHITELISTED_URL) {
+    DownloadCheckResultReason reason,
+    enterprise_connectors::AnalysisSettings settings) {
+  if (reason == REASON_DOWNLOAD_DANGEROUS ||
+      reason == REASON_DOWNLOAD_DANGEROUS_HOST ||
+      reason == REASON_WHITELISTED_URL) {
     service()->UploadForDeepScanning(
         item_,
         base::BindRepeating(&MaybeOverrideDlpScanResult, reason, callback_),
         DeepScanningRequest::DeepScanTrigger::TRIGGER_POLICY,
-        {DeepScanningRequest::DeepScanType::SCAN_DLP});
+        std::move(settings));
   } else {
     service()->UploadForDeepScanning(
         item_, callback_, DeepScanningRequest::DeepScanTrigger::TRIGGER_POLICY,
-        DeepScanningRequest::AllScans());
+        std::move(settings));
   }
 }
 

@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(Inkognitó)</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Fájlleírók</translation>
-<translation id="1635033183663317347">A gondviselő telepítette.</translation>
 <translation id="1682548588986054654">Új inkognitó ablak</translation>
 <translation id="1698122934742150150">Csak a jelenlegi inkognitó munkamenet</translation>
 <translation id="1706625117072057435">Nagyítási/kicsinyítési szintek</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">Bővítmény: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Képernyő-megosztási kérés</translation>
 <translation id="3711931198657368127"><ph name="URL" /> be&amp;illesztése és felkeresése</translation>
-<translation id="3725367690636977613">oldal</translation>
 <translation id="3727187387656390258">Felugró ablak vizsgálata</translation>
 <translation id="3744111561329211289">Szinkronizálás a háttérben</translation>
 <translation id="3760460896538743390">&amp;Háttéroldal vizsgálata</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Elfogadás a csoportra vonatkozóan</translation>
-<translation id="4091434297613116013">papírlap</translation>
 <translation id="4096508467498758490">A fejlesztői módban futó bővítmények kikapcsolása</translation>
 <translation id="4100839878934973028">A számítógépen lévő egyik program olyan alkalmazást adott hozzá, amely módosíthatja a Vivaldi működését.</translation>
 <translation id="4109898769411476438">Importálás előtt zárd be a böngészőt</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> × <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">&amp;Vezérlők megjelenítése</translation>
 <translation id="7311079019872751559">Sandbox-technológiát nem alkalmazó beépülő modul hozzáférése</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Valami nem sikerült a nyomtatás során. Ellenőrizd a nyomtatót, és próbáld újra.</translation>
 <translation id="7412226954991670867">GPU memória</translation>
 <translation id="7421925624202799674">&amp;Oldal forrásának megtekintése</translation>
@@ -422,19 +418,18 @@
 <translation id="7982789257301363584">Hálózat</translation>
 <translation id="7997826902155442747">Folyamatprioritás</translation>
 <translation id="7999229196265990314">A rendszer a következő fájlokat hozta létre:
-        
+
 Bővítmény: <ph name="EXTENSION_FILE" />
 Kulcsfájl: <ph name="KEY_FILE" />
 
-A kulcsfájlt tartsa biztonságos helyen. Szüksége lesz rá ahhoz, hogy új verziókat készítsen bővítményéből.</translation>
+A kulcsfájlt tartsd biztonságos helyen. Szükséged lesz rá ahhoz, hogy új verziókat készíts bővítményedből.</translation>
 <translation id="8004582292198964060">Böngésző</translation>
 <translation id="8018313076035239964">Szabályozhatod, hogy a webhelyek milyen adatokat használhatnak fel, és milyen tartalmakat jeleníthetnek meg</translation>
 <translation id="8032244173881942855">Nem lehet átküldeni a lapot.</translation>
 <translation id="8071432093239591881">Nyomtatás képként</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Bővítmények kezelése</translation>
-<translation id="8180239481735238521">weboldal</translation>
-<translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Letöltés folyamatban}other{Letöltések folyamatban}}</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD, plural, =1 {Letöltés folyamatban} other {Letöltések folyamatban}}</translation>
 <translation id="8230134520748321204">Szeretnéd elmenteni a(z) <ph name="ORIGIN" /> jelszavát?</translation>
 <translation id="8261378640211443080">A bővítmény nem a(z) <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> szolgáltatásból származik, és előfordulhat, hogy az Ön tudta nélkül lett telepítve.</translation>
 <translation id="8270242299912238708">PDF-dokumentumok</translation>
@@ -465,7 +460,6 @@ A kulcsfájlt tartsa biztonságos helyen. Szüksége lesz rá ahhoz, hogy új ve
 <translation id="8798099450830957504">Alapértelmezett</translation>
 <translation id="8800004011501252845">Célhelyek megjelenítése a következőhöz:</translation>
 <translation id="8808478386290700967">Vivaldi internetes áruház</translation>
-<translation id="8813811964357448561">papírlap</translation>
 <translation id="8823514049557262177">Hivatkozás szövegének má&amp;solása</translation>
 <translation id="8823704566850948458">Jelszó ajánlása…</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>
@@ -484,7 +478,7 @@ A kulcsfájlt tartsa biztonságos helyen. Szüksége lesz rá ahhoz, hogy új ve
 <translation id="9137916601698928395">Hivatkozás megnyitása mint <ph name="USER" /></translation>
 <translation id="916607977885256133">Kép a képben</translation>
 <translation id="9170848237812810038">&amp;Visszavonás</translation>
-<translation id="9215293857209265904">„<ph name="EXTENSION_NAME" />” hozzáadva</translation>
+<translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" hozzáadva</translation>
 <translation id="9218430445555521422">Beállítás alapértelmezettként</translation>
 <translation id="9219103736887031265">Képek</translation>
 <translation id="93766956588638423">Bővítmény javítása</translation>

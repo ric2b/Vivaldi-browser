@@ -278,7 +278,7 @@ bool SupervisedUserService::IsSupervisedUserIframeFilterEnabled() const {
 }
 
 bool SupervisedUserService::IsChild() const {
-  return profile_->IsSupervised();
+  return profile_->IsChild();
 }
 
 bool SupervisedUserService::IsSupervisedUserExtensionInstallEnabled() const {
@@ -373,6 +373,9 @@ void SupervisedUserService::UpdateApprovedExtensionForTesting(
 
 bool SupervisedUserService::
     GetSupervisedUserExtensionsMayRequestPermissionsPref() const {
+  DCHECK(IsChild())
+      << "Calling GetSupervisedUserExtensionsMayRequestPermissionsPref() only "
+         "makes sense for supervised users";
   return profile_->GetPrefs()->GetBoolean(
       prefs::kSupervisedUserExtensionsMayRequestPermissions);
 }
@@ -580,6 +583,7 @@ void SupervisedUserService::OnDefaultFilteringBehaviorChanged() {
   SupervisedUserURLFilter::FilteringBehavior behavior =
       SupervisedUserURLFilter::BehaviorFromInt(behavior_value);
   url_filter_.SetDefaultFilteringBehavior(behavior);
+  UpdateAsyncUrlChecker();
 
   for (SupervisedUserServiceObserver& observer : observer_list_)
     observer.OnURLFilterChanged();
@@ -600,8 +604,19 @@ void SupervisedUserService::OnSafeSitesSettingChanged() {
     // Do nothing - we'll check the setting again when the load finishes.
   }
 
+  UpdateAsyncUrlChecker();
+}
+
+void SupervisedUserService::UpdateAsyncUrlChecker() {
+  int behavior_value = profile_->GetPrefs()->GetInteger(
+      prefs::kDefaultSupervisedUserFilteringBehavior);
+  SupervisedUserURLFilter::FilteringBehavior behavior =
+      SupervisedUserURLFilter::BehaviorFromInt(behavior_value);
+
   bool use_online_check =
-      supervised_users::IsSafeSitesOnlineCheckEnabled(profile_);
+      supervised_users::IsSafeSitesOnlineCheckEnabled(profile_) ||
+      behavior == SupervisedUserURLFilter::FilteringBehavior::BLOCK;
+
   if (use_online_check != url_filter_.HasAsyncURLChecker()) {
     if (use_online_check) {
       url_filter_.InitAsyncURLChecker(
@@ -1012,7 +1027,7 @@ bool SupervisedUserService::IsEncryptEverythingAllowed() const {
 
 #if !defined(OS_ANDROID)
 void SupervisedUserService::OnBrowserSetLastActive(Browser* browser) {
-  bool profile_became_active = profile_->IsSameProfile(browser->profile());
+  bool profile_became_active = profile_->IsSameOrParent(browser->profile());
   if (!is_profile_active_ && profile_became_active)
     base::RecordAction(UserMetricsAction("ManagedUsers_OpenProfile"));
   else if (is_profile_active_ && !profile_became_active)

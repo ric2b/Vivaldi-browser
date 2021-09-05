@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import remote_cmd
+import runner_logs
 import shutil
 import subprocess
 import sys
@@ -21,7 +22,7 @@ _ATTACH_RETRY_SECONDS = 120
 
 # Amount of time to wait for Amber to complete package installation, as a
 # mitigation against hangs due to amber/network-related failures.
-_INSTALL_TIMEOUT_SECS = 5 * 60
+_INSTALL_TIMEOUT_SECS = 10 * 60
 
 
 def _GetPackageUri(package_name):
@@ -216,9 +217,14 @@ class Target(object):
 
     host, port = self._GetEndpoint()
     end_time = time.time() + _ATTACH_RETRY_SECONDS
+    ssh_diagnostic_log = runner_logs.FileStreamFor('ssh_diagnostic_log')
     while time.time() < end_time:
       runner = remote_cmd.CommandRunner(self._GetSshConfigPath(), host, port)
-      if runner.RunCommand(['true'], True) == 0:
+      ssh_proc = runner.RunCommandPiped(['true'],
+                                        ssh_args=['-v'],
+                                        stdout=ssh_diagnostic_log,
+                                        stderr=subprocess.STDOUT)
+      if ssh_proc.wait() == 0:
         logging.info('Connected!')
         self._started = True
         return True

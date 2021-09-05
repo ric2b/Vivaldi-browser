@@ -25,7 +25,7 @@ class PasswordsModelDelegateMock
                password_manager::PasswordFormMetricsRecorder*());
   MOCK_METHOD0(GetPasswordFeatureManager,
                password_manager::PasswordFeatureManager*());
-  MOCK_CONST_METHOD0(GetOrigin, const GURL&());
+  MOCK_CONST_METHOD0(GetOrigin, url::Origin());
   MOCK_CONST_METHOD0(GetState, password_manager::ui::State());
   MOCK_CONST_METHOD0(GetPendingPassword, const autofill::PasswordForm&());
   MOCK_CONST_METHOD0(GetUnsyncedCredentials,
@@ -37,6 +37,7 @@ class PasswordsModelDelegateMock
       const std::vector<std::unique_ptr<autofill::PasswordForm>>&());
   MOCK_CONST_METHOD0(GetCurrentInteractionStats,
                      password_manager::InteractionsStats*());
+  MOCK_CONST_METHOD0(DidAuthForAccountStoreOptInFail, bool());
   MOCK_CONST_METHOD0(BubbleIsManualFallbackForSaving, bool());
   MOCK_METHOD0(OnBubbleShown, void());
   MOCK_METHOD0(OnBubbleHidden, void());
@@ -47,7 +48,10 @@ class PasswordsModelDelegateMock
   MOCK_METHOD0(OnPasswordsRevealed, void());
   MOCK_METHOD2(SavePassword,
                void(const base::string16&, const base::string16&));
+  MOCK_METHOD0(SaveUnsyncedCredentialsInProfileStore, void());
+  MOCK_METHOD0(DiscardUnsyncedCredentials, void());
   MOCK_METHOD0(MovePasswordToAccountStore, void());
+  MOCK_METHOD0(BlockMovingPasswordToAccountStore, void());
   MOCK_METHOD2(ChooseCredential,
                void(const autofill::PasswordForm&,
                     password_manager::CredentialType));
@@ -61,6 +65,7 @@ class PasswordsModelDelegateMock
   MOCK_METHOD0(AuthenticateUser, bool());
   MOCK_METHOD2(AuthenticateUserForAccountStoreOptInAndSavePassword,
                void(const base::string16&, const base::string16&));
+  MOCK_METHOD0(AuthenticateUserForAccountStoreOptInAndMovePassword, void());
   MOCK_CONST_METHOD0(ArePasswordsRevealedWhenBubbleIsOpened, bool());
 
  private:

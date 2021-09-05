@@ -31,21 +31,19 @@ class OobeUI;
 // coordinating loading the kiosk profile, launching the app, and
 // updating the splash screen UI.
 class AppLaunchController : public KioskProfileLoader::Delegate,
-                            public StartupAppLauncher::Delegate,
+                            public KioskAppLauncher::Delegate,
                             public AppLaunchSigninScreen::Delegate,
                             public AppLaunchSplashScreenView::Delegate {
  public:
   typedef base::Callback<bool()> ReturnBoolCallback;
 
   AppLaunchController(const std::string& app_id,
-                      bool diagnostic_mode,
                       LoginDisplayHost* host,
                       OobeUI* oobe_ui);
 
   ~AppLaunchController() override;
 
-  // Starts launching an app - set |auto_launch| to true if the app is being
-  // auto-launched with zero delay.
+  // Starts launching an app.
   void StartAppLaunch(bool auto_launch);
 
   bool waiting_for_network() { return waiting_for_network_; }
@@ -72,15 +70,9 @@ class AppLaunchController : public KioskProfileLoader::Delegate,
   static void SetBlockAppLaunchForTesting(bool block);
 
  private:
-  // A class to watch app window creation.
-  class AppWindowWatcher;
-
   void ClearNetworkWaitTimer();
   void CleanUp();
   void OnNetworkWaitTimedout();
-
-  // Callback of AppWindowWatcher to notify an app window is created.
-  void OnAppWindowCreated();
 
   // Whether the network could be configured during launching.
   bool CanConfigureNetwork();
@@ -99,30 +91,30 @@ class AppLaunchController : public KioskProfileLoader::Delegate,
   // KioskProfileLoader::Delegate overrides:
   void OnProfileLoaded(Profile* profile) override;
   void OnProfileLoadFailed(KioskAppLaunchError::Error error) override;
+  void OnOldEncryptionDetected(const UserContext& user_context) override;
 
-  // StartupAppLauncher::Delegate overrides:
+  // KioskAppLauncher::Delegate overrides:
   void InitializeNetwork() override;
-  bool IsNetworkReady() override;
-  bool ShouldSkipAppInstallation() override;
-  void OnInstallingApp() override;
-  void OnReadyToLaunch() override;
-  void OnLaunchSucceeded() override;
+  bool IsNetworkReady() const override;
+  bool ShouldSkipAppInstallation() const override;
+  void OnAppInstalling() override;
+  void OnAppPrepared() override;
+  void OnAppLaunched() override;
   void OnLaunchFailed(KioskAppLaunchError::Error error) override;
-  bool IsShowingNetworkConfigScreen() override;
+  void OnAppWindowCreated() override;
+  bool IsShowingNetworkConfigScreen() const override;
 
   // AppLaunchSigninScreen::Delegate overrides:
   void OnOwnerSigninSuccess() override;
 
   Profile* profile_ = nullptr;
   const std::string app_id_;
-  const bool diagnostic_mode_;
   LoginDisplayHost* host_ = nullptr;
   OobeUI* oobe_ui_ = nullptr;
   AppLaunchSplashScreenView* app_launch_splash_screen_view_ = nullptr;
   std::unique_ptr<KioskProfileLoader> kiosk_profile_loader_;
-  std::unique_ptr<StartupAppLauncher> startup_app_launcher_;
+  std::unique_ptr<KioskAppLauncher> startup_app_launcher_;
   std::unique_ptr<AppLaunchSigninScreen> signin_screen_;
-  std::unique_ptr<AppWindowWatcher> app_window_watcher_;
 
   bool launcher_ready_ = false;
   bool cleaned_up_ = false;

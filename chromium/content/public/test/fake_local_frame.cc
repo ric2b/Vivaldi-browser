@@ -34,6 +34,8 @@ void FakeLocalFrame::SetFrameOwnerProperties(
 
 void FakeLocalFrame::NotifyUserActivation() {}
 
+void FakeLocalFrame::NotifyVirtualKeyboardOverlayRect(const gfx::Rect&) {}
+
 void FakeLocalFrame::AddMessageToConsole(
     blink::mojom::ConsoleMessageLevel level,
     const std::string& message,
@@ -97,6 +99,9 @@ void FakeLocalFrame::PostMessageEvent(
     const base::string16& target_origin,
     blink::TransferableMessage message) {}
 
+void FakeLocalFrame::GetSavableResourceLinks(
+    GetSavableResourceLinksCallback callback) {}
+
 #if defined(OS_MACOSX)
 void FakeLocalFrame::GetCharacterIndexAtPoint(const gfx::Point& point) {}
 void FakeLocalFrame::GetFirstRectForRange(const gfx::Range& range) {}
@@ -104,6 +109,9 @@ void FakeLocalFrame::GetFirstRectForRange(const gfx::Range& range) {}
 
 void FakeLocalFrame::BindReportingObserver(
     mojo::PendingReceiver<blink::mojom::ReportingObserver> receiver) {}
+
+void FakeLocalFrame::UpdateOpener(
+    const base::Optional<base::UnguessableToken>& opener_frame_token) {}
 
 void FakeLocalFrame::BindFrameHostReceiver(
     mojo::ScopedInterfaceEndpointHandle handle) {

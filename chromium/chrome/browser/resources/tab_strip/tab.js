@@ -11,10 +11,10 @@ import {isRTL} from 'chrome://resources/js/util.m.js';
 
 import {AlertIndicatorsElement} from './alert_indicators.js';
 import {CustomElement} from './custom_element.js';
-import {TabStripEmbedderProxy} from './tab_strip_embedder_proxy.js';
+import {TabStripEmbedderProxy, TabStripEmbedderProxyImpl} from './tab_strip_embedder_proxy.js';
 import {tabStripOptions} from './tab_strip_options.js';
 import {TabSwiper} from './tab_swiper.js';
-import {CloseTabAction, TabData, TabNetworkState, TabsApiProxy} from './tabs_api_proxy.js';
+import {CloseTabAction, TabData, TabNetworkState, TabsApiProxy, TabsApiProxyImpl} from './tabs_api_proxy.js';
 
 const DEFAULT_ANIMATION_DURATION = 125;
 
@@ -84,13 +84,21 @@ export class TabElement extends CustomElement {
     this.tab_;
 
     /** @private {!TabsApiProxy} */
-    this.tabsApi_ = TabsApiProxy.getInstance();
+    this.tabsApi_ = TabsApiProxyImpl.getInstance();
 
     /** @private {!TabStripEmbedderProxy} */
-    this.embedderApi_ = TabStripEmbedderProxy.getInstance();
+    this.embedderApi_ = TabStripEmbedderProxyImpl.getInstance();
 
     /** @private {!HTMLElement} */
     this.titleTextEl_ = /** @type {!HTMLElement} */ (this.$('#titleText'));
+
+    /**
+     * Flag indicating if this TabElement can accept dragover events. This
+     * is used to pause dragover events while animating as animating causes
+     * the elements below the pointer to shift.
+     * @private {boolean}
+     */
+    this.isValidDragOverTarget_ = true;
 
     this.tabEl_.addEventListener('click', () => this.onClick_());
     this.tabEl_.addEventListener('contextmenu', e => this.onContextMenu_(e));
@@ -167,6 +175,16 @@ export class TabElement extends CustomElement {
     }
 
     this.tab_ = Object.freeze(tab);
+  }
+
+  /** @return {boolean} */
+  get isValidDragOverTarget() {
+    return !this.hasAttribute('dragging_') && this.isValidDragOverTarget_;
+  }
+
+  /** @param {boolean} isValid */
+  set isValidDragOverTarget(isValid) {
+    this.isValidDragOverTarget_ = isValid;
   }
 
   /** @param {!Function} callback */

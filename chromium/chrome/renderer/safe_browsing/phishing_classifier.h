@@ -27,6 +27,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 
 namespace content {
 class RenderFrame;
@@ -34,7 +35,6 @@ class RenderFrame;
 
 namespace safe_browsing {
 class ClientPhishingRequest;
-class FeatureExtractorClock;
 class FeatureMap;
 class PhishingDOMFeatureExtractor;
 class PhishingTermFeatureExtractor;
@@ -55,11 +55,9 @@ class PhishingClassifier {
   static const float kInvalidScore;
 
   // Creates a new PhishingClassifier object that will operate on
-  // |render_view|.  |clock| is used to time feature extractor operations, and
-  // the PhishingClassifier takes ownership of this object.  Note that the
-  // classifier will not be 'ready' until set_phishing_scorer() is called.
-  PhishingClassifier(content::RenderFrame* render_frame,
-                     FeatureExtractorClock* clock);
+  // |render_view|. Note that the classifier will not be 'ready' until
+  // set_phishing_scorer() is called.
+  explicit PhishingClassifier(content::RenderFrame* render_frame);
   virtual ~PhishingClassifier();
 
   // Sets a scorer for the classifier to use in computing the phishiness score.
@@ -110,15 +108,18 @@ class PhishingClassifier {
   void DOMExtractionFinished(bool success);
 
   // Callback to be run when term feature extraction is complete.
+  // If it was successful, begins visual feature extraction, otherwise runs the
+  // DoneCallback with a non-phishy verdict.
+  void TermExtractionFinished(bool success);
+
+  // Called to extract the visual features of the current page.
+  void ExtractVisualFeatures();
+
+  // Callback when visual feature extraction is complete.
   // If it was successful, computes a score and runs the DoneCallback.
   // If extraction was unsuccessful, runs the DoneCallback with a
   // non-phishy verdict.
-  void TermExtractionFinished(bool success);
-
-  // Helper to verify that there is no pending phishing classification.  Dies
-  // in debug builds if the state is not as expected.  This is a no-op in
-  // release builds.
-  void CheckNoPendingClassification();
+  void VisualExtractionFinished(bool success);
 
   // Helper method to run the DoneCallback and clear the state.
   void RunCallback(const ClientPhishingRequest& verdict);
@@ -132,7 +133,6 @@ class PhishingClassifier {
 
   content::RenderFrame* render_frame_;  // owns us
   const Scorer* scorer_;  // owned by the caller
-  std::unique_ptr<FeatureExtractorClock> clock_;
   std::unique_ptr<PhishingUrlFeatureExtractor> url_extractor_;
   std::unique_ptr<PhishingDOMFeatureExtractor> dom_extractor_;
   std::unique_ptr<PhishingTermFeatureExtractor> term_extractor_;
@@ -141,6 +141,7 @@ class PhishingClassifier {
   std::unique_ptr<FeatureMap> features_;
   std::unique_ptr<std::set<uint32_t>> shingle_hashes_;
   const base::string16* page_text_;  // owned by the caller
+  std::unique_ptr<SkBitmap> bitmap_;
   DoneCallback done_callback_;
 
   // Used in scheduling BeginFeatureExtraction tasks.

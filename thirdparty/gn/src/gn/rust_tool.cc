@@ -42,6 +42,10 @@ void RustTool::SetComplete() {
   SetToolComplete();
 }
 
+std::string_view RustTool::GetSysroot() const {
+  return rust_sysroot_;
+}
+
 bool RustTool::SetOutputExtension(const Value* value,
                                   std::string* var,
                                   Err* err) {
@@ -99,6 +103,11 @@ bool RustTool::InitTool(Scope* scope, Toolchain* toolchain, Err* err) {
 
   // All Rust tools should have outputs.
   if (!ReadOutputsPatternList(scope, "outputs", &outputs_, err)) {
+    return false;
+  }
+
+  // Check for a sysroot. Sets an empty string when not explicitly set.
+  if (!ReadString(scope, "rust_sysroot", &rust_sysroot_, err)) {
     return false;
   }
   return true;

@@ -326,12 +326,8 @@ MediaStreamVideoTrack::FrameDeliverer::GetBlackFrame(
     return nullptr;
 
   wrapped_black_frame->set_timestamp(reference_frame.timestamp());
-  base::TimeTicks reference_time;
-  if (reference_frame.metadata()->GetTimeTicks(
-          media::VideoFrameMetadata::REFERENCE_TIME, &reference_time)) {
-    wrapped_black_frame->metadata()->SetTimeTicks(
-        media::VideoFrameMetadata::REFERENCE_TIME, reference_time);
-  }
+  wrapped_black_frame->metadata()->reference_time =
+      reference_frame.metadata()->reference_time;
 
   return wrapped_black_frame;
 }
@@ -343,19 +339,6 @@ WebMediaStreamTrack MediaStreamVideoTrack::CreateVideoTrack(
     bool enabled) {
   WebMediaStreamTrack track;
   track.Initialize(source->Owner());
-  track.SetPlatformTrack(std::make_unique<MediaStreamVideoTrack>(
-      source, std::move(callback), enabled));
-  return track;
-}
-
-// static
-WebMediaStreamTrack MediaStreamVideoTrack::CreateVideoTrack(
-    const WebString& id,
-    MediaStreamVideoSource* source,
-    MediaStreamVideoSource::ConstraintsOnceCallback callback,
-    bool enabled) {
-  WebMediaStreamTrack track;
-  track.Initialize(id, source->Owner());
   track.SetPlatformTrack(std::make_unique<MediaStreamVideoTrack>(
       source, std::move(callback), enabled));
   return track;

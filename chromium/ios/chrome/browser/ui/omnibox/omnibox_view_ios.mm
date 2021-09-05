@@ -188,17 +188,15 @@ void OmniboxViewIOS::OnTemporaryTextMaybeChanged(
     model()->OnChanged();
 }
 
-bool OmniboxViewIOS::OnInlineAutocompleteTextMaybeChanged(
+void OmniboxViewIOS::OnInlineAutocompleteTextMaybeChanged(
     const base::string16& display_text,
+    size_t user_text_start,
     size_t user_text_length) {
   if (display_text == GetText())
-    return false;
+    return;
 
   NSAttributedString* as = ApplyTextAttributes(display_text);
   [field_ setText:as userTextLength:user_text_length];
-  if (model())
-    model()->OnChanged();
-  return true;
 }
 
 void OmniboxViewIOS::OnBeforePossibleChange() {
@@ -251,6 +249,10 @@ void OmniboxViewIOS::GetSelectionBounds(base::string16::size_type* start,
   } else {
     *start = *end = 0;
   }
+}
+
+size_t OmniboxViewIOS::GetAllSelectionsLength() const {
+  return 0;
 }
 
 gfx::NativeView OmniboxViewIOS::GetNativeView() const {
@@ -527,8 +529,7 @@ void OmniboxViewIOS::WillPaste() {
 UIColor* OmniboxViewIOS::GetSecureTextColor(
     security_state::SecurityLevel security_level,
     bool in_dark_mode) {
-  if (security_level == security_state::EV_SECURE ||
-      security_level == security_state::SECURE) {
+  if (security_level == security_state::SECURE) {
     return in_dark_mode ? IncognitoSecureTextColor() : SecureTextColor();
   }
 

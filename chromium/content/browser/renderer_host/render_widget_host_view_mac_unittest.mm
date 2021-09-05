@@ -31,7 +31,6 @@
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/input_messages.h"
-#include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
 #include "content/common/widget_messages.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -44,7 +43,7 @@
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_utils.h"
 #include "content/test/mock_render_widget_host_delegate.h"
-#include "content/test/mock_widget_impl.h"
+#include "content/test/mock_widget_input_handler.h"
 #include "content/test/stub_render_widget_host_owner_delegate.h"
 #include "content/test/test_render_view_host.h"
 #include "gpu/ipc/common/gpu_messages.h"
@@ -56,6 +55,7 @@
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/ocmock_extensions.h"
 #include "ui/base/cocoa/secure_password_input.h"
+#include "ui/base/ime/mojom/text_input_state.mojom.h"
 #import "ui/base/test/cocoa_helper.h"
 #import "ui/base/test/scoped_fake_nswindow_focus.h"
 #include "ui/base/ui_base_features.h"
@@ -221,17 +221,15 @@ blink::WebPointerProperties::PointerType GetPointerType(
     return blink::WebPointerProperties::PointerType::kUnknown;
 
   if (blink::WebInputEvent::IsMouseEventType(
-          event->Event()->web_event->GetType())) {
-    return static_cast<const blink::WebMouseEvent*>(
-               event->Event()->web_event.get())
-        ->pointer_type;
+          event->Event()->Event().GetType())) {
+    return static_cast<const blink::WebMouseEvent&>(event->Event()->Event())
+        .pointer_type;
   }
 
   if (blink::WebInputEvent::IsTouchEventType(
-          event->Event()->web_event->GetType())) {
-    return static_cast<const blink::WebTouchEvent*>(
-               event->Event()->web_event.get())
-        ->touches[0]
+          event->Event()->Event().GetType())) {
+    return static_cast<const blink::WebTouchEvent&>(event->Event()->Event())
+        .touches[0]
         .pointer_type;
   }
   return blink::WebPointerProperties::PointerType::kUnknown;
@@ -341,37 +339,28 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
   static MockRenderWidgetHostImpl* Create(RenderWidgetHostDelegate* delegate,
                                           RenderProcessHost* process,
                                           int32_t routing_id) {
-    mojo::PendingRemote<mojom::Widget> widget;
-    std::unique_ptr<MockWidgetImpl> widget_impl =
-        std::make_unique<MockWidgetImpl>(
-            widget.InitWithNewPipeAndPassReceiver());
-
-    return new MockRenderWidgetHostImpl(delegate, process, routing_id,
-                                        std::move(widget_impl),
-                                        std::move(widget));
+    return new MockRenderWidgetHostImpl(delegate, process, routing_id);
   }
 
-  MockWidgetInputHandler* input_handler() {
-    return widget_impl_->input_handler();
-  }
+  MockWidgetInputHandler* input_handler() { return &input_handler_; }
   MockWidgetInputHandler::MessageVector GetAndResetDispatchedMessages() {
-    return input_handler()->GetAndResetDispatchedMessages();
+    return input_handler_.GetAndResetDispatchedMessages();
+  }
+
+  blink::mojom::WidgetInputHandler* GetWidgetInputHandler() override {
+    return &input_handler_;
   }
 
  private:
   MockRenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
                            RenderProcessHost* process,
-                           int32_t routing_id,
-                           std::unique_ptr<MockWidgetImpl> widget_impl,
-                           mojo::PendingRemote<mojom::Widget> widget)
+                           int32_t routing_id)
       : RenderWidgetHostImpl(delegate,
                              process,
                              routing_id,
-                             std::move(widget),
                              /*hidden=*/false,
-                             std::make_unique<FrameTokenMessageQueue>()),
-        widget_impl_(std::move(widget_impl)) {
-    SetRendererInitialized(true, RendererInitializer::kTest);
+                             std::make_unique<FrameTokenMessageQueue>()) {
+    set_renderer_initialized(true);
     lastWheelEventLatencyInfo = ui::LatencyInfo();
 
     ON_CALL(*this, Focus())
@@ -385,7 +374,7 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
   void FocusImpl() { RenderWidgetHostImpl::Focus(); }
   void BlurImpl() { RenderWidgetHostImpl::Blur(); }
 
-  std::unique_ptr<MockWidgetImpl> widget_impl_;
+  MockWidgetInputHandler input_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(MockRenderWidgetHostImpl);
 };
@@ -532,7 +521,7 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
 
   void ActivateViewWithTextInputManager(RenderWidgetHostViewBase* view,
                                         ui::TextInputType type) {
-    TextInputState state;
+    ui::mojom::TextInputState state;
     state.type = type;
     view->TextInputStateChanged(state);
   }
@@ -649,14 +638,13 @@ TEST_F(RenderWidgetHostViewMacTest, GetFirstRectForCharacterRangeCaretCase) {
 
   gfx::Rect caret_rect(10, 11, 0, 10);
   gfx::Range caret_range(0, 0);
-  WidgetHostMsg_SelectionBounds_Params params;
 
   gfx::Rect rect;
   gfx::Range actual_range;
   rwhv_mac_->SelectionChanged(kDummyString, kDummyOffset, caret_range);
-  params.anchor_rect = params.focus_rect = caret_rect;
-  params.anchor_dir = params.focus_dir = base::i18n::LEFT_TO_RIGHT;
-  rwhv_mac_->SelectionBoundsChanged(params);
+  rwhv_mac_->SelectionBoundsChanged(caret_rect, base::i18n::LEFT_TO_RIGHT,
+                                    caret_rect, base::i18n::LEFT_TO_RIGHT,
+                                    false);
   EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(caret_range, &rect,
                                                              &actual_range));
   EXPECT_EQ(caret_rect, rect);
@@ -672,9 +660,10 @@ TEST_F(RenderWidgetHostViewMacTest, GetFirstRectForCharacterRangeCaretCase) {
   // Caret moved.
   caret_rect = gfx::Rect(20, 11, 0, 10);
   caret_range = gfx::Range(1, 1);
-  params.anchor_rect = params.focus_rect = caret_rect;
   rwhv_mac_->SelectionChanged(kDummyString, kDummyOffset, caret_range);
-  rwhv_mac_->SelectionBoundsChanged(params);
+  rwhv_mac_->SelectionBoundsChanged(caret_rect, base::i18n::LEFT_TO_RIGHT,
+                                    caret_rect, base::i18n::LEFT_TO_RIGHT,
+                                    false);
   EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(caret_range, &rect,
                                                              &actual_range));
   EXPECT_EQ(caret_rect, rect);
@@ -690,9 +679,9 @@ TEST_F(RenderWidgetHostViewMacTest, GetFirstRectForCharacterRangeCaretCase) {
   // No caret.
   caret_range = gfx::Range(1, 2);
   rwhv_mac_->SelectionChanged(kDummyString, kDummyOffset, caret_range);
-  params.anchor_rect = caret_rect;
-  params.focus_rect = gfx::Rect(30, 11, 0, 10);
-  rwhv_mac_->SelectionBoundsChanged(params);
+  rwhv_mac_->SelectionBoundsChanged(caret_rect, base::i18n::LEFT_TO_RIGHT,
+                                    gfx::Rect(30, 11, 0, 10),
+                                    base::i18n::LEFT_TO_RIGHT, false);
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
       gfx::Range(0, 0), &rect, &actual_range));
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
@@ -944,6 +933,12 @@ TEST_F(RenderWidgetHostViewMacTest, LastWheelEventLatencyInfoExists) {
   ASSERT_TRUE(host_->lastWheelEventLatencyInfo.FindLatency(
       ui::INPUT_EVENT_LATENCY_UI_COMPONENT, nullptr));
 
+  MockWidgetInputHandler::MessageVector events =
+      host_->GetAndResetDispatchedMessages();
+  EXPECT_EQ("MouseWheel", GetMessageNames(events));
+  events[0]->ToEvent()->CallCallback(
+      blink::mojom::InputEventResultState::kNotConsumed);
+
   // Send a wheel event with phaseEnded.
   // Verifies that ui::INPUT_EVENT_LATENCY_UI_COMPONENT is added
   // properly in shortCircuitScrollWheelEvent function which is called
@@ -952,6 +947,9 @@ TEST_F(RenderWidgetHostViewMacTest, LastWheelEventLatencyInfoExists) {
   [rwhv_mac_->GetInProcessNSView() scrollWheel:wheelEvent2];
   ASSERT_TRUE(host_->lastWheelEventLatencyInfo.FindLatency(
       ui::INPUT_EVENT_LATENCY_UI_COMPONENT, nullptr));
+
+  events = host_->GetAndResetDispatchedMessages();
+  EXPECT_EQ("GestureScrollBegin GestureScrollUpdate", GetMessageNames(events));
 }
 
 TEST_F(RenderWidgetHostViewMacTest, SourceEventTypeExistsInLatencyInfo) {
@@ -961,6 +959,13 @@ TEST_F(RenderWidgetHostViewMacTest, SourceEventTypeExistsInLatencyInfo) {
   // Verifies that SourceEventType exists in forwarded LatencyInfo object.
   NSEvent* wheelEvent = MockScrollWheelEventWithPhase(@selector(phaseBegan), 3);
   [rwhv_mac_->GetInProcessNSView() scrollWheel:wheelEvent];
+
+  MockWidgetInputHandler::MessageVector events =
+      host_->GetAndResetDispatchedMessages();
+  EXPECT_EQ("MouseWheel", GetMessageNames(events));
+  events[0]->ToEvent()->CallCallback(
+      blink::mojom::InputEventResultState::kConsumed);
+
   ASSERT_TRUE(host_->lastWheelEventLatencyInfo.source_event_type() ==
               ui::SourceEventType::WHEEL);
 }
@@ -1053,9 +1058,9 @@ TEST_F(RenderWidgetHostViewMacTest, PointerEventWithPenTypeNoTabletEvent) {
   events = host_->GetAndResetDispatchedMessages();
   ASSERT_EQ("MouseMove", GetMessageNames(events));
   EXPECT_EQ(blink::WebPointerProperties::PointerType::kPen,
-            static_cast<const blink::WebMouseEvent*>(
-                events[0]->ToEvent()->Event()->web_event.get())
-                ->pointer_type);
+            static_cast<const blink::WebMouseEvent&>(
+                events[0]->ToEvent()->Event()->Event())
+                .pointer_type);
 }
 
 TEST_F(RenderWidgetHostViewMacTest, PointerEventWithMouseType) {
@@ -1119,9 +1124,9 @@ TEST_F(RenderWidgetHostViewMacTest, PointerEventWithPenTypeSendAsTouch) {
   events = host_->GetAndResetDispatchedMessages();
   ASSERT_EQ("TouchEnd GestureScrollEnd", GetMessageNames(events));
   EXPECT_EQ(blink::WebPointerProperties::PointerType::kPen,
-            static_cast<const blink::WebTouchEvent*>(
-                events[0]->ToEvent()->Event()->web_event.get())
-                ->touches[0]
+            static_cast<const blink::WebTouchEvent&>(
+                events[0]->ToEvent()->Event()->Event())
+                .touches[0]
                 .pointer_type);
 
   events.clear();
@@ -1264,9 +1269,9 @@ TEST_F(RenderWidgetHostViewMacTest, TimerBasedPhaseInfo) {
   // Both GSB and GSU will be sent since GestureEventQueue allows multiple
   // in-flight events.
   ASSERT_EQ("GestureScrollBegin GestureScrollUpdate", GetMessageNames(events));
-  ASSERT_TRUE(static_cast<const blink::WebGestureEvent*>(
-                  events[0]->ToEvent()->Event()->web_event.get())
-                  ->data.scroll_begin.synthetic);
+  ASSERT_TRUE(static_cast<const blink::WebGestureEvent&>(
+                  events[0]->ToEvent()->Event()->Event())
+                  .data.scroll_begin.synthetic);
   events.clear();
 
   // Wait for the mouse_wheel_end_dispatch_timer_ to expire, the pending wheel
@@ -1279,9 +1284,9 @@ TEST_F(RenderWidgetHostViewMacTest, TimerBasedPhaseInfo) {
 
   events = host_->GetAndResetDispatchedMessages();
   ASSERT_EQ("MouseWheel GestureScrollEnd", GetMessageNames(events));
-  ASSERT_TRUE(static_cast<const blink::WebGestureEvent*>(
-                  events[1]->ToEvent()->Event()->web_event.get())
-                  ->data.scroll_end.synthetic);
+  ASSERT_TRUE(static_cast<const blink::WebGestureEvent&>(
+                  events[1]->ToEvent()->Event()->Event())
+                  .data.scroll_end.synthetic);
 }
 
 // With wheel scroll latching wheel end events are not sent immediately, instead
@@ -1682,6 +1687,13 @@ TEST_F(RenderWidgetHostViewMacTest, EventLatencyOSMouseWheelHistogram) {
   // Verify that Event.Latency.OS.MOUSE_WHEEL histogram is computed properly.
   NSEvent* wheelEvent = MockScrollWheelEventWithPhase(@selector(phaseBegan),3);
   [rwhv_mac_->GetInProcessNSView() scrollWheel:wheelEvent];
+
+  MockWidgetInputHandler::MessageVector events =
+      host_->GetAndResetDispatchedMessages();
+  EXPECT_EQ("MouseWheel", GetMessageNames(events));
+  events[0]->ToEvent()->CallCallback(
+      blink::mojom::InputEventResultState::kConsumed);
+
   histogram_tester.ExpectTotalCount("Event.Latency.OS.MOUSE_WHEEL", 1);
 }
 
@@ -1737,7 +1749,7 @@ class InputMethodMacTest : public RenderWidgetHostViewMacTest {
 
   void SetTextInputType(RenderWidgetHostViewBase* view,
                         ui::TextInputType type) {
-    TextInputState state;
+    ui::mojom::TextInputState state;
     state.type = type;
     view->TextInputStateChanged(state);
   }
@@ -1975,7 +1987,7 @@ TEST_F(InputMethodMacTest, MonitorCompositionRangeForActiveWidget) {
   [window_ makeFirstResponder:tab_GetInProcessNSView()];
   EXPECT_TRUE(tab_view()->HasFocus());
 
-  TextInputState state;
+  ui::mojom::TextInputState state;
   state.type = ui::TEXT_INPUT_TYPE_TEXT;
 
   // Make the tab's widget active.

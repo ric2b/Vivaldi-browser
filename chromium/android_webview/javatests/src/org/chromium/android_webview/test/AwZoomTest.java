@@ -6,9 +6,10 @@ package org.chromium.android_webview.test;
 
 import android.app.Activity;
 import android.content.pm.ActivityInfo;
-import android.support.test.filters.SmallTest;
 import android.view.View;
 import android.view.ViewConfiguration;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -20,7 +21,6 @@ import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 
 import java.util.Locale;
 
@@ -195,7 +195,6 @@ public class AwZoomTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @RetryOnFailure
     public void testZoomControls() throws Throwable {
         AwSettings webSettings = mActivityTestRule.getAwSettingsOnUiThread(mAwContents);
         webSettings.setUseWideViewPort(true);

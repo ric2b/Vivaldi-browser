@@ -15,6 +15,7 @@
 #include "services/media_session/public/mojom/media_controller.mojom.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/metadata/metadata_header_macros.h"
 
 namespace views {
 class Label;
@@ -42,6 +43,7 @@ class ASH_EXPORT LockScreenMediaControlsView
       public views::ButtonListener,
       public ui::ImplicitAnimationObserver {
  public:
+  METADATA_HEADER(LockScreenMediaControlsView);
   // The name of the histogram that records the reason why the controls were
   // hidden.
   static const char kMediaControlsHideHistogramName[];
@@ -98,14 +100,11 @@ class ASH_EXPORT LockScreenMediaControlsView
   ~LockScreenMediaControlsView() override;
 
   // views::View:
-  const char* GetClassName() const override;
   gfx::Size CalculatePreferredSize() const override;
   void Layout() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
-
-  views::View* GetMiddleSpacingView();
 
   // media_session::mojom::MediaControllerObserver:
   void MediaSessionInfoChanged(
@@ -220,15 +219,14 @@ class ASH_EXPORT LockScreenMediaControlsView
   // The MediaPosition associated with the current media session.
   base::Optional<media_session::MediaPosition> position_;
 
-  // Spacing between controls and user.
-  std::unique_ptr<views::View> middle_spacing_;
-
   // Automatically hides the controls a few seconds if no media playing.
-  std::unique_ptr<base::OneShotTimer> hide_controls_timer_;
+  std::unique_ptr<base::OneShotTimer> hide_controls_timer_ =
+      std::make_unique<base::OneShotTimer>();
 
   // Make artwork view invisible if there is no artwork update after receiving
   // an empty artwork.
-  std::unique_ptr<base::OneShotTimer> hide_artwork_timer_;
+  std::unique_ptr<base::OneShotTimer> hide_artwork_timer_ =
+      std::make_unique<base::OneShotTimer>();
 
   // Caches the text to be read by screen readers describing the media controls
   // view.

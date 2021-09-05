@@ -27,7 +27,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -63,6 +62,7 @@
 #include "chrome/browser/chromeos/dbus/screen_lock_service_provider.h"
 #include "chrome/browser/chromeos/dbus/smb_fs_service_provider.h"
 #include "chrome/browser/chromeos/dbus/virtual_file_request_service_provider.h"
+#include "chrome/browser/chromeos/dbus/vm/vm_permission_service_provider.h"
 #include "chrome/browser/chromeos/dbus/vm_applications_service_provider.h"
 #include "chrome/browser/chromeos/display/quirks_manager_delegate_impl.h"
 #include "chrome/browser/chromeos/events/event_rewriter_delegate_impl.h"
@@ -70,6 +70,7 @@
 #include "chrome/browser/chromeos/extensions/login_screen/login_screen_ui/ui_handler.h"
 #include "chrome/browser/chromeos/external_metrics.h"
 #include "chrome/browser/chromeos/input_method/input_method_configuration.h"
+#include "chrome/browser/chromeos/lacros/lacros_manager.h"
 #include "chrome/browser/chromeos/language_preferences.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
 #include "chrome/browser/chromeos/logging.h"
@@ -85,7 +86,7 @@
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
-#include "chrome/browser/chromeos/net/network_health.h"
+#include "chrome/browser/chromeos/net/network_health/network_health_service.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_impl.h"
 #include "chrome/browser/chromeos/net/network_pref_state_observer.h"
 #include "chrome/browser/chromeos/net/network_throttling_observer.h"
@@ -221,9 +222,11 @@ void ChromeOSVersionCallback(const std::string& version) {
 bool ShouldAutoLaunchKioskApp(const base::CommandLine& command_line) {
   KioskAppManager* app_manager = KioskAppManager::Get();
   WebKioskAppManager* web_app_manager = WebKioskAppManager::Get();
+  ArcKioskAppManager* arc_app_manager = ArcKioskAppManager::Get();
   return command_line.HasSwitch(switches::kLoginManager) &&
          (app_manager->IsAutoLaunchEnabled() ||
-          web_app_manager->GetAutoLaunchAccountId().is_valid()) &&
+          web_app_manager->GetAutoLaunchAccountId().is_valid() ||
+          arc_app_manager->GetAutoLaunchAccountId().is_valid()) &&
          KioskAppLaunchError::Get() == KioskAppLaunchError::NONE;
 }
 
@@ -321,6 +324,12 @@ class DBusServices {
         CrosDBusService::CreateServiceProviderList(
             std::make_unique<VmApplicationsServiceProvider>()));
 
+    vm_permission_service_ = CrosDBusService::Create(
+        system_bus, kVmPermissionServiceName,
+        dbus::ObjectPath(kVmPermissionServicePath),
+        CrosDBusService::CreateServiceProviderList(
+            std::make_unique<VmPermissionServiceProvider>()));
+
     drive_file_stream_service_ = CrosDBusService::Create(
         system_bus, drivefs::kDriveFileStreamServiceName,
         dbus::ObjectPath(drivefs::kDriveFileStreamServicePath),
@@ -400,6 +409,7 @@ class DBusServices {
     component_updater_service_.reset();
     chrome_features_service_.reset();
     vm_applications_service_.reset();
+    vm_permission_service_.reset();
     drive_file_stream_service_.reset();
     cryptohome_key_delegate_service_.reset();
     lock_to_single_user_service_.reset();
@@ -425,6 +435,7 @@ class DBusServices {
   std::unique_ptr<CrosDBusService> component_updater_service_;
   std::unique_ptr<CrosDBusService> chrome_features_service_;
   std::unique_ptr<CrosDBusService> vm_applications_service_;
+  std::unique_ptr<CrosDBusService> vm_permission_service_;
   std::unique_ptr<CrosDBusService> drive_file_stream_service_;
   std::unique_ptr<CrosDBusService> cryptohome_key_delegate_service_;
   std::unique_ptr<CrosDBusService> libvda_service_;
@@ -535,7 +546,7 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
 
   // Set the crypto thread after the IO thread has been created/started.
   TPMTokenLoader::Get()->SetCryptoTaskRunner(
-      base::CreateSingleThreadTaskRunner({content::BrowserThread::IO}));
+      content::GetIOThreadTaskRunner({}));
 
   // Initialize NSS database for system token.
   system_token_certdb_initializer_ =
@@ -739,6 +750,12 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
       std::make_unique<lock_screen_apps::StateController>();
   lock_screen_apps_state_controller_->Initialize();
 
+  // Always construct LacrosManager, even if the lacros flag is disabled, so
+  // it can do cleanup work if needed. Initialized in PreProfileInit because the
+  // profile-keyed service AppService can call into it.
+  lacros_manager_ = std::make_unique<LacrosManager>(
+      g_browser_process->platform_part()->cros_component_manager());
+
   if (immediate_login) {
     const std::string cryptohome_id =
         parsed_command_line().GetSwitchValueASCII(switches::kLoginUser);
@@ -880,7 +897,9 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
   network_pref_state_observer_ = std::make_unique<NetworkPrefStateObserver>();
 
   // Initialize the NetworkHealth aggregator.
-  network_health_ = std::make_unique<network_health::NetworkHealth>();
+  network_health::NetworkHealthService* network_health_service =
+      network_health::NetworkHealthService::GetInstance();
+  DCHECK(network_health_service);
 
   // Initialize input methods.
   input_method::InputMethodManager* manager =
@@ -1021,6 +1040,8 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
 
   BootTimesRecorder::Get()->AddLogoutTimeMarker("UIMessageLoopEnded", true);
 
+  lacros_manager_.reset();
+
   if (lock_screen_apps_state_controller_)
     lock_screen_apps_state_controller_->Shutdown();
 
@@ -1055,7 +1076,6 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   // We should remove observers attached to D-Bus clients before
   // DBusThreadManager is shut down.
   network_pref_state_observer_.reset();
-  network_health_.reset();
   power_metrics_reporter_.reset();
   renderer_freezer_.reset();
   fast_transition_observer_.reset();

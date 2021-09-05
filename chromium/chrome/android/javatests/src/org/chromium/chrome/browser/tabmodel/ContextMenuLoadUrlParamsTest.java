@@ -6,7 +6,8 @@ package org.chromium.chrome.browser.tabmodel;
 
 import android.app.Activity;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -21,13 +22,14 @@ import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.app.tabmodel.ChromeTabModelFilterFactory;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.NextTabPolicy.NextTabPolicySupplier;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager.TabModelSelectorFactory;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -49,7 +51,6 @@ import java.util.regex.Pattern;
 @RunWith(ParameterizedRunner.class)
 @UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@RetryOnFailure
 public class ContextMenuLoadUrlParamsTest {
     @ClassParameter
     private static List<ParameterSet> sClassParams =
@@ -79,10 +80,11 @@ public class ContextMenuLoadUrlParamsTest {
             return super.openNewTab(loadUrlParams, type, parent, incognito);
         }
 
-        public RecordingTabModelSelector(
-                Activity activity, TabCreatorManager tabCreatorManager, int selectorIndex) {
+        public RecordingTabModelSelector(Activity activity, TabCreatorManager tabCreatorManager,
+                TabModelFilterFactory tabModelFilterFactory, int selectorIndex) {
             super(activity, tabCreatorManager,
-                    new TabbedModeTabPersistencePolicy(selectorIndex, false), false, false, false);
+                    new TabbedModeTabPersistencePolicy(selectorIndex, false), tabModelFilterFactory,
+                    () -> NextTabPolicy.HIERARCHICAL, false, false, false);
         }
     }
 
@@ -105,9 +107,10 @@ public class ContextMenuLoadUrlParamsTest {
                     new TabModelSelectorFactory() {
                         @Override
                         public TabModelSelector buildSelector(Activity activity,
-                                TabCreatorManager tabCreatorManager, int selectorIndex) {
-                            return new RecordingTabModelSelector(
-                                    activity, tabCreatorManager, selectorIndex);
+                                TabCreatorManager tabCreatorManager,
+                                NextTabPolicySupplier nextTabPolicySupplier, int selectorIndex) {
+                            return new RecordingTabModelSelector(activity, tabCreatorManager,
+                                    new ChromeTabModelFilterFactory(), selectorIndex);
                         }
                     });
         });

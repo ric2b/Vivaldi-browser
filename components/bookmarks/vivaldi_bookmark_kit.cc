@@ -2,8 +2,10 @@
 
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 
+#include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "components/bookmarks/browser/base_bookmark_model_observer.h"
@@ -134,18 +136,27 @@ const VivaldiMetaNames& GetMetaNames() {
   return *instance;
 }
 
-bool GetMetaBool(const BookmarkNode* node, const std::string& key) {
-  std::string temp;
-  if (node->GetMetaInfo(key, &temp))
-    return temp == GetMetaNames().true_value;
-  return false;
+const std::string* GetMetaString(const BookmarkNode::MetaInfoMap& meta_info_map,
+                                 const std::string& key) {
+  auto i = meta_info_map.find(key);
+  if (i == meta_info_map.end() || i->second.empty())
+    return nullptr;
+  return &i->second;
 }
 
-std::string GetMetaString(const BookmarkNode* node, const std::string& key) {
-  std::string value;
-  if (node->GetMetaInfo(key, &value))
-    return value;
-  return std::string();
+const std::string& GetMetaString(const BookmarkNode* node,
+                                 const std::string& key) {
+  if (const BookmarkNode::MetaInfoMap* meta_info_map = node->GetMetaInfoMap()) {
+    const std::string* value = GetMetaString(*meta_info_map, key);
+    if (value)
+      return *value;
+  }
+  return base::EmptyString();
+}
+
+bool GetMetaBool(const BookmarkNode* node, const std::string& key) {
+  const std::string& value = GetMetaString(node, key);
+  return value == GetMetaNames().true_value;
 }
 
 void SetMetaBool(BookmarkNode::MetaInfoMap* map,
@@ -187,6 +198,9 @@ base::WeakPtr<BookmarkModel> GetModelWeakPtr(BookmarkModel* model) {
   return VivaldiBookmarkModelFriend::GetModelWeakPtr(model);
 }
 
+const std::string& ThumbnailString() {
+  return GetMetaNames().thumbnail;
+}
 
 CustomMetaInfo::CustomMetaInfo() = default;
 CustomMetaInfo::~CustomMetaInfo() = default;
@@ -231,19 +245,23 @@ bool GetBookmarkbar(const BookmarkNode* node) {
   return GetMetaBool(node, GetMetaNames().bookmarkbar);
 }
 
-std::string GetNickname(const BookmarkNode* node) {
+const std::string& GetNickname(const BookmarkNode* node) {
   return GetMetaString(node, GetMetaNames().nickname);
 }
 
-std::string GetDescription(const BookmarkNode* node) {
+const std::string& GetDescription(const BookmarkNode* node) {
   return GetMetaString(node, GetMetaNames().description);
 }
 
-std::string GetPartner(const BookmarkNode* node) {
+const std::string* GetPartner(const BookmarkNode::MetaInfoMap& meta_info_map) {
+  return GetMetaString(meta_info_map, GetMetaNames().partner);
+}
+
+const std::string& GetPartner(const BookmarkNode* node) {
   return GetMetaString(node, GetMetaNames().partner);
 }
 
-std::string GetThumbnail(const BookmarkNode* node) {
+const std::string& GetThumbnail(const BookmarkNode* node) {
   return GetMetaString(node, GetMetaNames().thumbnail);
 }
 

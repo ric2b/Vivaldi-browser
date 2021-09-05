@@ -4,6 +4,12 @@
 
 #include "chrome/browser/web_applications/manifest_update_task.h"
 
+#include <map>
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "base/feature_list.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/installable/installable_manager.h"
 #include "chrome/browser/web_applications/components/app_icon_manager.h"
@@ -13,10 +19,38 @@
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
 #include "ui/gfx/skia_util.h"
 
 namespace web_app {
+
+namespace {
+
+bool HaveIconContentsChanged(
+    const std::map<SquareSizePx, SkBitmap>& disk_icon_bitmaps,
+    const std::map<SquareSizePx, SkBitmap>& downloaded_icon_bitmaps) {
+  if (downloaded_icon_bitmaps.size() != disk_icon_bitmaps.size())
+    return true;
+
+  for (const std::pair<const SquareSizePx, SkBitmap>& entry :
+       downloaded_icon_bitmaps) {
+    SquareSizePx size = entry.first;
+    const SkBitmap& downloaded_bitmap = entry.second;
+
+    auto it = disk_icon_bitmaps.find(size);
+    if (it == disk_icon_bitmaps.end())
+      return true;
+
+    const SkBitmap& disk_bitmap = it->second;
+    if (!gfx::BitmapsAreEqual(downloaded_bitmap, disk_bitmap))
+      return true;
+  }
+
+  return false;
+}
+
+}  // namespace
 
 ManifestUpdateTask::ManifestUpdateTask(const GURL& url,
                                        const AppId& app_id,
@@ -128,6 +162,13 @@ bool ManifestUpdateTask::IsUpdateNeededForManifest() const {
   if (web_application_info_->icon_infos != registrar_.GetAppIconInfos(app_id_))
     return true;
 
+  if (base::FeatureList::IsEnabled(
+          features::kDesktopPWAsAppIconShortcutsMenu) &&
+      web_application_info_->shortcut_infos !=
+          registrar_.GetAppShortcutInfos(app_id_)) {
+    return true;
+  }
+
   // TODO(crbug.com/926083): Check more manifest fields.
   return false;
 }
@@ -194,7 +235,15 @@ void ManifestUpdateTask::OnAllIconsRead(
     return;
   }
 
-  DestroySelf(ManifestUpdateResult::kAppUpToDate);
+  if (base::FeatureList::IsEnabled(
+          features::kDesktopPWAsAppIconShortcutsMenu)) {
+    icon_manager_.ReadAllShortcutsMenuIcons(
+        app_id_,
+        base::BindOnce(&ManifestUpdateTask::OnAllShortcutsMenuIconsRead,
+                       AsWeakPtr()));
+  } else {
+    DestroySelf(ManifestUpdateResult::kAppUpToDate);
+  }
 }
 
 bool ManifestUpdateTask::IsUpdateNeededForIconContents(
@@ -202,20 +251,43 @@ bool ManifestUpdateTask::IsUpdateNeededForIconContents(
   DCHECK(web_application_info_.has_value());
   const std::map<SquareSizePx, SkBitmap>& downloaded_icon_bitmaps =
       web_application_info_->icon_bitmaps;
-  if (disk_icon_bitmaps.size() != disk_icon_bitmaps.size())
+  if (HaveIconContentsChanged(disk_icon_bitmaps, downloaded_icon_bitmaps))
     return true;
 
-  for (const std::pair<const SquareSizePx, SkBitmap>& entry :
-       downloaded_icon_bitmaps) {
-    SquareSizePx size = entry.first;
-    const SkBitmap& downloaded_bitmap = entry.second;
+  return false;
+}
 
-    auto it = disk_icon_bitmaps.find(size);
-    if (it == disk_icon_bitmaps.end())
-      return true;
+void ManifestUpdateTask::OnAllShortcutsMenuIconsRead(
+    ShortcutsMenuIconsBitmaps disk_shortcuts_menu_icons_bitmaps) {
+  DCHECK(stage_ == Stage::kPendingIconReadFromDisk);
 
-    const SkBitmap& disk_bitmap = it->second;
-    if (!gfx::BitmapsAreEqual(downloaded_bitmap, disk_bitmap))
+  DCHECK(web_application_info_.has_value());
+
+  if (IsUpdateNeededForShortcutsMenuIconsContents(
+          disk_shortcuts_menu_icons_bitmaps)) {
+    UpdateAfterWindowsClose();
+    return;
+  }
+
+  DestroySelf(ManifestUpdateResult::kAppUpToDate);
+}
+
+bool ManifestUpdateTask::IsUpdateNeededForShortcutsMenuIconsContents(
+    const ShortcutsMenuIconsBitmaps& disk_shortcuts_menu_icons_bitmaps) const {
+  DCHECK(web_application_info_.has_value());
+  const ShortcutsMenuIconsBitmaps& downloaded_shortcuts_menu_icons_bitmaps =
+      web_application_info_->shortcuts_menu_icons_bitmaps;
+  if (downloaded_shortcuts_menu_icons_bitmaps.size() !=
+      disk_shortcuts_menu_icons_bitmaps.size()) {
+    return true;
+  }
+
+  for (size_t i = 0; i < downloaded_shortcuts_menu_icons_bitmaps.size(); ++i) {
+    const std::map<SquareSizePx, SkBitmap>& downloaded_icon_bitmaps =
+        downloaded_shortcuts_menu_icons_bitmaps[i];
+    const std::map<SquareSizePx, SkBitmap>& disk_icon_bitmaps =
+        disk_shortcuts_menu_icons_bitmaps[i];
+    if (HaveIconContentsChanged(disk_icon_bitmaps, downloaded_icon_bitmaps))
       return true;
   }
 
@@ -228,6 +300,7 @@ void ManifestUpdateTask::OnAllAppWindowsClosed() {
   DCHECK(web_application_info_.has_value());
 
   // The app's name must not change due to an automatic update.
+  // TODO(crbug.com/1088338): Provide a safe way for apps to update their name.
   web_application_info_->title =
       base::UTF8ToUTF16(registrar_.GetAppShortName(app_id_));
 

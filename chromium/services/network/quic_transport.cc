@@ -19,6 +19,23 @@
 
 namespace network {
 
+namespace {
+
+net::QuicTransportClient::Parameters CreateParameters(
+    const std::vector<mojom::QuicTransportCertificateFingerprintPtr>&
+        fingerprints) {
+  net::QuicTransportClient::Parameters params;
+
+  for (const auto& fingerprint : fingerprints) {
+    params.server_certificate_fingerprints.push_back(
+        quic::CertificateFingerprint{.algorithm = fingerprint->algorithm,
+                                     .fingerprint = fingerprint->fingerprint});
+  }
+  return params;
+}
+
+}  // namespace
+
 class QuicTransport::Stream final {
  public:
   class StreamVisitor final : public quic::QuicTransportStream::Visitor {
@@ -116,6 +133,19 @@ class QuicTransport::Stream final {
   void NotifyFinFromClient() {
     has_received_fin_from_client_ = true;
     MaySendFin();
+  }
+
+  void Abort(quic::QuicRstStreamErrorCode code) {
+    auto* stream = incoming_ ? incoming_ : outgoing_;
+    if (!stream) {
+      return;
+    }
+    stream->Reset(code);
+    incoming_ = nullptr;
+    outgoing_ = nullptr;
+    readable_watcher_.Cancel();
+    readable_.reset();
+    MayDisposeLater();
   }
 
   ~Stream() { transport_->transport_->session()->CloseStream(id_); }
@@ -278,12 +308,14 @@ class QuicTransport::Stream final {
 
   // This must be the last member.
   base::WeakPtrFactory<Stream> weak_factory_{this};
-};
+};  // namespace network
 
 QuicTransport::QuicTransport(
     const GURL& url,
     const url::Origin& origin,
     const net::NetworkIsolationKey& key,
+    const std::vector<mojom::QuicTransportCertificateFingerprintPtr>&
+        fingerprints,
     NetworkContext* context,
     mojo::PendingRemote<mojom::QuicTransportHandshakeClient> handshake_client)
     : transport_(std::make_unique<net::QuicTransportClient>(
@@ -291,7 +323,8 @@ QuicTransport::QuicTransport(
           origin,
           this,
           key,
-          context->url_request_context())),
+          context->url_request_context(),
+          CreateParameters(fingerprints))),
       context_(context),
       receiver_(this),
       handshake_client_(std::move(handshake_client)) {
@@ -390,6 +423,18 @@ void QuicTransport::SendFin(uint32_t stream) {
   it->second->NotifyFinFromClient();
 }
 
+void QuicTransport::AbortStream(uint32_t stream, uint64_t code) {
+  auto it = streams_.find(stream);
+  if (it == streams_.end()) {
+    return;
+  }
+  auto code_to_pass = quic::QuicRstStreamErrorCode::QUIC_STREAM_NO_ERROR;
+  if (code < quic::QuicRstStreamErrorCode::QUIC_STREAM_LAST_ERROR) {
+    code_to_pass = static_cast<quic::QuicRstStreamErrorCode>(code);
+  }
+  it->second->Abort(code_to_pass);
+}
+
 void QuicTransport::OnConnected() {
   if (torn_down_) {
     return;
@@ -413,12 +458,9 @@ void QuicTransport::OnConnectionFailed() {
 
   DCHECK(handshake_client_);
 
-  const net::QuicTransportError& error = transport_->error();
   // Here we assume that the error is not going to handed to the
   // initiator renderer.
-  handshake_client_->OnHandshakeFailed(mojom::QuicTransportError::New(
-      error.net_error, static_cast<int>(error.quic_error), error.details,
-      error.safe_to_report_details));
+  handshake_client_->OnHandshakeFailed(transport_->error());
 
   TearDown();
 }

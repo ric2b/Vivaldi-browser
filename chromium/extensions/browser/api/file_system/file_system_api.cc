@@ -22,9 +22,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
-#include "base/value_conversions.h"
+#include "base/util/values/values_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_context.h"
@@ -191,8 +190,8 @@ void PassFileInfoToUIThread(const FileInfoOptCallback& callback,
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   std::unique_ptr<base::File::Info> file_info(
       result == base::File::FILE_OK ? new base::File::Info(info) : NULL);
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(callback, std::move(file_info)));
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(callback, std::move(file_info)));
 }
 
 // Gets a WebContents instance handle for a platform app hosted in
@@ -232,7 +231,7 @@ void SetLastChooseEntryDirectory(ExtensionPrefs* prefs,
                                  const base::FilePath& path) {
   prefs->UpdateExtensionPref(
       extension_id, kLastChooseEntryDirectory,
-      base::Value::ToUniquePtrValue(base::CreateFilePathValue(path)));
+      base::Value::ToUniquePtrValue(::util::FilePathToValue(path)));
 }
 
 }  // namespace file_system_api
@@ -400,8 +399,8 @@ void FileSystemChooseEntryFunction::ShowPicker(
     else if (g_paths_to_be_picked_for_test)
       test_paths = *g_paths_to_be_picked_for_test;
 
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::UI},
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         test_paths.size() > 0
             ? base::BindOnce(&FileSystemChooseEntryFunction::FilesSelected,
                              this, test_paths)
@@ -503,9 +502,16 @@ void FileSystemChooseEntryFunction::FilesSelected(
   } else {
     last_choose_directory = paths[0].DirName();
   }
-  file_system_api::SetLastChooseEntryDirectory(
-      ExtensionPrefs::Get(browser_context()), extension()->id(),
-      last_choose_directory);
+
+  if (extension_->is_extension()) {
+    ExtensionsBrowserClient::Get()->SetLastSaveFilePath(browser_context(),
+                                                        last_choose_directory);
+  } else {
+    file_system_api::SetLastChooseEntryDirectory(
+        ExtensionPrefs::Get(browser_context()), extension()->id(),
+        last_choose_directory);
+  }
+
   if (is_directory_) {
     // Get the WebContents for the app window to be the parent window of the
     // confirmation dialog if necessary.
@@ -547,8 +553,8 @@ void FileSystemChooseEntryFunction::ConfirmDirectoryAccessAsync(
   const base::FilePath check_path =
       non_native_path ? paths[0] : base::MakeAbsoluteFilePath(paths[0]);
   if (check_path.empty()) {
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::UI},
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&FileSystemChooseEntryFunction::FileSelectionCanceled,
                        this));
     return;
@@ -564,23 +570,23 @@ void FileSystemChooseEntryFunction::ConfirmDirectoryAccessAsync(
     if (g_skip_directory_confirmation_for_test) {
       if (g_allow_directory_access_for_test)
         break;
-      base::PostTask(
-          FROM_HERE, {content::BrowserThread::UI},
+      content::GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE,
           base::BindOnce(&FileSystemChooseEntryFunction::FileSelectionCanceled,
                          this));
       return;
     }
 
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::UI},
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(
             &FileSystemChooseEntryFunction::ConfirmSensitiveDirectoryAccess,
             this, paths, web_contents));
     return;
   }
 
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&FileSystemChooseEntryFunction::OnDirectoryAccessConfirmed,
                      this, paths));
 }
@@ -624,10 +630,10 @@ void FileSystemChooseEntryFunction::BuildFileTypeInfo(
     ui::SelectFileDialog::FileTypeInfo* file_type_info,
     const base::FilePath::StringType& suggested_extension,
     const AcceptOptions* accepts,
-    const bool* acceptsAllTypes) {
+    const bool* accepts_all_types) {
   file_type_info->include_all_files = true;
-  if (acceptsAllTypes)
-    file_type_info->include_all_files = *acceptsAllTypes;
+  if (accepts_all_types)
+    file_type_info->include_all_files = *accepts_all_types;
 
   bool need_suggestion =
       !file_type_info->include_all_files && !suggested_extension.empty();
@@ -750,8 +756,14 @@ ExtensionFunction::ResponseAction FileSystemChooseEntryFunction::Run() {
 
   file_type_info.allowed_paths = ui::SelectFileDialog::FileTypeInfo::ANY_PATH;
 
-  base::FilePath previous_path = file_system_api::GetLastChooseEntryDirectory(
-      ExtensionPrefs::Get(browser_context()), extension()->id());
+  base::FilePath previous_path;
+  if (extension_->is_extension()) {
+    previous_path =
+        ExtensionsBrowserClient::Get()->GetSaveFilePath(browser_context());
+  } else {
+    previous_path = file_system_api::GetLastChooseEntryDirectory(
+        ExtensionPrefs::Get(browser_context()), extension()->id());
+  }
 
   if (previous_path.empty()) {
     SetInitialPathAndShowPicker(previous_path, suggested_name, file_type_info,
@@ -831,8 +843,8 @@ ExtensionFunction::ResponseAction FileSystemRetainEntryFunction::Run() {
 
     // It is safe to use base::Unretained() for operation_runner(), since it
     // is owned by |context| which will delete it on the IO thread.
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::IO},
+    content::GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(
             base::IgnoreResult(
                 &storage::FileSystemOperationRunner::GetMetadata),

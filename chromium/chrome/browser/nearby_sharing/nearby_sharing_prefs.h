@@ -9,8 +9,15 @@ namespace user_prefs {
 class PrefRegistrySyncable;
 }  // namespace user_prefs
 
+class PrefRegistrySimple;
+
+namespace prefs {
 extern const char kNearbySharingEnabledPrefName[];
+extern const char kNearbySharingActiveProfilePrefName[];
+}  // namespace prefs
 
 void RegisterNearbySharingPrefs(user_prefs::PrefRegistrySyncable* registry);
+
+void RegisterNearbySharingLocalPrefs(PrefRegistrySimple* local_state);
 
 #endif  // CHROME_BROWSER_NEARBY_SHARING_NEARBY_SHARING_PREFS_H_

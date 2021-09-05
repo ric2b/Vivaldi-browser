@@ -20,7 +20,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
-#include "chrome/browser/chromeos/app_mode/kiosk_app_manager_observer.h"
+#include "chrome/browser/chromeos/app_mode/kiosk_app_types.h"
 #include "chrome/browser/chromeos/login/screens/encryption_migration_mode.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
@@ -40,6 +40,7 @@
 #include "url/gurl.h"
 
 namespace base {
+class ElapsedTimer;
 class ListValue;
 }
 
@@ -52,6 +53,7 @@ namespace chromeos {
 class CrosSettings;
 class LoginDisplay;
 class OAuth2TokenInitializer;
+class KioskAppId;
 
 namespace login {
 class NetworkStateHelper;
@@ -63,7 +65,6 @@ class NetworkStateHelper;
 class ExistingUserController : public LoginDisplay::Delegate,
                                public content::NotificationObserver,
                                public LoginPerformer::Delegate,
-                               public KioskAppManagerObserver,
                                public UserSessionManagerDelegate,
                                public user_manager::UserManager::Observer {
  public:
@@ -129,9 +130,6 @@ class ExistingUserController : public LoginDisplay::Delegate,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
-  // KioskAppManagerObserver overrides.
-  void OnKioskAppsSettingsChanged() override;
-
   // Set a delegate that we will pass AuthStatusConsumer events to.
   // Used for testing.
   void set_login_status_consumer(AuthStatusConsumer* consumer) {
@@ -164,23 +162,19 @@ class ExistingUserController : public LoginDisplay::Delegate,
 
   void LoginAsGuest();
   void LoginAsPublicSession(const UserContext& user_context);
-  void LoginAsKioskApp(const std::string& app_id, bool diagnostic_mode);
-  void LoginAsArcKioskApp(const AccountId& account_id);
-  void LoginAsWebKioskApp(const AccountId& account_id);
-  // Retrieve public session and ARC kiosk auto-login policy and update the
+  void LoginAsKioskApp(KioskAppId kiosk_app_id);
+  // Retrieve public session auto-login policy and update the
   // timer.
   void ConfigureAutoLogin();
 
   // Trigger public session auto-login.
   void OnPublicSessionAutoLoginTimerFire();
-  // Trigger ARC kiosk auto-login.
-  void OnArcKioskAutoLoginTimerFire();
 
   // LoginPerformer::Delegate implementation:
   void OnAuthFailure(const AuthFailure& error) override;
   void OnAuthSuccess(const UserContext& user_context) override;
   void OnOffTheRecordAuthSuccess() override;
-  void OnPasswordChangeDetected() override;
+  void OnPasswordChangeDetected(const UserContext& user_context) override;
   void OnOldEncryptionDetected(const UserContext& user_context,
                                bool has_incomplete_migration) override;
   void WhiteListCheckFailed(const std::string& email) override;
@@ -234,7 +228,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void ShowTPMError();
 
   // Shows "password changed" dialog.
-  void ShowPasswordChangedDialog();
+  void ShowPasswordChangedDialog(const UserContext& user_context);
 
   // Creates |login_performer_| if necessary and calls login() on it.
   void PerformLogin(const UserContext& user_context,
@@ -350,9 +344,6 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // AccountId for public session auto-login.
   AccountId public_session_auto_login_account_id_ = EmptyAccountId();
 
-  // AccountId for ARC kiosk auto-login.
-  AccountId arc_kiosk_auto_login_account_id_ = EmptyAccountId();
-
   // Used to execute login operations.
   std::unique_ptr<LoginPerformer> login_performer_;
 
@@ -404,9 +395,9 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // Indicates use of local (not GAIA) authentication.
   bool auth_flow_offline_ = false;
 
-  // Time when the signin screen was first displayed. Used to measure the time
+  // Timer when the signin screen was first displayed. Used to measure the time
   // from showing the screen until a successful login is performed.
-  base::Time time_init_;
+  std::unique_ptr<base::ElapsedTimer> timer_init_;
 
   // Timer for the interval to wait for the reboot after TPM error UI was shown.
   base::OneShotTimer reboot_timer_;

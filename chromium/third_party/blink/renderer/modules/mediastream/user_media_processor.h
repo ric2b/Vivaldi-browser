@@ -12,7 +12,6 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/threading/thread_checker.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/mojom/mediastream/media_devices.mojom-blink.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-blink.h"
@@ -20,6 +19,8 @@
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_audio.h"
 #include "third_party/blink/renderer/modules/mediastream/user_media_request.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -90,10 +91,10 @@ class MODULES_EXPORT UserMediaProcessor
   void set_media_stream_dispatcher_host_for_testing(
       mojo::PendingRemote<blink::mojom::blink::MediaStreamDispatcherHost>
           dispatcher_host) {
-    dispatcher_host_.Bind(std::move(dispatcher_host));
+    dispatcher_host_.Bind(std::move(dispatcher_host), task_runner_);
   }
 
-  void Trace(Visitor*);
+  void Trace(Visitor*) const;
 
  protected:
   // These methods are virtual for test purposes. A test can override them to
@@ -101,7 +102,8 @@ class MODULES_EXPORT UserMediaProcessor
   // |request| have completed.
   virtual void GetUserMediaRequestSucceeded(
       const blink::WebMediaStream& stream,
-      UserMediaRequest* user_media_request);
+      UserMediaRequest* user_media_request,
+      bool pan_tilt_zoom_allowed);
   virtual void GetUserMediaRequestFailed(
       blink::mojom::blink::MediaStreamRequestResult result,
       const String& constraint_name = String());
@@ -137,7 +139,8 @@ class MODULES_EXPORT UserMediaProcessor
                          blink::mojom::blink::MediaStreamRequestResult result,
                          const String& label,
                          const Vector<blink::MediaStreamDevice>& audio_devices,
-                         const Vector<blink::MediaStreamDevice>& video_devices);
+                         const Vector<blink::MediaStreamDevice>& video_devices,
+                         bool pan_tilt_zoom_allowed);
 
   void GotAllVideoInputFormatsForDevice(
       UserMediaRequest* user_media_request,
@@ -153,10 +156,10 @@ class MODULES_EXPORT UserMediaProcessor
 
   bool IsCurrentRequestInfo(int request_id) const;
   bool IsCurrentRequestInfo(UserMediaRequest* user_media_request) const;
-  void DelayedGetUserMediaRequestSucceeded(
-      int request_id,
-      const blink::WebMediaStream& stream,
-      UserMediaRequest* user_media_request);
+  void DelayedGetUserMediaRequestSucceeded(int request_id,
+                                           const blink::WebMediaStream& stream,
+                                           UserMediaRequest* user_media_request,
+                                           bool pan_tilt_zoom_allowed);
   void DelayedGetUserMediaRequestFailed(
       int request_id,
       UserMediaRequest* user_media_request,
@@ -178,10 +181,10 @@ class MODULES_EXPORT UserMediaProcessor
   void StartTracks(const String& label);
 
   void CreateVideoTracks(const Vector<blink::MediaStreamDevice>& devices,
-                         Vector<blink::WebMediaStreamTrack>* webkit_tracks);
+                         HeapVector<Member<MediaStreamComponent>>* components);
 
   void CreateAudioTracks(const Vector<blink::MediaStreamDevice>& devices,
-                         Vector<blink::WebMediaStreamTrack>* webkit_tracks);
+                         HeapVector<Member<MediaStreamComponent>>* components);
 
   // Callback function triggered when all native versions of the
   // underlying media sources and tracks have been created and started.
@@ -283,7 +286,9 @@ class MODULES_EXPORT UserMediaProcessor
   LocalStreamSources local_sources_;
   LocalStreamSources pending_local_sources_;
 
-  mojo::Remote<blink::mojom::blink::MediaStreamDispatcherHost> dispatcher_host_;
+  HeapMojoRemote<blink::mojom::blink::MediaStreamDispatcherHost,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
+      dispatcher_host_;
 
   // UserMedia requests are processed sequentially. |current_request_info_|
   // contains the request currently being processed.

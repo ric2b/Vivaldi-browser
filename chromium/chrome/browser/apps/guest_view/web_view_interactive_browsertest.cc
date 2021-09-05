@@ -153,8 +153,8 @@ class NewSubViewAddedObserver : content::RenderWidgetHostViewCocoaObserver {
 class WebViewInteractiveTest : public extensions::PlatformAppBrowserTest {
  public:
   WebViewInteractiveTest()
-      : guest_web_contents_(NULL),
-        embedder_web_contents_(NULL),
+      : guest_web_contents_(nullptr),
+        embedder_web_contents_(nullptr),
         corner_(gfx::Point()),
         mouse_click_result_(false),
         first_click_(true) {
@@ -410,8 +410,7 @@ class WebViewInteractiveTest : public extensions::PlatformAppBrowserTest {
   class PopupCreatedObserver {
    public:
     PopupCreatedObserver()
-        : initial_widget_count_(0),
-          last_render_widget_host_(NULL) {}
+        : initial_widget_count_(0), last_render_widget_host_(nullptr) {}
 
     ~PopupCreatedObserver() {}
 
@@ -1353,7 +1352,12 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_FocusRestored) {
 
 // ui::TextInputClient is NULL for mac and android.
 #if !defined(OS_MACOSX) && !defined(OS_ANDROID)
-IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, Focus_InputMethod) {
+#if defined(ADDRESS_SANITIZER) || defined(OS_WIN)
+#define MAYBE_Focus_InputMethod DISABLED_Focus_InputMethod
+#else
+#define MAYBE_Focus_InputMethod Focus_InputMethod
+#endif
+IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, MAYBE_Focus_InputMethod) {
   content::WebContents* embedder_web_contents = NULL;
   std::unique_ptr<ExtensionTestMessageListener> done_listener(
       RunAppHelper("testInputMethod", "web_view/focus", NO_TEST_SERVER,

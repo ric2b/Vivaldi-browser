@@ -23,6 +23,7 @@
 #include "components/user_manager/user_type.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 
 class AccountId;
@@ -38,7 +39,6 @@ class NSSTempCertsCacheChromeOS;
 
 namespace chromeos {
 
-class ActiveDirectoryPasswordChangeScreenHandler;
 class Key;
 class SamlPasswordAttributes;
 class SigninScreenHandler;
@@ -109,9 +109,7 @@ class GaiaScreenHandler : public BaseScreenHandler,
   GaiaScreenHandler(
       JSCallsContainer* js_calls_container,
       CoreOobeView* core_oobe_view,
-      const scoped_refptr<NetworkStateInformer>& network_state_informer,
-      ActiveDirectoryPasswordChangeScreenHandler*
-          active_directory_password_change_screen_handler);
+      const scoped_refptr<NetworkStateInformer>& network_state_informer);
   ~GaiaScreenHandler() override;
 
   // GaiaView:
@@ -155,10 +153,9 @@ class GaiaScreenHandler : public BaseScreenHandler,
                              const std::string& partition_name);
 
   // Called after the GAPS cookie, if present, is added to the cookie store.
-  void OnSetCookieForLoadGaiaWithPartition(
-      const GaiaContext& context,
-      const std::string& partition_name,
-      net::CanonicalCookie::CookieInclusionStatus status);
+  void OnSetCookieForLoadGaiaWithPartition(const GaiaContext& context,
+                                           const std::string& partition_name,
+                                           net::CookieInclusionStatus status);
 
   // Callback that loads GAIA after version and stat consent information has
   // been retrieved.
@@ -332,8 +329,8 @@ class GaiaScreenHandler : public BaseScreenHandler,
 
   void ContinueAuthenticationWhenCookiesAvailable();
   void OnGetCookiesForCompleteAuthentication(
-      const net::CookieStatusList& cookies,
-      const net::CookieStatusList& excluded_cookies);
+      const net::CookieAccessResultList& cookies,
+      const net::CookieAccessResultList& excluded_cookies);
 
   void OnCookieWaitTimeout();
 
@@ -355,9 +352,6 @@ class GaiaScreenHandler : public BaseScreenHandler,
   scoped_refptr<NetworkStateInformer> network_state_informer_;
 
   CoreOobeView* core_oobe_view_ = nullptr;
-
-  ActiveDirectoryPasswordChangeScreenHandler*
-      active_directory_password_change_screen_handler_ = nullptr;
 
   // Account to pre-populate with.
   AccountId populated_account_id_;

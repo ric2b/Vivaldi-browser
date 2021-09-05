@@ -8,8 +8,9 @@ import android.app.PendingIntent;
 import android.app.PendingIntent.CanceledException;
 import android.content.Context;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
 import android.util.Pair;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
 import org.junit.Rule;
@@ -20,11 +21,10 @@ import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tab.TabState;
+import org.chromium.chrome.browser.tab.TabStateFileManager;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore;
 import org.chromium.chrome.browser.tabmodel.TestTabModelDirectory;
 import org.chromium.chrome.browser.tabmodel.TestTabModelDirectory.TabStateInfo;
@@ -119,7 +119,6 @@ public class IncognitoNotificationServiceTest {
     @Test
     @Feature("Incognito")
     @MediumTest
-    @RetryOnFailure
     @DisabledTest
     // https://crbug.com/1033835
     public void testNoAliveProcess() throws Exception {
@@ -155,7 +154,7 @@ public class IncognitoNotificationServiceTest {
         int normalCount = 0;
         for (File tabbedModeFile : tabbedModeFiles) {
             Pair<Integer, Boolean> tabFileInfo =
-                    TabState.parseInfoFromFilename(tabbedModeFile.getName());
+                    TabStateFileManager.parseInfoFromFilename(tabbedModeFile.getName());
             if (tabFileInfo.second) incognitoCount++;
             else normalCount++;
         }
@@ -172,7 +171,7 @@ public class IncognitoNotificationServiceTest {
                 int incognitoCount = 0;
                 for (File tabbedModeFile : tabbedModeFiles) {
                     Pair<Integer, Boolean> tabFileInfo =
-                            TabState.parseInfoFromFilename(tabbedModeFile.getName());
+                            TabStateFileManager.parseInfoFromFilename(tabbedModeFile.getName());
                     if (tabFileInfo != null && tabFileInfo.second) incognitoCount++;
                 }
                 return incognitoCount;
@@ -187,7 +186,7 @@ public class IncognitoNotificationServiceTest {
                 int normalCount = 0;
                 for (File tabbedModeFile : tabbedModeFiles) {
                     Pair<Integer, Boolean> tabFileInfo =
-                            TabState.parseInfoFromFilename(tabbedModeFile.getName());
+                            TabStateFileManager.parseInfoFromFilename(tabbedModeFile.getName());
                     if (tabFileInfo != null && !tabFileInfo.second) normalCount++;
                 }
                 return normalCount;

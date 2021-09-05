@@ -13,7 +13,6 @@
 #include <sstream>
 #include <utility>
 
-#include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/public/cpp/ash_features.h"
 #include "base/bind.h"
 #include "base/feature_list.h"
@@ -32,6 +31,9 @@
 #include "chrome/browser/chromeos/input_method/assistive_window_controller.h"
 #include "chrome/browser/chromeos/input_method/candidate_window_controller.h"
 #include "chrome/browser/chromeos/input_method/component_extension_ime_manager_impl.h"
+#include "chrome/browser/chromeos/input_method/ui/assistive_delegate.h"
+#include "chrome/browser/chromeos/input_method/ui/input_method_menu_item.h"
+#include "chrome/browser/chromeos/input_method/ui/input_method_menu_manager.h"
 #include "chrome/browser/chromeos/language_preferences.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -46,12 +48,10 @@
 #include "ui/base/ime/chromeos/component_extension_ime_manager.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/fake_ime_keyboard.h"
+#include "ui/base/ime/chromeos/ime_bridge.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/ime_keyboard_impl.h"
 #include "ui/base/ime/chromeos/input_method_delegate.h"
-#include "ui/base/ime/ime_bridge.h"
-#include "ui/chromeos/ime/input_method_menu_item.h"
-#include "ui/chromeos/ime/input_method_menu_manager.h"
 #include "ui/ozone/public/ozone_platform.h"
 
 namespace chromeos {
@@ -1235,11 +1235,6 @@ void InputMethodManagerImpl::SetCandidateWindowControllerForTesting(
   candidate_window_controller_->AddObserver(this);
 }
 
-void InputMethodManagerImpl::SetAssistiveWindowControllerForTesting(
-    AssistiveWindowController* assistive_window_controller) {
-  assistive_window_controller_.reset(assistive_window_controller);
-}
-
 void InputMethodManagerImpl::SetImeKeyboardForTesting(ImeKeyboard* keyboard) {
   keyboard_.reset(keyboard);
 }
@@ -1266,6 +1261,14 @@ void InputMethodManagerImpl::CandidateWindowOpened() {
 void InputMethodManagerImpl::CandidateWindowClosed() {
   for (auto& observer : candidate_window_observers_)
     observer.CandidateWindowClosed(this);
+}
+
+void InputMethodManagerImpl::AssistiveWindowButtonClicked(
+    const ui::ime::AssistiveWindowButton& button) const {
+  ui::IMEEngineHandlerInterface* engine =
+      ui::IMEBridge::Get()->GetCurrentEngineHandler();
+  if (engine)
+    engine->AssistiveWindowButtonClicked(button);
 }
 
 void InputMethodManagerImpl::ImeMenuActivationChanged(bool is_active) {
@@ -1305,7 +1308,8 @@ void InputMethodManagerImpl::MaybeInitializeAssistiveWindowController() {
   if (assistive_window_controller_.get())
     return;
 
-  assistive_window_controller_ = std::make_unique<AssistiveWindowController>();
+  assistive_window_controller_ =
+      std::make_unique<AssistiveWindowController>(this, state_->profile);
   ui::IMEBridge::Get()->SetAssistiveWindowHandler(
       assistive_window_controller_.get());
 }
@@ -1425,14 +1429,11 @@ void InputMethodManagerImpl::NotifyObserversImeExtraInputStateChange() {
 
 ui::InputMethodKeyboardController*
 InputMethodManagerImpl::GetInputMethodKeyboardController() {
-  // Callers expect a nullptr when the keyboard is disabled. See
-  // https://crbug.com/850020.
-  if (!keyboard::KeyboardUIController::HasInstance() ||
-      !keyboard::KeyboardUIController::Get()->IsEnabled()) {
+  ui::IMEEngineHandlerInterface* engine =
+      ui::IMEBridge::Get()->GetCurrentEngineHandler();
+  if (!engine)
     return nullptr;
-  }
-  return keyboard::KeyboardUIController::Get()
-      ->input_method_keyboard_controller();
+  return engine->GetInputMethodKeyboardController();
 }
 
 void InputMethodManagerImpl::ReloadKeyboard() {

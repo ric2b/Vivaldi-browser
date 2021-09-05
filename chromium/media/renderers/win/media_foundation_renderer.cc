@@ -21,6 +21,7 @@
 #include "base/win/windows_version.h"
 #include "base/win/wrapped_window_proc.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/cdm_context.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/win/mf_helpers.h"
 
@@ -330,8 +331,8 @@ void MediaFoundationRenderer::SetLatencyHint(
   NOTIMPLEMENTED() << "We do not use the latency hint today";
 }
 
-// TODO(frankli): Use ComPtr<> for |cdm|.
-void MediaFoundationRenderer::OnCdmProxyReceived(IMFCdmProxy* cdm) {
+void MediaFoundationRenderer::OnCdmProxyReceived(
+    ComPtr<IMFCdmProxy> cdm_proxy) {
   DVLOG_FUNC(1);
 
   if (!waiting_for_mf_cdm_ || !content_protection_manager_) {
@@ -342,8 +343,6 @@ void MediaFoundationRenderer::OnCdmProxyReceived(IMFCdmProxy* cdm) {
 
   waiting_for_mf_cdm_ = false;
 
-  ComPtr<IMFCdmProxy> cdm_proxy;
-  cdm_proxy.Attach(cdm);
   content_protection_manager_->SetCdmProxy(cdm_proxy.Get());
   mf_source_->SetCdmProxy(cdm_proxy.Get());
   HRESULT hr = SetSourceOnMediaEngine();

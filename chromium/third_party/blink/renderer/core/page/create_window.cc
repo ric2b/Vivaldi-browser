@@ -320,8 +320,8 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
     // TODO(japhet): Does network::mojom::ReferrerPolicy need to be proagated
     // for RemoteFrames?
     if (new_local_frame) {
-      new_local_frame->GetDocument()->SetReferrerPolicy(
-          opener_frame.GetDocument()->GetReferrerPolicy());
+      new_local_frame->DomWindow()->SetReferrerPolicy(
+          opener_frame.DomWindow()->GetReferrerPolicy());
     }
   }
 
@@ -330,7 +330,7 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
     if (!opener_frame.CanNavigate(*frame))
       return nullptr;
     if (!features.noopener)
-      frame->Client()->SetOpener(&opener_frame);
+      frame->SetOpener(&opener_frame);
     return frame;
   }
 

@@ -25,8 +25,8 @@ update_target("//chrome/browser/ui:ui") {
       "//vivaldi/ui/views/vivaldi_overlay_window_views.h",
       "//vivaldi/ui/views/video_pip_controller.cc",
       "//vivaldi/ui/views/video_pip_controller.h",
-      "//vivaldi/ui/vivaldi_app_window_contents.cc",
-      "//vivaldi/ui/vivaldi_app_window_contents.h",
+      "//vivaldi/ui/vivaldi_ui_web_contents_delegate.cc",
+      "//vivaldi/ui/vivaldi_ui_web_contents_delegate.h",
       "//vivaldi/ui/vivaldi_browser_window.cc",
       "//vivaldi/ui/vivaldi_browser_window.h",
       "//vivaldi/ui/infobar_container_web_proxy.cc",
@@ -63,6 +63,8 @@ update_target("//chrome/browser/ui:ui") {
       "//vivaldi/ui/views/vivaldi_system_menu_model_builder.h",
       "//vivaldi/ui/views/vivaldi_menubar_menu_views.h",
       "//vivaldi/ui/views/vivaldi_menubar_menu_views.cc",
+      "//vivaldi/ui/views/vivaldi_window_frame_view_aura.cc",
+      "//vivaldi/ui/views/vivaldi_window_frame_view_aura.h",
       "//vivaldi/ui/vivaldi_native_app_window_views_aura.cc",
       "//vivaldi/ui/vivaldi_native_app_window_views_aura.h",
     ]
@@ -112,6 +114,7 @@ if (!is_android) {
       "//vivaldi/app:resources",
       "//vivaldi/ui/vector_icons:vector_icons",
       "//third_party/blink/public:blink_headers",
+      "//vivaldi/app:resources",
     ]
   }
 }

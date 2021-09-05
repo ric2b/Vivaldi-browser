@@ -10,12 +10,16 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/swap_promise.h"
 #include "cc/trees/ukm_manager.h"
+#include "third_party/blink/public/mojom/input/input_handler.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_render_widget_scheduling_state.h"
+#include "third_party/blink/public/web/web_autofill_client.h"
 #include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_widget_client.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/layout_tree_builder_traversal.h"
@@ -31,6 +35,7 @@
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/core/loader/interactive_detector.h"
 #include "third_party/blink/renderer/core/page/context_menu_controller.h"
 #include "third_party/blink/renderer/core/page/drag_actions.h"
 #include "third_party/blink/renderer/core/page/drag_controller.h"
@@ -83,9 +88,12 @@ WebFrameWidgetBase::WebFrameWidgetBase(
     : widget_base_(std::make_unique<WidgetBase>(this,
                                                 std::move(widget_host),
                                                 std::move(widget))),
-      client_(&client),
-      frame_widget_host_(std::move(frame_widget_host)),
-      receiver_(this, std::move(frame_widget)) {}
+      client_(&client) {
+  frame_widget_host_.Bind(std::move(frame_widget_host),
+                          ThreadScheduler::Current()->IPCTaskRunner());
+  receiver_.Bind(std::move(frame_widget),
+                 ThreadScheduler::Current()->IPCTaskRunner());
+}
 
 WebFrameWidgetBase::~WebFrameWidgetBase() = default;
 
@@ -163,15 +171,17 @@ WebDragOperation WebFrameWidgetBase::DragTargetDragEnter(
                                    modifiers);
 }
 
-WebDragOperation WebFrameWidgetBase::DragTargetDragOver(
+void WebFrameWidgetBase::DragTargetDragOver(
     const gfx::PointF& point_in_viewport,
     const gfx::PointF& screen_point,
     WebDragOperationsMask operations_allowed,
-    int modifiers) {
+    uint32_t modifiers,
+    DragTargetDragOverCallback callback) {
   operations_allowed_ = operations_allowed;
 
-  return DragTargetDragEnterOrOver(point_in_viewport, screen_point, kDragOver,
-                                   modifiers);
+  blink::WebDragOperation operation = DragTargetDragEnterOrOver(
+      point_in_viewport, screen_point, kDragOver, modifiers);
+  std::move(callback).Run(operation);
 }
 
 void WebFrameWidgetBase::DragTargetDragLeave(
@@ -179,11 +189,11 @@ void WebFrameWidgetBase::DragTargetDragLeave(
     const gfx::PointF& screen_point) {
   DCHECK(current_drag_data_);
 
-  // TODO(paulmeyer): It shouldn't be possible for |m_currentDragData| to be
+  // TODO(paulmeyer): It shouldn't be possible for |current_drag_data_| to be
   // null here, but this is somehow happening (rarely). This suggests that in
   // some cases drag-leave is happening before drag-enter, which should be
   // impossible. This needs to be investigated further. Once fixed, the extra
-  // check for |!m_currentDragData| should be removed. (crbug.com/671152)
+  // check for |!current_drag_data_| should be removed. (crbug.com/671152)
   if (IgnoreInputEvents() || !current_drag_data_) {
     CancelDrag();
     return;
@@ -277,6 +287,12 @@ void WebFrameWidgetBase::SetBackgroundOpaque(bool opaque) {
     View()->SetBaseBackgroundColorOverride(SK_ColorTRANSPARENT);
     View()->SetBackgroundColorOverride(SK_ColorTRANSPARENT);
   }
+}
+
+void WebFrameWidgetBase::SetTextDirection(base::i18n::TextDirection direction) {
+  LocalFrame* focusedFrame = FocusedLocalFrameInWidget();
+  if (focusedFrame)
+    focusedFrame->SetTextDirection(direction);
 }
 
 void WebFrameWidgetBase::CancelDrag() {
@@ -373,9 +389,9 @@ Page* WebFrameWidgetBase::GetPage() const {
   return View()->GetPage();
 }
 
-const mojo::AssociatedRemote<mojom::blink::FrameWidgetHost>&
+mojom::blink::FrameWidgetHost*
 WebFrameWidgetBase::GetAssociatedFrameWidgetHost() const {
-  return frame_widget_host_;
+  return frame_widget_host_.get();
 }
 
 void WebFrameWidgetBase::DidAcquirePointerLock() {
@@ -401,9 +417,11 @@ void WebFrameWidgetBase::RequestDecode(
   Client()->RequestDecode(image, std::move(callback));
 }
 
-void WebFrameWidgetBase::Trace(Visitor* visitor) {
+void WebFrameWidgetBase::Trace(Visitor* visitor) const {
   visitor->Trace(local_root_);
   visitor->Trace(current_drag_data_);
+  visitor->Trace(frame_widget_host_);
+  visitor->Trace(receiver_);
 }
 
 void WebFrameWidgetBase::SetNeedsRecalculateRasterScales() {
@@ -455,6 +473,21 @@ void WebFrameWidgetBase::DidCommitAndDrawCompositorFrame() {
   Client()->DidCommitAndDrawCompositorFrame();
 }
 
+void WebFrameWidgetBase::DidObserveFirstScrollDelay(
+    base::TimeDelta first_scroll_delay,
+    base::TimeTicks first_scroll_timestamp) {
+  if (!local_root_ || !(local_root_->GetFrame()) ||
+      !(local_root_->GetFrame()->GetDocument())) {
+    return;
+  }
+  InteractiveDetector* interactive_detector =
+      InteractiveDetector::From(*(local_root_->GetFrame()->GetDocument()));
+  if (interactive_detector) {
+    interactive_detector->DidObserveFirstScrollDelay(first_scroll_delay,
+                                                     first_scroll_timestamp);
+  }
+}
+
 void WebFrameWidgetBase::OnDeferMainFrameUpdatesChanged(bool defer) {
   Client()->OnDeferMainFrameUpdatesChanged(defer);
 }
@@ -478,6 +511,19 @@ void WebFrameWidgetBase::DidBeginMainFrame() {
 
 void WebFrameWidgetBase::WillBeginMainFrame() {
   Client()->WillBeginMainFrame();
+}
+
+void WebFrameWidgetBase::SubmitThroughputData(
+    ukm::SourceId source_id,
+    int aggregated_percent,
+    int impl_percent,
+    base::Optional<int> main_percent) {
+  local_root_->Client()->SubmitThroughputData(source_id, aggregated_percent,
+                                              impl_percent, main_percent);
+}
+
+void WebFrameWidgetBase::ScheduleAnimationForWebTests() {
+  Client()->ScheduleAnimationForWebTests();
 }
 
 int WebFrameWidgetBase::GetLayerTreeId() {
@@ -525,6 +571,10 @@ cc::EventListenerProperties WebFrameWidgetBase::EventListenerProperties(
 
 mojom::blink::DisplayMode WebFrameWidgetBase::DisplayMode() const {
   return display_mode_;
+}
+
+const WebVector<WebRect>& WebFrameWidgetBase::WindowSegments() const {
+  return window_segments_;
 }
 
 void WebFrameWidgetBase::StartDeferringCommits(base::TimeDelta timeout) {
@@ -684,6 +734,59 @@ void WebFrameWidgetBase::DispatchRafAlignedInput(base::TimeTicks frame_time) {
   }
 }
 
+bool WebFrameWidgetBase::WillHandleGestureEvent(const WebGestureEvent& event) {
+  return Client()->WillHandleGestureEvent(event);
+}
+
+bool WebFrameWidgetBase::WillHandleMouseEvent(const WebMouseEvent& event) {
+  return Client()->WillHandleMouseEvent(event);
+}
+
+void WebFrameWidgetBase::ObserveGestureEventAndResult(
+    const WebGestureEvent& gesture_event,
+    const gfx::Vector2dF& unused_delta,
+    const cc::OverscrollBehavior& overscroll_behavior,
+    bool event_processed) {
+  Client()->DidHandleGestureScrollEvent(gesture_event, unused_delta,
+                                        overscroll_behavior, event_processed);
+}
+
+void WebFrameWidgetBase::DidHandleKeyEvent() {
+  ClearEditCommands();
+}
+
+void WebFrameWidgetBase::QueueSyntheticEvent(
+    std::unique_ptr<blink::WebCoalescedInputEvent> event) {
+  Client()->QueueSyntheticEvent(std::move(event));
+}
+
+WebTextInputType WebFrameWidgetBase::GetTextInputType() {
+  if (Client()->ShouldDispatchImeEventsToPepper())
+    return Client()->GetPepperTextInputType();
+
+  WebInputMethodController* controller = GetActiveWebInputMethodController();
+  if (!controller)
+    return WebTextInputType::kWebTextInputTypeNone;
+  return controller->TextInputType();
+}
+
+void WebFrameWidgetBase::GetWidgetInputHandler(
+    mojo::PendingReceiver<mojom::blink::WidgetInputHandler> request,
+    mojo::PendingRemote<mojom::blink::WidgetInputHandlerHost> host) {
+  Client()->GetWidgetInputHandler(std::move(request), std::move(host));
+}
+
+bool WebFrameWidgetBase::HasCurrentImeGuard(
+    bool request_to_show_virtual_keyboard) {
+  return Client()->HasCurrentImeGuard(request_to_show_virtual_keyboard);
+}
+
+void WebFrameWidgetBase::SendCompositionRangeChanged(
+    const gfx::Range& range,
+    const std::vector<gfx::Rect>& character_bounds) {
+  Client()->SendCompositionRangeChanged(range, character_bounds);
+}
+
 void WebFrameWidgetBase::ApplyViewportChangesForTesting(
     const ApplyViewportChangesArgs& args) {
   widget_base_->ApplyViewportChanges(args);
@@ -698,8 +801,52 @@ void WebFrameWidgetBase::SetDisplayMode(mojom::blink::DisplayMode mode) {
   }
 }
 
+void WebFrameWidgetBase::SetWindowSegments(WebVector<WebRect> window_segments) {
+  if (!window_segments_.Equals(window_segments))
+    window_segments_ = std::move(window_segments);
+}
+
 void WebFrameWidgetBase::SetCursor(const ui::Cursor& cursor) {
   widget_base_->SetCursor(cursor);
+}
+
+bool WebFrameWidgetBase::HandlingInputEvent() {
+  return widget_base_->input_handler().handling_input_event();
+}
+
+void WebFrameWidgetBase::SetHandlingInputEvent(bool handling) {
+  widget_base_->input_handler().set_handling_input_event(handling);
+}
+
+void WebFrameWidgetBase::ProcessInputEventSynchronously(
+    const WebCoalescedInputEvent& event,
+    HandledEventCallback callback) {
+  widget_base_->input_handler().HandleInputEvent(event, std::move(callback));
+}
+
+void WebFrameWidgetBase::UpdateTextInputState() {
+  widget_base_->UpdateTextInputState();
+}
+
+void WebFrameWidgetBase::ForceTextInputStateUpdate() {
+  widget_base_->ForceTextInputStateUpdate();
+}
+
+void WebFrameWidgetBase::UpdateCompositionInfo() {
+  widget_base_->UpdateCompositionInfo(/*immediate_request=*/false);
+}
+
+void WebFrameWidgetBase::UpdateSelectionBounds() {
+  widget_base_->UpdateSelectionBounds();
+}
+
+void WebFrameWidgetBase::ShowVirtualKeyboard() {
+  widget_base_->ShowVirtualKeyboard();
+}
+
+void WebFrameWidgetBase::RequestCompositionUpdates(bool immediate_request,
+                                                   bool monitor_updates) {
+  widget_base_->RequestCompositionUpdates(immediate_request, monitor_updates);
 }
 
 void WebFrameWidgetBase::AutoscrollStart(const gfx::PointF& position) {
@@ -712,6 +859,24 @@ void WebFrameWidgetBase::AutoscrollFling(const gfx::Vector2dF& velocity) {
 
 void WebFrameWidgetBase::AutoscrollEnd() {
   GetAssociatedFrameWidgetHost()->AutoscrollEnd();
+}
+
+void WebFrameWidgetBase::DidMeaningfulLayout(WebMeaningfulLayout layout_type) {
+  if (layout_type == blink::WebMeaningfulLayout::kVisuallyNonEmpty) {
+    NotifySwapAndPresentationTime(
+        base::NullCallback(),
+        WTF::Bind(&WebFrameWidgetBase::PresentationCallbackForMeaningfulLayout,
+                  WrapPersistent(this)));
+  }
+
+  if (client_)
+    client_->DidMeaningfulLayout(layout_type);
+}
+
+void WebFrameWidgetBase::PresentationCallbackForMeaningfulLayout(
+    blink::WebSwapResult,
+    base::TimeTicks) {
+  GetAssociatedFrameWidgetHost()->DidFirstVisuallyNonEmptyPaint();
 }
 
 void WebFrameWidgetBase::RequestAnimationAfterDelay(
@@ -763,6 +928,11 @@ WebFrameWidgetBase::EnsureCompositorPaintDispatcher(
   DCHECK(paint_task_runner_);
   *paint_task_runner = paint_task_runner_;
   return paint_dispatcher_;
+}
+
+void WebFrameWidgetBase::SetDelegatedInkMetadata(
+    std::unique_ptr<viz::DelegatedInkMetadata> metadata) {
+  widget_base_->LayerTreeHost()->SetDelegatedInkMetadata(std::move(metadata));
 }
 
 // Enables measuring and reporting both presentation times and swap times in
@@ -917,6 +1087,266 @@ void WebFrameWidgetBase::NotifySwapAndPresentationTime(
 scheduler::WebRenderWidgetSchedulingState*
 WebFrameWidgetBase::RendererWidgetSchedulingState() {
   return widget_base_->RendererWidgetSchedulingState();
+}
+
+void WebFrameWidgetBase::WaitForDebuggerWhenShown() {
+  local_root_->WaitForDebuggerWhenShown();
+}
+
+void WebFrameWidgetBase::SetTextZoomFactor(float text_zoom_factor) {
+  local_root_->GetFrame()->SetTextZoomFactor(text_zoom_factor);
+}
+
+float WebFrameWidgetBase::TextZoomFactor() {
+  return local_root_->GetFrame()->TextZoomFactor();
+}
+
+void WebFrameWidgetBase::SetMainFrameOverlayColor(SkColor color) {
+  DCHECK(!local_root_->Parent());
+  local_root_->GetFrame()->SetMainFrameColorOverlay(color);
+}
+
+void WebFrameWidgetBase::AddEditCommandForNextKeyEvent(const WebString& name,
+                                                       const WebString& value) {
+  edit_commands_.push_back(mojom::blink::EditCommand::New(name, value));
+}
+
+bool WebFrameWidgetBase::HandleCurrentKeyboardEvent() {
+  bool did_execute_command = false;
+  WebLocalFrame* frame = FocusedWebLocalFrameInWidget();
+  if (!frame)
+    frame = local_root_;
+  for (const auto& command : edit_commands_) {
+    // In gtk and cocoa, it's possible to bind multiple edit commands to one
+    // key (but it's the exception). Once one edit command is not executed, it
+    // seems safest to not execute the rest.
+    if (!frame->ExecuteCommand(command->name, command->value))
+      break;
+    did_execute_command = true;
+  }
+
+  return did_execute_command;
+}
+
+void WebFrameWidgetBase::ClearEditCommands() {
+  edit_commands_ = Vector<mojom::blink::EditCommandPtr>();
+}
+
+WebTextInputInfo WebFrameWidgetBase::TextInputInfo() {
+  WebInputMethodController* controller = GetActiveWebInputMethodController();
+  if (!controller)
+    return WebTextInputInfo();
+  return controller->TextInputInfo();
+}
+
+ui::mojom::blink::VirtualKeyboardVisibilityRequest
+WebFrameWidgetBase::GetLastVirtualKeyboardVisibilityRequest() {
+  WebInputMethodController* controller = GetActiveWebInputMethodController();
+  if (!controller)
+    return ui::mojom::blink::VirtualKeyboardVisibilityRequest::NONE;
+  return controller->GetLastVirtualKeyboardVisibilityRequest();
+}
+
+bool WebFrameWidgetBase::ShouldSuppressKeyboardForFocusedElement() {
+  WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
+  if (!focused_frame)
+    return false;
+  return focused_frame->ShouldSuppressKeyboardForFocusedElement();
+}
+
+void WebFrameWidgetBase::GetEditContextBoundsInWindow(
+    base::Optional<gfx::Rect>* edit_context_control_bounds,
+    base::Optional<gfx::Rect>* edit_context_selection_bounds) {
+  WebInputMethodController* controller = GetActiveWebInputMethodController();
+  if (!controller)
+    return;
+  WebRect control_bounds;
+  WebRect selection_bounds;
+  controller->GetLayoutBounds(&control_bounds, &selection_bounds);
+  client_->ConvertViewportToWindow(&control_bounds);
+  edit_context_control_bounds->emplace(control_bounds);
+  if (controller->IsEditContextActive()) {
+    client_->ConvertViewportToWindow(&selection_bounds);
+    edit_context_selection_bounds->emplace(selection_bounds);
+  }
+}
+
+int32_t WebFrameWidgetBase::ComputeWebTextInputNextPreviousFlags() {
+  WebInputMethodController* controller = GetActiveWebInputMethodController();
+  if (!controller)
+    return 0;
+  return controller->ComputeWebTextInputNextPreviousFlags();
+}
+
+void WebFrameWidgetBase::ResetVirtualKeyboardVisibilityRequest() {
+  WebInputMethodController* controller = GetActiveWebInputMethodController();
+  if (!controller)
+    return;
+  controller->SetVirtualKeyboardVisibilityRequest(
+      ui::mojom::blink::VirtualKeyboardVisibilityRequest::NONE);
+  ;
+}
+
+bool WebFrameWidgetBase::GetSelectionBoundsInWindow(
+    gfx::Rect* focus,
+    gfx::Rect* anchor,
+    base::i18n::TextDirection* focus_dir,
+    base::i18n::TextDirection* anchor_dir,
+    bool* is_anchor_first) {
+  if (Client()->ShouldDispatchImeEventsToPepper()) {
+    // TODO(kinaba) http://crbug.com/101101
+    // Current Pepper IME API does not handle selection bounds. So we simply
+    // use the caret position as an empty range for now. It will be updated
+    // after Pepper API equips features related to surrounding text retrieval.
+    gfx::Rect pepper_caret = Client()->GetPepperCaretBounds();
+    if (pepper_caret == *focus && pepper_caret == *anchor)
+      return false;
+    *focus = pepper_caret;
+    *anchor = *focus;
+    return true;
+  }
+  WebRect focus_webrect;
+  WebRect anchor_webrect;
+  SelectionBounds(focus_webrect, anchor_webrect);
+  client_->ConvertViewportToWindow(&focus_webrect);
+  client_->ConvertViewportToWindow(&anchor_webrect);
+
+  // if the bounds are the same return false.
+  if (gfx::Rect(focus_webrect) == *focus &&
+      gfx::Rect(anchor_webrect) == *anchor)
+    return false;
+  *focus = gfx::Rect(focus_webrect);
+  *anchor = gfx::Rect(anchor_webrect);
+
+  WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
+  if (!focused_frame)
+    return true;
+  focused_frame->SelectionTextDirection(*focus_dir, *anchor_dir);
+  *is_anchor_first = focused_frame->IsSelectionAnchorFirst();
+  return true;
+}
+
+void WebFrameWidgetBase::ClearTextInputState() {
+  widget_base_->ClearTextInputState();
+}
+
+void WebFrameWidgetBase::SetFocus(bool focus) {
+  widget_base_->SetFocus(focus);
+}
+
+bool WebFrameWidgetBase::HasFocus() {
+  return widget_base_->has_focus();
+}
+
+void WebFrameWidgetBase::SetToolTipText(const String& tooltip_text,
+                                        TextDirection dir) {
+  widget_base_->SetToolTipText(tooltip_text, dir);
+}
+
+void WebFrameWidgetBase::DidOverscroll(
+    const gfx::Vector2dF& overscroll_delta,
+    const gfx::Vector2dF& accumulated_overscroll,
+    const gfx::PointF& position,
+    const gfx::Vector2dF& velocity) {
+#if defined(OS_MACOSX)
+  // On OSX the user can disable the elastic overscroll effect. If that's the
+  // case, don't forward the overscroll notification.
+  if (!widget_base_->LayerTreeHost()->GetSettings().enable_elastic_overscroll)
+    return;
+#endif
+
+  cc::OverscrollBehavior overscroll_behavior =
+      widget_base_->LayerTreeHost()->overscroll_behavior();
+  if (!widget_base_->input_handler().DidOverscrollFromBlink(
+          overscroll_delta, accumulated_overscroll, position, velocity,
+          overscroll_behavior))
+    return;
+
+  // If we're currently handling an event, stash the overscroll data such that
+  // it can be bundled in the event ack.
+  Client()->DidOverscroll(overscroll_delta, accumulated_overscroll, position,
+                          velocity, overscroll_behavior);
+}
+
+void WebFrameWidgetBase::InjectGestureScrollEvent(
+    blink::WebGestureDevice device,
+    const gfx::Vector2dF& delta,
+    ui::ScrollGranularity granularity,
+    cc::ElementId scrollable_area_element_id,
+    blink::WebInputEvent::Type injected_type) {
+  widget_base_->input_handler().InjectGestureScrollEvent(
+      device, delta, granularity, scrollable_area_element_id, injected_type);
+}
+
+void WebFrameWidgetBase::DidChangeCursor(const ui::Cursor& cursor) {
+  widget_base_->SetCursor(cursor);
+  Client()->DidChangeCursor(cursor);
+}
+
+void WebFrameWidgetBase::FocusChangeComplete() {
+  blink::WebLocalFrame* focused = LocalRoot()->View()->FocusedFrame();
+
+  if (focused && focused->AutofillClient())
+    focused->AutofillClient()->DidCompleteFocusChangeInFrame();
+}
+
+void WebFrameWidgetBase::ShowVirtualKeyboardOnElementFocus() {
+  widget_base_->ShowVirtualKeyboardOnElementFocus();
+}
+
+void WebFrameWidgetBase::ProcessTouchAction(WebTouchAction touch_action) {
+  if (!widget_base_->ProcessTouchAction(touch_action))
+    return;
+  Client()->SetTouchAction(touch_action);
+}
+
+void WebFrameWidgetBase::DidHandleGestureEvent(const WebGestureEvent& event,
+                                               bool event_cancelled) {
+  if (event_cancelled) {
+    // The delegate() doesn't need to hear about cancelled events.
+    return;
+  }
+
+#if defined(OS_ANDROID) || defined(USE_AURA)
+  if (event.GetType() == WebInputEvent::Type::kGestureTap) {
+    widget_base_->input_handler().ShowVirtualKeyboard();
+  } else if (event.GetType() == WebInputEvent::Type::kGestureLongPress) {
+    WebInputMethodController* controller = GetActiveWebInputMethodController();
+    if (!controller || controller->TextInputInfo().value.IsEmpty())
+      widget_base_->input_handler().UpdateTextInputState();
+    else
+      widget_base_->input_handler().ShowVirtualKeyboard();
+  }
+#endif
+}
+
+gfx::Range WebFrameWidgetBase::CompositionRange() {
+  WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
+  if (!focused_frame)
+    return gfx::Range::InvalidRange();
+  blink::WebInputMethodController* controller =
+      focused_frame->GetInputMethodController();
+  WebRange web_range = controller->CompositionRange();
+  if (web_range.IsNull())
+    return gfx::Range::InvalidRange();
+  return gfx::Range(web_range.StartOffset(), web_range.EndOffset());
+}
+
+void WebFrameWidgetBase::GetCompositionCharacterBoundsInWindow(
+    Vector<gfx::Rect>* bounds) {
+  WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
+  if (!focused_frame)
+    return;
+  blink::WebInputMethodController* controller =
+      focused_frame->GetInputMethodController();
+  blink::WebVector<blink::WebRect> bounds_from_blink;
+  if (!controller->GetCompositionCharacterBounds(bounds_from_blink))
+    return;
+
+  for (size_t i = 0; i < bounds_from_blink.size(); ++i) {
+    Client()->ConvertViewportToWindow(&bounds_from_blink[i]);
+    bounds->push_back(bounds_from_blink[i]);
+  }
 }
 
 }  // namespace blink

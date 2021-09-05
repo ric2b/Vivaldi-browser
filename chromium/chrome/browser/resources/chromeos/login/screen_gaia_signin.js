@@ -711,11 +711,6 @@ Polymer({
    * Event handler that is invoked just before the frame is shown.
    */
   onBeforeShow() {
-    this.behaviors.forEach((behavior) => {
-      if (behavior.onBeforeShow)
-        behavior.onBeforeShow.call(this);
-    });
-
     this.screenMode_ = AuthMode.DEFAULT;
     this.loadingFrameContents_ = true;
     chrome.send('loginUIStateChanged', ['gaia-signin', true]);
@@ -731,10 +726,11 @@ Polymer({
     this.lastBackMessageValue_ = false;
     this.updateGuestButtonVisibility_();
 
-    this.$['offline-ad-auth'].onBeforeShow();
-    this.$['signin-frame-dialog'].onBeforeShow();
-    this.$['offline-gaia'].onBeforeShow();
-    this.$.pinDialog.onBeforeShow();
+    cr.ui.login.invokePolymerMethod(this.$['offline-ad-auth'], 'onBeforeShow');
+    cr.ui.login.invokePolymerMethod(
+        this.$['signin-frame-dialog'], 'onBeforeShow');
+    cr.ui.login.invokePolymerMethod(this.$['offline-gaia'], 'onBeforeShow');
+    cr.ui.login.invokePolymerMethod(this.$.pinDialog, 'onBeforeShow');
   },
 
   /**
@@ -1101,7 +1097,7 @@ Polymer({
       chrome.send('scrapedPasswordCount', [passwordCount]);
 
     if (this.samlPasswordConfirmAttempt_ < 2) {
-      login.ConfirmPasswordScreen.show(
+      login.ConfirmSamlPasswordScreen.show(
           email, false /* manual password entry */,
           this.samlPasswordConfirmAttempt_,
           this.onConfirmPasswordCollected_.bind(this));
@@ -1146,7 +1142,7 @@ Polymer({
    */
   onAuthNoPassword_(email) {
     chrome.send('scrapedPasswordCount', [0]);
-    login.ConfirmPasswordScreen.show(
+    login.ConfirmSamlPasswordScreen.show(
         email, true /* manual password entry */,
         this.samlPasswordConfirmAttempt_,
         this.onManualPasswordCollected_.bind(this));

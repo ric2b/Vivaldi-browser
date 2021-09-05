@@ -865,10 +865,6 @@ jumbo_component("platform") {
     "graphics/dark_mode_color_filter.h",
     "graphics/dark_mode_filter.cc",
     "graphics/dark_mode_filter.h",
-    "graphics/dark_mode_generic_classifier.cc",
-    "graphics/dark_mode_generic_classifier.h",
-    "graphics/dark_mode_icon_classifier.cc",
-    "graphics/dark_mode_icon_classifier.h",
     "graphics/dark_mode_image_classifier.cc",
     "graphics/dark_mode_image_classifier.h",
     "graphics/dark_mode_settings.h",
@@ -981,6 +977,8 @@ jumbo_component("platform") {
     "graphics/graphics_types.cc",
     "graphics/graphics_types.h",
     "graphics/graphics_types_3d.h",
+    "graphics/identifiability_paint_op_digest.cc",
+    "graphics/identifiability_paint_op_digest.h",
     "graphics/image.cc",
     "graphics/image.h",
     "graphics/image_animation_policy.h",
@@ -1237,6 +1235,8 @@ jumbo_component("platform") {
     "mojo/big_string_mojom_traits.h",
     "mojo/bluetooth_mojom_traits.cc",
     "mojo/bluetooth_mojom_traits.h",
+    "mojo/features.cc",
+    "mojo/features.h",
     "mojo/fetch_api_request_headers_mojom_traits.h",
     "mojo/heap_mojo_associated_receiver.h",
     "mojo/heap_mojo_associated_receiver_set.h",
@@ -1398,6 +1398,9 @@ jumbo_component("platform") {
     "text/web_entities.cc",
     "text/web_entities.h",
     "text/win/hyphenation_win.cc",
+    "text/writing_direction_mode.cc",
+    "text/writing_direction_mode.h",
+    "text/writing_mode.cc",
     "text/writing_mode.h",
     "text/writing_mode_utils.h",
     "timer.cc",
@@ -1500,6 +1503,8 @@ jumbo_component("platform") {
     "widget/input/prediction/predictor_factory.cc",
     "widget/input/scroll_predictor.cc",
     "widget/input/scroll_predictor.h",
+    "widget/input/widget_base_input_handler.cc",
+    "widget/input/widget_base_input_handler.h",
     "widget/widget_base.cc",
     "widget/widget_base.h",
     "widget/widget_base_client.h",
@@ -1581,7 +1586,7 @@ jumbo_component("platform") {
     "//skia",
     "//skia:skcms",
     "//third_party:freetype_harfbuzz",
-    "//third_party/abseil-cpp/absl/types:optional",
+    "//third_party/abseil-cpp:absl",
     "//third_party/blink/public:image_resources",
     "//third_party/blink/public/common",
     "//third_party/blink/public/mojom:embedded_frame_sink_mojo_bindings_blink",
@@ -1595,7 +1600,7 @@ jumbo_component("platform") {
     "//third_party/one_euro_filter",
     "//third_party/webrtc_overrides:webrtc_component",
     "//third_party/zlib/google:compression_utils",
-    "//ui/base/cursor",
+    "//ui/base/cursor:cursor_base",
     "//ui/base/cursor/mojom:cursor_type_blink",
     "//ui/events/ipc",
     "//ui/gfx/geometry",
@@ -1826,7 +1831,6 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "disk_data_allocator_test.cc",
     "disk_data_allocator_test_utils.h",
     "exported/file_path_conversion_test.cc",
-    "exported/mediastream/media_stream_audio_test.cc",
     "exported/page_zoom_test.cc",
     "exported/video_capture/web_video_capture_impl_manager_test.cc",
     "exported/web_icon_sizes_parser_test.cc",
@@ -1949,6 +1953,7 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "mac/graphics_context_canvas_test.mm",
     "media/webaudiosourceprovider_impl_test.cc",
     "mediastream/media_stream_audio_processor_options_test.cc",
+    "mediastream/media_stream_audio_test.cc",
     "mediastream/webrtc_uma_histograms_test.cc",
     "mhtml/mhtml_parser_test.cc",
     "mojo/big_string_mojom_traits_test.cc",
@@ -2010,6 +2015,7 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "widget/compositing/test/stub_layer_tree_view_delegate.h",
     "widget/input/input_handler_proxy_unittest.cc",
     "widget/input/input_scroll_elasticity_controller_unittest.cc",
+    "widget/input/overscroll_bounce_controller_unittest.cc",
     "widget/input/prediction/empty_filter_unittests.cc",
     "widget/input/prediction/filter_factory_unittests.cc",
     "widget/input/prediction/input_filter_unittest_helpers.cc",
@@ -2103,6 +2109,26 @@ executable("image_decode_bench") {
     ":platform",
     "//base",
     "//mojo/core/embedder",
+    "//third_party/blink/renderer/platform/wtf",
+  ]
+
+  configs += [
+    "//third_party/blink/renderer/platform/wtf:wtf_config",
+    "//third_party/blink/renderer:config",
+  ]
+
+  defines = [ "INSIDE_BLINK" ]
+}
+
+executable("image_decode_to_nia") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ "*" ]
+
+  sources = [ "testing/image_decode_to_nia.cc" ]
+
+  deps = [
+    ":platform",
+    "//base",
     "//third_party/blink/renderer/platform/wtf",
   ]
 

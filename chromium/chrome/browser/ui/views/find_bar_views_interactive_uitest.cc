@@ -46,7 +46,7 @@ class WebContentsFocusChangedWatcher : public content::WebContentsObserver {
  public:
   explicit WebContentsFocusChangedWatcher(WebContents* web_contents)
       : WebContentsObserver(web_contents) {
-    EXPECT_TRUE(web_contents != nullptr);
+    EXPECT_TRUE(web_contents);
   }
   ~WebContentsFocusChangedWatcher() override {}
 
@@ -614,8 +614,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageTest, MAYBE_CtrlEnter) {
   observer.Wait();
 }
 
-// Flaky: https://crbug.com/1072464
-IN_PROC_BROWSER_TEST_F(FindInPageTest, DISABLED_SelectionDuringFind) {
+IN_PROC_BROWSER_TEST_F(FindInPageTest, SelectionDuringFind) {
   ASSERT_TRUE(embedded_test_server()->Start());
   // Make sure Chrome is in the foreground, otherwise sending input
   // won't do anything and the test will hang.

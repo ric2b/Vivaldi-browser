@@ -7,9 +7,8 @@
 
 #include <string>
 
-#include "base/macros.h"
 #include "base/optional.h"
-#include "chromeos/dbus/lorgnette_manager_client.h"
+#include "chromeos/dbus/lorgnette/lorgnette_service.pb.h"
 #include "extensions/browser/api/document_scan/document_scan_interface.h"
 
 namespace extensions {
@@ -18,6 +17,9 @@ namespace api {
 class DocumentScanInterfaceChromeos : public DocumentScanInterface {
  public:
   DocumentScanInterfaceChromeos();
+  DocumentScanInterfaceChromeos(const DocumentScanInterfaceChromeos&) = delete;
+  DocumentScanInterfaceChromeos& operator=(
+      const DocumentScanInterfaceChromeos&) = delete;
   ~DocumentScanInterfaceChromeos() override;
 
   // DocumentScanInterface:
@@ -30,11 +32,9 @@ class DocumentScanInterfaceChromeos : public DocumentScanInterface {
  private:
   void OnScannerListReceived(
       ListScannersResultsCallback callback,
-      base::Optional<chromeos::LorgnetteManagerClient::ScannerTable> scanners);
+      base::Optional<lorgnette::ListScannersResponse> response);
   void OnScanCompleted(ScanResultsCallback callback,
                        base::Optional<std::string> image_data);
-
-  DISALLOW_COPY_AND_ASSIGN(DocumentScanInterfaceChromeos);
 };
 
 }  // namespace api

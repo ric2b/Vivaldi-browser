@@ -12,6 +12,7 @@
 
 #include "base/optional.h"
 #include "content/common/ax_content_node_data.h"
+#include "content/common/ax_content_tree_data.h"
 #include "third_party/blink/public/web/web_ax_object.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "ui/accessibility/ax_mode.h"
@@ -91,12 +92,6 @@ class BlinkAXTreeSource
   bool ShouldLoadInlineTextBoxes(const blink::WebAXObject& obj) const;
   void SetLoadInlineTextBoxesForId(int32_t id);
 
-  // Call this to enable populating the DOMNodeID for each node. This is
-  // currently only used for accessible PDF exporting. Warning, this is totally
-  // unrelated to the accessibility node ID, or the ID attribute for an HTML
-  // element.
-  void EnableDOMNodeIDs();
-
   // AXTreeSource implementation.
   bool GetTreeData(AXContentTreeData* tree_data) const override;
   blink::WebAXObject GetRoot() const override;
@@ -131,6 +126,45 @@ class BlinkAXTreeSource
     return focus_;
   }
 
+  void SerializeBoundingBoxAttributes(blink::WebAXObject src,
+                                      AXContentNodeData* dst) const;
+  void SerializePDFAttributes(blink::WebAXObject src,
+                              AXContentNodeData* dst) const;
+  void SerializeSparseAttributes(blink::WebAXObject src,
+                                 AXContentNodeData* dst) const;
+  void SerializeNameAndDescriptionAttributes(blink::WebAXObject src,
+                                             AXContentNodeData* dst) const;
+  void SerializeValueAttributes(blink::WebAXObject src,
+                                AXContentNodeData* dst) const;
+  void SerializeStateAttributes(blink::WebAXObject src,
+                                AXContentNodeData* dst) const;
+  void SerializeStyleAttributes(blink::WebAXObject src,
+                                AXContentNodeData* dst) const;
+  void SerializeInlineTextBoxAttributes(blink::WebAXObject src,
+                                        AXContentNodeData* dst) const;
+  void SerializeMarkerAttributes(blink::WebAXObject src,
+                                 AXContentNodeData* dst) const;
+  void SerializeLiveRegionAttributes(blink::WebAXObject src,
+                                     AXContentNodeData* dst) const;
+  void SerializeListAttributes(blink::WebAXObject src,
+                               AXContentNodeData* dst) const;
+  void SerializeTableAttributes(blink::WebAXObject src,
+                                AXContentNodeData* dst) const;
+  void SerializeScrollAttributes(blink::WebAXObject src,
+                                 AXContentNodeData* dst) const;
+  void SerializeChooserPopupAttributes(blink::WebAXObject src,
+                                       AXContentNodeData* dst) const;
+  void SerializeOtherScreenReaderAttributes(blink::WebAXObject src,
+                                            AXContentNodeData* dst) const;
+  void SerializeEditableTextAttributes(blink::WebAXObject src,
+                                       AXContentNodeData* dst) const;
+  void SerializeElementAttributes(blink::WebAXObject src,
+                                  blink::WebElement element,
+                                  AXContentNodeData* dst) const;
+  void SerializeHTMLAttributes(blink::WebAXObject src,
+                               blink::WebElement element,
+                               AXContentNodeData* dst) const;
+
   blink::WebAXObject ComputeRoot() const;
 
   // Max length for attributes such as aria-label.
@@ -156,11 +190,6 @@ class BlinkAXTreeSource
 
   // A set of IDs for which we should always load inline text boxes.
   std::set<int32_t> load_inline_text_boxes_ids_;
-
-  // Whether we should store Blink DOMNodeIds in the accessibility tree.
-  // Warning, this is totally unrelated to the accessibility node ID, or the ID
-  // attribute for an HTML element.
-  bool enable_dom_node_ids_ = false;
 
   // The ID of the object to fetch image data for.
   int image_data_node_id_ = -1;

@@ -7,6 +7,8 @@
 #import <UIKit/UIKit.h>
 
 #include "base/containers/adapters.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "base/strings/stringprintf.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/values.h"
@@ -18,6 +20,7 @@
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/pref_names.h"
+#include "ios/chrome/browser/web/features.h"
 #include "ios/components/ui_util/dynamic_type_util.h"
 #include "ios/web/public/js_messaging/web_frame.h"
 #include "ios/web/public/js_messaging/web_frame_util.h"
@@ -148,7 +151,13 @@ void FontSizeTabHelper::UserZoom(Zoom zoom) {
   double new_zoom_multiplier = NewMultiplierAfterZoom(zoom).value_or(1);
   StoreCurrentUserZoomMultiplier(new_zoom_multiplier);
 
-  // Track when the user zooms to see if there are certain websites that are
+  LogZoomEvent(zoom);
+
+  SetPageFontSize(GetFontSize());
+}
+
+void FontSizeTabHelper::LogZoomEvent(Zoom zoom) const {
+  // Log when the user zooms to see if there are certain websites that are
   // broken when zooming.
   IOSContentSizeCategory content_size_category =
       IOSContentSizeCategoryForCurrentUIContentSizeCategory();
@@ -160,7 +169,18 @@ void FontSizeTabHelper::UserZoom(Zoom zoom) {
       .SetOverallZoomLevel(GetFontSize())
       .Record(ukm_recorder);
 
-  SetPageFontSize(GetFontSize());
+  // Log a UserMetricsAction as well so the zoom events appear in breadcrumbs.
+  switch (zoom) {
+    case ZOOM_OUT:
+      base::RecordAction(base::UserMetricsAction("IOS.PageZoom.ZoomOut"));
+      break;
+    case ZOOM_IN:
+      base::RecordAction(base::UserMetricsAction("IOS.PageZoom.ZoomIn"));
+      break;
+    case ZOOM_RESET:
+      base::RecordAction(base::UserMetricsAction("IOS.PageZoom.ZoomReset"));
+      break;
+  }
 }
 
 base::Optional<double> FontSizeTabHelper::NewMultiplierAfterZoom(
@@ -221,9 +241,13 @@ bool FontSizeTabHelper::CurrentPageSupportsTextZoom() const {
 }
 
 int FontSizeTabHelper::GetFontSize() const {
+  // Only add in the dynamic type multiplier if the flag is enabled.
+  double dynamic_type_multiplier =
+      base::FeatureList::IsEnabled(web::kWebPageDefaultZoomFromDynamicType)
+          ? ui_util::SystemSuggestedFontSizeMultiplier()
+          : 1;
   // Multiply by 100 as the web property needs a percentage.
-  return ui_util::SystemSuggestedFontSizeMultiplier() *
-         GetCurrentUserZoomMultiplier() * 100;
+  return dynamic_type_multiplier * GetCurrentUserZoomMultiplier() * 100;
 }
 
 void FontSizeTabHelper::WebStateDestroyed(web::WebState* web_state) {
@@ -279,9 +303,14 @@ PrefService* FontSizeTabHelper::GetPrefService() const {
 }
 
 std::string FontSizeTabHelper::GetCurrentUserZoomMultiplierKey() const {
-  std::string content_size_category = base::SysNSStringToUTF8(
-      UIApplication.sharedApplication.preferredContentSizeCategory);
-  return base::StringPrintf("%s.%s", content_size_category.c_str(),
+  UIContentSizeCategory content_size_category =
+      base::FeatureList::IsEnabled(web::kWebPageDefaultZoomFromDynamicType)
+          ? UIApplication.sharedApplication.preferredContentSizeCategory
+          : UIContentSizeCategoryLarge;
+
+  std::string content_size_category_key =
+      base::SysNSStringToUTF8(content_size_category);
+  return base::StringPrintf("%s.%s", content_size_category_key.c_str(),
                             GetUserZoomMultiplierKeyUrlPart().c_str());
 }
 

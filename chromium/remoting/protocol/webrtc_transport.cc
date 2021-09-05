@@ -11,6 +11,7 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
@@ -194,27 +195,28 @@ base::Optional<bool> IsConnectionRelayed(
 class CreateSessionDescriptionObserver
     : public webrtc::CreateSessionDescriptionObserver {
  public:
-  typedef base::Callback<void(
+  typedef base::OnceCallback<void(
       std::unique_ptr<webrtc::SessionDescriptionInterface> description,
       const std::string& error)>
       ResultCallback;
 
   static CreateSessionDescriptionObserver* Create(
-      const ResultCallback& result_callback) {
+      ResultCallback result_callback) {
     return new rtc::RefCountedObject<CreateSessionDescriptionObserver>(
-        result_callback);
+        std::move(result_callback));
   }
+
   void OnSuccess(webrtc::SessionDescriptionInterface* desc) override {
     std::move(result_callback_).Run(base::WrapUnique(desc), std::string());
   }
+
   void OnFailure(webrtc::RTCError error) override {
     std::move(result_callback_).Run(nullptr, error.message());
   }
 
  protected:
-  explicit CreateSessionDescriptionObserver(
-      const ResultCallback& result_callback)
-      : result_callback_(result_callback) {}
+  explicit CreateSessionDescriptionObserver(ResultCallback result_callback)
+      : result_callback_(std::move(result_callback)) {}
   ~CreateSessionDescriptionObserver() override = default;
 
  private:
@@ -228,13 +230,12 @@ class CreateSessionDescriptionObserver
 class SetSessionDescriptionObserver
     : public webrtc::SetSessionDescriptionObserver {
  public:
-  typedef base::Callback<void(bool success, const std::string& error)>
+  typedef base::OnceCallback<void(bool success, const std::string& error)>
       ResultCallback;
 
-  static SetSessionDescriptionObserver* Create(
-      const ResultCallback& result_callback) {
+  static SetSessionDescriptionObserver* Create(ResultCallback result_callback) {
     return new rtc::RefCountedObject<SetSessionDescriptionObserver>(
-        result_callback);
+        std::move(result_callback));
   }
 
   void OnSuccess() override {
@@ -246,8 +247,8 @@ class SetSessionDescriptionObserver
   }
 
  protected:
-  explicit SetSessionDescriptionObserver(const ResultCallback& result_callback)
-      : result_callback_(result_callback) {}
+  explicit SetSessionDescriptionObserver(ResultCallback result_callback)
+      : result_callback_(std::move(result_callback)) {}
   ~SetSessionDescriptionObserver() override = default;
 
  private:
@@ -258,14 +259,13 @@ class SetSessionDescriptionObserver
 
 class RTCStatsCollectorCallback : public webrtc::RTCStatsCollectorCallback {
  public:
-  typedef base::RepeatingCallback<void(
+  typedef base::OnceCallback<void(
       const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report)>
       ResultCallback;
 
-  static RTCStatsCollectorCallback* Create(
-      const ResultCallback& result_callback) {
+  static RTCStatsCollectorCallback* Create(ResultCallback result_callback) {
     return new rtc::RefCountedObject<RTCStatsCollectorCallback>(
-        result_callback);
+        std::move(result_callback));
   }
 
   void OnStatsDelivered(
@@ -274,8 +274,8 @@ class RTCStatsCollectorCallback : public webrtc::RTCStatsCollectorCallback {
   }
 
  protected:
-  explicit RTCStatsCollectorCallback(const ResultCallback& result_callback)
-      : result_callback_(result_callback) {}
+  explicit RTCStatsCollectorCallback(ResultCallback result_callback)
+      : result_callback_(std::move(result_callback)) {}
   ~RTCStatsCollectorCallback() override = default;
 
  private:
@@ -552,16 +552,18 @@ bool WebrtcTransport::ProcessTransportInfo(XmlElement* transport_info) {
     }
 
     peer_connection()->SetRemoteDescription(
-        SetSessionDescriptionObserver::Create(
-            base::Bind(&WebrtcTransport::OnRemoteDescriptionSet,
-                       weak_factory_.GetWeakPtr(),
-                       type == webrtc::SessionDescriptionInterface::kOffer)),
+        SetSessionDescriptionObserver::Create(base::BindOnce(
+            &WebrtcTransport::OnRemoteDescriptionSet,
+            weak_factory_.GetWeakPtr(),
+            type == webrtc::SessionDescriptionInterface::kOffer)),
         session_description.release());
 
     // SetRemoteDescription() might overwrite any bitrate caps previously set,
     // so (re)apply them here. This might happen if ICE state were already
     // connected and OnStatsDelivered() had already set the caps.
-    SetPeerConnectionBitrates(MaxBitrateForConnection());
+    int min_bitrate_bps, max_bitrate_bps;
+    std::tie(min_bitrate_bps, max_bitrate_bps) = BitratesForConnection();
+    SetPeerConnectionBitrates(min_bitrate_bps, max_bitrate_bps);
   }
 
   XmlElement* candidate_element;
@@ -608,6 +610,20 @@ bool WebrtcTransport::ProcessTransportInfo(XmlElement* transport_info) {
 const SessionOptions& WebrtcTransport::session_options() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return session_options_;
+}
+
+void WebrtcTransport::SetPreferredBitrates(
+    base::Optional<int> min_bitrate_bps,
+    base::Optional<int> max_bitrate_bps) {
+  preferred_min_bitrate_bps_ = min_bitrate_bps;
+  preferred_max_bitrate_bps_ = max_bitrate_bps;
+  if (connected_) {
+    int actual_min_bitrate_bps, actual_max_bitrate_bps;
+    std::tie(actual_min_bitrate_bps, actual_max_bitrate_bps) =
+        BitratesForConnection();
+    SetPeerConnectionBitrates(actual_min_bitrate_bps, actual_max_bitrate_bps);
+    SetSenderBitrates(actual_min_bitrate_bps, actual_max_bitrate_bps);
+  }
 }
 
 // static
@@ -693,7 +709,9 @@ void WebrtcTransport::OnAudioTransceiverCreated(
 void WebrtcTransport::OnVideoTransceiverCreated(
     rtc::scoped_refptr<webrtc::RtpTransceiverInterface> transceiver) {
   video_transceiver_ = transceiver;
-  SetSenderBitrates(MaxBitrateForConnection());
+  int min_bitrate_bps, max_bitrate_bps;
+  std::tie(min_bitrate_bps, max_bitrate_bps) = BitratesForConnection();
+  SetSenderBitrates(min_bitrate_bps, max_bitrate_bps);
 }
 
 void WebrtcTransport::OnLocalSessionDescriptionCreated(
@@ -756,7 +774,7 @@ void WebrtcTransport::OnLocalSessionDescriptionCreated(
   send_transport_info_callback_.Run(std::move(transport_info));
 
   peer_connection()->SetLocalDescription(
-      SetSessionDescriptionObserver::Create(base::Bind(
+      SetSessionDescriptionObserver::Create(base::BindOnce(
           &WebrtcTransport::OnLocalDescriptionSet, weak_factory_.GetWeakPtr())),
       description.release());
 }
@@ -796,8 +814,8 @@ void WebrtcTransport::OnRemoteDescriptionSet(bool send_answer,
     const webrtc::PeerConnectionInterface::RTCOfferAnswerOptions options;
     peer_connection()->CreateAnswer(
         CreateSessionDescriptionObserver::Create(
-            base::Bind(&WebrtcTransport::OnLocalSessionDescriptionCreated,
-                       weak_factory_.GetWeakPtr())),
+            base::BindOnce(&WebrtcTransport::OnLocalSessionDescriptionCreated,
+                           weak_factory_.GetWeakPtr())),
         options);
   }
 
@@ -936,12 +954,13 @@ void WebrtcTransport::OnStatsDelivered(
   // (~600kbps).
   // Set the global bitrate caps in addition to the VideoSender bitrates. The
   // global caps affect the probing configuration used by b/w estimator.
-  int max_bitrate_bps = MaxBitrateForConnection();
-  SetPeerConnectionBitrates(max_bitrate_bps);
-  SetSenderBitrates(max_bitrate_bps);
+  int min_bitrate_bps, max_bitrate_bps;
+  std::tie(min_bitrate_bps, max_bitrate_bps) = BitratesForConnection();
+  SetPeerConnectionBitrates(min_bitrate_bps, max_bitrate_bps);
+  SetSenderBitrates(min_bitrate_bps, max_bitrate_bps);
 }
 
-int WebrtcTransport::MaxBitrateForConnection() {
+std::tuple<int, int> WebrtcTransport::BitratesForConnection() {
   int max_bitrate_bps = kMaxBitrateBps;
   if (connection_relayed_.value_or(false)) {
     int turn_max_rate_kbps = transport_context_->GetTurnMaxRateKbps();
@@ -955,16 +974,52 @@ int WebrtcTransport::MaxBitrateForConnection() {
       max_bitrate_bps = turn_max_rate_kbps * 1000;
     }
   }
-  return max_bitrate_bps;
+
+  if (preferred_max_bitrate_bps_.has_value()) {
+    if (*preferred_max_bitrate_bps_ >= 0 &&
+        *preferred_max_bitrate_bps_ <= max_bitrate_bps) {
+      VLOG(0) << "Client sets max bitrate to " << *preferred_max_bitrate_bps_
+              << " bps.";
+      max_bitrate_bps = *preferred_max_bitrate_bps_;
+    } else {
+      LOG(WARNING) << "Max bitrate setting  " << *preferred_max_bitrate_bps_
+                   << " bps ignored since it's not in the range of "
+                   << "[0, " << max_bitrate_bps << "].";
+    }
+  }
+
+  int min_bitrate_bps = 0;
+  if (preferred_min_bitrate_bps_.has_value()) {
+    if (preferred_min_bitrate_bps_ >= 0 &&
+        preferred_min_bitrate_bps_ <= max_bitrate_bps) {
+      VLOG(0) << "Client sets min bitrate to " << *preferred_min_bitrate_bps_
+              << " bps.";
+      min_bitrate_bps = *preferred_min_bitrate_bps_;
+    } else {
+      LOG(WARNING) << "Min bitrate setting  " << *preferred_min_bitrate_bps_
+                   << " bps ignored since it's not in the range of "
+                   << "[0, " << max_bitrate_bps << "].";
+    }
+  }
+  return {min_bitrate_bps, max_bitrate_bps};
 }
 
-void WebrtcTransport::SetPeerConnectionBitrates(int max_bitrate_bps) {
+void WebrtcTransport::SetPeerConnectionBitrates(int min_bitrate_bps,
+                                                int max_bitrate_bps) {
+  DCHECK_LE(min_bitrate_bps, max_bitrate_bps);
   webrtc::BitrateSettings bitrate;
+  if (min_bitrate_bps > 0) {
+    bitrate.min_bitrate_bps = min_bitrate_bps;
+  } else {
+    bitrate.min_bitrate_bps.reset();
+  }
   bitrate.max_bitrate_bps = max_bitrate_bps;
   peer_connection()->SetBitrate(bitrate);
 }
 
-void WebrtcTransport::SetSenderBitrates(int max_bitrate_bps) {
+void WebrtcTransport::SetSenderBitrates(int min_bitrate_bps,
+                                        int max_bitrate_bps) {
+  DCHECK_LE(min_bitrate_bps, max_bitrate_bps);
   // Only set the cap on the VideoSender, because the AudioSender (via the
   // Opus codec) is already configured with a lower bitrate.
   rtc::scoped_refptr<webrtc::RtpSenderInterface> sender = GetVideoSender();
@@ -985,6 +1040,11 @@ void WebrtcTransport::SetSenderBitrates(int max_bitrate_bps) {
                << sender->id();
   }
 
+  if (min_bitrate_bps > 0) {
+    parameters.encodings[0].min_bitrate_bps = min_bitrate_bps;
+  } else {
+    parameters.encodings[0].min_bitrate_bps.reset();
+  }
   parameters.encodings[0].max_bitrate_bps = max_bitrate_bps;
   webrtc::RTCError result = sender->SetParameters(parameters);
   DCHECK(result.ok()) << "SetParameters() failed: " << result.message();
@@ -994,9 +1054,8 @@ void WebrtcTransport::RequestRtcStats() {
   if (!connected_)
     return;
 
-  peer_connection()->GetStats(
-      RTCStatsCollectorCallback::Create(base::BindRepeating(
-          &WebrtcTransport::OnStatsDelivered, weak_factory_.GetWeakPtr())));
+  peer_connection()->GetStats(RTCStatsCollectorCallback::Create(base::BindOnce(
+      &WebrtcTransport::OnStatsDelivered, weak_factory_.GetWeakPtr())));
 }
 
 void WebrtcTransport::RequestNegotiation() {
@@ -1017,13 +1076,13 @@ void WebrtcTransport::SendOffer() {
   negotiation_pending_ = false;
 
   webrtc::PeerConnectionInterface::RTCOfferAnswerOptions options;
-  options.offer_to_receive_video = true;
+  options.offer_to_receive_video = false;
   options.offer_to_receive_audio = false;
   options.ice_restart = want_ice_restart_;
   peer_connection()->CreateOffer(
-      CreateSessionDescriptionObserver::Create(base::BindRepeating(
-          &WebrtcTransport::OnLocalSessionDescriptionCreated,
-          weak_factory_.GetWeakPtr())),
+      CreateSessionDescriptionObserver::Create(
+          base::BindOnce(&WebrtcTransport::OnLocalSessionDescriptionCreated,
+                         weak_factory_.GetWeakPtr())),
       options);
 }
 

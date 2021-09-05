@@ -6,8 +6,8 @@ GN is a meta-build system that generates build files for
 Related resources:
 
   * Documentation in [docs/](https://gn.googlesource.com/gn/+/master/docs/). In
-    particular [getting
-    started](https://gn.googlesource.com/gn/+/master/docs/getting_started.md)
+    particular [GN Quick Start
+    guide](https://gn.googlesource.com/gn/+/master/docs/quick_start.md)
     and the [reference](https://gn.googlesource.com/gn/+/master/docs/reference.md)
     (the latter is all builtin help converted to a single file).
   * An introductory [presentation](https://docs.google.com/presentation/d/15Zwb53JcncHfEwHpnG_PoIbbzQ3GQi_cpujYwbpcbZo/edit?usp=sharing).

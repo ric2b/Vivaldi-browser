@@ -13,9 +13,10 @@ import android.provider.Browser;
 import android.speech.RecognizerResultsIntent;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.annotation.UiThreadTest;
-import android.support.test.filters.MediumTest;
-import android.support.test.filters.SmallTest;
 import android.support.test.rule.UiThreadTestRule;
+
+import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -531,5 +532,22 @@ public class IntentHandlerTest {
         intent = IntentHandler.createTrustedOpenNewTabIntent(context, false);
         Assert.assertFalse(
                 intent.getBooleanExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true));
+    }
+
+    /**
+     * Test that IntentHandler#shouldIgnoreIntent() returns false for Webapp launch intents.
+     */
+    @Test
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testShouldIgnoreIntentWebapp() {
+        Intent webappLauncherActivityIntent =
+                WebappTestHelper.createMinimalWebappIntent("id", GOOGLE_URL);
+        WebappLauncherActivity.LaunchData launchData = new WebappLauncherActivity.LaunchData("id",
+                GOOGLE_URL, null /* webApkPackageName */, false /* isSplashProvidedByWebApk */);
+        Intent intent = WebappLauncherActivity.createIntentToLaunchForWebapp(
+                webappLauncherActivityIntent, launchData, 0);
+
+        Assert.assertFalse(mIntentHandler.shouldIgnoreIntent(intent));
     }
 }

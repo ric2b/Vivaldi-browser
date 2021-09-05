@@ -29,6 +29,7 @@ class SharedURLLoaderFactory;
 
 namespace safe_browsing {
 class UrlCheckerDelegate;
+class RealTimeUrlLookupServiceBase;
 class RemoteSafeBrowsingDatabaseManager;
 class SafeBrowsingApiHandler;
 class SafeBrowsingNetworkContext;
@@ -49,13 +50,14 @@ class SafeBrowsingService {
   void Initialize();
   std::unique_ptr<blink::URLLoaderThrottle> CreateURLLoaderThrottle(
       const base::RepeatingCallback<content::WebContents*()>& wc_getter,
-      int frame_tree_node_id);
+      int frame_tree_node_id,
+      safe_browsing::RealTimeUrlLookupServiceBase* url_lookup_service);
   std::unique_ptr<content::NavigationThrottle>
   CreateSafeBrowsingNavigationThrottle(content::NavigationHandle* handle);
   void AddInterface(service_manager::BinderRegistry* registry,
                     content::RenderProcessHost* render_process_host);
   void StopDBManager();
-  void SetSafeBrowsingDisabled(bool disabled);
+  scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory();
 
  private:
   SafeBrowsingUIManager* GetSafeBrowsingUIManager();
@@ -72,7 +74,6 @@ class SafeBrowsingService {
   void CreateURLLoaderFactoryForIO(
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver);
   void StopDBManagerOnIOThread();
-  void SetSafeBrowsingDisabledOnIOThread(bool disabled);
 
   // The UI manager handles showing interstitials. Accessed on both UI and IO
   // thread.
@@ -97,8 +98,6 @@ class SafeBrowsingService {
       safe_browsing_api_handler_;
 
   std::string user_agent_;
-
-  bool safe_browsing_disabled_;
 
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingService);
 };

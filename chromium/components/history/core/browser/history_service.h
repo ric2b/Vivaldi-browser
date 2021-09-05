@@ -17,20 +17,20 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_list.h"
+#include "base/check.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
+#include "base/sequence_checker.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/task/cancelable_task_tracker.h"
-#include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/favicon_base/favicon_callback.h"
@@ -53,7 +53,6 @@ class TestingProfile;
 
 namespace base {
 class FilePath;
-class Thread;
 }  // namespace base
 
 namespace favicon {
@@ -90,8 +89,6 @@ class WebHistoryService;
 // as information about downloads.
 class HistoryService : public KeyedService {
  public:
-  static const base::Feature kHistoryServiceUsesTaskScheduler;
-
   // Must call Init after construction. The empty constructor provided only for
   // unit tests. When using the full constructor, |history_client| may only be
   // null during testing, while |visit_delegate| may be null if the embedder use
@@ -170,6 +167,9 @@ class HistoryService : public KeyedService {
   // should be the unique ID of the current navigation entry in the given
   // process.
   //
+  // |publicly_routable| is a property of the IP address at the URL visit time.
+  // See VisitRow for more details about this field.
+  //
   // TODO(avi): This is no longer true. 'page id' was removed years ago, and
   // their uses replaced by globally-unique nav_entry_ids. Is ContextID still
   // needed? https://crbug.com/859902
@@ -192,7 +192,8 @@ class HistoryService : public KeyedService {
                const RedirectList& redirects,
                ui::PageTransition transition,
                VisitSource visit_source,
-               bool did_replace_entry);
+               bool did_replace_entry,
+               bool publicly_routable);
 
   // For adding pages to history where no tracking information can be done.
   void AddPage(const GURL& url, base::Time time, VisitSource visit_source);
@@ -871,13 +872,7 @@ class HistoryService : public KeyedService {
   void NotifyFaviconsChanged(const std::set<GURL>& page_urls,
                              const GURL& icon_url);
 
-  base::ThreadChecker thread_checker_;
-
-  // The thread used by the history service to run HistoryBackend operations.
-  // Intentionally not a BrowserThread because the sync integration unit tests
-  // need to create multiple HistoryServices which each have their own thread.
-  // Nullptr if TaskScheduler is used for HistoryBackend operations.
-  std::unique_ptr<base::Thread> thread_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // The TaskRunner to which HistoryBackend tasks are posted. Nullptr once
   // Cleanup() is called.

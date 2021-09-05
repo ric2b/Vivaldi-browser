@@ -29,10 +29,10 @@
 #include "chrome/common/url_constants.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/payments/content/payment_app.h"
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/content/payment_request_state.h"
 #include "components/payments/core/currency_formatter.h"
-#include "components/payments/core/payment_app.h"
 #include "components/payments/core/payment_prefs.h"
 #include "components/payments/core/strings_util.h"
 #include "components/prefs/pref_service.h"
@@ -786,7 +786,7 @@ PaymentSheetViewController::CreatePaymentMethodRow() {
     layout->AddView(std::move(selected_app_sublabel));
 
     std::unique_ptr<views::ImageView> icon_view = CreateAppIconView(
-        selected_app->icon_resource_id(), selected_app->icon_image_skia(),
+        selected_app->icon_resource_id(), selected_app->icon_bitmap(),
         selected_app->GetLabel());
 
     return builder.AccessibleContent(selected_app->GetLabel())

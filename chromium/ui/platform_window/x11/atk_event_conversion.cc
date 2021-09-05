@@ -10,13 +10,15 @@
 
 namespace ui {
 
-std::unique_ptr<AtkKeyEventStruct> AtkKeyEventFromXEvent(XEvent* xevent) {
-  DCHECK(xevent);
+std::unique_ptr<AtkKeyEventStruct> AtkKeyEventFromXEvent(
+    x11::Event* x11_event) {
+  DCHECK(x11_event);
+  XEvent* xevent = &x11_event->xlib_event();
   auto atk_key_event = std::make_unique<AtkKeyEventStruct>();
 
-  if (xevent->type == KeyPress)
+  if (xevent->type == x11::KeyEvent::Press)
     atk_key_event->type = ATK_KEY_EVENT_PRESS;
-  else if (xevent->type == KeyRelease)
+  else if (xevent->type == x11::KeyEvent::Release)
     atk_key_event->type = ATK_KEY_EVENT_RELEASE;
   else
     NOTREACHED() << xevent->type;
@@ -35,7 +37,7 @@ std::unique_ptr<AtkKeyEventStruct> AtkKeyEventFromXEvent(XEvent* xevent) {
   atk_key_event->string = nullptr;
   atk_key_event->length = 0;
 
-  int flags = ui::EventFlagsFromXEvent(*xevent);
+  int flags = ui::EventFlagsFromXEvent(*x11_event);
   if (flags & ui::EF_SHIFT_DOWN)
     atk_key_event->state |= AtkKeyModifierMask::kAtkShiftMask;
   if (flags & ui::EF_CAPS_LOCK_ON)

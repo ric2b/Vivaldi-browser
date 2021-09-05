@@ -52,6 +52,7 @@ ProfileSigninConfirmationDialogViews::ProfileSigninConfirmationDialogViews(
       username_(username),
       delegate_(std::move(delegate)),
       prompt_for_new_profile_(prompt_for_new_profile) {
+  SetTitle(IDS_ENTERPRISE_SIGNIN_TITLE);
   SetDefaultButton(ui::DIALOG_BUTTON_NONE);
   SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
@@ -122,11 +123,6 @@ void ProfileSigninConfirmationDialogViews::ShowDialog(
       profile,
       base::BindOnce(&ProfileSigninConfirmationDialogViews::Show,
                      base::Unretained(browser), username, std::move(delegate)));
-}
-
-base::string16 ProfileSigninConfirmationDialogViews::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(
-      IDS_ENTERPRISE_SIGNIN_TITLE);
 }
 
 ui::ModalType ProfileSigninConfirmationDialogViews::GetModalType() const {
@@ -252,10 +248,6 @@ void ProfileSigninConfirmationDialogViews::ViewHierarchyChanged(
   dialog_layout->AddView(std::move(explanation_label), 1, 1,
                          views::GridLayout::FILL, views::GridLayout::FILL,
                          kPreferredWidth, explanation_label_height);
-}
-
-void ProfileSigninConfirmationDialogViews::WindowClosing() {
-  Cancel();
 }
 
 void ProfileSigninConfirmationDialogViews::StyledLabelLinkClicked(

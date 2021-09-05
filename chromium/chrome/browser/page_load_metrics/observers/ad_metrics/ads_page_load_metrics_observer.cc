@@ -44,6 +44,7 @@
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-shared.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/size.h"
@@ -111,7 +112,7 @@ std::string GetHeavyAdReportMessage(const FrameData& frame_data,
   base::StringPiece intervention_mode =
       will_unload_adframe ? kInterventionMessage : kReportingOnlyMessage;
 
-  switch (frame_data.heavy_ad_status()) {
+  switch (frame_data.heavy_ad_status_with_noise()) {
     case FrameData::HeavyAdStatus::kNetwork:
       return base::StrCat({intervention_mode,
                            " because its network usage exceeded the limit. ",
@@ -140,6 +141,21 @@ void RecordHeavyAdInterventionDisallowedByBlocklist(bool disallowed) {
 using ResourceMimeType = AdsPageLoadMetricsObserver::ResourceMimeType;
 const char kIgnoredByReloadHistogramName[] =
     "PageLoad.Clients.Ads.HeavyAds.IgnoredByReload";
+
+blink::mojom::HeavyAdReason GetHeavyAdReason(FrameData::HeavyAdStatus status) {
+  switch (status) {
+    case FrameData::HeavyAdStatus::kNetwork:
+      return blink::mojom::HeavyAdReason::kNetworkTotalLimit;
+    case FrameData::HeavyAdStatus::kTotalCpu:
+      return blink::mojom::HeavyAdReason::kCpuTotalLimit;
+    case FrameData::HeavyAdStatus::kPeakCpu:
+      return blink::mojom::HeavyAdReason::kCpuPeakLimit;
+    case FrameData::HeavyAdStatus::kNone:
+      NOTREACHED();
+      return blink::mojom::HeavyAdReason::kNetworkTotalLimit;
+  }
+}
+
 }  // namespace
 
 // static
@@ -247,14 +263,21 @@ void AdsPageLoadMetricsObserver::OnTimingUpdate(
 
   FrameData* ancestor_data = FindFrameData(subframe_rfh->GetFrameTreeNodeId());
 
-  // Only update the frame with the root frames timing updates.
-  if (ancestor_data && ancestor_data->root_frame_tree_node_id() ==
-                           subframe_rfh->GetFrameTreeNodeId())
+  if (!ancestor_data)
+    return;
+
+  // Only update the frame with the root frame's timing updates.
+  if (ancestor_data->root_frame_tree_node_id() ==
+      subframe_rfh->GetFrameTreeNodeId())
     ancestor_data->set_timing(timing.Clone());
+
+  // Set paint eligiblity status.
+  ancestor_data->SetFirstEligibleToPaint(
+      timing.paint_timing->first_eligible_to_paint);
 
   // Set creative origin status if this is the first FCP for any frame in the
   // root ad frame's subtree.
-  if (ancestor_data && timing.paint_timing->first_contentful_paint &&
+  if (timing.paint_timing->first_contentful_paint &&
       ancestor_data->creative_origin_status() ==
           FrameData::OriginStatus::kUnknown) {
     FrameData::OriginStatus origin_status =
@@ -424,9 +447,12 @@ void AdsPageLoadMetricsObserver::OnDidFinishSubFrameNavigation(
       client->GetThrottleManager()->LoadPolicyForLastCommittedNavigation(
           frame_host);
 
-  // If there is not load policy use |is_adframe| solely.
+  // Only un-tag frames as ads if the navigation has committed. This prevents
+  // frames from being untagged that have an aborted navigation to allowlist
+  // urls.
   if (restricted_navigation_ad_tagging_enabled_ && load_policy &&
-      navigation_handle->GetNetErrorCode() == net::OK) {
+      navigation_handle->GetNetErrorCode() == net::OK &&
+      navigation_handle->HasCommitted()) {
     // If a filter list explicitly allows the rule, we should ignore a detected
     // ad.
     bool navigation_is_explicitly_allowed =
@@ -794,6 +820,10 @@ void AdsPageLoadMetricsObserver::RecordAggregateHistogramsForAdTagging(
                     aggregate_frame_data_->ad_network_bytes() * 100 /
                         aggregate_frame_data_->network_bytes());
     }
+    ADS_HISTOGRAM("AllPages.NonAdNetworkBytes", PAGE_BYTES_HISTOGRAM,
+                  visibility,
+                  aggregate_frame_data_->network_bytes() -
+                      aggregate_frame_data_->ad_network_bytes());
   }
 
   // Only post AllPages and FrameCounts UMAs for pages that don't have ads.
@@ -1000,9 +1030,20 @@ void AdsPageLoadMetricsObserver::RecordPerFrameHistogramsForAdTagging(
                   UMA_HISTOGRAM_ENUMERATION, visibility,
                   ad_frame_data.creative_origin_status());
 
+    ADS_HISTOGRAM(
+        "FrameCounts.AdFrames.PerFrame.CreativeOriginStatusWithThrottling",
+        UMA_HISTOGRAM_ENUMERATION, visibility,
+        ad_frame_data.GetCreativeOriginStatusWithThrottling());
+
     ADS_HISTOGRAM("FrameCounts.AdFrames.PerFrame.UserActivation",
                   UMA_HISTOGRAM_ENUMERATION, visibility,
                   ad_frame_data.user_activation_status());
+
+    if (auto first_contentful_paint = ad_frame_data.FirstContentfulPaint()) {
+      ADS_HISTOGRAM("AdPaintTiming.NavigationToFirstContentfulPaint",
+                    PAGE_LOAD_HISTOGRAM, visibility,
+                    first_contentful_paint.value());
+    }
   }
 }
 
@@ -1113,9 +1154,12 @@ void AdsPageLoadMetricsObserver::MaybeTriggerHeavyAdIntervention(
       base::FeatureList::IsEnabled(features::kHeavyAdIntervention);
 
   if (will_report_adframe) {
-    const char kReportId[] = "HeavyAdIntervention";
-    std::string report_message =
-        GetHeavyAdReportMessage(*frame_data, will_unload_adframe);
+    // Add an inspector issue for the root of the ad subtree.
+    render_frame_host->ReportHeavyAdIssue(
+        will_unload_adframe
+            ? blink::mojom::HeavyAdResolutionStatus::kHeavyAdBlocked
+            : blink::mojom::HeavyAdResolutionStatus::kHeavyAdWarning,
+        GetHeavyAdReason(frame_data->heavy_ad_status_with_noise()));
 
     // Report to all child frames that will be unloaded. Once all reports are
     // queued, the frame will be unloaded. Because the IPC messages are ordered
@@ -1123,6 +1167,9 @@ void AdsPageLoadMetricsObserver::MaybeTriggerHeavyAdIntervention(
     // error page. Reports will be added to ReportingObserver queues
     // synchronously when the IPC message is handled, which guarantees they will
     // be available in the the unload handler.
+    const char kReportId[] = "HeavyAdIntervention";
+    std::string report_message =
+        GetHeavyAdReportMessage(*frame_data, will_unload_adframe);
     for (content::RenderFrameHost* reporting_frame :
          render_frame_host->GetFramesInSubtree()) {
       reporting_frame->SendInterventionReport(kReportId, report_message);
@@ -1183,13 +1230,13 @@ bool AdsPageLoadMetricsObserver::IsBlocklisted() {
     return true;
   }
 
-  std::vector<blacklist::BlacklistReason> passed_reasons;
+  std::vector<blocklist::BlocklistReason> passed_reasons;
   auto blocklist_reason = blocklist->IsLoadedAndAllowed(
       GetDelegate().GetWebContents()->GetLastCommittedURL().host(),
       static_cast<int>(HeavyAdBlocklistType::kHeavyAdOnlyType),
       false /* opt_out */, &passed_reasons);
   heavy_ads_blocklist_blocklisted_ =
-      (blocklist_reason != blacklist::BlacklistReason::kAllowed);
+      (blocklist_reason != blocklist::BlocklistReason::kAllowed);
 
   // Record whether this intervention hit the blocklist.
   RecordHeavyAdInterventionDisallowedByBlocklist(

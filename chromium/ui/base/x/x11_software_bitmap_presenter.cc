@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -20,6 +21,7 @@
 #include "ui/base/x/x11_shm_image_pool.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/base/x/x11_util_internal.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_error_tracker.h"
 #include "ui/gfx/x/x11_types.h"
@@ -65,8 +67,8 @@ bool X11SoftwareBitmapPresenter::CompositeBitmap(XDisplay* display,
   ui::XScopedImage bg;
   {
     gfx::X11ErrorTracker ignore_x_errors;
-    bg.reset(
-        XGetImage(display, widget, x, y, width, height, AllPlanes, ZPixmap));
+    bg.reset(XGetImage(display, widget, x, y, width, height, AllPlanes,
+                       static_cast<int>(x11::ImageFormat::ZPixmap)));
   }
 
   // XGetImage() may fail if the drawable is a window and the window is not
@@ -78,27 +80,28 @@ bool X11SoftwareBitmapPresenter::CompositeBitmap(XDisplay* display,
       return false;
 
     XGCValues gcv;
-    gcv.subwindow_mode = IncludeInferiors;
+    gcv.subwindow_mode = static_cast<int>(x11::SubwindowMode::IncludeInferiors);
     XChangeGC(display, gc, GCSubwindowMode, &gcv);
 
     XCopyArea(display, widget, pixmap, gc, x, y, width, height, 0, 0);
 
-    gcv.subwindow_mode = ClipByChildren;
+    gcv.subwindow_mode = static_cast<int>(x11::SubwindowMode::ClipByChildren);
     XChangeGC(display, gc, GCSubwindowMode, &gcv);
 
-    bg.reset(
-        XGetImage(display, pixmap, 0, 0, width, height, AllPlanes, ZPixmap));
+    bg.reset(XGetImage(display, pixmap, 0, 0, width, height, AllPlanes,
+                       static_cast<int>(x11::ImageFormat::ZPixmap)));
   }
 
   if (!bg)
     return false;
 
   SkBitmap bg_bitmap;
-  SkImageInfo image_info =
-      SkImageInfo::Make(bg->width, bg->height,
-                        bg->byte_order == LSBFirst ? kBGRA_8888_SkColorType
-                                                   : kRGBA_8888_SkColorType,
-                        kPremul_SkAlphaType);
+  SkImageInfo image_info = SkImageInfo::Make(
+      bg->width, bg->height,
+      bg->byte_order == static_cast<int>(x11::ImageOrder::LSBFirst)
+          ? kBGRA_8888_SkColorType
+          : kRGBA_8888_SkColorType,
+      kPremul_SkAlphaType);
   if (!bg_bitmap.installPixels(image_info, bg->data, bg->bytes_per_line))
     return false;
   SkCanvas canvas(bg_bitmap);
@@ -120,16 +123,18 @@ X11SoftwareBitmapPresenter::X11SoftwareBitmapPresenter(
     gfx::AcceleratedWidget widget,
     scoped_refptr<base::SequencedTaskRunner> host_task_runner,
     scoped_refptr<base::SequencedTaskRunner> event_task_runner)
-    : widget_(widget),
+    : widget_(static_cast<x11::Window>(widget)),
       display_(gfx::GetXDisplay()),
       gc_(nullptr),
       host_task_runner_(host_task_runner),
       event_task_runner_(event_task_runner) {
-  DCHECK_NE(widget_, gfx::kNullAcceleratedWidget);
-  gc_ = XCreateGC(display_, widget_, 0, nullptr);
+  DCHECK(widget_ != x11::Window::None);
+  gc_ = XCreateGC(display_, static_cast<uint32_t>(widget_), 0, nullptr);
   memset(&attributes_, 0, sizeof(attributes_));
-  if (!XGetWindowAttributes(display_, widget_, &attributes_)) {
-    LOG(ERROR) << "XGetWindowAttributes failed for window " << widget_;
+  if (!XGetWindowAttributes(display_, static_cast<uint32_t>(widget_),
+                            &attributes_)) {
+    LOG(ERROR) << "XGetWindowAttributes failed for window "
+               << static_cast<uint32_t>(widget_);
     return;
   }
 
@@ -219,9 +224,9 @@ void X11SoftwareBitmapPresenter::EndPaint(const gfx::Rect& damage_rect) {
   if (ShmPoolReady()) {
     // TODO(thomasanderson): Investigate direct rendering with DRI3 to avoid any
     // unnecessary X11 IPC or buffer copying.
-    if (XShmPutImage(display_, widget_, gc_, shm_pool_->CurrentImage(),
-                     rect.x(), rect.y(), rect.x(), rect.y(), rect.width(),
-                     rect.height(), x11::True)) {
+    if (XShmPutImage(display_, static_cast<uint32_t>(widget_), gc_,
+                     shm_pool_->CurrentImage(), rect.x(), rect.y(), rect.x(),
+                     rect.y(), rect.width(), rect.height(), x11::True)) {
       needs_swap_ = true;
       FlushAfterPutImage();
       return;
@@ -231,10 +236,13 @@ void X11SoftwareBitmapPresenter::EndPaint(const gfx::Rect& damage_rect) {
     surface_->peekPixels(&skia_pixmap);
   }
 
+  if (!skia_pixmap.addr())
+    return;
+
   if (composite_ &&
-      CompositeBitmap(display_, widget_, rect.x(), rect.y(), rect.width(),
-                      rect.height(), attributes_.depth, gc_,
-                      skia_pixmap.addr())) {
+      CompositeBitmap(display_, static_cast<uint32_t>(widget_), rect.x(),
+                      rect.y(), rect.width(), rect.height(), attributes_.depth,
+                      gc_, skia_pixmap.addr())) {
     FlushAfterPutImage();
     return;
   }
@@ -242,10 +250,10 @@ void X11SoftwareBitmapPresenter::EndPaint(const gfx::Rect& damage_rect) {
   XImage image = {};
   image.width = viewport_pixel_size_.width();
   image.height = viewport_pixel_size_.height();
-  image.format = ZPixmap;
-  image.byte_order = LSBFirst;
+  image.format = static_cast<int>(x11::ImageFormat::ZPixmap);
+  image.byte_order = static_cast<int>(x11::ImageOrder::LSBFirst);
   image.bitmap_unit = 8;
-  image.bitmap_bit_order = LSBFirst;
+  image.bitmap_bit_order = static_cast<int>(x11::ImageOrder::LSBFirst);
   image.depth = attributes_.depth;
 
   image.bits_per_pixel = attributes_.visual->bits_per_rgb;
@@ -257,8 +265,8 @@ void X11SoftwareBitmapPresenter::EndPaint(const gfx::Rect& damage_rect) {
   image.blue_mask = attributes_.visual->blue_mask;
 
   image.data = reinterpret_cast<char*>(const_cast<void*>(skia_pixmap.addr()));
-  XPutImage(display_, widget_, gc_, &image, rect.x(), rect.y(), rect.x(),
-            rect.y(), rect.width(), rect.height());
+  XPutImage(display_, static_cast<uint32_t>(widget_), gc_, &image, rect.x(),
+            rect.y(), rect.x(), rect.y(), rect.width(), rect.height());
 
   FlushAfterPutImage();
 }

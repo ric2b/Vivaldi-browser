@@ -273,7 +273,7 @@ class DownloadItemCreatedObserver : public DownloadManager::Observer {
 
   void ManagerGoingDown(DownloadManager* manager) override {
     manager_->RemoveObserver(this);
-    manager_ = NULL;
+    manager_ = nullptr;
     if (!quit_waiting_callback_.is_null())
       quit_waiting_callback_.Run();
   }
@@ -489,6 +489,32 @@ IN_PROC_BROWSER_TEST_F(SavePageBrowserTest, SaveHTMLOnlyCancel) {
 
   // TODO(benjhayden): Figure out how to safely wait for SavePackage's finished
   // notification, then expect the contents of the downloaded file.
+}
+
+// Test that saving an HTML file with long (i.e. > 65536 bytes) text content
+// does not crash the browser despite the renderer requiring more than one
+// "pass" to serialize the HTML content (see crash from crbug.com/1085721).
+IN_PROC_BROWSER_TEST_F(SavePageBrowserTest, SaveHTMLWithLongTextContent) {
+  GURL url =
+      embedded_test_server()->GetURL("/save_page/long-text-content.html");
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  base::FilePath full_file_name, dir;
+  SaveCurrentTab(url, content::SAVE_PAGE_TYPE_AS_COMPLETE_HTML,
+                 "long-text-content", 1, &dir, &full_file_name);
+
+  ASSERT_FALSE(HasFailure());
+
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  EXPECT_TRUE(base::PathExists(full_file_name));
+  EXPECT_FALSE(base::PathExists(dir));
+
+  // Besides checking that the renderer didn't crash, test also that the HTML
+  // content saved is the expected one (i.e. the whole HTML, no truncation).
+  EXPECT_EQ(ReadFileAndCollapseWhitespace(full_file_name),
+            WriteSavedFromPath(ReadFileAndCollapseWhitespace(GetTestDirFile(
+                                   "long-text-content.saved.html")),
+                               url));
 }
 
 class DelayingDownloadManagerDelegate : public ChromeDownloadManagerDelegate {
@@ -1416,7 +1442,14 @@ IN_PROC_BROWSER_TEST_P(SavePageOriginalVsSavedComparisonTest, BrokenImage) {
 }
 
 // Test for saving a page with a cross-site <object> element.
-IN_PROC_BROWSER_TEST_P(SavePageOriginalVsSavedComparisonTest, CrossSiteObject) {
+// Disabled on Windows due to flakiness. crbug.com/1070597.
+#if defined(OS_WIN)
+#define MAYBE_CrossSiteObject DISABLED_CrossSiteObject
+#else
+#define MAYBE_CrossSiteObject CrossSiteObject
+#endif
+IN_PROC_BROWSER_TEST_P(SavePageOriginalVsSavedComparisonTest,
+                       MAYBE_CrossSiteObject) {
   content::SavePageType save_page_type = GetParam();
 
   std::vector<std::string> expected_substrings = {

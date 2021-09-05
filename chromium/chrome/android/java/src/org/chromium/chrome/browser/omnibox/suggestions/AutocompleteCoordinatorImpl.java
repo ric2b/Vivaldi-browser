@@ -28,7 +28,7 @@ import org.chromium.chrome.browser.omnibox.suggestions.answer.AnswerSuggestionVi
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewViewBinder;
-import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestionProcessor;
+import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.entity.EntitySuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderView;
@@ -74,17 +74,18 @@ public class AutocompleteCoordinatorImpl implements AutocompleteCoordinator {
         Context context = parent.getContext();
 
         PropertyModel listModel = new PropertyModel(SuggestionListProperties.ALL_KEYS);
-        MVCListAdapter.ModelList listItems = new MVCListAdapter.ModelList();
-        mQueryTileCoordinator = new OmniboxQueryTileCoordinator(context, this::onTileSelected);
-        mMediator = new AutocompleteMediator(context, delegate, urlBarEditingTextProvider,
-                new AutocompleteController(), mQueryTileCoordinator::setTiles, listModel,
-                new Handler());
-        mMediator.initDefaultProcessors();
+        ModelList listItems = new ModelList();
 
         listModel.set(SuggestionListProperties.EMBEDDER, dropdownEmbedder);
         listModel.set(SuggestionListProperties.VISIBLE, false);
-        listModel.set(SuggestionListProperties.OBSERVER, mMediator);
         listModel.set(SuggestionListProperties.SUGGESTION_MODELS, listItems);
+
+        mQueryTileCoordinator = new OmniboxQueryTileCoordinator(context, this::onTileSelected);
+        mMediator = new AutocompleteMediator(context, delegate, urlBarEditingTextProvider,
+                new AutocompleteController(), listModel, new Handler());
+        mMediator.initDefaultProcessors(mQueryTileCoordinator::setTiles);
+
+        listModel.set(SuggestionListProperties.OBSERVER, mMediator);
 
         ViewProvider<SuggestionListViewHolder> viewProvider =
                 createViewProvider(context, listItems);
@@ -138,8 +139,8 @@ public class AutocompleteCoordinatorImpl implements AutocompleteCoordinator {
 
                 adapter.registerType(
                         OmniboxSuggestionUiType.EDIT_URL_SUGGESTION,
-                        parent -> EditUrlSuggestionProcessor.createView(parent.getContext()),
-                        EditUrlSuggestionViewBinder::bind);
+                        parent -> new EditUrlSuggestionView(parent.getContext()),
+                        new EditUrlSuggestionViewBinder());
 
                 adapter.registerType(
                         OmniboxSuggestionUiType.ANSWER_SUGGESTION,

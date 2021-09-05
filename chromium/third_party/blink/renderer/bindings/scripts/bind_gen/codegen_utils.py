@@ -59,15 +59,21 @@ def make_header_include_directives(accumulator):
     return LiteralNode(HeaderIncludeDirectives(accumulator))
 
 
-def component_export(component):
+def component_export(component, for_testing):
     assert isinstance(component, web_idl.Component)
+    assert isinstance(for_testing, bool)
 
+    if for_testing:
+        return ""
     return name_style.macro(component, "EXPORT")
 
 
-def component_export_header(component):
+def component_export_header(component, for_testing):
     assert isinstance(component, web_idl.Component)
+    assert isinstance(for_testing, bool)
 
+    if for_testing:
+        return None
     if component == "core":
         return "third_party/blink/renderer/core/core_export.h"
     elif component == "modules":
@@ -88,59 +94,6 @@ def enclose_with_header_guard(code_node, header_guard):
         EmptyNode(),
         LiteralNode("#endif  // {}".format(header_guard)),
     ])
-
-
-def collect_include_headers_of_idl_types(idl_types):
-    """
-    Returns a set of header paths that are required by |idl_types|.
-    """
-    header_paths = set()
-
-    def add_header_path(idl_type):
-        assert isinstance(idl_type, web_idl.IdlType)
-
-        if idl_type.is_numeric or idl_type.is_boolean or idl_type.is_typedef:
-            pass
-        elif idl_type.is_string:
-            header_paths.add(
-                "third_party/blink/renderer/platform/wtf/text/wtf_string.h")
-        elif idl_type.is_buffer_source_type:
-            header_paths.update([
-                "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h",
-                "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h",
-                "third_party/blink/renderer/platform/heap/handle.h",
-            ])
-        elif idl_type.is_object or idl_type.is_any:
-            header_paths.add(
-                "third_party/blink/renderer/bindings/core/v8/script_value.h")
-        elif idl_type.type_definition_object:
-            type_def_obj = idl_type.type_definition_object
-            header_paths.update([
-                PathManager(type_def_obj).api_path(ext="h"),
-                "third_party/blink/renderer/platform/heap/handle.h",
-            ])
-        elif (idl_type.is_sequence or idl_type.is_frozen_array
-              or idl_type.is_variadic or idl_type.is_record):
-            header_paths.update([
-                "third_party/blink/renderer/platform/wtf/vector.h",
-                "third_party/blink/renderer/platform/heap/heap_allocator.h",
-            ])
-        elif idl_type.is_promise:
-            header_paths.add(
-                "third_party/blink/renderer/bindings/core/v8/script_promise.h")
-        elif idl_type.is_union:
-            union_def_obj = idl_type.union_definition_object
-            header_paths.add(PathManager(union_def_obj).api_path(ext="h"))
-        elif idl_type.is_nullable:
-            if not blink_type_info(idl_type.inner_type).has_null_value:
-                header_paths.add("base/optional.h")
-        else:
-            assert False, "Unknown type: {}".format(idl_type.syntactic_form)
-
-    for idl_type in idl_types:
-        idl_type.apply_to_all_composing_elements(add_header_path)
-
-    return header_paths
 
 
 def write_code_node_to_file(code_node, filepath):

@@ -776,7 +776,7 @@ void DocumentMarkerController::DidProcessMarkerMap(const LivenessBroker&) {
     Clear();
 }
 
-void DocumentMarkerController::Trace(Visitor* visitor) {
+void DocumentMarkerController::Trace(Visitor* visitor) const {
   // Note: To make |DidProcessMarkerMap()| called after weak members callback
   // of |markers_|, we should register it before tracing |markers_|.
   visitor->template RegisterWeakCallbackMethod<
@@ -837,6 +837,25 @@ void DocumentMarkerController::RemoveSuggestionMarkerInRangeOnFinish(
           suggestion_marker->Tag());
       InvalidatePaintForNode(text);
     }
+  }
+}
+
+void DocumentMarkerController::RemoveSuggestionMarkerByType(
+    const EphemeralRangeInFlatTree& range,
+    const SuggestionMarker::SuggestionType& type) {
+  // MarkersIntersectingRange() might be expensive. In practice, we hope we will
+  // only check one node for the range.
+  const HeapVector<std::pair<Member<const Text>, Member<DocumentMarker>>>&
+      node_marker_pairs = MarkersIntersectingRange(
+          range, DocumentMarker::MarkerTypes::Suggestion());
+  for (const auto& node_marker_pair : node_marker_pairs) {
+    const Text& text = *node_marker_pair.first;
+    DocumentMarkerList* const list =
+        ListForType(markers_.at(&text), DocumentMarker::kSuggestion);
+    // RemoveMarkerByType() might be expensive. In practice, we have at most
+    // one suggestion marker needs to be removed.
+    To<SuggestionMarkerListImpl>(list)->RemoveMarkerByType(type);
+    InvalidatePaintForNode(text);
   }
 }
 

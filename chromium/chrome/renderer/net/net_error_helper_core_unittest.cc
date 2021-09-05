@@ -171,7 +171,7 @@ class NetErrorHelperCoreTest : public testing::Test,
                                public NetErrorHelperCore::Delegate {
  public:
   NetErrorHelperCoreTest()
-      : timer_(NULL),
+      : timer_(nullptr),
         update_count_(0),
         error_html_update_count_(0),
         reload_count_(0),
@@ -308,6 +308,20 @@ class NetErrorHelperCoreTest : public testing::Test,
 
   void DoErrorLoad(net::Error error) {
     DoErrorLoadOfURL(error, GURL(kFailedUrl));
+  }
+
+  void DoErrorLoadWithCustomErrorPage(net::Error error) {
+    core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,
+                        NetErrorHelperCore::NON_ERROR_PAGE);
+    // Custom error pages pass nullptr to PrepareErrorPage, since they set the
+    // error HTML on their own.
+    core()->PrepareErrorPage(NetErrorHelperCore::MAIN_FRAME,
+                             NetErrorForURL(error, GURL(kFailedUrl)),
+                             false /* is_failed_post */, nullptr);
+    core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,
+                        NetErrorHelperCore::ERROR_PAGE);
+    core()->OnCommitLoad(NetErrorHelperCore::MAIN_FRAME, error_url());
+    core()->OnFinishLoad(NetErrorHelperCore::MAIN_FRAME);
   }
 
   void DoSuccessLoad() {
@@ -2419,6 +2433,25 @@ TEST_F(NetErrorHelperCoreAutoReloadTest, ManualReloadShowsError) {
   EXPECT_FALSE(core()->ShouldSuppressErrorPage(NetErrorHelperCore::MAIN_FRAME,
                                                GURL(kFailedUrl),
                                                net::ERR_CONNECTION_RESET));
+}
+
+TEST_F(NetErrorHelperCoreAutoReloadTest,
+       AutoReloadDisabledForCustomErrorPages) {
+  // This error code would normally trigger auto-reloads, but shouldn't if we
+  // are showing a custom error page (e.g. an interstitial.).
+  DoErrorLoadWithCustomErrorPage(net::ERR_CONNECTION_RESET);
+
+  EXPECT_FALSE(timer()->IsRunning());
+  EXPECT_EQ(0, reload_count());
+}
+
+TEST_F(NetErrorHelperCoreAutoReloadTest,
+       AutoReloadEnabledAfterCustomErrorPage) {
+  DoErrorLoadWithCustomErrorPage(net::ERR_CONNECTION_RESET);
+  EXPECT_FALSE(timer()->IsRunning());
+  EXPECT_EQ(0, reload_count());
+  DoErrorLoad(net::ERR_CONNECTION_RESET);
+  EXPECT_TRUE(timer()->IsRunning());
 }
 
 TEST_F(NetErrorHelperCoreTest, ExplicitReloadSucceeds) {

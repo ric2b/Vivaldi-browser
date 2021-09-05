@@ -21,11 +21,10 @@
 #include "media/renderers/paint_canvas_video_renderer.h"
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
 #include "skia/ext/platform_canvas.h"
-#include "third_party/blink/public/platform/web_media_stream.h"
-#include "third_party/blink/public/platform/web_media_stream_source.h"
-#include "third_party/blink/public/platform/web_media_stream_track.h"
 #include "third_party/blink/public/platform/web_video_frame_submitter.h"
 #include "third_party/blink/public/web/modules/mediastream/webmediaplayer_ms.h"
+#include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
+#include "third_party/blink/renderer/platform/mediastream/media_stream_descriptor.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/libyuv/include/libyuv/convert.h"
@@ -141,7 +140,7 @@ WebMediaPlayerMSCompositor::WebMediaPlayerMSCompositor(
     scoped_refptr<base::SingleThreadTaskRunner>
         video_frame_compositor_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-    const WebMediaStream& web_stream,
+    MediaStreamDescriptor* media_stream_descriptor,
     std::unique_ptr<WebVideoFrameSubmitter> submitter,
     WebMediaPlayer::SurfaceLayerMode surface_layer_mode,
     const base::WeakPtr<WebMediaPlayerMS>& player)
@@ -170,12 +169,12 @@ WebMediaPlayerMSCompositor::WebMediaPlayerMSCompositor(
             weak_ptr_factory_.GetWeakPtr())));
   }
 
-  WebVector<WebMediaStreamTrack> video_tracks;
-  if (!web_stream.IsNull())
-    video_tracks = web_stream.VideoTracks();
+  HeapVector<Member<MediaStreamComponent>> video_components;
+  if (media_stream_descriptor)
+    video_components = media_stream_descriptor->VideoComponents();
 
   const bool remote_video =
-      video_tracks.size() && video_tracks[0].Source().Remote();
+      video_components.size() && video_components[0]->Source()->Remote();
 
   if (remote_video && Platform::Current()->RTCSmoothnessAlgorithmEnabled()) {
     base::AutoLock auto_lock(current_frame_lock_);
@@ -187,8 +186,9 @@ WebMediaPlayerMSCompositor::WebMediaPlayerMSCompositor(
   }
 
   // Just for logging purpose.
-  std::string stream_id =
-      web_stream.IsNull() ? std::string() : web_stream.Id().Utf8();
+  std::string stream_id = media_stream_descriptor
+                              ? media_stream_descriptor->Id().Utf8()
+                              : std::string();
   const uint32_t hash_value = base::Hash(stream_id);
   serial_ = (hash_value << 1) | (remote_video ? 1 : 0);
 }
@@ -333,10 +333,7 @@ void WebMediaPlayerMSCompositor::EnqueueFrame(
   }
 
   // This is a signal frame saying that the stream is stopped.
-  bool end_of_stream = false;
-  if (frame->metadata()->GetBoolean(media::VideoFrameMetadata::END_OF_STREAM,
-                                    &end_of_stream) &&
-      end_of_stream) {
+  if (frame->metadata()->end_of_stream) {
     rendering_frame_buffer_.reset();
     RenderWithoutAlgorithm(std::move(frame));
     return;
@@ -345,16 +342,15 @@ void WebMediaPlayerMSCompositor::EnqueueFrame(
   // If we detect a bad frame without |render_time|, we switch off algorithm,
   // because without |render_time|, algorithm cannot work.
   // In general, this should not happen.
-  base::TimeTicks render_time;
-  if (!frame->metadata()->GetTimeTicks(
-          media::VideoFrameMetadata::REFERENCE_TIME, &render_time)) {
+  if (!frame->metadata()->reference_time.has_value()) {
     DLOG(WARNING)
-        << "Incoming VideoFrames have no REFERENCE_TIME, switching off super "
+        << "Incoming VideoFrames have no reference_time, switching off super "
            "sophisticated rendering algorithm";
     rendering_frame_buffer_.reset();
     RenderWithoutAlgorithm(std::move(frame));
     return;
   }
+  base::TimeTicks render_time = *frame->metadata()->reference_time;
 
   // The code below handles the case where UpdateCurrentFrame() callbacks stop.
   // These callbacks can stop when the tab is hidden or the page area containing
@@ -400,9 +396,10 @@ bool WebMediaPlayerMSCompositor::UpdateCurrentFrame(
     tracing_or_dcheck_enabled = true;
 #endif  // DCHECK_IS_ON()
     if (tracing_or_dcheck_enabled) {
-      base::TimeTicks render_time;
-      if (!current_frame_->metadata()->GetTimeTicks(
-              media::VideoFrameMetadata::REFERENCE_TIME, &render_time)) {
+      base::TimeTicks render_time =
+          current_frame_->metadata()->reference_time.value_or(
+              base::TimeTicks());
+      if (!current_frame_->metadata()->reference_time.has_value()) {
         DCHECK(!rendering_frame_buffer_)
             << "VideoFrames need REFERENCE_TIME to use "
                "sophisticated video rendering algorithm.";
@@ -573,25 +570,20 @@ void WebMediaPlayerMSCompositor::SetCurrentFrame(
   // current frame.
   bool is_first_frame = true;
   bool has_frame_size_changed = false;
-  base::Optional<media::VideoRotation> new_rotation = media::VIDEO_ROTATION_0;
-  base::Optional<bool> new_opacity;
 
+  base::Optional<media::VideoRotation> new_rotation =
+      frame->metadata()->rotation.value_or(media::VIDEO_ROTATION_0);
+
+  base::Optional<bool> new_opacity;
   new_opacity = media::IsOpaque(frame->format());
-  media::VideoRotation current_video_rotation;
-  if (frame->metadata()->GetRotation(media::VideoFrameMetadata::ROTATION,
-                                     &current_video_rotation)) {
-    new_rotation = current_video_rotation;
-  }
 
   if (current_frame_) {
     // We have a current frame, so determine what has changed.
     is_first_frame = false;
 
-    if (!current_frame_->metadata()->GetRotation(
-            media::VideoFrameMetadata::ROTATION, &current_video_rotation)) {
-      // Assume VIDEO_ROTATION_0 for current frame without video rotation.
-      current_video_rotation = media::VIDEO_ROTATION_0;
-    }
+    media::VideoRotation current_video_rotation =
+        current_frame_->metadata()->rotation.value_or(media::VIDEO_ROTATION_0);
+
     if (current_video_rotation == *new_rotation) {
       new_rotation.reset();
     }

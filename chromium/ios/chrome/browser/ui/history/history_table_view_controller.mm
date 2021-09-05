@@ -13,11 +13,16 @@
 #include "components/url_formatter/url_formatter.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
+#include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
+#import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
+#import "ios/chrome/browser/drag_and_drop/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
-#import "ios/chrome/browser/ui/context_menu/context_menu_coordinator.h"
+#import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #include "ios/chrome/browser/ui/history/history_entries_status_item.h"
 #import "ios/chrome/browser/ui/history/history_entries_status_item_delegate.h"
 #include "ios/chrome/browser/ui/history/history_entry_inserter.h"
@@ -33,10 +38,12 @@
 #import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/ui/table_view/table_view_favicon_data_source.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
+#import "ios/chrome/browser/ui/util/multi_window_support.h"
 #import "ios/chrome/browser/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #include "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #import "ios/chrome/common/ui/colors/UIColor+cr_semantic_colors.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/favicon/favicon_view.h"
@@ -72,13 +79,14 @@ const CGFloat kButtonDefaultFontSize = 15.0;
 const CGFloat kButtonHorizontalPadding = 30.0;
 }  // namespace
 
-@interface HistoryTableViewController ()<HistoryEntriesStatusItemDelegate,
-                                         HistoryEntryInserterDelegate,
-                                         HistoryEntryItemDelegate,
-                                         TableViewTextLinkCellDelegate,
-                                         UISearchControllerDelegate,
-                                         UISearchResultsUpdating,
-                                         UISearchBarDelegate> {
+@interface HistoryTableViewController () <HistoryEntriesStatusItemDelegate,
+                                          HistoryEntryInserterDelegate,
+                                          HistoryEntryItemDelegate,
+                                          TableViewTextLinkCellDelegate,
+                                          TableViewURLDragDataSource,
+                                          UISearchControllerDelegate,
+                                          UISearchResultsUpdating,
+                                          UISearchBarDelegate> {
   // Closure to request next page of history.
   base::OnceClosure _query_history_continuation;
 }
@@ -116,6 +124,8 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 @property(nonatomic, strong) UIBarButtonItem* editButton;
 // Scrim when search box in focused.
 @property(nonatomic, strong) UIControl* scrimView;
+// Handler for URL drag interactions.
+@property(nonatomic, strong) TableViewURLDragDropHandler* dragDropHandler;
 @end
 
 @implementation HistoryTableViewController
@@ -168,12 +178,21 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   // history content.
   self.tableView.tableFooterView = [[UIView alloc] init];
 
-  // ContextMenu gesture recognizer.
-  UILongPressGestureRecognizer* longPressRecognizer = [
-      [UILongPressGestureRecognizer alloc]
-      initWithTarget:self
-              action:@selector(displayContextMenuInvokedByGestureRecognizer:)];
+  // Long-press gesture recognizer.
+  UILongPressGestureRecognizer* longPressRecognizer =
+      [[UILongPressGestureRecognizer alloc]
+          initWithTarget:self
+                  action:@selector
+                  (displayContextMenuInvokedByGestureRecognizer:)];
   [self.tableView addGestureRecognizer:longPressRecognizer];
+
+  if (DragAndDropIsEnabled()) {
+    self.dragDropHandler = [[TableViewURLDragDropHandler alloc] init];
+    self.dragDropHandler.origin = WindowActivityHistoryOrigin;
+    self.dragDropHandler.dragDataSource = self;
+    self.tableView.dragDelegate = self.dragDropHandler;
+    self.tableView.dragInteractionEnabled = YES;
+  }
 
   // NavigationController configuration.
   self.title = l10n_util::GetNSString(IDS_HISTORY_TITLE);
@@ -655,6 +674,28 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   }
 }
 
+#pragma mark - TableViewURLDragDataSource
+
+- (URLInfo*)tableView:(UITableView*)tableView
+    URLInfoAtIndexPath:(NSIndexPath*)indexPath {
+  if (self.tableView.isEditing)
+    return nil;
+
+  TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
+  switch (item.type) {
+    case ItemTypeHistoryEntry: {
+      HistoryEntryItem* URLItem =
+          base::mac::ObjCCastStrict<HistoryEntryItem>(item);
+      return [[URLInfo alloc] initWithURL:URLItem.URL title:URLItem.text];
+    }
+    case ItemTypeEntriesStatus:
+    case ItemTypeActivityIndicator:
+    case ItemTypeEntriesStatusWithLink:
+      break;
+  }
+  return nil;
+}
+
 #pragma mark - Private methods
 
 // Fetches history for search text |query|. If |query| is nil or the empty
@@ -972,7 +1013,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
 #pragma mark Context Menu
 
-// Displays context menu on cell pressed with gestureRecognizer.
+// Displays a context menu on the cell pressed with gestureRecognizer.
 - (void)displayContextMenuInvokedByGestureRecognizer:
     (UILongPressGestureRecognizer*)gestureRecognizer {
   if (gestureRecognizer.numberOfTouches != 1 || self.editing ||
@@ -1001,12 +1042,14 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   __weak HistoryTableViewController* weakSelf = self;
   NSString* menuTitle =
       base::SysUTF16ToNSString(url_formatter::FormatUrl(entry.URL));
-  self.contextMenuCoordinator = [[ContextMenuCoordinator alloc]
+  self.contextMenuCoordinator = [[ActionSheetCoordinator alloc]
       initWithBaseViewController:self.navigationController
                          browser:_browser
                            title:menuTitle
-                          inView:self.tableView
-                      atLocation:touchLocation];
+                         message:nil
+                            rect:CGRectMake(touchLocation.x, touchLocation.y,
+                                            1.0, 1.0)
+                            view:self.tableView];
 
   // Add "Open in New Tab" option.
   NSString* openInNewTabTitle =
@@ -1015,7 +1058,20 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     [weakSelf openURLInNewTab:entry.URL];
   };
   [self.contextMenuCoordinator addItemWithTitle:openInNewTabTitle
-                                         action:openInNewTabAction];
+                                         action:openInNewTabAction
+                                          style:UIAlertActionStyleDefault];
+
+  if (IsMultiwindowSupported()) {
+    // Add "Open In New Window" option.
+    NSString* openInNewWindowTitle =
+        l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_OPENINNEWWINDOW);
+    ProceduralBlock openInNewWindowAction = ^{
+      [weakSelf openURLInNewWindow:entry.URL];
+    };
+    [self.contextMenuCoordinator addItemWithTitle:openInNewWindowTitle
+                                           action:openInNewWindowAction
+                                            style:UIAlertActionStyleDefault];
+  }
 
   // Add "Open in New Incognito Tab" option.
   NSString* openInNewIncognitoTabTitle = l10n_util::GetNSStringWithFixup(
@@ -1024,7 +1080,8 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     [weakSelf openURLInNewIncognitoTab:entry.URL];
   };
   [self.contextMenuCoordinator addItemWithTitle:openInNewIncognitoTabTitle
-                                         action:openInNewIncognitoTabAction];
+                                         action:openInNewIncognitoTabAction
+                                          style:UIAlertActionStyleDefault];
 
   // Add "Copy URL" option.
   NSString* copyURLTitle =
@@ -1033,7 +1090,8 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     StoreURLInPasteboard(entry.URL);
   };
   [self.contextMenuCoordinator addItemWithTitle:copyURLTitle
-                                         action:copyURLAction];
+                                         action:copyURLAction
+                                          style:UIAlertActionStyleDefault];
   [self.contextMenuCoordinator start];
 }
 
@@ -1046,6 +1104,16 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     UrlLoadingBrowserAgent::FromBrowser(_browser)->Load(params);
     [self.presentationDelegate showActiveRegularTabFromHistory];
   }];
+}
+
+// Opens URL in a new non-incognito tab in a new window and dismisses the
+// history view.
+- (void)openURLInNewWindow:(const GURL&)URL {
+  id<ApplicationCommands> windowOpener = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), ApplicationCommands);
+  [windowOpener
+      openNewWindowWithActivity:ActivityToLoadURL(WindowActivityHistoryOrigin,
+                                                  URL)];
 }
 
 // Opens URL in a new incognito tab and dismisses the history view.

@@ -6,11 +6,11 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/views/accessibility/caption_bubble.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -24,7 +24,6 @@
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/test/widget_test.h"
 #include "ui/views/widget/widget.h"
 
 #if defined(USE_AURA)
@@ -79,25 +78,29 @@ class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
   }
 
   std::string GetLabelText() {
-    return controller_ ? base::UTF16ToUTF8(GetLabel()->GetText()) : "";
+    return controller_ ? controller_->GetBubbleLabelTextForTesting() : "";
   }
 
   views::Widget* GetCaptionWidget() {
     return controller_ ? controller_->caption_widget_ : nullptr;
   }
 
+  bool IsWidgetVisible() {
+    return controller_ && controller_->IsWidgetVisibleForTesting();
+  }
+
+  void DestroyController() { controller_.reset(nullptr); }
+
   void ClickCloseButton() {
     views::Button* button = GetCloseButton();
     if (!button)
       return;
-    views::test::WidgetDestroyedWaiter waiter(GetCaptionWidget());
     button->OnMousePressed(
         ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(0, 0), gfx::Point(0, 0),
                        ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
     button->OnMouseReleased(ui::MouseEvent(
         ui::ET_MOUSE_RELEASED, gfx::Point(0, 0), gfx::Point(0, 0),
         ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
-    waiter.Wait();
   }
 
   // There may be some rounding errors as we do floating point math with ints.
@@ -109,14 +112,14 @@ class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
     EXPECT_EQ(bubble_bounds.bottom(), anchor_bounds.bottom() - 48);
   }
 
-  void OnPartialTranscription(std::string text, int tab_index = 0) {
-    GetController()->OnTranscription(
+  bool OnPartialTranscription(std::string text, int tab_index = 0) {
+    return GetController()->OnTranscription(
         chrome::mojom::TranscriptionResult::New(text, false),
         browser()->tab_strip_model()->GetWebContentsAt(tab_index));
   }
 
-  void OnFinalTranscription(std::string text, int tab_index = 0) {
-    GetController()->OnTranscription(
+  bool OnFinalTranscription(std::string text, int tab_index = 0) {
+    return GetController()->OnTranscription(
         chrome::mojom::TranscriptionResult::New(text, true),
         browser()->tab_strip_model()->GetWebContentsAt(tab_index));
   }
@@ -132,13 +135,23 @@ class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
                                                      TabStripModel::CLOSE_NONE);
   }
 
+  void SetHasError(bool has_error) {
+    // TODO(crbug.com/1055150): Use a public function on the
+    // CaptionBubbleController to set an error once error messages are wired up
+    // from the speech service to the CaptionBubbleController.
+    GetController()
+        ->caption_bubble_models_
+            [browser()->tab_strip_model()->GetActiveWebContents()]
+        ->SetHasError(has_error);
+  }
+
  private:
   std::unique_ptr<CaptionBubbleControllerViews> controller_;
 };
 
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ShowsCaptionInBubble) {
   OnPartialTranscription("Taylor");
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
   EXPECT_EQ("Taylor", GetLabelText());
   OnPartialTranscription(
       "Taylor Alison Swift (born December 13, "
@@ -147,13 +160,13 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ShowsCaptionInBubble) {
 
   // Hides the bubble when set to the empty string.
   OnPartialTranscription("");
-  EXPECT_FALSE(GetCaptionWidget()->IsVisible());
+  EXPECT_FALSE(IsWidgetVisible());
 
   // Shows it again when the caption is no longer empty.
   OnPartialTranscription(
       "Taylor Alison Swift (born December 13, "
       "1989) is an American singer-songwriter.");
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
   EXPECT_EQ(
       "Taylor Alison Swift (born December 13, 1989) is an American "
       "singer-songwriter.",
@@ -309,11 +322,11 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, BubblePositioning) {
   // Shrink it so small the caption bubble can't fit. Ensure it's hidden.
   // Mac windows cannot be shrunk small enough to force the bubble to hide.
   browser()->window()->SetBounds(gfx::Rect(50, 50, 200, 100));
-  EXPECT_FALSE(GetCaptionWidget()->IsVisible());
+  EXPECT_FALSE(IsWidgetVisible());
 
   // Make it bigger again and ensure it's visible and wide again.
   browser()->window()->SetBounds(gfx::Rect(50, 50, 800, 400));
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
 #endif
 }
 
@@ -324,7 +337,7 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ShowsAndHidesError) {
   EXPECT_FALSE(GetErrorMessage()->GetVisible());
   EXPECT_FALSE(GetErrorIcon()->GetVisible());
 
-  GetBubble()->SetHasError(true);
+  SetHasError(true);
   EXPECT_FALSE(GetTitle()->GetVisible());
   EXPECT_FALSE(GetLabel()->GetVisible());
   EXPECT_TRUE(GetErrorMessage()->GetVisible());
@@ -338,7 +351,7 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ShowsAndHidesError) {
   EXPECT_TRUE(GetErrorIcon()->GetVisible());
 
   // Clear the error and everything should be visible again.
-  GetBubble()->SetHasError(false);
+  SetHasError(false);
   EXPECT_TRUE(GetTitle()->GetVisible());
   EXPECT_TRUE(GetLabel()->GetVisible());
   EXPECT_FALSE(GetErrorMessage()->GetVisible());
@@ -346,10 +359,18 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ShowsAndHidesError) {
 }
 
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, CloseButtonCloses) {
-  OnPartialTranscription("Elephants have 3-4 toenails per foot");
+  bool success = OnFinalTranscription("Elephants have 3-4 toenails per foot");
+  EXPECT_TRUE(success);
   EXPECT_TRUE(GetCaptionWidget());
+  EXPECT_TRUE(IsWidgetVisible());
+  EXPECT_EQ("Elephants have 3-4 toenails per foot", GetLabelText());
   ClickCloseButton();
-  EXPECT_FALSE(GetCaptionWidget());
+  EXPECT_TRUE(GetCaptionWidget());
+  EXPECT_FALSE(IsWidgetVisible());
+  success = OnFinalTranscription(
+      "Elephants wander 35 miles a day in search of water");
+  EXPECT_FALSE(success);
+  EXPECT_EQ("", GetLabelText());
 }
 
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
@@ -392,8 +413,6 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
                                               false, false, false));
   EXPECT_EQ(bounds, GetCaptionWidget()->GetClientAreaBoundsInScreen());
 
-#if !defined(OS_MACOSX)
-  // TODO(crbug.com/1055150): Get this working for Mac.
   // Hitting the escape key should remove focus from the view, so arrows no
   // longer work.
   EXPECT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_ESCAPE, false,
@@ -402,7 +421,6 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
   EXPECT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_UP, false,
                                               false, false, false));
   EXPECT_EQ(bounds, GetCaptionWidget()->GetClientAreaBoundsInScreen());
-#endif
 }
 
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, FocusableInTabOrder) {
@@ -415,9 +433,10 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, FocusableInTabOrder) {
   EXPECT_FALSE(GetBubble()->GetFocusManager()->GetFocusedView());
 
   // Press tab until we enter the bubble.
-  while (!GetBubble()->HasFocus())
+  while (!GetBubble()->HasFocus()) {
     EXPECT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_TAB, false,
                                                 false, false, false));
+  }
 #if defined(USE_AURA) && !defined(OS_CHROMEOS)
   // Check the native widget has focus.
   aura::client::FocusClient* focus_client =
@@ -505,7 +524,7 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
   // Set the error message.
   caption_style.text_size = "50%";
   GetController()->UpdateCaptionStyle(caption_style);
-  GetBubble()->SetHasError(true);
+  SetHasError(true);
   EXPECT_EQ(lineHeight / 2, GetErrorMessage()->GetLineHeight());
   // The error icon height remains unchanged at 20.
   EXPECT_GT(GetBubble()->GetPreferredSize().height(), lineHeight / 2 + 20);
@@ -532,60 +551,53 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ShowsAndHidesBubble) {
   // Bubble isn't shown when controller is created.
   GetController();
-  EXPECT_FALSE(GetCaptionWidget()->IsVisible());
+  EXPECT_FALSE(IsWidgetVisible());
 
   // It is shown if there is an error, and hidden when that error goes away.
-  GetBubble()->SetHasError(true);
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
-  GetBubble()->SetHasError(false);
-  EXPECT_FALSE(GetCaptionWidget()->IsVisible());
+  SetHasError(true);
+  EXPECT_TRUE(IsWidgetVisible());
+  SetHasError(false);
+  EXPECT_FALSE(IsWidgetVisible());
 
   // It is shown if there is text, and hidden if the text is removed.
   OnPartialTranscription("Newborn kangaroos are less than 1 in long");
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
   // Stays visible when switching to an error state.
-  GetBubble()->SetHasError(true);
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  SetHasError(true);
+  EXPECT_TRUE(IsWidgetVisible());
   // Even if the text is removed, because of the error.
   OnFinalTranscription("");
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
   // No error and no text means not visible.
-  GetBubble()->SetHasError(false);
-  EXPECT_FALSE(GetCaptionWidget()->IsVisible());
-
-  // Explicitly tell the bubble to show itself. It shouldn't show because
-  // it has no text and no error.
-  GetBubble()->Show();
-  EXPECT_FALSE(GetCaptionWidget()->IsVisible());
-  GetBubble()->SetHasError(true);
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
-
-  // Telling it explicitly to hide will hide it.
-  GetBubble()->Hide();
-  EXPECT_FALSE(GetCaptionWidget()->IsVisible());
-  GetBubble()->Show();
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  SetHasError(false);
+  EXPECT_FALSE(IsWidgetVisible());
 
 #if !defined(OS_MACOSX)
   // Shrink it so small the caption bubble can't fit. Ensure it's hidden.
   // Mac windows cannot be shrunk small enough to force the bubble to hide.
-  GetBubble()->SetHasError(false);
+  SetHasError(false);
   browser()->window()->SetBounds(gfx::Rect(50, 50, 200, 100));
-  EXPECT_FALSE(GetCaptionWidget()->IsVisible());
+  EXPECT_FALSE(IsWidgetVisible());
 
   // Make it bigger again and ensure it's still not visible.
   browser()->window()->SetBounds(gfx::Rect(50, 50, 800, 400));
-  EXPECT_FALSE(GetCaptionWidget()->IsVisible());
+  EXPECT_FALSE(IsWidgetVisible());
 
   // Now set some text, and ensure it hides when shrunk but re-shows when
   // grown.
   OnPartialTranscription("Newborn opossums are about 1cm long");
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
   browser()->window()->SetBounds(gfx::Rect(50, 50, 200, 100));
-  EXPECT_FALSE(GetCaptionWidget()->IsVisible());
+  EXPECT_FALSE(IsWidgetVisible());
   browser()->window()->SetBounds(gfx::Rect(50, 50, 800, 400));
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
 #endif
+
+  // Close the bubble. It should not show, even when it has an error.
+  ClickCloseButton();
+  EXPECT_FALSE(IsWidgetVisible());
+  SetHasError(true);
+  EXPECT_FALSE(IsWidgetVisible());
 }
 
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ChangeActiveTab) {
@@ -595,37 +607,37 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ChangeActiveTab) {
   // Tab 2 will have the text "A rhino's horn is made of hair".
 
   OnPartialTranscription("Polar bears are the largest carnivores on land", 0);
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
   EXPECT_EQ("Polar bears are the largest carnivores on land", GetLabelText());
 
   // Insert a new tab and switch to it.
   InsertNewTab();
   ActivateTabAt(1);
-  EXPECT_FALSE(GetCaptionWidget()->IsVisible());
+  EXPECT_FALSE(IsWidgetVisible());
   EXPECT_EQ("", GetLabelText());
 
   // Switch back to tab 0.
   ActivateTabAt(0);
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
   EXPECT_EQ("Polar bears are the largest carnivores on land", GetLabelText());
 
   // Switch back to tab 1 and send transcriptions.
   ActivateTabAt(1);
   OnFinalTranscription("A snail can sleep", 1);
   OnPartialTranscription("for two years", 1);
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
   EXPECT_EQ("A snail can sleep for two years", GetLabelText());
 
   // Send a transcription to tab 2 before activating it.
   InsertNewTab();
   OnPartialTranscription("A rhino's horn is made of hair", 2);
   ActivateTabAt(2);
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
   EXPECT_EQ("A rhino's horn is made of hair", GetLabelText());
 
   // Switch back to tab 1 and check that the partial transcription was saved.
   ActivateTabAt(1);
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
   EXPECT_EQ("A snail can sleep for two years", GetLabelText());
 
   // Add a new final transcription.
@@ -634,14 +646,127 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ChangeActiveTab) {
 
   // Close tab 1 and check that the bubble is still visible on tabs 0 and 2.
   CloseTabAt(1);
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
   EXPECT_EQ("A rhino's horn is made of hair", GetLabelText());
   ActivateTabAt(0);
-  EXPECT_TRUE(GetCaptionWidget()->IsVisible());
+  EXPECT_TRUE(IsWidgetVisible());
   EXPECT_EQ("Polar bears are the largest carnivores on land", GetLabelText());
 
+  // Close caption bubble on tab 0 and verify that it is still visible on tab 1.
+  ClickCloseButton();
+  EXPECT_FALSE(IsWidgetVisible());
+  ActivateTabAt(1);
+  EXPECT_TRUE(IsWidgetVisible());
+  EXPECT_EQ("A rhino's horn is made of hair", GetLabelText());
+  ActivateTabAt(0);
+  EXPECT_FALSE(IsWidgetVisible());
+
   // TODO(1055150): Test tab switching when there is an error message.
-  // TODO(1055150): Test tab switching when the close button is pressed.
+}
+
+IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, TruncatesFinalText) {
+  // Make a string with 30 lines of 500 characters each.
+  std::string text;
+  std::string line(497, 'a');
+  for (int i = 10; i < 40; i++) {
+    text += base::NumberToString(i) + line + " ";
+  }
+  OnFinalTranscription(text);
+  EXPECT_EQ(text.substr(12500, 15000), GetLabelText());
+  EXPECT_EQ(5u, GetBubble()->GetNumLinesInLabel());
+  OnPartialTranscription(text);
+  EXPECT_EQ(text.substr(12500, 15000) + text, GetLabelText());
+  EXPECT_EQ(35u, GetBubble()->GetNumLinesInLabel());
+  OnFinalTranscription("a ");
+  EXPECT_EQ(text.substr(13000, 15000) + "a ", GetLabelText());
+  EXPECT_EQ(5u, GetBubble()->GetNumLinesInLabel());
+}
+
+IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, TabNavigation) {
+  ui_test_utils::NavigateToURL(browser(), GURL("http://www.google.com"));
+  content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  OnFinalTranscription("Elephant calves can stand within 20 minutes of birth");
+  EXPECT_TRUE(IsWidgetVisible());
+  EXPECT_EQ("Elephant calves can stand within 20 minutes of birth",
+            GetLabelText());
+
+  // The caption bubble disappears when the tab navigates to a new page.
+  ui_test_utils::NavigateToURL(browser(), GURL("http://www.youtube.com"));
+  content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_FALSE(IsWidgetVisible());
+
+  // The caption bubble reappears when a transcription is received on the new
+  // page.
+  OnFinalTranscription("A group of toads is called a knot");
+  EXPECT_TRUE(IsWidgetVisible());
+  EXPECT_EQ("A group of toads is called a knot", GetLabelText());
+
+  // The caption bubble disappears when the tab refreshes.
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
+  content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_FALSE(IsWidgetVisible());
+
+  // The caption bubble reappears when a transcription is received.
+  OnFinalTranscription("Lemurs, like dogs, have wet noses");
+  EXPECT_TRUE(IsWidgetVisible());
+  EXPECT_EQ("Lemurs, like dogs, have wet noses", GetLabelText());
+
+  // The caption bubble disappears when the tab goes back.
+  chrome::GoBack(browser(), WindowOpenDisposition::CURRENT_TAB);
+  content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_FALSE(IsWidgetVisible());
+
+  // The caption bubble reappears when a transcription is received.
+  OnFinalTranscription("A blue whale's tongue weighs more than most elephants");
+  EXPECT_TRUE(IsWidgetVisible());
+  EXPECT_EQ("A blue whale's tongue weighs more than most elephants",
+            GetLabelText());
+
+  // The caption bubble disappears when the tab goes forward.
+  chrome::GoForward(browser(), WindowOpenDisposition::CURRENT_TAB);
+  content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_FALSE(IsWidgetVisible());
+
+  // The caption bubble reappears when a transcription is received.
+  OnFinalTranscription("All polar bears are left-pawed");
+  EXPECT_TRUE(IsWidgetVisible());
+  EXPECT_EQ("All polar bears are left-pawed", GetLabelText());
+
+  // The caption bubble disappears after being closed, and reappears when a
+  // transcription is received after a navigation.
+  ClickCloseButton();
+  EXPECT_FALSE(IsWidgetVisible());
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
+  content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_FALSE(IsWidgetVisible());
+  OnFinalTranscription("Rats laugh when they are tickled");
+  EXPECT_TRUE(IsWidgetVisible());
+  EXPECT_EQ("Rats laugh when they are tickled", GetLabelText());
+
+  // The caption bubble is not affected if a navigation occurs on a different
+  // tab.
+  chrome::Reload(browser(), WindowOpenDisposition::NEW_BACKGROUND_TAB);
+  content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_TRUE(IsWidgetVisible());
+  EXPECT_EQ("Rats laugh when they are tickled", GetLabelText());
+}
+
+IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
+                       DestroysWithoutCrashing) {
+  // Test passes if destroying the controller does not crash.
+  OnPartialTranscription("Deer have a four-chambered stomach");
+  DestroyController();
+
+  OnPartialTranscription("Deer antlers fall off and regrow every year");
+  ClickCloseButton();
+  DestroyController();
 }
 
 }  // namespace captions

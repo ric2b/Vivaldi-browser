@@ -5,6 +5,10 @@
 #ifndef CONTENT_PUBLIC_BROWSER_SERVICE_WORKER_CONTEXT_OBSERVER_H_
 #define CONTENT_PUBLIC_BROWSER_SERVICE_WORKER_CONTEXT_OBSERVER_H_
 
+#include <string>
+
+#include "content/public/browser/global_routing_id.h"
+#include "content/public/browser/service_worker_client_info.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -52,9 +56,26 @@ class ServiceWorkerContextObserver {
       const ServiceWorkerRunningInfo& running_info) {}
   virtual void OnVersionStoppedRunning(int64_t version_id) {}
 
+  // Called when a controllee is added/removed for the service worker with id
+  // |version_id|.
+  virtual void OnControlleeAdded(int64_t version_id,
+                                 const std::string& client_uuid,
+                                 const ServiceWorkerClientInfo& client_info) {}
+  virtual void OnControlleeRemoved(int64_t version_id,
+                                   const std::string& client_uuid) {}
+
   // Called when there are no more controllees for the service worker with id
   // |version_id|.
   virtual void OnNoControllees(int64_t version_id, const GURL& scope) {}
+
+  // Called when the navigation for a window client commits to a render frame
+  // host. At this point, if there was a previous controllee attached to that
+  // render frame host, it has already been removed and OnControlleeRemoved()
+  // has been called.
+  virtual void OnControlleeNavigationCommitted(
+      int64_t version_id,
+      const std::string& client_uuid,
+      GlobalFrameRoutingId render_frame_host_id) {}
 
   // Called when a console message is reported for the service worker with id
   // |version_id|.

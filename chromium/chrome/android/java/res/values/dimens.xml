@@ -53,14 +53,6 @@
     <!-- Infobar dimensions -->
     <!-- Text size of descriptive controls on an infobar. -->
     <dimen name="infobar_descriptive_text_size">14sp</dimen>
-    <!-- Maximum width of an infobar. -->
-    <dimen name="infobar_max_width">600dp</dimen>
-    <!-- Width of side shadows on floating infobars. -->
-    <dimen name="infobar_shadow_width">8dp</dimen>
-    <!-- Height of top shadow on each infobar. -->
-    <dimen name="infobar_shadow_height">8dp</dimen>
-    <!-- Distance that a back infobar peeks out above the front infobar. -->
-    <dimen name="infobar_peeking_height">10dp</dimen>
 
     <!-- Dimension applied to SyncErrorInfoBar icon. -->
     <dimen name="sync_error_infobar_icon_size">48dp</dimen>
@@ -305,7 +297,7 @@
     <dimen name="omnibox_suggestion_24dp_icon_margin_start">16dp</dimen>
     <dimen name="omnibox_suggestion_24dp_icon_margin_end">16dp</dimen>
     <dimen name="omnibox_suggestion_favicon_size">24dp</dimen>
-    <dimen name="omnibox_suggestion_entity_icon_size">36dp</dimen>
+    <dimen name="omnibox_suggestion_decoration_image_size">36dp</dimen>
     <dimen name="omnibox_suggestion_icon_area_size">56dp</dimen>
 
     <dimen name="omnibox_suggestion_action_icon_width">48dp</dimen>
@@ -444,6 +436,10 @@
     <dimen name="photo_picker_tile_min_size">100dp</dimen>
     <dimen name="photo_picker_tile_gap">4dp</dimen>
     <dimen name="photo_picker_grainy_thumbnail_size">12dp</dimen>
+    <dimen name="photo_picker_play_button_size">84dp</dimen>
+    <dimen name="photo_picker_seek_bar_thickness">4dp</dimen>
+    <dimen name="photo_picker_seek_bar_edge_radius">2dp</dimen>
+    <dimen name="photo_picker_seek_bar_thumb_size">12dp</dimen>
     <dimen name="photo_picker_video_duration_offset">16dp</dimen>
 
     <!-- Account chooser dialog dimensions -->
@@ -506,6 +502,7 @@
     <dimen name="pref_autofill_field_horizontal_padding">4dp</dimen>
     <dimen name="pref_autofill_field_top_margin">8dp</dimen>
     <dimen name="pref_autofill_field_large_top_margin">16dp</dimen>
+    <dimen name="pref_autofill_field_extra_large_top_margin">24dp</dimen>
     <dimen name="pref_autofill_field_bottom_margin">8dp</dimen>
     <!-- The dropdown element has no embedded bottom padding like the TextView has so the margin
          is doubled. -->
@@ -606,10 +603,12 @@
     <dimen name="navigation_sheet_content_wrap_padding">12dp</dimen>
     <dimen name="navigation_sheet_peek_height">120dp</dimen>
 
+    <!-- RadioButtonWithDescriptionLayout dimensions -->
+    <dimen name="radio_button_accessory_view_padding_start">60dp</dimen>
+    <dimen name="radio_button_accessory_view_padding_end">16dp</dimen>
+
     <!-- Appearance Settings dimensions -->
     <dimen name="theme_preferences_checkbox_margin_end">8dp</dimen>
-    <dimen name="theme_preferences_checkbox_container_padding_start">60dp</dimen>
-    <dimen name="theme_preferences_checkbox_container_padding_end">16dp</dimen>
     <dimen name="homepage_preference_title_lateral_padding">16dp</dimen>
     <dimen name="homepage_preference_title_vertical_padding">10dp</dimen>
 

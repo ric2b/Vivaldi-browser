@@ -8,6 +8,7 @@
 
 #include "base/check_op.h"
 #include "base/notreached.h"
+#include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
 #include "ui/gfx/geometry/point_f.h"
 
 namespace content {
@@ -172,23 +173,6 @@ void SyntheticSmoothMoveGesture::ForwardMouseWheelInputEvents(
       base::TimeTicks event_timestamp = ClampTimestamp(timestamp);
       gfx::Vector2dF delta = GetPositionDeltaAtTime(event_timestamp) -
                              current_move_segment_total_delta_;
-
-      // Android MotionEvents that carry mouse wheel ticks and the tick
-      // granularity. Since it's not easy to change this granularity, it means
-      // we can only scroll in terms of number of these ticks. Note also: if
-      // the delta is smaller than one tick size we wont send an event or
-      // accumulate it in current_move_segment_total_delta_ so that we don't
-      // consider that delta applied. If we did, slow scrolls would be entirely
-      // lost since we'd send 0 ticks in each event but assume delta was
-      // applied.
-      int pixels_per_wheel_tick = target->GetMouseWheelMinimumGranularity();
-      if (pixels_per_wheel_tick) {
-        int wheel_ticks_x = static_cast<int>(delta.x() / pixels_per_wheel_tick);
-        int wheel_ticks_y = static_cast<int>(delta.y() / pixels_per_wheel_tick);
-        delta = gfx::Vector2dF(wheel_ticks_x * pixels_per_wheel_tick,
-                               wheel_ticks_y * pixels_per_wheel_tick);
-      }
-
       if (delta.x() || delta.y()) {
         blink::WebMouseWheelEvent::Phase phase =
             needs_scroll_begin_ ? blink::WebMouseWheelEvent::kPhaseBegan
@@ -287,7 +271,7 @@ void SyntheticSmoothMoveGesture::ForwardMouseWheelEvent(
     const base::TimeTicks& timestamp,
     int key_modifiers) const {
   blink::WebMouseWheelEvent mouse_wheel_event =
-      SyntheticWebMouseWheelEventBuilder::Build(
+      blink::SyntheticWebMouseWheelEventBuilder::Build(
           0, 0, delta.x(), delta.y(), key_modifiers, params_.granularity);
 
   mouse_wheel_event.SetPositionInWidget(
@@ -304,7 +288,7 @@ void SyntheticSmoothMoveGesture::ForwardFlingGestureEvent(
     SyntheticGestureTarget* target,
     const blink::WebInputEvent::Type type) const {
   blink::WebGestureEvent fling_gesture_event =
-      SyntheticWebGestureEventBuilder::Build(
+      blink::SyntheticWebGestureEventBuilder::Build(
           type, blink::WebGestureDevice::kTouchpad);
   fling_gesture_event.data.fling_start.velocity_x = params_.fling_velocity_x;
   fling_gesture_event.data.fling_start.velocity_y = params_.fling_velocity_y;

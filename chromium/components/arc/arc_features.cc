@@ -44,6 +44,11 @@ const base::Feature kEnableDocumentsProviderInFilesAppFeature{
 const base::Feature kEnableRegularToChildTransitionFeature{
     "ArcEnableRegularToChildTransition", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Controls whether secondary accounts are added to ARC++ for child user.
+// This is added temporarily to allow further investigation.
+const base::Feature kEnableSecondaryAccountsForChildExperiment{
+    "ArcEnableSecondaryAccountForChild", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether we should delegate audio focus requests from ARC to Chrome.
 const base::Feature kEnableUnifiedAudioFocusFeature{
     "ArcEnableUnifiedAudioFocus", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -56,7 +61,7 @@ const base::Feature kFilePickerExperimentFeature{
 // Note, that we keep the original feature name to preserve
 // corresponding metrics.
 const base::Feature kNativeBridgeToggleFeature{
-    "ArcNativeBridgeExperiment", base::FEATURE_ENABLED_BY_DEFAULT};
+    "ArcNativeBridgeExperiment", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls ARC picture-in-picture feature. If this is enabled, then Android
 // will control which apps can enter PIP. If this is disabled, then ARC PIP

@@ -15,7 +15,6 @@
 #include "base/optional.h"
 #include "build/build_config.h"
 #include "components/viz/common/surfaces/surface_id.h"
-#include "content/browser/frame_host/file_chooser_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/webui/web_ui_impl.h"
 #include "content/common/content_export.h"
@@ -71,7 +70,6 @@ class Origin;
 
 namespace blink {
 namespace mojom {
-class FileChooserParams;
 class FullscreenOptions;
 }
 }  // namespace blink
@@ -184,26 +182,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       RenderFrameHost* source,
       std::vector<blink::mojom::FaviconURLPtr> candidates) {}
 
-  // Called when a file selection is to be done.
-  //
-  // Overrides of this function must call either listener->FileSelected() or
-  // listener->FileSelectionCanceled().
-  virtual void RunFileChooser(
-      RenderFrameHost* render_frame_host,
-      std::unique_ptr<FileChooserImpl::FileSelectListenerImpl> listener,
-      const blink::mojom::FileChooserParams& params);
-
-  // Request to enumerate a directory.  This is equivalent to running the file
-  // chooser in directory-enumeration mode and having the user select the given
-  // directory.
-  //
-  // Overrides of this function must call either listener->FileSelected() or
-  // listener->FileSelectionCanceled().
-  virtual void EnumerateDirectory(
-      RenderFrameHost* render_frame_host,
-      std::unique_ptr<FileChooserImpl::FileSelectListenerImpl> listener,
-      const base::FilePath& directory_path);
-
   // The pending page load was canceled, so the address bar should be updated.
   virtual void DidCancelLoading() {}
 
@@ -298,11 +276,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Returns whether entering fullscreen with EnterFullscreenMode() is allowed.
   virtual bool CanEnterFullscreenMode();
 
-  // Notification that the frame wants to go into fullscreen mode.
-  // |origin| represents the origin of the frame that requests fullscreen. Must
-  // only be called if CanEnterFullscreenMode returns true.
+  // Notification that the frame with the given host wants to enter fullscreen
+  // mode. Must only be called if CanEnterFullscreenMode returns true.
   virtual void EnterFullscreenMode(
-      const GURL& origin,
+      RenderFrameHost* requesting_frame,
       const blink::mojom::FullscreenOptions& options) {}
 
   // Notification that the frame wants to go out of fullscreen mode.
@@ -430,10 +407,8 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Reports that passive mixed content was found at the specified url.
   virtual void PassiveInsecureContentFound(const GURL& resource_url) {}
 
-  // Checks if running of active mixed content is allowed for the specified
-  // WebContents/tab.
-  virtual bool ShouldAllowRunningInsecureContent(WebContents* web_contents,
-                                                 bool allowed_per_prefs,
+  // Checks if running of active mixed content is allowed in the current tab.
+  virtual bool ShouldAllowRunningInsecureContent(bool allowed_per_prefs,
                                                  const url::Origin& origin,
                                                  const GURL& resource_url);
 
@@ -495,6 +470,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
                                            int context_id) {}
   virtual void AudioContextPlaybackStopped(RenderFrameHost* host,
                                            int context_id) {}
+
+  // Notifies observers if the frame has changed audible state.
+  virtual void OnFrameAudioStateChanged(RenderFrameHost* host,
+                                        bool is_audible) {}
 
   // Returns the main frame of the inner delegate that is attached to this
   // delegate using |frame_tree_node|. Returns nullptr if no such inner delegate
@@ -571,7 +550,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void CreateNewWidget(
       int32_t render_process_id,
       int32_t widget_route_id,
-      mojo::PendingRemote<mojom::Widget> widget,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}
@@ -580,7 +558,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void CreateNewFullscreenWidget(
       int32_t render_process_id,
       int32_t widget_route_id,
-      mojo::PendingRemote<mojom::Widget> widget,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}
@@ -613,6 +590,26 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   virtual void OnCookiesAccessed(RenderFrameHostImpl* render_frame_host,
                                  const CookieAccessDetails& details) {}
+
+  // Notified that the renderer responded after calling GetSavableResourceLinks.
+  virtual void SavableResourceLinksResponse(
+      RenderFrameHostImpl* source,
+      const std::vector<GURL>& resources_list,
+      blink::mojom::ReferrerPtr referrer,
+      const std::vector<blink::mojom::SavableSubframePtr>& subframes) {}
+
+  // Notified that the renderer returned an error after calling
+  // GetSavableResourceLinks in case the frame contains non-savable content
+  // (i.e. from a non-savable scheme) or if there were errors gathering the
+  // links.
+  virtual void SavableResourceLinksError(RenderFrameHostImpl* source) {}
+
+  // Called when |RenderFrameHostImpl::lifecycle_state()| changes i.e., when
+  // RenderFrameHost LifecycleState changes from old_state to new_state.
+  virtual void RenderFrameHostStateChanged(
+      RenderFrameHost* host,
+      RenderFrameHostImpl::LifecycleState old_state,
+      RenderFrameHostImpl::LifecycleState new_state) {}
 
  protected:
   virtual ~RenderFrameHostDelegate() = default;

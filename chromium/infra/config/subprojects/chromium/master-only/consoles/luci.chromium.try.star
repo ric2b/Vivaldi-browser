@@ -1,9 +1,15 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 luci.list_view(
     name = 'luci.chromium.try',
     entries = [
         'try/android-cronet-arm-dbg',
         'try/android-lollipop-arm-rel',
         'try/android-marshmallow-arm64-rel',
+        'try/android-marshmallow-x86-rel',
+        'try/android-nougat-arm64-rel',
         'try/android-oreo-arm64-cts-networkservice-dbg',
         'try/android-pie-arm64-coverage-rel',
         'try/android-pie-arm64-rel',
@@ -137,6 +143,7 @@ luci.list_view(
         'try/linux_upload_clang',
         'try/linux-viz-rel',
         'try/linux-wpt-fyi-rel',
+        'try/network_service_linux',
         'try/ios-device',
         'try/ios-simulator',
         'try/ios-simulator-cronet',
@@ -164,7 +171,6 @@ luci.list_view(
         'try/win7-rel',
         'try/win10_chromium_x64_dbg_ng',
         'try/win10_chromium_x64_rel_ng',
-        'try/win10_chromium_x64_coverage_rel_ng',
         'try/win10_chromium_x64_rel_ng_exp',
         'try/win-angle-deqp-rel-32',
         'try/win-angle-deqp-rel-64',

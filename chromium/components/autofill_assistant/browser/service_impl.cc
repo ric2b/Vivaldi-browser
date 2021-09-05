@@ -133,6 +133,7 @@ void ServiceImpl::GetScriptsForUrl(const GURL& url,
                                    ResponseCallback callback) {
   DCHECK(url.is_valid());
 
+  UpdateMutableClientContextFields();
   SendRequest(AddLoader(
       script_server_url_,
       ProtocolUtils::CreateGetScriptsRequest(
@@ -148,6 +149,7 @@ void ServiceImpl::GetActions(const std::string& script_path,
                              ResponseCallback callback) {
   DCHECK(!script_path.empty());
 
+  UpdateMutableClientContextFields();
   SendRequest(
       AddLoader(script_action_server_url_,
                 ProtocolUtils::CreateInitialScriptActionsRequest(
@@ -162,6 +164,7 @@ void ServiceImpl::GetNextActions(
     const std::string& previous_script_payload,
     const std::vector<ProcessedActionProto>& processed_actions,
     ResponseCallback callback) {
+  UpdateMutableClientContextFields();
   SendRequest(AddLoader(
       script_action_server_url_,
       ProtocolUtils::CreateNextScriptActionsRequest(
@@ -333,6 +336,14 @@ ClientContextProto ServiceImpl::CreateClientContext(
     field_trial->set_group_name(group.group_name);
   }
   return context;
+}
+
+void ServiceImpl::UpdateMutableClientContextFields() {
+  client_context_.set_accessibility_enabled(client_->IsAccessibilityEnabled());
+  client_context_.set_signed_into_chrome_status(
+      client_->GetChromeSignedInEmailAddress().empty()
+          ? ClientContextProto::NOT_SIGNED_IN
+          : ClientContextProto::SIGNED_IN);
 }
 
 }  // namespace autofill_assistant

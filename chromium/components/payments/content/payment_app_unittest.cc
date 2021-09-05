@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/payments/core/payment_app.h"
+#include "components/payments/content/payment_app.h"
 
 #include <vector>
 
@@ -11,10 +11,9 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/payments/content/autofill_payment_app.h"
 #include "components/payments/content/service_worker_payment_app.h"
-#include "components/payments/core/autofill_payment_app.h"
 #include "components/payments/core/features.h"
-#include "components/payments/core/mock_payment_request_delegate.h"
 #include "content/public/browser/stored_payment_app.h"
 #include "content/public/browser/supported_delegations.h"
 #include "content/public/browser/web_contents.h"
@@ -86,12 +85,10 @@ class PaymentAppTest : public testing::TestWithParam<RequiredPaymentOptions>,
     }
 
     return std::make_unique<ServiceWorkerPaymentApp>(
-        &browser_context_, GURL("https://testmerchant.com"),
+        web_contents_, GURL("https://testmerchant.com"),
         GURL("https://testmerchant.com/bobpay"), spec_.get(),
-        std::move(stored_app), &delegate_,
-        /*identity_callback=*/
-        base::BindRepeating([](const url::Origin&,
-                               int64_t) { /* Intentionally left blank. */ }));
+        std::move(stored_app), /*is_incognito=*/false,
+        /*show_processing_spinner=*/base::DoNothing());
   }
 
   std::unique_ptr<ServiceWorkerPaymentApp>
@@ -119,10 +116,8 @@ class PaymentAppTest : public testing::TestWithParam<RequiredPaymentOptions>,
     return std::make_unique<ServiceWorkerPaymentApp>(
         web_contents_, GURL("https://merchant.example"),
         GURL("https://merchant.example/iframe"), spec_.get(),
-        std::move(installable_app), "https://pay.example", &delegate_,
-        /*identity_callback=*/
-        base::BindRepeating([](const url::Origin&,
-                               int64_t) { /* Intentionally left blank. */ }));
+        std::move(installable_app), "https://pay.example",
+        /*is_incognito=*/false, /*show_processing_spinner=*/base::DoNothing());
   }
 
   static void PopulateIcon(SkBitmap* icon) {
@@ -178,7 +173,6 @@ class PaymentAppTest : public testing::TestWithParam<RequiredPaymentOptions>,
   autofill::AutofillProfile address_;
   autofill::CreditCard local_card_;
   std::vector<autofill::AutofillProfile*> billing_profiles_;
-  MockPaymentRequestDelegate delegate_;
   RequiredPaymentOptions required_options_;
   std::unique_ptr<PaymentRequestSpec> spec_;
 
@@ -207,8 +201,8 @@ TEST_P(PaymentAppTest, SortApps) {
   // Add an expired card.
   autofill::CreditCard expired_card = local_credit_card();
   expired_card.SetExpirationYear(2016);
-  AutofillPaymentApp expired_cc_app("visa", expired_card,
-                                    billing_profiles(), "en-US", nullptr);
+  AutofillPaymentApp expired_cc_app("visa", expired_card, billing_profiles(),
+                                    "en-US", nullptr);
   apps.push_back(&expired_cc_app);
 
   // Add a non-preselectable sw based payment app.

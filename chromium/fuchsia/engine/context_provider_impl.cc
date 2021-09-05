@@ -54,12 +54,20 @@
 #include "net/http/http_util.h"
 #include "services/network/public/cpp/features.h"
 #include "services/service_manager/sandbox/fuchsia/sandbox_policy_fuchsia.h"
+#include "third_party/blink/public/common/switches.h"
 #include "third_party/widevine/cdm/widevine_cdm_common.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/ozone/public/ozone_switches.h"
 
 namespace {
+
+// Use a constexpr instead of the existing base::Feature, because of the
+// additional dependencies required.
+constexpr char kMixedContentAutoupgradeFeatureName[] =
+    "AutoupgradeMixedContent";
+constexpr char kDisableMixedContentAutoupgradeOrigin[] =
+    "disable-mixed-content-autoupgrade";
 
 // Returns the underlying channel if |directory| is a client endpoint for a
 // |fuchsia::io::Directory| protocol. Otherwise, returns an empty channel.
@@ -154,25 +162,30 @@ bool MaybeAddCommandLineArgsFromConfig(const base::Value& config,
     return true;
 
   static const base::StringPiece kAllowedArgs[] = {
+      blink::switches::kGpuRasterizationMSAASampleCount,
+      blink::switches::kMinHeightForGpuRasterTile,
       cc::switches::kEnableGpuBenchmarking,
-      switches::kAcceleratedCanvas2dMSAASampleCount,
       switches::kDisableFeatures,
       switches::kDisableGpuWatchdog,
+      // TODO(crbug.com/1082821): Remove this switch from the allow-list.
+      switches::kEnableCastStreamingReceiver,
       switches::kEnableFeatures,
       switches::kEnableLowEndDeviceMode,
       switches::kForceGpuMemAvailableMb,
       switches::kForceGpuMemDiscardableLimitMb,
       switches::kForceMaxTextureSize,
-      switches::kGpuRasterizationMSAASampleCount,
-      switches::kMinHeightForGpuRasterTile,
+      switches::kMaxDecodedImageSizeMb,
       switches::kRendererProcessLimit,
+      switches::kWebglAntialiasingMode,
+      switches::kWebglMSAASampleCount,
   };
 
   for (const auto& arg : args->DictItems()) {
     if (!base::Contains(kAllowedArgs, arg.first)) {
-      LOG(ERROR) << "Unknown command-line arg: " << arg.first;
-      // TODO(https://crbug.com/1032439): Return false here once we are done
-      // experimenting with memory-related command-line options.
+      // TODO(https://crbug.com/1032439): Increase severity and return false
+      // once we have a mechanism for soft transitions of supported arguments.
+      LOG(WARNING) << "Unknown command-line arg: '" << arg.first
+                   << "'. Config file and WebEngine version may not match.";
       continue;
     }
 
@@ -191,7 +204,7 @@ bool MaybeAddCommandLineArgsFromConfig(const base::Value& config,
     // which
     // we don't yet support.
     if (arg.first == switches::kEnableLowEndDeviceMode)
-      command_line->AppendSwitch(switches::kDisableRGBA4444Textures);
+      command_line->AppendSwitch(blink::switches::kDisableRGBA4444Textures);
   }
 
   return true;
@@ -210,12 +223,6 @@ bool IsFuchsiaCdmSupported() {
   return false;
 #endif
 }
-
-// Use the most significant bit to enable cast streaming receiver features.
-// TODO(crbug.com/1078919): Remove this when we have a better way of enabling
-// this feature.
-constexpr auto kCastStreamingFeatureFlag =
-    static_cast<fuchsia::web::ContextFeatureFlags>(1ULL << 63);
 
 }  // namespace
 
@@ -405,18 +412,8 @@ void ContextProviderImpl::Create(
     // SkiaRenderer requires out-of-process rasterization be enabled.
     launch_command.AppendSwitch(switches::kEnableOopRasterization);
 
-    if (!enable_protected_graphics) {
-      launch_command.AppendSwitchASCII(switches::kUseGL,
-                                       gl::kGLImplementationANGLEName);
-    } else {
-      DLOG(WARNING) << "ANGLE is not compatible with "
-                    << switches::kEnforceVulkanProtectedMemory
-                    << ", disabling GL";
-      // TODO(crbug.com/1059010): Fix this; probably don't protect canvas
-      // resources.
-      launch_command.AppendSwitchASCII(switches::kUseGL,
-                                       gl::kGLImplementationStubName);
-    }
+    launch_command.AppendSwitchASCII(switches::kUseGL,
+                                     gl::kGLImplementationANGLEName);
   } else {
     VLOG(1) << "Disabling GPU acceleration.";
     // Disable use of Vulkan GPU, and use of the software-GL rasterizer. The
@@ -460,11 +457,6 @@ void ContextProviderImpl::Create(
     launch_command.AppendSwitch(switches::kDisableSoftwareVideoDecoders);
   }
 
-  const bool enable_cast_streaming_receiver =
-      (features & kCastStreamingFeatureFlag) == kCastStreamingFeatureFlag;
-  if (enable_cast_streaming_receiver)
-    launch_command.AppendSwitch(switches::kEnableCastStreamingReceiver);
-
   // Validate embedder-supplied product, and optional version, and pass it to
   // the Context to include in the UserAgent.
   if (params.has_user_agent_product()) {
@@ -502,10 +494,13 @@ void ContextProviderImpl::Create(
   if (params.has_unsafely_treat_insecure_origins_as_secure()) {
     const std::vector<std::string>& insecure_origins =
         params.unsafely_treat_insecure_origins_as_secure();
-    if (std::find(insecure_origins.begin(), insecure_origins.end(),
-                  switches::kAllowRunningInsecureContent) !=
-        insecure_origins.end()) {
-      launch_command.AppendSwitch(switches::kAllowRunningInsecureContent);
+    for (auto origin : insecure_origins) {
+      if (origin == switches::kAllowRunningInsecureContent)
+        launch_command.AppendSwitch(switches::kAllowRunningInsecureContent);
+      if (origin == kDisableMixedContentAutoupgradeOrigin) {
+        AppendFeature(switches::kDisableFeatures,
+                      kMixedContentAutoupgradeFeatureName, &launch_command);
+      }
     }
     // TODO(crbug.com/1023510): Pass the rest of the list to the Context
     // process.
@@ -522,10 +517,19 @@ void ContextProviderImpl::Create(
         base::JoinString(cors_exempt_headers, ","));
   }
 
-  if (launch_for_test_)
-    launch_for_test_.Run(launch_command, launch_options);
-  else
-    base::LaunchProcess(launch_command, launch_options);
+  base::Process context_process;
+  if (launch_for_test_) {
+    context_process = launch_for_test_.Run(launch_command, launch_options);
+  } else {
+    context_process = base::LaunchProcess(launch_command, launch_options);
+  }
+
+  if (context_process.IsValid()) {
+    // Set |context_process| termination to teardown its job and sub-processes.
+    zx_status_t result = zx_job_set_critical(launch_options.job_handle, 0,
+                                             context_process.Handle());
+    ZX_CHECK(ZX_OK == result, result) << "zx_job_set_critical";
+  }
 
   // |context_request| and any DevTools channels were transferred (not copied)
   // to the Context process.

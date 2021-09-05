@@ -11,8 +11,8 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/check.h"
 #include "base/component_export.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
@@ -48,8 +48,7 @@ class COMPONENT_EXPORT(MOJO_CPP_BINDINGS) BindingStateBase {
   void PauseIncomingMethodCallProcessing();
   void ResumeIncomingMethodCallProcessing();
 
-  bool WaitForIncomingMethodCall(
-      MojoDeadline deadline = MOJO_DEADLINE_INDEFINITE);
+  bool WaitForIncomingMethodCall();
 
   void PauseRemoteCallbacksUntilFlushCompletes(PendingFlush flush);
   void FlushAsync(AsyncFlusher flusher);

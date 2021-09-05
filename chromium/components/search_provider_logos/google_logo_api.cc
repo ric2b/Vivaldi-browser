@@ -15,12 +15,12 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/json/json_reader.h"
+#include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
-#include "components/search_provider_logos/features.h"
 #include "components/search_provider_logos/switches.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_constants.h"
@@ -189,20 +189,16 @@ std::unique_ptr<EncodedLogo> ParseDoodleLogoResponse(
   // Default parsing failure to be true.
   *parsing_failed = true;
 
-  int error_code;
-  std::string error_string;
-  int error_line;
-  int error_col;
-  std::unique_ptr<base::Value> value =
-      base::JSONReader::ReadAndReturnErrorDeprecated(
-          response_sp, 0, &error_code, &error_string, &error_line, &error_col);
-  if (!value) {
-    LOG(WARNING) << error_string << " at " << error_line << ":" << error_col;
+  base::JSONReader::ValueWithError parsed_json =
+      base::JSONReader::ReadAndReturnValueWithError(response_sp);
+  if (!parsed_json.value) {
+    LOG(WARNING) << parsed_json.error_message << " at "
+                 << parsed_json.error_line << ":" << parsed_json.error_column;
     return nullptr;
   }
 
-  std::unique_ptr<base::DictionaryValue> config =
-      base::DictionaryValue::From(std::move(value));
+  std::unique_ptr<base::DictionaryValue> config = base::DictionaryValue::From(
+      base::Value::ToUniquePtrValue(std::move(*parsed_json.value)));
   if (!config)
     return nullptr;
 
@@ -251,11 +247,17 @@ std::unique_ptr<EncodedLogo> ParseDoodleLogoResponse(
 
   if (is_simple || is_animated) {
     const base::DictionaryValue* image = nullptr;
-    std::string bg_color;
-    if (ddljson->GetDictionary("dark_large_image", &image)) {
-      image->GetString("background_color", &bg_color);
+    if (ddljson->GetDictionary("large_image", &image)) {
+      image->GetInteger("width", &logo->metadata.width_px);
+      image->GetInteger("height", &logo->metadata.height_px);
     }
-    logo->metadata.dark_background_color = bg_color;
+    const base::DictionaryValue* dark_image = nullptr;
+    if (ddljson->GetDictionary("dark_large_image", &dark_image)) {
+      dark_image->GetString("background_color",
+                            &logo->metadata.dark_background_color);
+      dark_image->GetInteger("width", &logo->metadata.dark_width_px);
+      dark_image->GetInteger("height", &logo->metadata.dark_height_px);
+    }
   }
 
   const bool is_eligible_for_share_button =
@@ -333,10 +335,11 @@ std::unique_ptr<EncodedLogo> ParseDoodleLogoResponse(
   logo->metadata.on_click_url = ParseUrl(*ddljson, "target_url", base_url);
   ddljson->GetString("alt_text", &logo->metadata.alt_text);
 
-  if (base::FeatureList::IsEnabled(features::kDoodleLogging)) {
-    logo->metadata.cta_log_url = ParseUrl(*ddljson, "cta_log_url", base_url);
-    logo->metadata.log_url = ParseUrl(*ddljson, "log_url", base_url);
-  }
+  logo->metadata.cta_log_url = ParseUrl(*ddljson, "cta_log_url", base_url);
+  logo->metadata.dark_cta_log_url =
+      ParseUrl(*ddljson, "dark_cta_log_url", base_url);
+  logo->metadata.log_url = ParseUrl(*ddljson, "log_url", base_url);
+  logo->metadata.dark_log_url = ParseUrl(*ddljson, "dark_log_url", base_url);
 
   ddljson->GetString("fingerprint", &logo->metadata.fingerprint);
 

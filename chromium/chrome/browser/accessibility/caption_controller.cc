@@ -53,15 +53,6 @@ void CaptionController::RegisterProfilePrefs(
   registry->RegisterFilePathPref(prefs::kSODAPath, base::FilePath());
 }
 
-// static
-void CaptionController::InitOffTheRecordPrefs(Profile* off_the_record_profile) {
-  DCHECK(off_the_record_profile->IsOffTheRecord());
-  off_the_record_profile->GetPrefs()->SetBoolean(prefs::kLiveCaptionEnabled,
-                                                 false);
-  off_the_record_profile->GetPrefs()->SetFilePath(prefs::kSODAPath,
-                                                  base::FilePath());
-}
-
 void CaptionController::Init() {
   // Hidden behind a feature flag.
   if (!base::FeatureList::IsEnabled(media::kLiveCaption))
@@ -107,7 +98,8 @@ void CaptionController::UpdateSpeechRecognitionServiceEnabled() {
         base::BindOnce(&component_updater::SODAComponentInstallerPolicy::
                            UpdateSODAComponentOnDemand));
   } else {
-    // TODO(evliu): Unregister SODA component.
+    // Do nothing. The SODA component will be uninstalled and removed from the
+    // device on the next start up.
   }
 }
 
@@ -147,32 +139,42 @@ void CaptionController::UpdateAccessibilityCaptionHistograms() {
 }
 
 void CaptionController::OnBrowserAdded(Browser* browser) {
-  if (browser->profile() != profile_)
+  if (browser->profile() != profile_ &&
+      browser->profile()->GetOriginalProfile() != profile_) {
     return;
+  }
 
+  DCHECK(!caption_bubble_controllers_.count(browser));
   caption_bubble_controllers_[browser] =
       CaptionBubbleController::Create(browser);
   caption_bubble_controllers_[browser]->UpdateCaptionStyle(caption_style_);
 }
 
 void CaptionController::OnBrowserRemoved(Browser* browser) {
-  if (browser->profile() != profile_)
+  if (browser->profile() != profile_ &&
+      browser->profile()->GetOriginalProfile() != profile_) {
     return;
+  }
 
   DCHECK(caption_bubble_controllers_.count(browser));
   caption_bubble_controllers_.erase(browser);
 }
 
-void CaptionController::DispatchTranscription(
+bool CaptionController::DispatchTranscription(
     content::WebContents* web_contents,
     const chrome::mojom::TranscriptionResultPtr& transcription_result) {
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
-  if (!browser)
-    return;
-  if (!caption_bubble_controllers_.count(browser))
-    return;
-  caption_bubble_controllers_[browser]->OnTranscription(transcription_result,
-                                                        web_contents);
+  if (!browser || !caption_bubble_controllers_.count(browser))
+    return false;
+  return caption_bubble_controllers_[browser]->OnTranscription(
+      transcription_result, web_contents);
+}
+
+CaptionBubbleController*
+CaptionController::GetCaptionBubbleControllerForBrowser(Browser* browser) {
+  if (!browser || !caption_bubble_controllers_.count(browser))
+    return nullptr;
+  return caption_bubble_controllers_[browser].get();
 }
 
 void CaptionController::UpdateCaptionStyle() {

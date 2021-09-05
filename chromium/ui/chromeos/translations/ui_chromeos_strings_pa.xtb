@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">ਜਪਾਨੀ ਇਨਪੁੱਟ (ਅਮਰੀਕੀ ਕੀ-ਬੋਰਡ ਲਈ)</translation>
 <translation id="1047956942837015229"><ph name="COUNT" /> ਆਈਟਮਾਂ ਮਿਟਾ ਰਿਹਾ ਹੈ...</translation>
 <translation id="1049926623896334335">ਸ਼ਬਦ ਦਸਤਾਵੇਜ਼</translation>
+<translation id="1060368002126861100"><ph name="APP_NAME" /> ਨਾਲ ਫ਼ਾਈਲਾਂ ਖੋਲ੍ਹਣ ਲਈ, ਪਹਿਲਾਂ ਉਹਨਾਂ ਨੂੰ Windows ਫ਼ਾਈਲਾਂ ਦੇ ਫੋਲਡਰ ਵਿੱਚ ਲਿਜਾਓ।</translation>
 <translation id="1062407476771304334">ਬਦਲੋ</translation>
 <translation id="1065449928621190041">ਕੈਨੇਡੀਅਨ ਫ੍ਰੈਂਚ ਕੀ-ਬੋਰਡ</translation>
 <translation id="1119069657431255176">Bzip2 ਕੰਪਪਰੈੱਸਡ ਟਾਰ ਪੁਰਾਲੇਖ</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">ਸੀਕ ਸਲਾਈਡਰ</translation>
 <translation id="1399648040768741453">ਤੇਲਗੂ ਕੀ-ਬੋਰਡ (ਧੁਨੀਆਤਮਿਕ)</translation>
 <translation id="1430915738399379752">ਪ੍ਰਿੰਟ ਕਰੋ</translation>
+<translation id="1433600251059882049">ਇਹ ਫੋਲਡਰ Linux ਅਤੇ Windows ਨਾਲ ਸਾਂਝਾ ਕੀਤਾ ਗਿਆ ਹੈ</translation>
+<translation id="1435838927755162558">Parallels Desktop ਨਾਲ ਫੋਲਡਰ ਸਾਂਝਾ ਕਰੋ</translation>
 <translation id="1439494416798956626"><ph name="FOLDER_NAME" /> ਵਿੱਚ ਲਿਜਾਈ ਗਈ।</translation>
 <translation id="1441841714100794440">ਵੀਅਤਨਾਮੀ ਕੀ-ਬੋਰਡ (Telex)</translation>
 <translation id="1455548678241328678">ਨਾਵੇਜੀਅਨ ਕੀ-ਬੋਰਡ</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">ਇਹ ਫ਼ਾਈਲ ਆਫ਼ਲਾਈਨ ਉਪਲਬਧ ਨਹੀਂ ਹੈ।</translation>
 <translation id="184633654410729720">ਥਾਈ ਕੀ-ਬੋਰਡ (Kedmanee)</translation>
 <translation id="1847880352285315359">ਰੱਖਿਅਤ ਕੀਤਾ ਗਿਆ</translation>
+<translation id="1853795129690976061">ਇਹ ਫੋਲਡਰ Linux ਨਾਲ ਸਾਂਝਾ ਕੀਤਾ ਗਿਆ ਹੈ</translation>
 <translation id="1864756863218646478">ਫਾਈਲ ਨਹੀਂ ਲੱਭੀ ਜਾ ਸਕੀ।</translation>
 <translation id="1921986354447415460">ਤੁਰਕੀ-F ਕੀ-ਬੋਰਡ</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" /> ਨੂੰ ਫਾਰਮੈਟ ਕੀਤਾ ਗਿਆ</translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">ਸਿੰਹਾਲਾ ਕੀ-ਬੋਰਡ</translation>
 <translation id="240770291734945588"><ph name="SPACE_AVAILABLE" /> ਉਪਲਬਧ ਹੈ</translation>
 <translation id="2425665904502185219">ਕੁੱਲ ਫ਼ਾਈਲ ਆਕਾਰ</translation>
+<translation id="2428749644083375155"><ph name="NUMBER_OF_ITEMS" /> ਆਈਟਮਾਂ ਨੂੰ <ph name="FOLDER_NAME" /> ਵਿੱਚ ਕਾਪੀ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ</translation>
 <translation id="2448312741937722512">ਟਾਈਪ ਕਰੋ</translation>
 <translation id="2453576648990281505">ਫਾਈਲ ਪਹਿਲਾਂ ਹੀ ਮੌਜੂਦ ਹੈ</translation>
 <translation id="2464079411014186876">ਆਈਸ ਕ੍ਰੀਮ</translation>
@@ -165,7 +170,7 @@
 <translation id="2925966894897775835">Sheets</translation>
 <translation id="2938685643439809023">Mongolian</translation>
 <translation id="2942290791863759244">ਜਰਮਨ NEO 2 ਕੀ-ਬੋਰਡ</translation>
-<translation id="2943400156390503548">ਸਲਾਈਡਸ</translation>
+<translation id="2943400156390503548">Slides</translation>
 <translation id="2943503720238418293">ਵਧੇਰੇ ਛੋਟਾ ਨਾਮ ਵਰਤੋ</translation>
 <translation id="2949781154072577687"><ph name="DRIVE_NAME" /> ਨੂੰ ਫਾਰਮੈਟ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ…</translation>
 <translation id="2951236788251446349">ਜੈਲੀਫ਼ਿਸ਼</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">ਭੂਗੋਲ</translation>
 <translation id="3057861065630527966">ਆਪਣੀਆਂ ਫ਼ੋਟੋਆਂ ਅਤੇ ਵੀਡੀਓ ਦਾ ਬੈਕਅੱਪ ਲਵੋ</translation>
 <translation id="3064388234319122767">ਲਿਪਾਂਤਰਨ (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Windows ਫ਼ਾਈਲਾਂ</translation>
 <translation id="3078461028045006476"><ph name="EXTENSION_NAME" /> ਨਾਲ ਸਾਂਝੀ ਕਰੋ</translation>
 <translation id="3088034400796962477">ਲਿਪਾਂਤਰਨ (ਸਲਾਮ ← سلام)</translation>
 <translation id="3116361045094675131">ਯੂ.ਕੇ. ਕੀ-ਬੋਰਡ</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">ਸਾਵਧਾਨ: ਇਹ ਫ਼ਾਈਲਾਂ ਅਸਥਾਈ ਹਨ ਅਤੇ ਡਿਸਕ ਵਿੱਚ ਜਗ੍ਹਾ ਨੂੰ ਖਾਲੀ ਕਰਨ ਲਈ ਸਵੈਚਲਿਤ ਤੌਰ 'ਤੇ ਮਿਟਾਈਆਂ ਜਾ ਸਕਦੀਆਂ ਹਨ।  <ph name="BEGIN_LINK" />ਹੋਰ ਜਾਣੋ<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">ਫੋਲਡਰ</translation>
 <translation id="3549797760399244642">drive.google.com ਤੇ ਜਾਓ...</translation>
+<translation id="3553048479571901246"><ph name="APP_NAME" /> ਨਾਲ ਫ਼ਾਈਲਾਂ ਖੋਲ੍ਹਣ ਲਈ, ਪਹਿਲਾਂ ਉਹਨਾਂ ਨੂੰ Windows ਫ਼ਾਈਲਾਂ ਦੇ ਫੋਲਡਰ ਵਿੱਚ ਕਾਪੀ ਕਰੋ।</translation>
 <translation id="357479282490346887">Lithuanian</translation>
 <translation id="3583509704582854624">ਵਰਨਅੰਕੀ ਇਨਪੁੱਟ (ਜਪਾਨੀ ਕੀ-ਬੋਰਡ ਲਈ)</translation>
 <translation id="3603385196401704894">ਕੈਨੇਡੀਅਨ ਫ੍ਰੈਂਚ</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">ਵਰਜਨ:</translation>
 <translation id="3801082500826908679">ਫ਼ਰੋਈ</translation>
 <translation id="3809272675881623365">ਖਰਗੋਸ਼</translation>
+<translation id="3810973564298564668">ਵਿਵਸਥਿਤ ਕਰੋ</translation>
 <translation id="3811494700605067549">1 ਫ਼ਾਈਲ ਨੂੰ ਚੁਣਿਆ ਗਿਆ</translation>
 <translation id="3815016854028376614">Zhuyin ਇਨਪੁੱਟ ਵਿਧੀ</translation>
 <translation id="3825863595139017598">ਮੰਗੋਲੀਅਨ ਕੀ-ਬੋਰਡ</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">ਪੇਸਟ ਕਰੋ</translation>
 <translation id="3958548648197196644">ਕੀਵੀ</translation>
 <translation id="3966388904776714213">ਆਡੀਓ ਪਲੇਅਰ</translation>
+<translation id="3984317463833596033">Parallels Desktop ਨੂੰ <ph name="FOLDER_NAME" /> ਫੋਲਡਰ ਵਿਚਲੀਆਂ ਫ਼ਾਈਲਾਂ ਸੋਧਣ ਲਈ ਇਜਾਜ਼ਤ ਦਿਓ</translation>
 <translation id="4002066346123236978">ਸਿਰਲੇਖ</translation>
-<translation id="4065397611279318371"><ph name="APP_NAME" /> ਐਪਾਂ ਨਾਲ ਫ਼ਾਈਲਾਂ ਖੋਲ੍ਹਣ ਲਈ, ਪਹਿਲਾਂ ਉਹਨਾਂ ਨੂੰ <ph name="SHARED_DIRECTORY_LABEL" /> ਫੋਲਡਰ ਵਿੱਚ ਲਿਜਾਓ।</translation>
 <translation id="4070370845051020638">Cantonese ਇਨਪੁੱਟ ਵਿਧੀ</translation>
 <translation id="4072248638558688893">ਤਾਮਿਲ ਕੀ-ਬੋਰਡ (ਧੁਨੀਆਤਮਿਕ)</translation>
 <translation id="4124935795427217608">ਇੱਕ ਸਿੰਗ ਵਾਲਾ ਘੋੜਾ</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">Hangul 2 ਸੈਟ</translation>
 <translation id="4477219268485577442">ਬਲਗੇਰੀਅਨ ਧੁਨੀਆਤਮਿਕ</translation>
 <translation id="4479812471636796472">US Dvorak ਕੀ-ਬੋਰਡ</translation>
+<translation id="4481711095103932593">ਇਹ ਫੋਲਡਰ Windows ਨਾਲ ਸਾਂਝਾ ਕੀਤਾ ਗਿਆ ਹੈ</translation>
 <translation id="4487088045714738411">ਬੈਲਜ਼ੀਅਨ ਕੀ-ਬੋਰਡ</translation>
 <translation id="4522570452068850558">ਵੇਰਵੇ</translation>
 <translation id="4552678318981539154">ਹੋਰ ਸਟੋਰੇਜ ਖਰੀਦੋ</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346"><ph name="ENTRY_NAME" /> ਨੂੰ ਚੋਣ ਵਿੱਚ ਸ਼ਾਮਲ ਕੀਤਾ ਗਿਆ।</translation>
 <translation id="4582497162516204941">Linux (ਬੀਟਾ) ਨਾਲ ਸਥਾਪਤ ਕਰੋ</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" /> ਦੇ ਨਤੀਜੇ ਦਿਖਾਏ ਜਾ ਰਹੇ ਹਨ।</translation>
+<translation id="4603392156942865207"><ph name="FILE_NAME" /> ਨੂੰ <ph name="FOLDER_NAME" /> ਵਿੱਚ ਕਾਪੀ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ</translation>
 <translation id="4631887759990505102">ਕਲਾਕਾਰ</translation>
 <translation id="4656293982926141856">ਇਹ ਕੰਪਿਊਟਰ</translation>
 <translation id="4669606053856530811">'<ph name="SOURCE_NAME" />' ਦੇ ਮੈਂਬਰ ਪਹੁੰਚ ਗੁਆ ਦੇਣਗੇ ਜੇਕਰ ਇਹਨਾਂ ਆਈਟਮਾਂ ਨੂੰ ਉਹਨਾਂ ਨਾਲ ਸਾਂਝਾ ਨਹੀਂ ਕੀਤਾ ਜਾਂਦਾ।</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">ਆਟੋ-ਫਿਕਸ ਕਰੋ</translation>
 <translation id="4881695831933465202">ਖੋਲ੍ਹੋ</translation>
 <translation id="4886021172213954916">ਤਮਿਲ ਕੀ-ਬੋਰਡ (ਟਾਈਪਰਾਈਟਰ)</translation>
-<translation id="4892969127351273348"><ph name="APP_NAME" /> ਨਾਲ ਖੋਲ੍ਹਿਆ ਨਹੀਂ ਜਾ ਸਕਦਾ</translation>
+<translation id="4900532980794411603">Parallels Desktop ਨਾਲ ਸਾਂਝਾ ਕਰੋ</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> ਦਾ ਬੈਕਅੱਪ ਲੈਣ ਲਈ ਤਿਆਰ</translation>
 <translation id="4924638091161556692">ਫਿਕਸਡ</translation>
 <translation id="4935975195727477204">ਗੈਨਜ਼ਾਨੀਆ ਫਲਾਵਰ</translation>
 <translation id="4943368462779413526">ਫੁੱਟਬਾਲ</translation>
+<translation id="4961158930123534723">1 ਫੋਲਡਰ Parallels Desktop ਨਾਲ ਸਾਂਝਾ ਕੀਤਾ ਗਿਆ</translation>
 <translation id="4969785127455456148">ਐਲਬਮ</translation>
 <translation id="497244430928947428">ਮਲਿਆਲਮ ਕੀ-ਬੋਰਡ (ਧੁਨੀਆਤਮਿਕ)</translation>
 <translation id="4973523518332075481"><ph name="MAX_LENGTH" /> ਜਾਂ ਇਸ ਤੋਂ ਘੱਟ ਅੱਖਰਾਂ ਵਾਲਾ ਕੋਈ ਨਾਮ ਵਰਤੋ</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">ਕੰਪਿਊਟਰ</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">ਇੱਕ ਓਪਰੇਸ਼ਨ ਅਨੁਮਾਨਿਤ ਤੋਂ ਵੱਧ ਸਮਾਂ ਲੈ ਰਿਹਾ ਹੈ। ਕੀ ਤੁਸੀਂ ਇਸਨੂੰ ਰੋਕਣਾ ਚਾਹੁੰਦੇ ਹੋ?</translation>
+<translation id="5036159836254554629">Parallels Desktop ਸਾਂਝਾਕਰਨ ਦਾ ਪ੍ਰਬੰਧਨ ਕਰੋ</translation>
 <translation id="5038625366300922036">ਹੋਰ ਦੇਖੋ...</translation>
 <translation id="5061708541166515394">ਕੰਟ੍ਰਾਸਟ</translation>
 <translation id="5068919226082848014">ਪੀਜ਼ਾ</translation>
 <translation id="5081517858322016911"><ph name="TOTAL_FILE_SIZE" /> ਫ਼ਾਈਲਾਂ ਮਿਟਾ ਦਿੱਤੀਆਂ ਜਾਣਗੀਆਂ</translation>
+<translation id="508423945471810158"><ph name="NUMBER_OF_ITEMS" /> ਆਈਟਮਾਂ ਨੂੰ <ph name="FOLDER_NAME" /> ਵਿੱਚ ਲਿਜਾਇਆ ਜਾ ਰਿਹਾ ਹੈ</translation>
 <translation id="509429900233858213">ਇੱਕ ਗੜਬੜ ਹੋਈ</translation>
 <translation id="5098629044894065541">Hebrew</translation>
 <translation id="5123433949759960244">ਬਾਸਕਟਬਾਲ</translation>
@@ -452,6 +465,7 @@
 <translation id="6054173164583630569">ਫ੍ਰੈਂਚ ਕੀ-ਬੋਰਡ</translation>
 <translation id="6074825444536523002">Google ਫ਼ਾਰਮ</translation>
 <translation id="6096979789310008754">ਖੋਜੀ ਗਈ ਲਿਖਤ ਨੂੰ ਕਲੀਅਰ ਕਰ ਦਿੱਤਾ ਗਿਆ ਹੈ, ਸਾਰੀਆਂ ਫ਼ਾਈਲਾਂ ਅਤੇ ਫੋਲਡਰਾਂ ਨੂੰ ਦਿਖਾਇਆ ਜਾ ਰਿਹਾ ਹੈ।</translation>
+<translation id="610101264611565198"><ph name="FILE_NAME" /> ਨੂੰ <ph name="FOLDER_NAME" /> ਵਿੱਚ ਲਿਜਾਇਆ ਜਾ ਰਿਹਾ ਹੈ</translation>
 <translation id="6111770213269631447">ਲਿਪਾਂਤਰਨ (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">ਸਪੇਸ</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" /> ਨੂੰ ਮੂਵ ਕਰ ਰਿਹਾ ਹੈ...</translation>
@@ -492,6 +506,7 @@
 <translation id="656398493051028875">"<ph name="FILENAME" />" ਨੂੰ ਮਿਟਾ ਰਿਹਾ ਹੈ...</translation>
 <translation id="6581162200855843583">Google Drive ਲਿੰਕ</translation>
 <translation id="6607272825297743757">ਫ਼ਾਈਲ ਜਾਣਕਾਰੀ</translation>
+<translation id="6609332149380188670"><ph name="NUMBER_OF_ITEMS" /> ਫੋਲਡਰ Parallels Desktop ਨਾਲ ਸਾਂਝੇ ਕੀਤੇ ਗਏ</translation>
 <translation id="6629841649550503054">ਸਾਰੇ <ph name="BEGIN_LINK" />Google Drive ਵਿੱਚ ਬੈਕ ਅਪ ਕੀਤੇ ਗਏ!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">ਹਟਾਓ</translation>
 <translation id="6650726141019353908">ਗੁਲਾਬੀ ਤਿਤਲੀ</translation>
@@ -535,6 +550,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">ਇੰਸਟੌਲੇਸ਼ਨ ਅਸਫਲ।</translation>
 <translation id="7040138676081995583">ਇਸ ਨਾਲ ਖੋਲ੍ਹੋ...</translation>
+<translation id="7059566040011178088"><ph name="REMAINING_TIME" /> ਤੋਂ ਘੱਟ</translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> ਆਈਟਮਾਂ ਚੁਣੀਆਂ</translation>
 <translation id="7106346894903675391">ਹੋਰ ਸਟੋਰੇਜ ਖਰੀਦੇ...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;ਡਰਾਈਵ ਖੋਜੋ&lt;/em&gt;</translation>
@@ -645,6 +661,7 @@
 <translation id="8193175696669055101">ਡੀਵਾਈਸ ਮਾਡਲ</translation>
 <translation id="8208580316430297579">ਆਰਟਵਰਕ</translation>
 <translation id="8223479393428528563">ਆਫ਼ਲਾਈਨ ਵਰਤੋਂ ਲਈ ਇਹ ਫ਼ਾਈਲਾਂ ਰੱਖਿਅਤ ਕਰਨ ਲਈ, ਵਾਪਸ ਆਨਲਾਈਨ ਜਾਓ, ਫ਼ਾਈਲਾਂ ਤੇ ਸੱਜਾ-ਕਲਿੱਕ ਕਰੋ ਅਤੇ <ph name="OFFLINE_CHECKBOX_NAME" /> ਵਿਕਲਪ ਚੁਣੋ।</translation>
+<translation id="8231972167769262174"><ph name="REMAINING_TIME" /> ਬਾਰੇ</translation>
 <translation id="8249296373107784235">ਰੋਕੋ</translation>
 <translation id="8261506727792406068">ਮਿਟਾਓ</translation>
 <translation id="8269755669432358899">ਫ਼ਾਈਲਾਂ ਦੇ ਪ੍ਰਤੀਕਰਮ ਪੈਨਲਾਂ ਨੂੰ ਸਮੇਟੋ</translation>
@@ -671,6 +688,7 @@
 <translation id="8475647382427415476">Google Drive ਇਸ ਵੇਲੇ "<ph name="FILENAME" />" ਨੂੰ ਸਿੰਕ ਕਰਨ ਵਿੱਚ ਅਸਮਰੱਥ ਸੀ। Google Drive ਬਾਅਦ ਵਿੱਚ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੇਗੀ।</translation>
 <translation id="8477649328507734757">ਭੁਆਂਟਣੀ</translation>
 <translation id="8487700953926739672">ਆਫ਼ਲਾਈਨ ਉਪਲਬਧ</translation>
+<translation id="8490342535582768689">Parallels Desktop ਨੂੰ ਆਪਣੀ Google Drive ਵਿਚਲੀਆਂ ਫ਼ਾਈਲਾਂ ਸੋਧਣ ਲਈ ਇਜਾਜ਼ਤ ਦਿਓ। ਤਬਦੀਲੀਆਂ ਦਾ ਤੁਹਾਡੇ ਹੋਰ ਡੀਵਾਈਸਾਂ ਨਾਲ ਸਮਕਾਲੀਕਰਨ ਕੀਤਾ ਜਾਵੇਗਾ।</translation>
 <translation id="8521441079177373948">ਯੂਕੇ</translation>
 <translation id="8525306231823319788">ਪੂਰੀ ਸਕ੍ਰੀਨ</translation>
 <translation id="8551494947769799688">Latvian</translation>

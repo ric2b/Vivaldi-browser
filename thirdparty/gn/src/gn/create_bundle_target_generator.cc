@@ -69,6 +69,9 @@ void CreateBundleTargetGenerator::DoRun() {
 
   if (!FillBundleDepsFilter())
     return;
+
+  if (!FillXcassetCompilerFlags())
+    return;
 }
 
 bool CreateBundleTargetGenerator::FillBundleDir(
@@ -301,4 +304,15 @@ bool CreateBundleTargetGenerator::FillBundleDepsFilter() {
   }
 
   return true;
+}
+
+bool CreateBundleTargetGenerator::FillXcassetCompilerFlags() {
+  const Value* value = scope_->GetValue(variables::kXcassetCompilerFlags, true);
+  if (!value)
+    return true;
+
+  if (!value->VerifyTypeIs(Value::LIST, err_))
+    return false;
+
+  return target_->bundle_data().xcasset_compiler_flags().Parse(*value, err_);
 }

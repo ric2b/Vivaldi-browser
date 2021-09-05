@@ -56,9 +56,11 @@ RemoteFontFaceSource::ComputeFontDisplayAutoPeriod() const {
     using Mode = features::AlignFontDisplayAutoTimeoutWithLCPGoalMode;
     Mode mode =
         features::kAlignFontDisplayAutoTimeoutWithLCPGoalModeParam.Get();
-    if (mode == Mode::kToFailurePeriod)
+    if (mode == Mode::kToSwapPeriod)
+      return kSwapPeriod;
+    DCHECK_EQ(Mode::kToFailurePeriod, mode);
+    if (custom_font_data_ && !custom_font_data_->MayBeIconFont())
       return kFailurePeriod;
-    DCHECK_EQ(Mode::kToSwapPeriod, mode);
     return kSwapPeriod;
   }
 
@@ -359,7 +361,7 @@ RemoteFontFaceSource::CreateLoadingFallbackFontData(
 }
 
 void RemoteFontFaceSource::BeginLoadIfNeeded() {
-  if (IsLoaded())
+  if (IsLoaded() || !font_selector_->GetExecutionContext())
     return;
   DCHECK(GetResource());
 
@@ -396,7 +398,7 @@ void RemoteFontFaceSource::BeginLoadIfNeeded() {
   face_->DidBeginLoad();
 }
 
-void RemoteFontFaceSource::Trace(Visitor* visitor) {
+void RemoteFontFaceSource::Trace(Visitor* visitor) const {
   visitor->Trace(face_);
   visitor->Trace(font_selector_);
   CSSFontFaceSource::Trace(visitor);

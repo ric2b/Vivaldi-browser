@@ -12,9 +12,6 @@ namespace syncer {
 std::string GetUniqueNotesTagFromUpdate(
   const sync_pb::SyncEntity& update);
 
-void UpdateNotesPositioning(const sync_pb::SyncEntity& update,
-                            syncable::ModelNeutralMutableEntry* local_entry);
-
 }  // namespace syncer
 
 #endif  // SYNC_VIVALDI_SYNCER_UTIL_H_

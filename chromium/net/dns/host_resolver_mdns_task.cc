@@ -198,8 +198,8 @@ HostCache::Entry HostResolverMdnsTask::ParseResult(
   switch (query_type) {
     case DnsQueryType::UNSPECIFIED:
       // Should create two separate transactions with specified type.
-    case DnsQueryType::ESNI:
-      // ESNI queries are not expected to be useful in mDNS, so they're not
+    case DnsQueryType::INTEGRITY:
+      // INTEGRITY queries are not expected to be useful in mDNS, so they're not
       // supported.
       NOTREACHED();
       return HostCache::Entry(ERR_FAILED, HostCache::Entry::SOURCE_UNKNOWN);

@@ -48,6 +48,8 @@ class FakeBaseTabStripController : public TabStripController {
   void CloseTab(int index) override;
   void MoveTab(int from_index, int to_index) override;
   void MoveGroup(const tab_groups::TabGroupId&, int to_index) override;
+  bool ToggleTabGroupCollapsedState(const tab_groups::TabGroupId group,
+                                    bool record_user_action) override;
   void ShowContextMenuForTab(Tab* tab,
                              const gfx::Point& p,
                              ui::MenuSourceType source_type) override;
@@ -65,6 +67,7 @@ class FakeBaseTabStripController : public TabStripController {
       const tab_groups::TabGroupId& group_id) const override;
   tab_groups::TabGroupColorId GetGroupColorId(
       const tab_groups::TabGroupId& group_id) const override;
+  bool IsGroupCollapsed(const tab_groups::TabGroupId& group) const override;
   void SetVisualDataForGroup(
       const tab_groups::TabGroupId& group,
       const tab_groups::TabGroupVisualData& visual_data) override;

@@ -85,11 +85,8 @@ class MediaSessionImpl : public MediaSession,
   ~MediaSessionImpl() override;
 
 #if defined(OS_ANDROID)
-  static MediaSession* FromJavaMediaSession(
-      const base::android::JavaRef<jobject>& j_media_session);
-  MediaSessionAndroid* session_android() const {
-    return session_android_.get();
-  }
+  void ClearMediaSessionAndroid();
+  MediaSessionAndroid* GetMediaSessionAndroid();
 #endif  // defined(OS_ANDROID)
 
   void NotifyMediaSessionMetadataChange();
@@ -139,6 +136,7 @@ class MediaSessionImpl : public MediaSession,
   void OnWebContentsLostFocus(RenderWidgetHost*) override;
   void TitleWasSet(NavigationEntry* entry) override;
   void DidUpdateFaviconURL(
+      RenderFrameHost* rfh,
       const std::vector<blink::mojom::FaviconURLPtr>& candidates) override;
   void MediaPictureInPictureChanged(bool is_picture_in_picture) override;
 

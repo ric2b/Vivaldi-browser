@@ -13,10 +13,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
-#include "chrome/browser/prerender/prerender_final_status.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
-#include "chrome/browser/prerender/prerender_origin.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/common/pref_names.h"
@@ -25,9 +23,12 @@
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/metrics/net/network_metrics_provider.h"
 #include "components/offline_pages/buildflags/buildflags.h"
+#include "components/page_load_metrics/browser/observers/largest_contentful_paint_handler.h"
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
 #include "components/page_load_metrics/browser/protocol_util.h"
 #include "components/prefs/pref_service.h"
+#include "components/prerender/common/prerender_final_status.h"
+#include "components/prerender/common/prerender_origin.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
@@ -107,6 +108,27 @@ std::unique_ptr<base::trace_event::TracedValue> CumulativeShiftScoreTraceData(
   return data;
 }
 
+int8_t ComputeMedianForThroughput(const base::flat_map<int8_t, int>& data) {
+  int total_samples = 0;
+  for (const auto& e : data)
+    total_samples += e.second;
+  int half_samples = total_samples / 2;
+  int current_samples = 0;
+  for (const auto& e : data) {
+    current_samples += e.second;
+    if (current_samples > half_samples)
+      return e.first;
+  }
+  NOTREACHED();
+  return 0;
+}
+
+bool ValidatePercent(int8_t percent) {
+  if (percent >= 0 && percent <= 100)
+    return true;
+  return false;
+}
+
 }  // namespace
 
 // static
@@ -121,8 +143,7 @@ UkmPageLoadMetricsObserver::CreateIfNeeded() {
 
 UkmPageLoadMetricsObserver::UkmPageLoadMetricsObserver(
     network::NetworkQualityTracker* network_quality_tracker)
-    : network_quality_tracker_(network_quality_tracker),
-      largest_contentful_paint_handler_() {
+    : network_quality_tracker_(network_quality_tracker) {
   DCHECK(network_quality_tracker_);
 }
 
@@ -132,7 +153,10 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnStart(
     content::NavigationHandle* navigation_handle,
     const GURL& currently_committed_url,
     bool started_in_foreground) {
-  browser_context_ = navigation_handle->GetWebContents()->GetBrowserContext();
+  content::WebContents* web_contents = navigation_handle->GetWebContents();
+  is_portal_ = web_contents->IsPortal();
+
+  browser_context_ = web_contents->GetBrowserContext();
 
   start_url_is_default_search_ =
       IsDefaultSearchEngine(browser_context_, navigation_handle->GetURL());
@@ -182,10 +206,6 @@ UkmPageLoadMetricsObserver::ShouldObserveMimeType(
 UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnCommit(
     content::NavigationHandle* navigation_handle,
     ukm::SourceId source_id) {
-  if (navigation_handle->IsInMainFrame()) {
-    largest_contentful_paint_handler_.RecordMainFrameTreeNodeId(
-        navigation_handle->GetFrameTreeNodeId());
-  }
   if (navigation_handle->GetWebContents()->GetContentsMimeType() ==
       kOfflinePreviewsMimeType) {
     if (!IsOfflinePreview(navigation_handle->GetWebContents()))
@@ -199,6 +219,7 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnCommit(
   // The PageTransition for the navigation may be updated on commit.
   page_transition_ = navigation_handle->GetPageTransition();
   was_cached_ = navigation_handle->WasResponseCached();
+  navigation_handle_timing_ = navigation_handle->GetNavigationHandleTiming();
   RecordNoStatePrefetchMetrics(navigation_handle, source_id);
   RecordGeneratedNavigationUKM(source_id, navigation_handle->GetURL());
   navigation_is_cross_process_ = !navigation_handle->IsSameProcess();
@@ -213,8 +234,12 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnCommit(
 UkmPageLoadMetricsObserver::ObservePolicy
 UkmPageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
+  if (is_portal_)
+    return STOP_OBSERVING;
+
   if (!was_hidden_) {
-    RecordPageLoadMetrics(base::TimeTicks::Now());
+    RecordNavigationTimingMetrics();
+    RecordPageLoadMetrics(base::TimeTicks::Now(), true /* became_hidden */);
     RecordTimingMetrics(timing);
     RecordInputTimingMetrics();
   }
@@ -224,8 +249,13 @@ UkmPageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
 
 UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnHidden(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
+  if (is_portal_)
+    return CONTINUE_OBSERVING;
+
   if (!was_hidden_) {
-    RecordPageLoadMetrics(base::TimeTicks() /* no app_background_time */);
+    RecordNavigationTimingMetrics();
+    RecordPageLoadMetrics(base::TimeTicks() /* no app_background_time */,
+                          true /* became_hidden */);
     RecordTimingMetrics(timing);
     RecordInputTimingMetrics();
     was_hidden_ = true;
@@ -235,9 +265,13 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnHidden(
 
 void UkmPageLoadMetricsObserver::OnFailedProvisionalLoad(
     const page_load_metrics::FailedProvisionalLoadInfo& failed_load_info) {
+  if (is_portal_)
+    return;
+
   if (was_hidden_)
     return;
-  RecordPageLoadMetrics(base::TimeTicks() /* no app_background_time */);
+  RecordPageLoadMetrics(base::TimeTicks() /* no app_background_time */,
+                        false /* became_hidden */);
 
   // Error codes have negative values, however we log net error code enum values
   // for UMA histograms using the equivalent positive value. For consistency in
@@ -253,8 +287,13 @@ void UkmPageLoadMetricsObserver::OnFailedProvisionalLoad(
 
 void UkmPageLoadMetricsObserver::OnComplete(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
+  if (is_portal_)
+    return;
+
   if (!was_hidden_) {
-    RecordPageLoadMetrics(base::TimeTicks() /* no app_background_time */);
+    RecordNavigationTimingMetrics();
+    RecordPageLoadMetrics(base::TimeTicks() /* no app_background_time */,
+                          false /* became_hidden */);
     RecordTimingMetrics(timing);
     RecordInputTimingMetrics();
   }
@@ -309,6 +348,87 @@ void UkmPageLoadMetricsObserver::OnLoadedResource(
   }
 }
 
+void UkmPageLoadMetricsObserver::RecordNavigationTimingMetrics() {
+  const base::TimeTicks navigation_start_time =
+      GetDelegate().GetNavigationStart();
+  const content::NavigationHandleTiming& timing = navigation_handle_timing_;
+
+  // Record metrics for navigation only when all relevant milestones are
+  // recorded and in the expected order. It is allowed that they have the same
+  // value for some cases (e.g., internal redirection for HSTS).
+  if (navigation_start_time.is_null() ||
+      timing.first_request_start_time.is_null() ||
+      timing.first_response_start_time.is_null() ||
+      timing.first_loader_callback_time.is_null() ||
+      timing.final_request_start_time.is_null() ||
+      timing.final_response_start_time.is_null() ||
+      timing.final_loader_callback_time.is_null() ||
+      timing.navigation_commit_sent_time.is_null()) {
+    return;
+  }
+  // TODO(https://crbug.com/1076710): Change these early-returns to DCHECKs
+  // after the issue 1076710 is fixed.
+  if (navigation_start_time > timing.first_request_start_time ||
+      timing.first_request_start_time > timing.first_response_start_time ||
+      timing.first_response_start_time > timing.first_loader_callback_time ||
+      timing.first_loader_callback_time > timing.navigation_commit_sent_time) {
+    return;
+  }
+  if (navigation_start_time > timing.final_request_start_time ||
+      timing.final_request_start_time > timing.final_response_start_time ||
+      timing.final_response_start_time > timing.final_loader_callback_time ||
+      timing.final_loader_callback_time > timing.navigation_commit_sent_time) {
+    return;
+  }
+  DCHECK_LE(timing.first_request_start_time, timing.final_request_start_time);
+  DCHECK_LE(timing.first_response_start_time, timing.final_response_start_time);
+  DCHECK_LE(timing.first_loader_callback_time,
+            timing.final_loader_callback_time);
+
+  ukm::builders::NavigationTiming builder(GetDelegate().GetSourceId());
+
+  // Record the elapsed time from the navigation start milestone.
+  builder
+      .SetFirstRequestStart(
+          (timing.first_request_start_time - navigation_start_time)
+              .InMilliseconds())
+      .SetFirstResponseStart(
+          (timing.first_response_start_time - navigation_start_time)
+              .InMilliseconds())
+      .SetFirstLoaderCallback(
+          (timing.first_loader_callback_time - navigation_start_time)
+              .InMilliseconds())
+      .SetFinalRequestStart(
+          (timing.final_request_start_time - navigation_start_time)
+              .InMilliseconds())
+      .SetFinalResponseStart(
+          (timing.final_response_start_time - navigation_start_time)
+              .InMilliseconds())
+      .SetFinalLoaderCallback(
+          (timing.final_loader_callback_time - navigation_start_time)
+              .InMilliseconds())
+      .SetNavigationCommitSent(
+          (timing.navigation_commit_sent_time - navigation_start_time)
+              .InMilliseconds());
+
+  // Record the elapsed time from the navigation start milestone for the 103
+  // Early Hints experiment (https://crbug.com/1093693). Note that multiple 103
+  // responses can be served per request. These metrics use the first 103
+  // response as the timing.
+  if (!timing.early_hints_for_first_request_time.is_null()) {
+    builder.SetEarlyHintsForFirstRequest(
+        (timing.early_hints_for_first_request_time - navigation_start_time)
+            .InMilliseconds());
+  }
+  if (!timing.early_hints_for_final_request_time.is_null()) {
+    builder.SetEarlyHintsForFinalRequest(
+        (timing.early_hints_for_final_request_time - navigation_start_time)
+            .InMilliseconds());
+  }
+
+  builder.Record(ukm::UkmRecorder::Get());
+}
+
 void UkmPageLoadMetricsObserver::RecordTimingMetrics(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
   ukm::builders::PageLoad builder(GetDelegate().GetSourceId());
@@ -359,7 +479,9 @@ void UkmPageLoadMetricsObserver::RecordTimingMetrics(
   }
   const page_load_metrics::ContentfulPaintTimingInfo&
       main_frame_largest_contentful_paint =
-          largest_contentful_paint_handler_.MainFrameLargestContentfulPaint();
+          GetDelegate()
+              .GetLargestContentfulPaintHandler()
+              .MainFrameLargestContentfulPaint();
   if (main_frame_largest_contentful_paint.ContainsValidTime() &&
       WasStartedInForegroundOptionalEventInForeground(
           main_frame_largest_contentful_paint.Time(), GetDelegate())) {
@@ -368,13 +490,46 @@ void UkmPageLoadMetricsObserver::RecordTimingMetrics(
   }
   const page_load_metrics::ContentfulPaintTimingInfo&
       all_frames_largest_contentful_paint =
-          largest_contentful_paint_handler_.MergeMainFrameAndSubframes();
+          GetDelegate()
+              .GetLargestContentfulPaintHandler()
+              .MergeMainFrameAndSubframes();
   if (all_frames_largest_contentful_paint.ContainsValidTime() &&
       WasStartedInForegroundOptionalEventInForeground(
           all_frames_largest_contentful_paint.Time(), GetDelegate())) {
     builder.SetPaintTiming_NavigationToLargestContentfulPaint(
         all_frames_largest_contentful_paint.Time().value().InMilliseconds());
   }
+  const page_load_metrics::ContentfulPaintTimingInfo&
+      main_frame_experimental_largest_contentful_paint =
+          GetDelegate()
+              .GetExperimentalLargestContentfulPaintHandler()
+              .MainFrameLargestContentfulPaint();
+  if (main_frame_experimental_largest_contentful_paint.ContainsValidTime() &&
+      WasStartedInForegroundOptionalEventInForeground(
+          main_frame_experimental_largest_contentful_paint.Time(),
+          GetDelegate())) {
+    builder
+        .SetPaintTiming_NavigationToExperimentalLargestContentfulPaint_MainFrame(
+            main_frame_experimental_largest_contentful_paint.Time()
+                .value()
+                .InMilliseconds());
+  }
+  const page_load_metrics::ContentfulPaintTimingInfo&
+      all_frames_experimental_largest_contentful_paint =
+          GetDelegate()
+              .GetExperimentalLargestContentfulPaintHandler()
+              .MergeMainFrameAndSubframes();
+  if (all_frames_experimental_largest_contentful_paint.ContainsValidTime() &&
+      WasStartedInForegroundOptionalEventInForeground(
+          all_frames_experimental_largest_contentful_paint.Time(),
+          GetDelegate())) {
+    builder.SetPaintTiming_NavigationToExperimentalLargestContentfulPaint(
+        all_frames_experimental_largest_contentful_paint.Time()
+            .value()
+            .InMilliseconds());
+  }
+  RecordInternalTimingMetrics(all_frames_largest_contentful_paint,
+                              all_frames_experimental_largest_contentful_paint);
   if (timing.interactive_timing->first_input_delay) {
     base::TimeDelta first_input_delay =
         timing.interactive_timing->first_input_delay.value();
@@ -400,6 +555,18 @@ void UkmPageLoadMetricsObserver::RecordTimingMetrics(
     builder.SetInteractiveTiming_LongestInputTimestamp4(
         longest_input_timestamp.InMilliseconds());
   }
+  if (timing.interactive_timing->first_scroll_delay) {
+    base::TimeDelta first_scroll_delay =
+        timing.interactive_timing->first_scroll_delay.value();
+    builder.SetInteractiveTiming_FirstScrollDelay(
+        first_scroll_delay.InMilliseconds());
+  }
+  if (timing.interactive_timing->first_input_processing_time) {
+    base::TimeDelta first_input_processing_time =
+        timing.interactive_timing->first_input_processing_time.value();
+    builder.SetInteractiveTiming_FirstInputProcessingTimes(
+        first_input_processing_time.InMilliseconds());
+  }
   builder.SetCpuTime(total_foreground_cpu_time_.InMilliseconds());
 
   // Use a bucket spacing factor of 1.3 for bytes.
@@ -423,10 +590,71 @@ void UkmPageLoadMetricsObserver::RecordTimingMetrics(
     ReportMainResourceTimingMetrics(timing, &builder);
 
   builder.Record(ukm::UkmRecorder::Get());
+
+  if (throughput_source_id_ != ukm::kInvalidSourceId)
+    ReportThroughputUkm();
+}
+
+void UkmPageLoadMetricsObserver::RecordInternalTimingMetrics(
+    const page_load_metrics::ContentfulPaintTimingInfo&
+        all_frames_largest_contentful_paint,
+    const page_load_metrics::ContentfulPaintTimingInfo&
+        all_frames_experimental_largest_contentful_paint) {
+  ukm::builders::PageLoad_Internal debug_builder(GetDelegate().GetSourceId());
+  LargestContentState lcp_state = LargestContentState::kNotFound;
+  if (all_frames_largest_contentful_paint.ContainsValidTime()) {
+    if (WasStartedInForegroundOptionalEventInForeground(
+            all_frames_largest_contentful_paint.Time(), GetDelegate())) {
+      debug_builder.SetPaintTiming_LargestContentfulPaint_ContentType(
+          static_cast<int>(all_frames_largest_contentful_paint.Type()));
+      lcp_state = LargestContentState::kReported;
+    } else {
+      // TODO(npm): figure out why this code can be reached given that
+      // RecordTimingMetrics() is only called when was_hidden_ is set to false.
+      lcp_state = LargestContentState::kFoundButNotReported;
+    }
+  } else if (all_frames_largest_contentful_paint.Time().has_value()) {
+    DCHECK(all_frames_largest_contentful_paint.Size());
+    lcp_state = LargestContentState::kLargestImageLoading;
+  } else {
+    DCHECK(all_frames_largest_contentful_paint.Empty());
+    lcp_state = LargestContentState::kNotFound;
+  }
+  debug_builder.SetPaintTiming_LargestContentfulPaint_TerminationState(
+      static_cast<int>(lcp_state));
+
+  LargestContentState experimental_lcp_state = LargestContentState::kNotFound;
+  if (all_frames_experimental_largest_contentful_paint.ContainsValidTime()) {
+    if (WasStartedInForegroundOptionalEventInForeground(
+            all_frames_experimental_largest_contentful_paint.Time(),
+            GetDelegate())) {
+      debug_builder
+          .SetPaintTiming_ExperimentalLargestContentfulPaint_ContentType(
+              static_cast<int>(
+                  all_frames_experimental_largest_contentful_paint.Type()));
+      experimental_lcp_state = LargestContentState::kReported;
+    } else {
+      // TODO(npm): figure out why this code can be reached given that
+      // RecordTimingMetrics() is only called when was_hidden_ is set to false.
+      experimental_lcp_state = LargestContentState::kFoundButNotReported;
+    }
+  } else if (all_frames_experimental_largest_contentful_paint.Time()
+                 .has_value()) {
+    DCHECK(all_frames_experimental_largest_contentful_paint.Size());
+    experimental_lcp_state = LargestContentState::kLargestImageLoading;
+  } else {
+    DCHECK(all_frames_experimental_largest_contentful_paint.Empty());
+    experimental_lcp_state = LargestContentState::kNotFound;
+  }
+  debug_builder
+      .SetPaintTiming_ExperimentalLargestContentfulPaint_TerminationState(
+          static_cast<int>(lcp_state));
+  debug_builder.Record(ukm::UkmRecorder::Get());
 }
 
 void UkmPageLoadMetricsObserver::RecordPageLoadMetrics(
-    base::TimeTicks app_background_time) {
+    base::TimeTicks app_background_time,
+    bool became_hidden) {
   ukm::builders::PageLoad builder(GetDelegate().GetSourceId());
   base::Optional<base::TimeDelta> foreground_duration =
       page_load_metrics::GetInitialForegroundDuration(GetDelegate(),
@@ -478,8 +706,12 @@ void UkmPageLoadMetricsObserver::RecordPageLoadMetrics(
   builder.SetNavigation_PageTransition(static_cast<int64_t>(page_transition_));
   // GetDelegate().GetPageEndReason() fits in a uint32_t, so we can safely cast
   // to int64_t.
-  builder.SetNavigation_PageEndReason(
-      static_cast<int64_t>(GetDelegate().GetPageEndReason()));
+  int64_t page_end_reason = GetDelegate().GetPageEndReason();
+  if (page_end_reason == page_load_metrics::PageEndReason::END_NONE &&
+      became_hidden) {
+    page_end_reason = page_load_metrics::PageEndReason::END_HIDDEN;
+  }
+  builder.SetNavigation_PageEndReason2(page_end_reason);
   if (GetDelegate().DidCommit() && was_cached_) {
     builder.SetWasCached(1);
   }
@@ -672,14 +904,14 @@ UkmPageLoadMetricsObserver::GetThirdPartyCookieBlockingEnabled() const {
 void UkmPageLoadMetricsObserver::OnTimingUpdate(
     content::RenderFrameHost* subframe_rfh,
     const page_load_metrics::mojom::PageLoadTiming& timing) {
-  largest_contentful_paint_handler_.RecordTiming(timing.paint_timing,
-                                                 subframe_rfh);
   bool loading_enabled;
   TRACE_EVENT_CATEGORY_GROUP_ENABLED("loading", &loading_enabled);
   if (!loading_enabled)
     return;
   const page_load_metrics::ContentfulPaintTimingInfo& paint =
-      largest_contentful_paint_handler_.MergeMainFrameAndSubframes();
+      GetDelegate()
+          .GetLargestContentfulPaintHandler()
+          .MergeMainFrameAndSubframes();
 
   if (paint.ContainsValidTime()) {
     TRACE_EVENT_INSTANT2(
@@ -687,21 +919,89 @@ void UkmPageLoadMetricsObserver::OnTimingUpdate(
         "NavStartToLargestContentfulPaint::Candidate::AllFrames::UKM",
         TRACE_EVENT_SCOPE_THREAD, "data", paint.DataAsTraceValue(),
         "main_frame_tree_node_id",
-        largest_contentful_paint_handler_.MainFrameTreeNodeId());
+        GetDelegate().GetLargestContentfulPaintHandler().MainFrameTreeNodeId());
   } else {
     TRACE_EVENT_INSTANT1(
         "loading",
         "NavStartToLargestContentfulPaint::"
         "Invalidate::AllFrames::UKM",
         TRACE_EVENT_SCOPE_THREAD, "main_frame_tree_node_id",
-        largest_contentful_paint_handler_.MainFrameTreeNodeId());
+        GetDelegate().GetLargestContentfulPaintHandler().MainFrameTreeNodeId());
+  }
+
+  const page_load_metrics::ContentfulPaintTimingInfo&
+      experimental_largest_contentful_paint =
+          GetDelegate()
+              .GetExperimentalLargestContentfulPaintHandler()
+              .MergeMainFrameAndSubframes();
+  if (experimental_largest_contentful_paint.ContainsValidTime()) {
+    TRACE_EVENT_INSTANT2(
+        "loading",
+        "NavStartToExperimentalLargestContentfulPaint::Candidate::AllFrames::"
+        "UKM",
+        TRACE_EVENT_SCOPE_THREAD, "data",
+        experimental_largest_contentful_paint.DataAsTraceValue(),
+        "main_frame_tree_node_id",
+        GetDelegate()
+            .GetExperimentalLargestContentfulPaintHandler()
+            .MainFrameTreeNodeId());
+  } else {
+    TRACE_EVENT_INSTANT1("loading",
+                         "NavStartToExperimentalLargestContentfulPaint::"
+                         "Invalidate::AllFrames::UKM",
+                         TRACE_EVENT_SCOPE_THREAD, "main_frame_tree_node_id",
+                         GetDelegate()
+                             .GetExperimentalLargestContentfulPaintHandler()
+                             .MainFrameTreeNodeId());
   }
 }
 
-void UkmPageLoadMetricsObserver::OnDidFinishSubFrameNavigation(
-    content::NavigationHandle* navigation_handle) {
-  largest_contentful_paint_handler_.OnDidFinishSubFrameNavigation(
-      navigation_handle, GetDelegate());
+void UkmPageLoadMetricsObserver::OnThroughputUpdate(
+    const page_load_metrics::mojom::ThroughputUkmDataPtr& throughput_data) {
+  ukm::SourceId source_id = throughput_data->source_id;
+  DCHECK_NE(source_id, ukm::kInvalidSourceId);
+
+  int8_t aggregated_throughput_percent =
+      throughput_data->aggregated_throughput_percent;
+  int8_t impl_throughput_percent = throughput_data->impl_throughput_percent;
+  page_load_metrics::mojom::PercentOptionalPtr main_throughput_percent =
+      std::move(throughput_data->main_throughput_percent);
+
+  throughput_source_id_ = source_id;
+  if (!ValidatePercent(aggregated_throughput_percent) ||
+      !ValidatePercent(impl_throughput_percent) ||
+      (main_throughput_percent &&
+       !ValidatePercent(main_throughput_percent->percent))) {
+    mojo::ReportBadMessage("Invalid percentage value in ThroughputUkmData.");
+    return;
+  }
+  ++aggregated_throughput_data_[aggregated_throughput_percent];
+  ++impl_throughput_data_[impl_throughput_percent];
+  if (main_throughput_percent)
+    ++main_throughput_data_[main_throughput_percent->percent];
+}
+
+void UkmPageLoadMetricsObserver::ReportThroughputUkm() {
+  DCHECK_NE(throughput_source_id_, ukm::kInvalidSourceId);
+
+  ukm::builders::Graphics_Smoothness_PercentDroppedFrames builder(
+      throughput_source_id_);
+  if (aggregated_throughput_data_.size() > 0) {
+    builder.SetSlowerThread_Universal(
+        ComputeMedianForThroughput(aggregated_throughput_data_));
+    aggregated_throughput_data_.clear();
+  }
+  if (impl_throughput_data_.size() > 0) {
+    builder.SetCompositorThread_Universal(
+        ComputeMedianForThroughput(impl_throughput_data_));
+    impl_throughput_data_.clear();
+  }
+  if (main_throughput_data_.size() > 0) {
+    builder.SetMainThread_Universal(
+        ComputeMedianForThroughput(main_throughput_data_));
+    main_throughput_data_.clear();
+  }
+  builder.Record(ukm::UkmRecorder::Get());
 }
 
 void UkmPageLoadMetricsObserver::OnCpuTimingUpdate(
@@ -709,6 +1009,11 @@ void UkmPageLoadMetricsObserver::OnCpuTimingUpdate(
     const page_load_metrics::mojom::CpuTiming& timing) {
   if (GetDelegate().GetVisibilityTracker().currently_in_foreground())
     total_foreground_cpu_time_ += timing.task_time;
+}
+
+void UkmPageLoadMetricsObserver::DidActivatePortal(
+    base::TimeTicks activation_time) {
+  is_portal_ = false;
 }
 
 void UkmPageLoadMetricsObserver::RecordNoStatePrefetchMetrics(

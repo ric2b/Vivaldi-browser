@@ -8,7 +8,6 @@
 
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "extensions/browser/app_window/app_window.h"
 #include "extensions/common/api/extension_types.h"
 
 namespace extensions {
@@ -22,13 +21,6 @@ namespace ui_tools {
 
 // Returns the currently active WebViewGuest.
 extern extensions::WebViewGuest* GetActiveWebViewGuest();
-
-// Returns the currently active WebViewGuest.
-// |app_window| The app-window where the webviewguest is present.
-// Used in paste and go and hardware key handling (ie. navigation buttons on
-// mouse/keyboard)
-extern extensions::WebViewGuest* GetActiveWebViewGuest(
-    extensions::NativeAppWindow* app_window);
 
 // Returns the active BrowserWindow, currently used by progress updates to the
 // taskbar on Windows.

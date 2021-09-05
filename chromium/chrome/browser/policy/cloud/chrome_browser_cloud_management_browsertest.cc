@@ -676,7 +676,7 @@ IN_PROC_BROWSER_TEST_P(MachineLevelUserCloudPolicyPolicyFetchTest, Test) {
   const PolicyMap& policy_map = manager->store()->policy_map();
   if (dm_token() != kInvalidDMToken) {
     EXPECT_EQ(1u, policy_map.size());
-    EXPECT_EQ(base::Value(true), *(policy_map.Get("ShowHomeButton")->value));
+    EXPECT_EQ(base::Value(true), *(policy_map.Get("ShowHomeButton")->value()));
 
     // The token in storage should be valid.
     DMToken token = retrieve_dm_token();
@@ -722,7 +722,7 @@ class MachineLevelUserCloudPolicyRobotAuthTest
  public:
   MachineLevelUserCloudPolicyRobotAuthTest() {
     scoped_feature_list_.InitAndEnableFeature(
-        policy::features::kCBCMServiceAccounts);
+        policy::features::kCBCMPolicyInvalidations);
 
     BrowserDMTokenStorage::SetForTesting(&storage_);
     storage_.SetEnrollmentToken(kEnrollmentToken);
@@ -800,7 +800,6 @@ IN_PROC_BROWSER_TEST_F(MachineLevelUserCloudPolicyRobotAuthTest, Test) {
     // Listen to store event which is fired after policy validation if token is
     // valid.
     std::unique_ptr<PolicyFetchStoreObserver> store_observer;
-
     store_observer = std::make_unique<PolicyFetchStoreObserver>(
         manager->store(), run_loop.QuitClosure());
 
@@ -815,7 +814,7 @@ IN_PROC_BROWSER_TEST_F(MachineLevelUserCloudPolicyRobotAuthTest, Test) {
   const PolicyMap& policy_map = manager->store()->policy_map();
 
   EXPECT_EQ(1u, policy_map.size());
-  EXPECT_EQ(base::Value(true), *(policy_map.Get("ShowHomeButton")->value));
+  EXPECT_EQ(base::Value(true), *(policy_map.Get("ShowHomeButton")->value()));
 
   // The token in storage should be valid.
   DMToken token = retrieve_dm_token();

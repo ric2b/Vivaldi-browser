@@ -126,6 +126,10 @@ extern const char kBundleExecutableDir[];
 extern const char kBundleExecutableDir_HelpShort[];
 extern const char kBundleExecutableDir_Help[];
 
+extern const char kXcassetCompilerFlags[];
+extern const char kXcassetCompilerFlags_HelpShort[];
+extern const char kXcassetCompilerFlags_Help[];
+
 extern const char kCflags[];
 extern const char kCflags_HelpShort[];
 extern const char* kCflags_Help;
@@ -325,6 +329,10 @@ extern const char kVisibility_Help[];
 extern const char kWalkKeys[];
 extern const char kWalkKeys_HelpShort[];
 extern const char kWalkKeys_Help[];
+
+extern const char kWeakFrameworks[];
+extern const char kWeakFrameworks_HelpShort[];
+extern const char kWeakFrameworks_Help[];
 
 extern const char kWriteValueContents[];
 extern const char kWriteValueContents_HelpShort[];

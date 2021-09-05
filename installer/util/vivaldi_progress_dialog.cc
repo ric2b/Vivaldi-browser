@@ -2,6 +2,7 @@
 
 #include "installer/util/vivaldi_progress_dialog.h"
 #include <CommCtrl.h>
+#include "base/check.h"
 #include "base/logging.h"
 #include "chrome/installer/setup/setup_resource.h"
 

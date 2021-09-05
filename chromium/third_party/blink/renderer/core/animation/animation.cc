@@ -996,14 +996,6 @@ void Animation::ResetPendingTasks() {
 
 // https://drafts.csswg.org/web-animations/#pausing-an-animation-section
 void Animation::pause(ExceptionState& exception_state) {
-  // TODO(crbug.com/916117): Implement pause for scroll-linked animations.
-  if (timeline_ && timeline_->IsScrollTimeline()) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kNotSupportedError,
-        "Scroll-linked WebAnimation currently does not support pause.");
-    return;
-  }
-
   // 1. If animation has a pending pause task, abort these steps.
   // 2. If the play state of animation is paused, abort these steps.
   if (pending_pause_ || CalculateAnimationPlayState() == kPaused)
@@ -1186,6 +1178,12 @@ void Animation::PlayInternal(AutoRewind auto_rewind,
     else
       hold_time_ = 0;
   }
+  // TODO(crbug.com/1081267): Update based on upcoming spec change.
+  // https://github.com/w3c/csswg-drafts/pull/5059
+  if (performed_seek && has_finite_timeline) {
+    hold_time_ = base::nullopt;
+    ApplyPendingPlaybackRate();
+  }
 
   // 6. If animation has a pending play task or a pending pause task,
   //   6.1 Cancel that task.
@@ -1233,14 +1231,6 @@ void Animation::PlayInternal(AutoRewind auto_rewind,
 
 // https://drafts.csswg.org/web-animations/#reversing-an-animation-section
 void Animation::reverse(ExceptionState& exception_state) {
-  // TODO(crbug.com/916117): Implement reverse for scroll-linked animations.
-  if (timeline_ && timeline_->IsScrollTimeline()) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kNotSupportedError,
-        "Scroll-linked WebAnimation currently does not support reverse.");
-    return;
-  }
-
   // 1. If there is no timeline associated with animation, or the associated
   //    timeline is inactive throw an "InvalidStateError" DOMException and abort
   //    these steps.
@@ -1371,6 +1361,11 @@ void Animation::UpdateFinishedState(UpdateType update_type,
         ScheduleAsyncFinish();
     }
   } else {
+    // Previously finished animation may restart so they should be added to
+    // pending animations to make sure that a compositor animation is re-created
+    // during future PreCommit.
+    if (finished_)
+      SetCompositorPending();
     // 6. If not finished but the current finished promise is already resolved,
     //    create a new promise.
     finished_ = pending_finish_notification_ = committed_finish_notification_ =
@@ -1437,16 +1432,6 @@ void Animation::CommitFinishNotification() {
 // https://drafts.csswg.org/web-animations/#setting-the-playback-rate-of-an-animation
 void Animation::updatePlaybackRate(double playback_rate,
                                    ExceptionState& exception_state) {
-  // TODO(crbug.com/916117): Implement updatePlaybackRate for scroll-linked
-  // animations.
-  if (timeline_ && timeline_->IsScrollTimeline()) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kNotSupportedError,
-        "Scroll-linked WebAnimation currently does not support"
-        " updatePlaybackRate.");
-    return;
-  }
-
   // 1. Let previous play state be animation’s play state.
   // 2. Let animation’s pending playback rate be new playback rate.
   AnimationPlayState play_state = CalculateAnimationPlayState();
@@ -1704,6 +1689,14 @@ Animation::CheckCanStartAnimationOnCompositorInternal() const {
       To<DocumentTimeline>(*timeline_).PlaybackRate() != 1)
     reasons |= CompositorAnimations::kInvalidAnimationOrEffect;
 
+  // If the scroll source is not composited, fall back to main thread.
+  // TODO(crbug.com/476553): Once all ScrollNodes including uncomposited ones
+  // are in the compositor, the animation should be composited.
+  if (timeline_->IsScrollTimeline() &&
+      !CompositorAnimations::CheckUsesCompositedScrolling(
+          To<ScrollTimeline>(*timeline_).ResolvedScrollSource()))
+    reasons |= CompositorAnimations::kTimelineSourceHasInvalidCompositingState;
+
   // An Animation without an effect cannot produce a visual, so there is no
   // reason to composite it.
   if (!IsA<KeyframeEffect>(content_.Get()))
@@ -1840,15 +1833,20 @@ bool Animation::Update(TimingUpdateReason reason) {
     UpdateFinishedState(UpdateType::kContinuous, NotificationType::kAsync);
 
   if (content_) {
-    base::Optional<double> inherited_time = idle || !timeline_->currentTime()
-                                                ? base::nullopt
-                                                : CurrentTimeInternal();
+    base::Optional<double> inherited_time;
+    base::Optional<TimelinePhase> timeline_phase;
 
-    // Special case for end-exclusivity when playing backwards.
-    if (inherited_time == 0 && EffectivePlaybackRate() < 0)
-      inherited_time = -1;
+    if (!idle) {
+      inherited_time = CurrentTimeInternal();
+      // Special case for end-exclusivity when playing backwards.
+      if (inherited_time == 0 && EffectivePlaybackRate() < 0)
+        inherited_time = -1;
 
-    content_->UpdateInheritedTime(inherited_time, reason);
+      timeline_phase = timeline_->Phase();
+    }
+
+    content_->UpdateInheritedTime(inherited_time, timeline_phase, reason);
+
     // After updating the animation time if the animation is no longer current
     // blink will no longer composite the element (see
     // CompositingReasonFinder::RequiresCompositingFor*Animation). We cancel any
@@ -2032,19 +2030,6 @@ void Animation::DetachCompositorTimeline() {
     return;
 
   compositor_timeline->AnimationDestroyed(*this);
-}
-
-void Animation::UpdateCompositorScrollTimeline() {
-  if (!compositor_animation_ || !timeline_)
-    return;
-  auto& timeline = To<ScrollTimeline>(*timeline_);
-  Node* scroll_source = timeline.ResolvedScrollSource();
-  auto start_scroll_offset = timeline.GetResolvedStartScrollOffset();
-  auto end_scroll_offset = timeline.GetResolvedEndScrollOffset();
-
-  compositor_animation_->GetAnimation()->UpdateScrollTimeline(
-      scroll_timeline_util::GetCompositorScrollElementId(scroll_source),
-      start_scroll_offset, end_scroll_offset);
 }
 
 void Animation::AttachCompositedLayers() {
@@ -2374,7 +2359,7 @@ void Animation::commitStyles(ExceptionState& exception_state) {
           WrapWeakPersistent(inline_style), WrapWeakPersistent(target)));
 }
 
-void Animation::Trace(Visitor* visitor) {
+void Animation::Trace(Visitor* visitor) const {
   visitor->Trace(content_);
   visitor->Trace(document_);
   visitor->Trace(timeline_);

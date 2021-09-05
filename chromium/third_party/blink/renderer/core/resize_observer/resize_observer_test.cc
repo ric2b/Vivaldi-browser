@@ -38,7 +38,7 @@ class TestResizeObserverDelegate : public ResizeObserver::Delegate {
   ExecutionContext* GetExecutionContext() const { return window_.Get(); }
   int CallCount() const { return call_count_; }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     ResizeObserver::Delegate::Trace(visitor);
     visitor->Trace(window_);
   }
@@ -257,7 +257,7 @@ TEST_F(ResizeObserverUnitTest, TestMemoryLeaks) {
   v8::HandleScope scope(v8::Isolate::GetCurrent());
 
   ScriptController& script_controller =
-      GetDocument().ExecutingFrame()->GetScriptController();
+      Window().GetFrame()->GetScriptController();
 
   //
   // Test whether ResizeObserver is kept alive by direct JS reference

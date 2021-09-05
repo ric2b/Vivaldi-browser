@@ -15,8 +15,10 @@
 #include "base/fuchsia/file_utils.h"
 #include "base/fuchsia/filtered_service_directory.h"
 #include "base/fuchsia/fuchsia_logging.h"
+#include "base/fuchsia/process_context.h"
 #include "base/logging.h"
 #include "fuchsia/base/agent_manager.h"
+#include "fuchsia/runners/cast/cast_streaming.h"
 #include "fuchsia/runners/cast/pending_cast_component.h"
 #include "fuchsia/runners/common/web_content_runner.h"
 #include "url/gurl.h"
@@ -69,15 +71,13 @@ bool IsPermissionGrantedInAppConfig(
 CastRunner::CastRunner(bool is_headless)
     : is_headless_(is_headless),
       main_services_(std::make_unique<base::fuchsia::FilteredServiceDirectory>(
-          base::fuchsia::ComponentContextForCurrentProcess()->svc().get())),
+          base::ComponentContextForProcess()->svc().get())),
       main_context_(std::make_unique<WebContentRunner>(
           base::BindRepeating(&CastRunner::GetMainContextParams,
                               base::Unretained(this)))),
       isolated_services_(
           std::make_unique<base::fuchsia::FilteredServiceDirectory>(
-              base::fuchsia::ComponentContextForCurrentProcess()
-                  ->svc()
-                  .get())) {
+              base::ComponentContextForProcess()->svc().get())) {
   // Specify the services to connect via the Runner process' service directory.
   for (const char* name : kServices) {
     main_services_->AddService(name);
@@ -132,40 +132,38 @@ void CastRunner::SetOnMainContextLostCallbackForTest(
 
 void CastRunner::LaunchPendingComponent(PendingCastComponent* pending_component,
                                         CastComponent::Params params) {
-  WebContentRunner* component_owner = main_context_.get();
-
   // Save the list of CORS exemptions so that they can be used in Context
   // creation parameters.
   cors_exempt_headers_ = pending_component->TakeCorsExemptHeaders();
 
-  const bool is_isolated =
-      params.application_config
-          .has_content_directories_for_isolated_application();
-  if (is_isolated) {
-    // Create an isolated context which will own the CastComponent.
-    auto context =
-        std::make_unique<WebContentRunner>(GetIsolatedContextParams(std::move(
-            *params.application_config
-                 .mutable_content_directories_for_isolated_application())));
-    context->SetOnEmptyCallback(base::BindOnce(
-        &CastRunner::OnIsolatedContextEmpty, base::Unretained(this),
-        base::Unretained(context.get())));
-    component_owner = context.get();
-    isolated_contexts_.insert(std::move(context));
+  // TODO(crbug.com/1082821): Remove |web_content_url| once the Cast Streaming
+  // Receiver component has been implemented.
+  GURL web_content_url(params.application_config.web_url());
+  if (IsAppConfigForCastStreaming(params.application_config))
+    web_content_url = GURL(kCastStreamingWebUrl);
+
+  base::Optional<fuchsia::web::CreateContextParams> create_context_params =
+      GetContextParamsForAppConfig(&params.application_config);
+
+  WebContentRunner* component_owner = main_context_.get();
+  if (create_context_params) {
+    component_owner = CreateIsolatedContextForParams(
+        std::move(create_context_params.value()));
   }
 
-  // Launch the URL specified in the component |params|.
-  GURL app_url = GURL(params.application_config.web_url());
   auto cast_component = std::make_unique<CastComponent>(
       component_owner, std::move(params), is_headless_);
+
+  // Start the component, which creates and configures the web.Frame, and load
+  // the specified web content into it.
   cast_component->SetOnDestroyedCallback(
       base::BindOnce(&CastRunner::OnComponentDestroyed, base::Unretained(this),
                      base::Unretained(cast_component.get())));
   cast_component->StartComponent();
-  cast_component->LoadUrl(std::move(app_url),
+  cast_component->LoadUrl(std::move(web_content_url),
                           std::vector<fuchsia::net::http::Header>());
 
-  if (!is_isolated) {
+  if (component_owner == main_context_.get()) {
     // If this component has the microphone permission then use it to route
     // Audio service requests through.
     if (IsPermissionGrantedInAppConfig(
@@ -205,6 +203,7 @@ fuchsia::web::CreateContextParams CastRunner::GetCommonContextParams() {
     LOG(WARNING) << "Running in headless mode.";
     *params.mutable_features() |= fuchsia::web::ContextFeatureFlags::HEADLESS;
   } else {
+    // TODO(crbug.com/1078227): Remove HARDWARE_VIDEO_DECODER_ONLY.
     *params.mutable_features() |=
         fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER |
         fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER_ONLY |
@@ -247,18 +246,67 @@ fuchsia::web::CreateContextParams CastRunner::GetMainContextParams() {
   // TODO(crbug.com/1023514): Remove this switch when it is no longer
   // necessary.
   params.set_unsafely_treat_insecure_origins_as_secure(
-      {"allow-running-insecure-content"});
+      {"allow-running-insecure-content", "disable-mixed-content-autoupgrade"});
 
   return params;
 }
 
-fuchsia::web::CreateContextParams CastRunner::GetIsolatedContextParams(
+fuchsia::web::CreateContextParams
+CastRunner::GetIsolatedContextParamsWithFuchsiaDirs(
     std::vector<fuchsia::web::ContentDirectoryProvider> content_directories) {
   fuchsia::web::CreateContextParams params = GetCommonContextParams();
   params.set_content_directories(std::move(content_directories));
   isolated_services_->ConnectClient(
       params.mutable_service_directory()->NewRequest());
   return params;
+}
+
+fuchsia::web::CreateContextParams
+CastRunner::GetIsolatedContextParamsForCastStreaming() {
+  fuchsia::web::CreateContextParams params = GetCommonContextParams();
+  ApplyCastStreamingContextParams(&params);
+  // TODO(crbug.com/1069746): Use a different FilteredServiceDirectory for Cast
+  // Streaming Contexts.
+  main_services_->ConnectClient(
+      params.mutable_service_directory()->NewRequest());
+  return params;
+}
+
+base::Optional<fuchsia::web::CreateContextParams>
+CastRunner::GetContextParamsForAppConfig(
+    chromium::cast::ApplicationConfig* app_config) {
+  base::Optional<fuchsia::web::CreateContextParams> params;
+
+  if (IsAppConfigForCastStreaming(*app_config)) {
+    // TODO(crbug.com/1082821): Remove this once the CastStreamingReceiver
+    // Component has been implemented.
+    return base::make_optional(GetIsolatedContextParamsForCastStreaming());
+  }
+
+  const bool is_isolated_app =
+      app_config->has_content_directories_for_isolated_application();
+  if (is_isolated_app) {
+    return base::make_optional(
+        GetIsolatedContextParamsWithFuchsiaDirs(std::move(
+            *app_config
+                 ->mutable_content_directories_for_isolated_application())));
+  }
+
+  // No need to create an isolated context in other cases.
+  return base::nullopt;
+}
+
+WebContentRunner* CastRunner::CreateIsolatedContextForParams(
+    fuchsia::web::CreateContextParams create_context_params) {
+  // Create an isolated context which will own the CastComponent.
+  auto context =
+      std::make_unique<WebContentRunner>(std::move(create_context_params));
+  context->SetOnEmptyCallback(
+      base::BindOnce(&CastRunner::OnIsolatedContextEmpty,
+                     base::Unretained(this), base::Unretained(context.get())));
+  WebContentRunner* raw_context = context.get();
+  isolated_contexts_.insert(std::move(context));
+  return raw_context;
 }
 
 void CastRunner::OnIsolatedContextEmpty(WebContentRunner* context) {
@@ -279,10 +327,9 @@ void CastRunner::OnAudioServiceRequest(
   }
 
   // Otherwise use the Runner's fuchsia.media.Audio service. fuchsia.media.Audio
-  // may be used by frames without MICRIPHONE permission to create AudioRenderer
+  // may be used by frames without MICROPHONE permission to create AudioRenderer
   // instance.
-  base::fuchsia::ComponentContextForCurrentProcess()->svc()->Connect(
-      std::move(request));
+  base::ComponentContextForProcess()->svc()->Connect(std::move(request));
 }
 
 void CastRunner::OnCameraServiceRequest(
@@ -309,6 +356,5 @@ void CastRunner::OnMetricsRecorderServiceRequest(
       reinterpret_cast<CastComponent*>(main_context_->GetAnyComponent());
   DCHECK(component);
 
-  component->agent_manager()->ConnectToAgentService(
-      component->application_config().agent_url(), std::move(request));
+  component->startup_context()->svc()->Connect(std::move(request));
 }

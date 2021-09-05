@@ -113,15 +113,16 @@ content::WebUI* OobeBaseTest::GetLoginUI() {
 }
 
 void OobeBaseTest::WaitForOobeUI() {
-  // TODO(crbug.com/1082670): Remove excessive logging after investigation.
-  LOG(ERROR) << "Start waiting for OOBE UI.";
+  // Wait for notification first. Otherwise LoginDisplayHost might not be
+  // created yet.
+  MaybeWaitForLoginScreenLoad();
+
   // Wait for OobeUI to finish loading.
   base::RunLoop run_loop;
   if (!LoginDisplayHost::default_host()->GetOobeUI()->IsJSReady(
           run_loop.QuitClosure())) {
     run_loop.Run();
   }
-  MaybeWaitForLoginScreenLoad();
 }
 
 void OobeBaseTest::WaitForGaiaPageLoad() {
@@ -173,7 +174,7 @@ void OobeBaseTest::WaitForGaiaPageEvent(const std::string& event) {
 
 void OobeBaseTest::WaitForSigninScreen() {
   WizardController* wizard_controller = WizardController::default_controller();
-  if (wizard_controller)
+  if (wizard_controller && wizard_controller->is_initialized())
     wizard_controller->SkipToLoginForTesting();
 
   WizardController::SkipPostLoginScreensForTesting();

@@ -5,6 +5,7 @@
 #include "base/profiler/stack_sampling_profiler.h"
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <utility>
 
@@ -26,7 +27,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "base/trace_event/trace_event.h"
+#include "base/trace_event/base_tracing.h"
 
 namespace base {
 
@@ -46,6 +47,36 @@ constexpr WaitableEvent::ResetPolicy kResetPolicy =
 // This value is used when there is no collection in progress and thus no ID
 // for referencing the active collection to the SamplingThread.
 const int kNullProfilerId = -1;
+
+TimeTicks GetNextSampleTimeImpl(TimeTicks scheduled_current_sample_time,
+                                TimeDelta sampling_interval,
+                                TimeTicks now) {
+  // Schedule the next sample at the next sampling_interval-aligned time in
+  // the future that's sufficiently far enough from the current sample. In the
+  // general case this will be one sampling_interval from the current
+  // sample. In cases where sample tasks were unable to be executed, such as
+  // during system suspend or bad system-wide jank, we may have missed some
+  // samples. The right thing to do for those cases is to skip the missed
+  // samples since the rest of the systems also wasn't executing.
+
+  // Ensure that the next sample time is at least half a sampling interval
+  // away. This causes the second sample after resume to be taken between 0.5
+  // and 1.5 samples after the first, or 1 sample interval on average. The delay
+  // also serves to provide a grace period in the normal sampling case where the
+  // current sample may be taken slightly later than its scheduled time.
+  const TimeTicks earliest_next_sample_time = now + sampling_interval / 2;
+
+  const TimeDelta minimum_time_delta_to_next_sample =
+      earliest_next_sample_time - scheduled_current_sample_time;
+
+  // The minimum number of sampling intervals required to get from the scheduled
+  // current sample time to the earliest next sample time.
+  const int64_t required_sampling_intervals = static_cast<int64_t>(
+      std::ceil(minimum_time_delta_to_next_sample.InMicrosecondsF() /
+                sampling_interval.InMicroseconds()));
+  return scheduled_current_sample_time +
+         required_sampling_intervals * sampling_interval;
+}
 
 }  // namespace
 
@@ -597,9 +628,9 @@ void StackSamplingProfiler::SamplingThread::RecordSampleTask(
 
   // Schedule the next sample recording if there is one.
   if (++collection->sample_count < collection->params.samples_per_profile) {
-    if (!collection->params.keep_consistent_sampling_interval)
-      collection->next_sample_time = TimeTicks::Now();
-    collection->next_sample_time += collection->params.sampling_interval;
+    collection->next_sample_time = GetNextSampleTimeImpl(
+        collection->next_sample_time, collection->params.sampling_interval,
+        TimeTicks::Now());
     bool success = GetTaskRunnerOnSamplingThread()->PostDelayedTask(
         FROM_HERE,
         BindOnce(&SamplingThread::RecordSampleTask, Unretained(this),
@@ -689,16 +720,25 @@ void StackSamplingProfiler::TestPeer::PerformSamplingThreadIdleShutdown(
   SamplingThread::TestPeer::ShutdownAssumingIdle(simulate_intervening_start);
 }
 
+// static
+TimeTicks StackSamplingProfiler::TestPeer::GetNextSampleTime(
+    TimeTicks scheduled_current_sample_time,
+    TimeDelta sampling_interval,
+    TimeTicks now) {
+  return GetNextSampleTimeImpl(scheduled_current_sample_time, sampling_interval,
+                               now);
+}
+
 StackSamplingProfiler::StackSamplingProfiler(
     SamplingProfilerThreadToken thread_token,
     const SamplingParams& params,
     std::unique_ptr<ProfileBuilder> profile_builder,
-    std::unique_ptr<Unwinder> native_unwinder,
+    std::vector<std::unique_ptr<Unwinder>> unwinders,
     StackSamplerTestDelegate* test_delegate)
     : StackSamplingProfiler(params, std::move(profile_builder), nullptr) {
   sampler_ =
       StackSampler::Create(thread_token, profile_builder_->GetModuleCache(),
-                           std::move(native_unwinder), test_delegate);
+                           std::move(unwinders), test_delegate);
 }
 
 StackSamplingProfiler::StackSamplingProfiler(
@@ -753,9 +793,6 @@ void StackSamplingProfiler::Start() {
   if (!sampler_)
     return;
 
-  if (pending_aux_unwinder_)
-    sampler_->AddAuxUnwinder(std::move(pending_aux_unwinder_));
-
   // The IsSignaled() check below requires that the WaitableEvent be manually
   // reset, to avoid signaling the event in IsSignaled() itself.
   static_assert(kResetPolicy == WaitableEvent::ResetPolicy::MANUAL,
@@ -789,9 +826,10 @@ void StackSamplingProfiler::Stop() {
 
 void StackSamplingProfiler::AddAuxUnwinder(std::unique_ptr<Unwinder> unwinder) {
   if (profiler_id_ == kNullProfilerId) {
-    // We haven't started sampling, and so don't have a sampler to which we can
-    // pass the unwinder yet. Save it on the instance until we do.
-    pending_aux_unwinder_ = std::move(unwinder);
+    // We haven't started sampling, and so we can add |unwinder| to the sampler
+    // directly
+    if (sampler_)
+      sampler_->AddAuxUnwinder(std::move(unwinder));
     return;
   }
 

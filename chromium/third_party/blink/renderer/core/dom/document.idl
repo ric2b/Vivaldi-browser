@@ -76,9 +76,6 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
     [NewObject] NodeIterator createNodeIterator(Node root, optional unsigned long whatToShow = 0xFFFFFFFF, optional NodeFilter? filter = null);
     [NewObject] TreeWalker createTreeWalker(Node root, optional unsigned long whatToShow = 0xFFFFFFFF, optional NodeFilter? filter = null);
 
-    // NonDocumentRootScroller (https://github.com/bokand/NonDocumentRootScroller)
-    [RaisesException=Setter, RuntimeEnabled=SetRootScroller, Measure] attribute Element? rootScroller;
-
     // FIXME: xmlEncoding/xmlVersion/xmlStandalone have been removed from the spec.
     [MeasureAs=DocumentXMLEncoding] readonly attribute DOMString? xmlEncoding;
     [RaisesException=Setter, MeasureAs=DocumentXMLVersion] attribute DOMString? xmlVersion;
@@ -182,17 +179,17 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
 
     // CORS and RFC1918
     // https://wicg.github.io/cors-rfc1918/#feature-detect
-    [RuntimeEnabled=AddressSpace, ImplementedAs=addressSpaceForBindings] readonly attribute AddressSpace addressSpace;
+    [CallWith=ScriptState, RuntimeEnabled=AddressSpace, ImplementedAs=addressSpaceForBindings] readonly attribute AddressSpace addressSpace;
 
     // Non-standard APIs
     [MeasureAs=DocumentCaretRangeFromPoint] Range caretRangeFromPoint(optional long x = 0, optional long y = 0);
 
     // Storage Access API
-    [CallWith=ScriptState, NewObject, RuntimeEnabled=StorageAccessAPI] Promise<boolean> hasStorageAccess();
-    [CallWith=ScriptState, NewObject, RuntimeEnabled=StorageAccessAPI] Promise<void> requestStorageAccess();
+    [CallWith=ScriptState, NewObject, RuntimeEnabled=StorageAccessAPI, MeasureAs=StorageAccessAPI_HasStorageAccess_Method] Promise<boolean> hasStorageAccess();
+    [CallWith=ScriptState, NewObject, RuntimeEnabled=StorageAccessAPI, MeasureAs=StorageAccessAPI_requestStorageAccess_Method] Promise<void> requestStorageAccess();
 
     // https://w3c.github.io/webappsec-feature-policy/#the-policy-object
-    [RuntimeEnabled=FeaturePolicyJavaScriptInterface] readonly attribute FeaturePolicy featurePolicy;
+    readonly attribute FeaturePolicy featurePolicy;
 
     // Deprecated prefixed page visibility API.
     // TODO(davidben): This is a property so attaching a deprecation warning results in false positives when outputting

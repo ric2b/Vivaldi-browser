@@ -11,7 +11,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.Activity;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Before;
@@ -307,7 +308,7 @@ public class FeedAppLifecycleTest {
     public void testClearDataAfterDisablingDoesNotCrash() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             FeedProcessScopeFactory.clearFeedProcessScopeForTesting();
-            PrefServiceBridge.getInstance().setBoolean(Pref.NTP_ARTICLES_SECTION_ENABLED, false);
+            PrefServiceBridge.getInstance().setBoolean(Pref.ENABLE_SNIPPETS, false);
             FeedLifecycleBridge.onCachedDataCleared();
             FeedLifecycleBridge.onHistoryDeleted();
         });

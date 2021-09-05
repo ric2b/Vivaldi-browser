@@ -85,7 +85,7 @@ class InstallFinalizerUnitTest
     switch (GetParam()) {
       case ProviderType::kWebApps:
         finalizer_ = std::make_unique<WebAppInstallFinalizer>(
-            profile(), icon_manager_.get());
+            profile(), icon_manager_.get(), /*legacy_finalizer=*/nullptr);
         break;
       case ProviderType::kBookmarkApps:
         InitializeEmptyExtensionService(profile());
@@ -97,6 +97,7 @@ class InstallFinalizerUnitTest
     finalizer_->SetSubsystems(&registrar(), ui_manager_.get(),
                               &test_registry_controller_->sync_bridge());
     test_registry_controller_->Init();
+    finalizer_->Start();
   }
 
   void TearDown() override {

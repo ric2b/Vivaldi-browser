@@ -50,10 +50,10 @@
 #include "third_party/blink/renderer/core/html/html_table_cell_element.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
-#include "third_party/blink/renderer/core/layout/layout_list_marker.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_replaced.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
+#include "third_party/blink/renderer/core/layout/list_marker.h"
 #include "third_party/blink/renderer/core/mathml/mathml_fraction_element.h"
 #include "third_party/blink/renderer/core/mathml/mathml_space_element.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
@@ -85,6 +85,23 @@ TouchAction AdjustTouchActionForElement(TouchAction touch_action,
   if ((!is_body_and_viewport && style.ScrollsOverflow()) || is_child_document)
     return touch_action | TouchAction::kPan;
   return touch_action;
+}
+
+void AdjustBackgroundForForcedColorsMode(StyleResolverState& state,
+                                         ComputedStyle& style,
+                                         Element* element) {
+  if (!element || !element->GetDocument().InForcedColorsMode() ||
+      style.ForcedColorAdjust() == EForcedColorAdjust::kNone)
+    return;
+
+  int bg_color_alpha =
+      LayoutObject::ResolveColor(style, GetCSSPropertyBackgroundColor())
+          .Alpha();
+  Color bg_color_rbg = StyleColor::ColorFromKeyword(
+      style.InternalForcedBackgroundColorRgb(), WebColorScheme::kLight);
+  Color bg_color = Color(bg_color_rbg.Red(), bg_color_rbg.Green(),
+                         bg_color_rbg.Blue(), bg_color_alpha);
+  style.SetBackgroundColor(bg_color);
 }
 
 }  // namespace
@@ -222,7 +239,7 @@ static void AdjustStyleForMarker(ComputedStyle& style,
        !parent_style.IsInsideListElement());
 
   if (is_inside) {
-    auto margins = LayoutListMarker::InlineMarginsForInside(
+    auto margins = ListMarker::InlineMarginsForInside(
         style, parent_style.GeneratesMarkerImage());
     style.SetMarginStart(Length::Fixed(margins.first));
     style.SetMarginEnd(Length::Fixed(margins.second));
@@ -509,10 +526,10 @@ static void AdjustEffectiveTouchAction(ComputedStyle& style,
                                        bool is_svg_root) {
   TouchAction inherited_action = parent_style.GetEffectiveTouchAction();
 
-  bool is_replaced_canvas =
-      element && IsA<HTMLCanvasElement>(element) &&
-      element->GetDocument().GetFrame() &&
-      element->GetDocument().CanExecuteScripts(kNotAboutToExecuteScript);
+  bool is_replaced_canvas = element && IsA<HTMLCanvasElement>(element) &&
+                            element->GetExecutionContext() &&
+                            element->GetExecutionContext()->CanExecuteScripts(
+                                kNotAboutToExecuteScript);
   bool is_non_replaced_inline_elements =
       style.IsDisplayInlineType() &&
       !(style.IsDisplayReplacedType() || is_svg_root ||
@@ -655,12 +672,11 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
   if (style.GetPosition() == EPosition::kStatic &&
       !LayoutParentStyleForcesZIndexToCreateStackingContext(
           layout_parent_style)) {
-    style.SetIsStackingContext(false);
-    // TODO(alancutter): Avoid altering z-index here.
+    style.SetIsStackingContextWithoutContainment(false);
     if (!style.HasAutoZIndex())
-      style.SetZIndex(0);
+      style.SetEffectiveZIndexZero(true);
   } else if (!style.HasAutoZIndex()) {
-    style.SetIsStackingContext(true);
+    style.SetIsStackingContextWithoutContainment(true);
   }
 
   if (style.OverflowX() != EOverflow::kVisible ||
@@ -794,5 +810,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
         (element && element->GetDocument().Printing()))
       style.SetInsideNGFragmentationContext(true);
   }
+
+  AdjustBackgroundForForcedColorsMode(state, style, element);
 }
 }  // namespace blink

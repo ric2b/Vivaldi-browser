@@ -64,7 +64,6 @@ class TypeDebugInfoObserver;
 struct CommitCounters;
 struct StatusCounters;
 struct UpdateCounters;
-struct UserShare;
 
 // Look at the SyncService interface for information on how to use this class.
 // You should not need to know about ProfileSyncService directly.
@@ -150,7 +149,6 @@ class ProfileSyncService : public SyncService,
   void AddObserver(SyncServiceObserver* observer) override;
   void RemoveObserver(SyncServiceObserver* observer) override;
   bool HasObserver(const SyncServiceObserver* observer) const override;
-  UserShare* GetUserShare() const override;
   SyncTokenStatus GetSyncTokenStatusForDebugging() const override;
   bool QueryDetailedSyncStatusForDebugging(SyncStatus* result) const override;
   base::Time GetLastSyncedTimeForDebugging() const override;
@@ -225,11 +223,6 @@ class ProfileSyncService : public SyncService,
   // once (before this object is destroyed).
   void Shutdown() override;
 
-  // This triggers a Directory::SaveChanges() call on the sync thread.
-  // It should be used to persist data to disk when the process might be
-  // killed in the near future.
-  void FlushDirectory() const;
-
   bool IsPassphrasePrompted() const;
   void SetPassphrasePrompted(bool prompted);
 
@@ -246,9 +239,6 @@ class ProfileSyncService : public SyncService,
 
   // Used by tests to inspect the OAuth2 access tokens used by PSS.
   std::string GetAccessTokenForTest() const;
-
-  // Returns true if the syncer is waiting for new datatypes to be encrypted.
-  bool IsEncryptionPendingForTest() const;
 
   // Overrides the callback used to create network connections.
   // TODO(crbug.com/949504): Inject this in the ctor instead. As it is, it's

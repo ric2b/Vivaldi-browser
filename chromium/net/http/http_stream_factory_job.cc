@@ -175,7 +175,7 @@ HttpStreamFactory::Job::Job(Delegate* delegate,
 
   // The Job is forced to use QUIC without a designated version, try the
   // preferred QUIC version that is supported by default.
-  if (quic_version_ == quic::UnsupportedQuicVersion() &&
+  if (quic_version_ == quic::ParsedQuicVersion::Unsupported() &&
       ShouldForceQuic(session, destination, origin_url, proxy_info,
                       using_ssl_)) {
     quic_version_ =
@@ -183,7 +183,7 @@ HttpStreamFactory::Job::Job(Delegate* delegate,
   }
 
   if (using_quic_)
-    DCHECK_NE(quic_version_, quic::UnsupportedQuicVersion());
+    DCHECK_NE(quic_version_, quic::ParsedQuicVersion::Unsupported());
 
   DCHECK(session);
   if (alternative_protocol != kProtoUnknown) {
@@ -1103,6 +1103,10 @@ int HttpStreamFactory::Job::DoCreateStream() {
               ->CreateBasicStream(std::move(connection_), using_proxy,
                                   session_->websocket_endpoint_lock_manager());
     } else {
+      if (request_info_.upload_data_stream &&
+          !request_info_.upload_data_stream->AllowHTTP1()) {
+        return ERR_H2_OR_QUIC_REQUIRED;
+      }
       stream_ = std::make_unique<HttpBasicStream>(std::move(connection_),
                                                   using_proxy);
     }
@@ -1292,7 +1296,7 @@ HttpStreamFactory::JobFactory::CreateMainJob(
   return std::make_unique<HttpStreamFactory::Job>(
       delegate, job_type, session, request_info, priority, proxy_info,
       server_ssl_config, proxy_ssl_config, destination, origin_url,
-      kProtoUnknown, quic::UnsupportedQuicVersion(), ProxyServer(),
+      kProtoUnknown, quic::ParsedQuicVersion::Unsupported(), ProxyServer(),
       is_websocket, enable_ip_based_pooling, net_log);
 }
 
@@ -1339,8 +1343,8 @@ HttpStreamFactory::JobFactory::CreateAltProxyJob(
   return std::make_unique<HttpStreamFactory::Job>(
       delegate, job_type, session, request_info, priority, proxy_info,
       server_ssl_config, proxy_ssl_config, destination, origin_url,
-      kProtoUnknown, quic::UnsupportedQuicVersion(), alternative_proxy_server,
-      is_websocket, enable_ip_based_pooling, net_log);
+      kProtoUnknown, quic::ParsedQuicVersion::Unsupported(),
+      alternative_proxy_server, is_websocket, enable_ip_based_pooling, net_log);
 }
 
 bool HttpStreamFactory::Job::ShouldThrottleConnectForSpdy() const {

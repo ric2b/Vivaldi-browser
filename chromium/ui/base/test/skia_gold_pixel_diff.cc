@@ -24,9 +24,13 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/test/skia_gold_matching_algorithm.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image.h"
 #include "ui/snapshot/snapshot.h"
+
+namespace ui {
+namespace test {
 
 const char* kSkiaGoldInstance = "chrome";
 
@@ -71,12 +75,7 @@ void AppendArgsJustAfterProgram(base::CommandLine& cmd,
   argv.insert(argv.begin() + 1, args.begin(), args.end());
 }
 
-// Fill in test environment to the keys_file. The format is json.
-// We need the system information to determine whether a new screenshot
-// is good or not. All the information that can affect the output of pixels
-// should be filled in. Eg: operating system, graphics card, processor
-// architecture, screen resolution, etc.
-bool FillInTestEnvironment(const base::FilePath& keys_file) {
+void FillInSystemEnvironment(base::Value::DictStorage& ds) {
   std::string processor = "unknown";
 #if defined(ARCH_CPU_X86)
   processor = "x86";
@@ -86,10 +85,27 @@ bool FillInTestEnvironment(const base::FilePath& keys_file) {
   LOG(WARNING) << "Unknown Processor.";
 #endif
 
-  base::Value::DictStorage ds;
   ds["system"] =
       std::make_unique<base::Value>(SkiaGoldPixelDiff::GetPlatform());
   ds["processor"] = std::make_unique<base::Value>(processor);
+}
+
+// TODO(crbug.com/1081962) Support grace period.
+// Set ignore to true. When the test fails, Skia Gold will not make
+// comment on Gerrit.
+void FillInGracePeriod(base::Value::DictStorage& ds) {
+  ds["ignore"] = std::make_unique<base::Value>("1");
+}
+
+// Fill in test environment to the keys_file. The format is json.
+// We need the system information to determine whether a new screenshot
+// is good or not. All the information that can affect the output of pixels
+// should be filled in. Eg: operating system, graphics card, processor
+// architecture, screen resolution, etc.
+bool FillInTestEnvironment(const base::FilePath& keys_file) {
+  base::Value::DictStorage ds;
+  FillInSystemEnvironment(ds);
+  FillInGracePeriod(ds);
   base::Value root(std::move(ds));
   std::string content;
   base::JSONWriter::Write(root, &content);
@@ -175,6 +191,7 @@ void SkiaGoldPixelDiff::InitSkiaGold() {
     cmd.AppendSwitchASCII("crs", "gerrit");
     cmd.AppendSwitchASCII("cis", "buildbucket");
   }
+
   AppendArgsJustAfterProgram(
       cmd, {FILE_PATH_LITERAL("imgtest"), FILE_PATH_LITERAL("init")});
   cmd_str = cmd.GetCommandLineString();
@@ -215,7 +232,8 @@ void SkiaGoldPixelDiff::Init(const std::string& screenshot_prefix) {
 
 bool SkiaGoldPixelDiff::UploadToSkiaGoldServer(
     const base::FilePath& local_file_path,
-    const std::string& remote_golden_image_name) const {
+    const std::string& remote_golden_image_name,
+    const SkiaGoldMatchingAlgorithm* algorithm) const {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           kBypassSkiaGoldFunctionality)) {
     LOG(WARNING) << "Bypassing Skia Gold comparison due to "
@@ -229,6 +247,10 @@ bool SkiaGoldPixelDiff::UploadToSkiaGoldServer(
   cmd.AppendSwitchASCII("add-test-key", "source_type:gtest-pixeltests");
   cmd.AppendSwitchPath("png-file", local_file_path);
   cmd.AppendSwitchPath("work-dir", working_dir_);
+
+  if (algorithm)
+    algorithm->AppendAlgorithmToCmdline(cmd);
+
   AppendArgsJustAfterProgram(
       cmd, {FILE_PATH_LITERAL("imgtest"), FILE_PATH_LITERAL("add")});
   base::CommandLine::StringType cmd_str = cmd.GetCommandLineString();
@@ -237,8 +259,10 @@ bool SkiaGoldPixelDiff::UploadToSkiaGoldServer(
   return exit_code == 0;
 }
 
-bool SkiaGoldPixelDiff::CompareScreenshot(const std::string& screenshot_name,
-                                          const SkBitmap& bitmap) const {
+bool SkiaGoldPixelDiff::CompareScreenshot(
+    const std::string& screenshot_name,
+    const SkBitmap& bitmap,
+    const SkiaGoldMatchingAlgorithm* algorithm) const {
   DCHECK(Initialized()) << "Initialize the class before using this method.";
   std::vector<unsigned char> output;
   bool ret = gfx::PNGCodec::EncodeBGRASkBitmap(bitmap, true, &output);
@@ -267,5 +291,8 @@ bool SkiaGoldPixelDiff::CompareScreenshot(const std::string& screenshot_name,
                << ". Return code: " << ret_code;
     return false;
   }
-  return UploadToSkiaGoldServer(temporary_path, name);
+  return UploadToSkiaGoldServer(temporary_path, name, algorithm);
 }
+
+}  // namespace test
+}  // namespace ui

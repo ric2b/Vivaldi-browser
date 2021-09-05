@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "chrome/browser/chromeos/local_search_service/index.h"
+#include "chrome/browser/chromeos/local_search_service/linear_map_search.h"
 
 namespace local_search_service {
 
@@ -14,11 +14,23 @@ LocalSearchService::LocalSearchService() = default;
 
 LocalSearchService::~LocalSearchService() = default;
 
-Index* LocalSearchService::GetIndex(local_search_service::IndexId index_id) {
+Index* LocalSearchService::GetIndex(IndexId index_id, Backend backend) {
   auto it = indices_.find(index_id);
-  if (it == indices_.end())
-    it = indices_.emplace(index_id, std::make_unique<Index>()).first;
-
+  if (it == indices_.end()) {
+    // TODO(jiameng): allow inverted index in the next cl.
+    DCHECK_EQ(backend, Backend::kLinearMap);
+    switch (backend) {
+      case Backend::kLinearMap:
+        it = indices_
+                 .emplace(index_id, std::make_unique<LinearMapSearch>(index_id))
+                 .first;
+        break;
+      default:
+        it = indices_
+                 .emplace(index_id, std::make_unique<LinearMapSearch>(index_id))
+                 .first;
+    }
+  }
   DCHECK(it != indices_.end());
   DCHECK(it->second);
 

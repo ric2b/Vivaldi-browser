@@ -154,6 +154,28 @@ Path QuadToPath(const FloatQuad& quad) {
   return quad_path;
 }
 
+Path RowQuadToPath(const FloatQuad& quad, bool drawEndLine) {
+  Path quad_path;
+  quad_path.MoveTo(quad.P1());
+  quad_path.AddLineTo(quad.P2());
+  if (drawEndLine) {
+    quad_path.MoveTo(quad.P3());
+    quad_path.AddLineTo(quad.P4());
+  }
+  return quad_path;
+}
+
+Path ColumnQuadToPath(const FloatQuad& quad, bool drawEndLine) {
+  Path quad_path;
+  quad_path.MoveTo(quad.P1());
+  quad_path.AddLineTo(quad.P4());
+  if (drawEndLine) {
+    quad_path.MoveTo(quad.P3());
+    quad_path.AddLineTo(quad.P2());
+  }
+  return quad_path;
+}
+
 FloatPoint FramePointToViewport(const LocalFrameView* view,
                                 FloatPoint point_in_frame) {
   FloatPoint point_in_root_frame = view->ConvertToRootFrame(point_in_frame);
@@ -309,11 +331,11 @@ std::unique_ptr<protocol::DictionaryValue> BuildElementInfo(Element* element) {
   element_info->setString("nodeWidth", String::Number(bounding_box->width()));
   element_info->setString("nodeHeight", String::Number(bounding_box->height()));
 
-  element_info->setBoolean("showAccessibilityInfo", true);
   element_info->setBoolean("isKeyboardFocusable",
                            element->IsKeyboardFocusable());
   element_info->setString("accessibleName", element->computedName());
   element_info->setString("accessibleRole", element->computedRole());
+
   return element_info;
 }
 
@@ -340,6 +362,10 @@ std::unique_ptr<protocol::DictionaryValue> BuildGridHighlightConfigInfo(
   grid_config_info->setBoolean("cellBorderDash", grid_config.cell_border_dash);
   grid_config_info->setBoolean("showGridExtensionLines",
                                grid_config.show_grid_extension_lines);
+  grid_config_info->setBoolean("showPositiveLineNumbers",
+                               grid_config.show_positive_line_numbers);
+  grid_config_info->setBoolean("showNegativeLineNumbers",
+                               grid_config.show_negative_line_numbers);
 
   if (grid_config.grid_color != Color::kTransparent) {
     grid_config_info->setString("gridBorderColor",
@@ -366,6 +392,73 @@ std::unique_ptr<protocol::DictionaryValue> BuildGridHighlightConfigInfo(
                                 grid_config.column_hatch_color.Serialized());
   }
   return grid_config_info;
+}
+
+std::unique_ptr<protocol::ListValue> BuildGridPositiveLineNumberOffsets(
+    LayoutGrid* layout_grid,
+    const Vector<LayoutUnit>& trackPositions,
+    const LayoutUnit& grid_gap,
+    GridTrackSizingDirection direction,
+    float scale) {
+  std::unique_ptr<protocol::ListValue> number_offsets =
+      protocol::ListValue::create();
+
+  // Find index of the first explicit Grid Line.
+  size_t firstExplicitIndex =
+      layout_grid->ExplicitGridStartForDirection(direction);
+
+  LayoutUnit firstOffset = trackPositions.front();
+
+  // Go line by line, calculating the offset to fall in the middel of gaps
+  // if needed.
+  for (size_t i = firstExplicitIndex; i < trackPositions.size(); ++i) {
+    float gapOffset = grid_gap / 2;
+    // No need for a gap offset if there is no gap, or the first line is
+    // explicit, or this is the last line.
+    if (grid_gap == 0 || i == 0 || i == trackPositions.size() - 1) {
+      gapOffset = 0;
+    }
+
+    number_offsets->pushValue(protocol::FundamentalValue::create(
+        (trackPositions.at(i) - gapOffset - firstOffset) * scale));
+  }
+
+  return number_offsets;
+}
+
+std::unique_ptr<protocol::ListValue> BuildGridNegativeLineNumberOffsets(
+    LayoutGrid* layout_grid,
+    const Vector<LayoutUnit>& trackPositions,
+    const LayoutUnit& grid_gap,
+    GridTrackSizingDirection direction,
+    float scale) {
+  std::unique_ptr<protocol::ListValue> number_offsets =
+      protocol::ListValue::create();
+
+  // This is the number of tracks from the start of the grid, to the end of the
+  // explicit grid (including any leading implicit tracks).
+  size_t explicit_grid_end_track_count =
+      layout_grid->ExplicitGridEndForDirection(direction);
+
+  LayoutUnit firstOffset = trackPositions.front();
+
+  // Always start negative numbers at the first line.
+  number_offsets->pushValue(protocol::FundamentalValue::create(0));
+
+  // Then go line by line, calculating the offset to fall in the middle of gaps
+  // if needed.
+  for (size_t i = 1; i <= explicit_grid_end_track_count; i++) {
+    float gapOffset = grid_gap / 2;
+    if (grid_gap == 0 || (i == explicit_grid_end_track_count &&
+                          i == trackPositions.size() - 1)) {
+      gapOffset = 0;
+    }
+
+    number_offsets->pushValue(protocol::FundamentalValue::create(
+        (trackPositions.at(i) - gapOffset - firstOffset) * scale));
+  }
+
+  return number_offsets;
 }
 
 std::unique_ptr<protocol::DictionaryValue> BuildGridInfo(
@@ -398,7 +491,8 @@ std::unique_ptr<protocol::DictionaryValue> BuildGridInfo(
     PhysicalRect row(position, size);
     FloatQuad row_quad = layout_grid->LocalRectToAbsoluteQuad(row);
     FrameQuadToViewport(containing_view, row_quad);
-    row_builder.AppendPath(QuadToPath(row_quad), scale);
+    row_builder.AppendPath(
+        RowQuadToPath(row_quad, i == rows.size() - 1 || row_gap > 0), scale);
     // Row Gaps
     if (i != rows.size() - 1) {
       PhysicalOffset gap_position(row_left, rows.at(i) - row_gap);
@@ -424,7 +518,10 @@ std::unique_ptr<protocol::DictionaryValue> BuildGridInfo(
     PhysicalRect column(position, size);
     FloatQuad column_quad = layout_grid->LocalRectToAbsoluteQuad(column);
     FrameQuadToViewport(containing_view, column_quad);
-    column_builder.AppendPath(QuadToPath(column_quad), scale);
+    column_builder.AppendPath(
+        ColumnQuadToPath(column_quad,
+                         i == columns.size() - 1 || column_gap > 0),
+        scale);
     // Column Gaps
     if (i != columns.size() - 1) {
       PhysicalOffset gap_position(columns.at(i) - column_gap, column_top);
@@ -437,6 +534,30 @@ std::unique_ptr<protocol::DictionaryValue> BuildGridInfo(
   }
   grid_info->setValue("columns", column_builder.Release());
   grid_info->setValue("columnGaps", column_gap_builder.Release());
+
+  // Positive Row and column Line offsets
+  if (highlight_config.grid_highlight_config &&
+      highlight_config.grid_highlight_config->show_positive_line_numbers) {
+    grid_info->setValue("positiveRowLineNumberOffsets",
+                        BuildGridPositiveLineNumberOffsets(
+                            layout_grid, rows, row_gap, kForRows, scale));
+    grid_info->setValue(
+        "positiveColumnLineNumberOffsets",
+        BuildGridPositiveLineNumberOffsets(layout_grid, columns, column_gap,
+                                           kForColumns, scale));
+  }
+
+  // Negative Row and column Line offsets
+  if (highlight_config.grid_highlight_config &&
+      highlight_config.grid_highlight_config->show_negative_line_numbers) {
+    grid_info->setValue("negativeRowLineNumberOffsets",
+                        BuildGridNegativeLineNumberOffsets(
+                            layout_grid, rows, row_gap, kForRows, scale));
+    grid_info->setValue(
+        "negativeColumnLineNumberOffsets",
+        BuildGridNegativeLineNumberOffsets(layout_grid, columns, column_gap,
+                                           kForColumns, scale));
+  }
 
   // Grid border
   PathBuilder grid_border_builder;
@@ -532,19 +653,23 @@ InspectorHighlightConfig::InspectorHighlightConfig()
       show_styles(false),
       show_rulers(false),
       show_extension_lines(false),
+      show_accessibility_info(true),
       color_format(ColorFormat::HEX) {}
 
 InspectorHighlight::InspectorHighlight(float scale)
     : highlight_paths_(protocol::ListValue::create()),
       show_rulers_(false),
       show_extension_lines_(false),
+      show_accessibility_info_(true),
       scale_(scale),
       color_format_(ColorFormat::HEX) {}
 
 InspectorGridHighlightConfig::InspectorGridHighlightConfig()
     : show_grid_extension_lines(false),
       grid_border_dash(false),
-      cell_border_dash(false) {}
+      cell_border_dash(false),
+      show_positive_line_numbers(false),
+      show_negative_line_numbers(false) {}
 
 InspectorHighlight::InspectorHighlight(
     Node* node,
@@ -556,6 +681,7 @@ InspectorHighlight::InspectorHighlight(
     : highlight_paths_(protocol::ListValue::create()),
       show_rulers_(highlight_config.show_rulers),
       show_extension_lines_(highlight_config.show_extension_lines),
+      show_accessibility_info_(highlight_config.show_accessibility_info),
       scale_(1.f),
       color_format_(highlight_config.color_format) {
   DCHECK(!DisplayLockUtilities::NearestLockedExclusiveAncestor(*node));
@@ -577,6 +703,10 @@ InspectorHighlight::InspectorHighlight(
 
   if (element_info_ && is_locked_ancestor)
     element_info_->setString("isLockedAncestor", "true");
+  if (element_info_) {
+    element_info_->setBoolean("showAccessibilityInfo",
+                              show_accessibility_info_);
+  }
   if (append_distance_info)
     AppendDistanceInfo(node);
 }
@@ -770,14 +900,6 @@ void InspectorHighlight::AppendNodeHighlight(
                                         ToLayoutGrid(layout_object),
                                         highlight_config, scale_, true));
   }
-  LayoutObject* parent = layout_object->Parent();
-  if (!parent || !parent->IsLayoutGrid())
-    return;
-  if (!BuildNodeQuads(parent->GetNode(), &content, &padding, &border, &margin))
-    return;
-  grid_info_->pushValue(BuildGridInfo(node->GetDocument().View(),
-                                      ToLayoutGrid(parent), highlight_config,
-                                      scale_, false));
 }
 
 std::unique_ptr<protocol::DictionaryValue> InspectorHighlight::AsProtocolValue()
@@ -787,6 +909,7 @@ std::unique_ptr<protocol::DictionaryValue> InspectorHighlight::AsProtocolValue()
   object->setValue("paths", highlight_paths_->clone());
   object->setBoolean("showRulers", show_rulers_);
   object->setBoolean("showExtensionLines", show_extension_lines_);
+  object->setBoolean("showAccessibilityInfo", show_accessibility_info_);
   switch (color_format_) {
     case ColorFormat::RGB:
       object->setString("colorFormat", "rgb");
@@ -1067,6 +1190,8 @@ InspectorGridHighlightConfig InspectorHighlight::DefaultGridConfig() {
   config.row_hatch_color = Color(255, 255, 255, 0);
   config.column_hatch_color = Color(128, 128, 128, 0);
   config.show_grid_extension_lines = true;
+  config.show_positive_line_numbers = true;
+  config.show_negative_line_numbers = true;
   config.grid_border_dash = false;
   config.cell_border_dash = true;
   return config;

@@ -34,22 +34,37 @@ class AlignedDataHelper;
 // Video encoder client configuration.
 // TODO(dstaessens): Add extra parameters (e.g. h264 output level)
 struct VideoEncoderClientConfig {
+  VideoEncoderClientConfig();
   // The output output profile to be used.
   VideoCodecProfile output_profile = VideoCodecProfile::H264PROFILE_MAIN;
   // The maximum number of bitstream buffer encodes that can be requested
   // without waiting for the result of the previous encodes requests.
   size_t max_outstanding_encode_requests = 1;
   // The desired bitrate in bits/second.
-  uint32_t bitrate = 64000;
+  uint32_t bitrate = 200000;
   // The desired framerate in frames/second.
   uint32_t framerate = 30.0;
+  // The number of frames to be encoded. This can be more than the number of
+  // frames in the video, and in which case the VideoEncoderClient loops the
+  // video during encoding.
+  size_t num_frames_to_encode = 0;
+};
+
+struct VideoEncoderStats {
+  explicit VideoEncoderStats(uint32_t framerate = 1u);
+  uint32_t Bitrate() const;
+  void Reset();
+
+  uint32_t framerate = 0;
+  size_t num_encoded_frames = 0;
+  size_t total_encoded_frames_size = 0;
 };
 
 // The video encoder client is responsible for the communication between the
 // test video encoder and the video encoder. It also communicates with the
-// attached bitstream processors. The video encoder client can only have one
-// active encoder at any time. To encode a different stream the Destroy() and
-// Initialize() functions have to be called to destroy and re-create the
+// attached decoder buffer processors. The video encoder client can only have
+// one active encoder at any time. To encode a different stream the Destroy()
+// and Initialize() functions have to be called to destroy and re-create the
 // encoder.
 //
 // All communication with the encoder is done on the |encoder_client_thread_|,
@@ -87,9 +102,16 @@ class VideoEncoderClient : public VideoEncodeAccelerator::Client {
   // event is always sent after all associated kFrameEncoded events.
   void Flush();
 
+  // Updates bitrate based on the specified |bitrate| and |framerate|.
+  void UpdateBitrate(const VideoBitrateAllocation& bitrate, uint32_t framerate);
+
   // Wait until all bitstream processors have finished processing. Returns
   // whether processing was successful.
   bool WaitForBitstreamProcessors();
+
+  // Get/Reset video encode statistics.
+  VideoEncoderStats GetStats() const;
+  void ResetStats();
 
   // VideoEncodeAccelerator::Client implementation
   void RequireBitstreamBuffers(unsigned int input_count,
@@ -130,6 +152,8 @@ class VideoEncoderClient : public VideoEncodeAccelerator::Client {
   void EncodeNextFrameTask();
   // Instruct the encoder to perform a flush on the |encoder_client_thread_|.
   void FlushTask();
+  void UpdateBitrateTask(const VideoBitrateAllocation& bitrate,
+                         uint32_t framerate);
 
   // Called by the encoder when a frame has been encoded.
   void EncodeDoneTask(base::TimeDelta timestamp);
@@ -139,13 +163,23 @@ class VideoEncoderClient : public VideoEncodeAccelerator::Client {
   // Fire the specified event.
   void FireEvent(VideoEncoder::EncoderEvent event);
 
+  // Create BitstreamRef from |buffer| and |metadata| passed to
+  // |bitstream_processors_|.
+  scoped_refptr<BitstreamProcessor::BitstreamRef> CreateBitstreamRef(
+      int32_t bitstream_buffer_id,
+      const BitstreamBufferMetadata& metadata);
+
+  // Invoked when BitstreamBuffer associated with |bitstream_buffer_id| can be
+  // reused by |encoder_|.
+  void BitstreamBufferProcessed(int32_t bitstream_buffer_id);
+
   // Get the next bitstream buffer id to be used.
   int32_t GetNextBitstreamBufferId();
 
   // The callback used to notify the test video encoder of events.
   VideoEncoder::EventCallback event_cb_;
-  // The list of bitstream processors. All decoded bitstream buffers will be
-  // forwarded to the bitstream processors (e.g. verification of contents).
+  // The list of bitstream processors. All bitstream buffers will be forwarded
+  // to the bitstream processors (e.g. verification of contents).
   std::vector<std::unique_ptr<BitstreamProcessor>> bitstream_processors_;
 
   // The currently active video encode accelerator.
@@ -174,6 +208,16 @@ class VideoEncoderClient : public VideoEncodeAccelerator::Client {
 
   // Id to be used for the the next bitstream buffer.
   int32_t next_bitstream_buffer_id_ = 0;
+
+  // A counter to how many VideoEncodeAccelerator::Encode() is called.
+  size_t num_encodes_requested_ = 0;
+
+  // A counter to track what frame is represented by a bitstream returned on
+  // BitstreamBufferReady().
+  size_t frame_index_ = 0;
+
+  VideoEncoderStats current_stats_ GUARDED_BY(stats_lock_);
+  mutable base::Lock stats_lock_;
 
   SEQUENCE_CHECKER(test_sequence_checker_);
   SEQUENCE_CHECKER(encoder_client_sequence_checker_);

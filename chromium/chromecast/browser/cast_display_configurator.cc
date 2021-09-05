@@ -30,7 +30,6 @@ namespace {
 constexpr int64_t kStubDisplayId = 1;
 constexpr char kCastGraphicsHeight[] = "cast-graphics-height";
 constexpr char kCastGraphicsWidth[] = "cast-graphics-width";
-constexpr char kDisplayRotation[] = "display-rotation";
 
 gfx::Size GetDefaultScreenResolution() {
 #if BUILDFLAG(IS_CAST_AUDIO_ONLY)
@@ -64,18 +63,18 @@ gfx::Size GetScreenResolution() {
   return GetDefaultScreenResolution();
 }
 
-display::Display::Rotation GetRotationFromCommandLine() {
-  std::string rotation =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueNative(
-          kDisplayRotation);
-  if (rotation == "90")
-    return display::Display::ROTATE_90;
-  else if (rotation == "180")
-    return display::Display::ROTATE_180;
-  else if (rotation == "270")
-    return display::Display::ROTATE_270;
-  else
-    return display::Display::ROTATE_0;
+display::Display::Rotation RotationFromPanelOrientation(
+    display::PanelOrientation orientation) {
+  switch (orientation) {
+    case display::kNormal:
+      return display::Display::ROTATE_0;
+    case display::kRightUp:
+      return display::Display::ROTATE_90;
+    case display::kBottomUp:
+      return display::Display::ROTATE_180;
+    case display::kLeftUp:
+      return display::Display::ROTATE_270;
+  }
 }
 
 gfx::Rect GetScreenBounds(const gfx::Size& size_in_pixels,
@@ -131,7 +130,7 @@ void CastDisplayConfigurator::OnConfigurationChanged() {
 void CastDisplayConfigurator::ConfigureDisplayFromCommandLine() {
   const gfx::Size size = GetScreenResolution();
   UpdateScreen(kStubDisplayId, gfx::Rect(size), GetDeviceScaleFactor(size),
-               GetRotationFromCommandLine());
+               display::Display::ROTATE_0);
 }
 
 void CastDisplayConfigurator::SetColorMatrix(
@@ -187,7 +186,7 @@ void CastDisplayConfigurator::OnDisplaysAcquired(
     // during the first queries to display::Screen.
     UpdateScreen(display_->display_id(), gfx::Rect(origin, native_size),
                  GetDeviceScaleFactor(native_size),
-                 GetRotationFromCommandLine());
+                 RotationFromPanelOrientation(display_->panel_orientation()));
   }
 
   delegate_->Configure(
@@ -216,7 +215,7 @@ void CastDisplayConfigurator::OnDisplayConfigured(
 
     UpdateScreen(display_->display_id(), bounds,
                  GetDeviceScaleFactor(display->native_mode()->size()),
-                 GetRotationFromCommandLine());
+                 RotationFromPanelOrientation(display_->panel_orientation()));
   } else {
     LOG(FATAL) << "Failed to configure display";
   }

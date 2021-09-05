@@ -106,8 +106,11 @@ absl_cc_library(
     "dynamic_annotations.h"
   SRCS
     "dynamic_annotations.cc"
+    "internal/dynamic_annotations.h"
   COPTS
     ${ABSL_DEFAULT_COPTS}
+  DEPS
+    absl::config
   PUBLIC
 )
 
@@ -696,5 +699,18 @@ absl_cc_test(
     ${ABSL_TEST_COPTS}
   DEPS
     absl::fast_type_id
+    gtest_main
+)
+
+absl_cc_test(
+  NAME
+    optimization_test
+  SRCS
+    "optimization_test.cc"
+  COPTS
+    ${ABSL_TEST_COPTS}
+  DEPS
+    absl::core_headers
+    absl::optional
     gtest_main
 )

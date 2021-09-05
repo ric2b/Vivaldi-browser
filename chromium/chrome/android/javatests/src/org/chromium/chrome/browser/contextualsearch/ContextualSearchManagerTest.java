@@ -21,8 +21,6 @@ import android.graphics.Point;
 import android.os.Build;
 import android.os.SystemClock;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.LargeTest;
-import android.support.test.filters.SmallTest;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
@@ -30,6 +28,8 @@ import android.view.ViewConfiguration;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
+import androidx.test.filters.LargeTest;
+import androidx.test.filters.SmallTest;
 
 import com.google.common.collect.ImmutableMap;
 
@@ -56,7 +56,7 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
+import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -115,6 +115,10 @@ import org.chromium.ui.touch_selection.SelectionEventType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeoutException;
 
@@ -136,7 +140,6 @@ import java.util.concurrent.TimeoutException;
         "disable-features=" + ChromeFeatureList.CONTEXTUAL_SEARCH_ML_TAP_SUPPRESSION + ","
                 + ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO})
 @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-@RetryOnFailure
 public class ContextualSearchManagerTest {
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
@@ -1243,6 +1246,42 @@ public class ContextualSearchManagerTest {
         }
     }
 
+    /**
+     * Monitor user action UMA recording operations.
+     */
+    private static class UserActionMonitor extends UserActionTester {
+        // TODO(donnd): merge into UserActionTester. See https://crbug.com/1103757.
+        private Set<String> mUserActionPrefixes;
+        private Map<String, Integer> mUserActionCounts;
+
+        /** @param userActionPrefixes A set of plain prefix strings for user actions to monitor. */
+        UserActionMonitor(Set<String> userActionPrefixes) {
+            mUserActionPrefixes = userActionPrefixes;
+            mUserActionCounts = new HashMap<String, Integer>();
+            for (String action : mUserActionPrefixes) {
+                mUserActionCounts.put(action, 0);
+            }
+        }
+
+        @Override
+        public void onActionRecorded(String action) {
+            for (String entry : mUserActionPrefixes) {
+                if (action.startsWith(entry)) {
+                    mUserActionCounts.put(entry, mUserActionCounts.get(entry) + 1);
+                }
+            }
+        }
+
+        /**
+         * Gets the count of user actions recorded for the given prefix.
+         * @param actionPrefix The plain string prefix to lookup (must match a constructed entry)
+         * @return The count of user actions recorded for that prefix.
+         */
+        int get(String actionPrefix) {
+            return mUserActionCounts.get(actionPrefix);
+        }
+    }
+
     //============================================================================================
     // Test Cases
     //============================================================================================
@@ -1304,10 +1343,19 @@ public class ContextualSearchManagerTest {
         Assert.assertFalse(mSelectionController.isValidSelection("editable", c));
         c.setIsFocusedNodeEditableForTest(false);
         String numberString = "0123456789";
-        StringBuilder longStringBuilder = new StringBuilder();
-        for (int i = 0; i < 11; i++) longStringBuilder.append(numberString);
         Assert.assertTrue(mSelectionController.isValidSelection(numberString, c));
-        Assert.assertFalse(mSelectionController.isValidSelection(longStringBuilder.toString(), c));
+        StringBuilder longStringBuilder = new StringBuilder().append(numberString);
+        for (int i = 0; i < 10; i++) {
+            longStringBuilder.append(longStringBuilder.toString());
+            if (longStringBuilder.toString().length() < 1000) {
+                Assert.assertTrue(
+                        mSelectionController.isValidSelection(longStringBuilder.toString(), c));
+            } else {
+                Assert.assertFalse(
+                        mSelectionController.isValidSelection(longStringBuilder.toString(), c));
+                break;
+            }
+        }
     }
 
     /**
@@ -2406,7 +2454,8 @@ public class ContextualSearchManagerTest {
                 "intent://test/#Intent;scheme=test;package=com.chrome.test;end", "",
                 false /* isPost */, true /* hasUserGesture */, PageTransition.LINK,
                 false /* isRedirect */, true /* isExternalProtocol */, true /* isMainFrame */,
-                true /* isRendererInitiated */, false /* hasUserGestureCarryover */);
+                true /* isRendererInitiated */, false /* hasUserGestureCarryover */,
+                null /* initiatorOrigin */);
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
@@ -2434,12 +2483,14 @@ public class ContextualSearchManagerTest {
         final NavigationParams initialNavigationParams = new NavigationParams("http://test.com", "",
                 false /* isPost */, true /* hasUserGesture */, PageTransition.LINK,
                 false /* isRedirect */, false /* isExternalProtocol */, true /* isMainFrame */,
-                true /* isRendererInitiated */, false /* hasUserGestureCarryover */);
+                true /* isRendererInitiated */, false /* hasUserGestureCarryover */,
+                null /* initiatorOrigin */);
         final NavigationParams redirectedNavigationParams = new NavigationParams(
                 "intent://test/#Intent;scheme=test;package=com.chrome.test;end", "",
                 false /* isPost */, false /* hasUserGesture */, PageTransition.LINK,
                 true /* isRedirect */, true /* isExternalProtocol */, true /* isMainFrame */,
-                true /* isRendererInitiated */, false /* hasUserGestureCarryover */);
+                true /* isRendererInitiated */, false /* hasUserGestureCarryover */,
+                null /* initiatorOrigin */);
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
@@ -2470,7 +2521,8 @@ public class ContextualSearchManagerTest {
                 "intent://test/#Intent;scheme=test;package=com.chrome.test;end", "",
                 false /* isPost */, false /* hasUserGesture */, PageTransition.LINK,
                 false /* isRedirect */, true /* isExternalProtocol */, true /* isMainFrame */,
-                true /* isRendererInitiated */, false /* hasUserGestureCarryover */);
+                true /* isRendererInitiated */, false /* hasUserGestureCarryover */,
+                null /* initiatorOrigin */);
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
@@ -2847,10 +2899,11 @@ public class ContextualSearchManagerTest {
      * Tests that a simple Tap with language determination triggers translation.
      */
     @Test
+    @FlakyTest(message = "https://crbug.com/1105488")
     @SmallTest
     @Feature({"ContextualSearch"})
     @ParameterAnnotations.UseMethodParameter(FeatureParamProvider.class)
-    public void testTapWithLanguage(@EnabledFeature int enabledFeature) throws Exception {
+    public void testTapWithLanguageDLD(@EnabledFeature int enabledFeature) throws Exception {
         // Resolving a German word should trigger translation.
         simulateResolveSearch("german");
 
@@ -2858,6 +2911,9 @@ public class ContextualSearchManagerTest {
         Assert.assertTrue("Translation was not forced with the current request URL: "
                         + mManager.getRequest().getSearchUrl(),
                 mManager.getRequest().isTranslationForced());
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "Search.ContextualSearch.TranslationNeeded"));
     }
 
     /**
@@ -3523,8 +3579,14 @@ public class ContextualSearchManagerTest {
     @DisableIf.Build(sdk_is_less_than = Build.VERSION_CODES.P,
             message = "Flaky < P, https://crbug.com/1048827")
     public void
-    testLongpressExtendingSelectionExactResolve() throws Exception {
+    testLongpressExtendingSelectionExactResolveDLD() throws Exception {
         FeatureList.setTestFeatures(ENABLE_LONGPRESS);
+
+        // Set up UserAction monitoring.
+        Set<String> userActions = new HashSet();
+        userActions.add("ContextualSearch.SelectionEstablished");
+        userActions.add("ContextualSearch.ManualRefine");
+        UserActionMonitor userActionMonitor = new UserActionMonitor(userActions);
 
         // First test regular long-press.  It should not require an exact resolve.
         longPressNode("search");
@@ -3541,6 +3603,10 @@ public class ContextualSearchManagerTest {
         fakeAResponse();
         assertSearchTermRequested();
         assertExactResolve(true);
+
+        // Check UMA metrics recorded.
+        Assert.assertEquals(2, userActionMonitor.get("ContextualSearch.ManualRefine"));
+        Assert.assertEquals(2, userActionMonitor.get("ContextualSearch.SelectionEstablished"));
     }
 
     @Test

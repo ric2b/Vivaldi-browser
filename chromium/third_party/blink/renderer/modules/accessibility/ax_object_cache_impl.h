@@ -32,6 +32,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "third_party/blink/public/mojom/permissions/permission.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom-blink-forward.h"
@@ -67,7 +68,7 @@ class MODULES_EXPORT AXObjectCacheImpl
 
   explicit AXObjectCacheImpl(Document&);
   ~AXObjectCacheImpl() override;
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   Document& GetDocument() { return *document_; }
   AXObject* FocusedObject();
@@ -109,7 +110,7 @@ class MODULES_EXPORT AXObjectCacheImpl
   // Called by a node when text or a text equivalent (e.g. alt) attribute is
   // changed.
   void TextChanged(LayoutObject*) override;
-  void TextChanged(AXObject*, Node* optional_node = nullptr);
+  void TextChangedWithCleanLayout(Node* optional_node, AXObject*);
   void FocusableChangedWithCleanLayout(Element* element);
   void DocumentTitleChanged() override;
   // Called when a node has just been attached, so we can make sure we have the
@@ -186,7 +187,8 @@ class MODULES_EXPORT AXObjectCacheImpl
 
   void Remove(AXID);
 
-  void ChildrenChanged(AXObject*, Node* node_for_relation_update = nullptr);
+  void ChildrenChangedWithCleanLayout(Node* optional_node_for_relation_update,
+                                      AXObject*);
 
   void MaybeNewRelationTarget(Node* node, AXObject* obj);
 
@@ -273,6 +275,8 @@ class MODULES_EXPORT AXObjectCacheImpl
     active_event_from_ = event_from;
   }
 
+  AXObject* GetActiveAriaModalDialog() const;
+
  protected:
   void PostPlatformNotification(
       AXObject* obj,
@@ -307,25 +311,30 @@ class MODULES_EXPORT AXObjectCacheImpl
     ax::mojom::blink::EventFrom event_from;
     BlinkAXEventIntentsSet event_intents;
 
-    void Trace(Visitor* visitor) { visitor->Trace(target); }
+    void Trace(Visitor* visitor) const { visitor->Trace(target); }
   };
 
   struct TreeUpdateParams final : public GarbageCollected<TreeUpdateParams> {
     TreeUpdateParams(Node* node,
+                     AXID axid,
                      ax::mojom::blink::EventFrom event_from,
                      const BlinkAXEventIntentsSet& intents,
                      base::OnceClosure callback)
-        : node(node), event_from(event_from), callback(std::move(callback)) {
+        : node(node),
+          axid(axid),
+          event_from(event_from),
+          callback(std::move(callback)) {
       for (const auto& intent : intents) {
         event_intents.insert(intent.key, intent.value);
       }
     }
     WeakMember<Node> node;
+    AXID axid;
     ax::mojom::blink::EventFrom event_from;
     BlinkAXEventIntentsSet event_intents;
     base::OnceClosure callback;
 
-    void Trace(Visitor* visitor) { visitor->Trace(node); }
+    void Trace(Visitor* visitor) const { visitor->Trace(node); }
   };
 
   ax::mojom::blink::EventFrom ComputeEventFrom();
@@ -347,6 +356,11 @@ class MODULES_EXPORT AXObjectCacheImpl
   // There can be only one of these per document with invalid form controls,
   // and it will always be related to the currently focused control.
   AXID validation_message_axid_;
+
+  // The currently active aria-modal dialog element, if one has been computed,
+  // null if otherwise. This is only ever computed on platforms that have the
+  // AriaModalPrunesAXTree setting enabled, such as Mac.
+  WeakMember<AXObject> active_aria_modal_dialog_;
 
   std::unique_ptr<AXRelationCache> relation_cache_;
 
@@ -402,11 +416,15 @@ class MODULES_EXPORT AXObjectCacheImpl
                                                          Element* element),
                        const QualifiedName& attr_name,
                        Element* element);
+  // Provide either a DOM node or AXObject. If both are provided, then they must
+  // match, meaning that the AXObject's DOM node must equal the provided node.
   void DeferTreeUpdate(void (AXObjectCacheImpl::*method)(Node*, AXObject*),
                        Node* node,
                        AXObject* obj);
 
-  void DeferTreeUpdateInternal(Node* node, base::OnceClosure callback);
+  void DeferTreeUpdateInternal(base::OnceClosure callback, Node* node);
+
+  void DeferTreeUpdateInternal(base::OnceClosure callback, AXObject* obj);
 
   void SelectionChangedWithCleanLayout(Node* node);
   void TextChangedWithCleanLayout(Node* node);
@@ -414,9 +432,22 @@ class MODULES_EXPORT AXObjectCacheImpl
   void HandleAttributeChangedWithCleanLayout(const QualifiedName& attr_name,
                                              Element* element);
 
+  //
+  // aria-modal support
+  //
+
+  // This function is only ever called on platforms where the
+  // AriaModalPrunesAXTree setting is enabled, and the accessibility tree must
+  // be manually pruned to remove background content.
+  void UpdateActiveAriaModalDialog(Node* element);
+
+  // This will return null on platforms without the AriaModalPrunesAXTree
+  // setting enabled, or where there is no active ancestral aria-modal dialog.
+  AXObject* AncestorAriaModalDialog(Node* node);
+
   void ScheduleVisualUpdate();
   void FireTreeUpdatedEventImmediately(
-      Node* node,
+      Document& document,
       ax::mojom::blink::EventFrom event_from,
       const BlinkAXEventIntentsSet& event_intents,
       base::OnceClosure callback);
@@ -424,6 +455,12 @@ class MODULES_EXPORT AXObjectCacheImpl
                               ax::mojom::blink::Event event_type,
                               ax::mojom::blink::EventFrom event_from,
                               const BlinkAXEventIntentsSet& event_intents);
+
+  void SetMaxPendingUpdatesForTesting(wtf_size_t max_pending_updates) {
+    max_pending_updates_ = max_pending_updates;
+  }
+
+  void UpdateNumTreeUpdatesQueuedBeforeLayoutHistogram();
 
   // Whether the user has granted permission for the user to install event
   // listeners for accessibility events using the AOM.
@@ -436,8 +473,17 @@ class MODULES_EXPORT AXObjectCacheImpl
 
   // The main document, plus any page popups.
   HeapHashSet<WeakMember<Document>> documents_;
+
+  // Queued callbacks.
   typedef HeapVector<Member<TreeUpdateParams>> TreeUpdateCallbackQueue;
   TreeUpdateCallbackQueue tree_update_callback_queue_;
+  HeapHashSet<WeakMember<Node>> nodes_with_pending_children_changed_;
+
+  // If tree_update_callback_queue_ gets improbably large, stop
+  // enqueueing updates and fire a single ChildrenChanged event on the
+  // document once layout occurs.
+  wtf_size_t max_pending_updates_ = 1UL << 16;
+  bool tree_updates_paused_ = false;
 
   // Maps ids to their object's autofill state.
   HashMap<AXID, WebAXAutofillState> autofill_state_map_;
@@ -450,6 +496,8 @@ class MODULES_EXPORT AXObjectCacheImpl
   BlinkAXEventIntentsSet active_event_intents_;
 
   DISALLOW_COPY_AND_ASSIGN(AXObjectCacheImpl);
+
+  FRIEND_TEST_ALL_PREFIXES(AccessibilityTest, PauseUpdatesAfterMaxNumberQueued);
 };
 
 // This is the only subclass of AXObjectCache.

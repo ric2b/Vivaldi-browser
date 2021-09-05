@@ -6,7 +6,7 @@ import './strings.m.js';
 import './most_visited.js';
 import './customize_dialog.js';
 import './voice_search_overlay.js';
-import './untrusted_iframe.js';
+import './iframe.js';
 import './fakebox.js';
 import './realbox.js';
 import './logo.js';
@@ -50,6 +50,13 @@ class AppElement extends PolymerElement {
       },
 
       /** @private */
+      oneGoogleBarModalOverlaysEnabled_: {
+        type: Boolean,
+        value: () =>
+            loadTimeData.getBoolean('oneGoogleBarModalOverlaysEnabled'),
+      },
+
+      /** @private */
       oneGoogleBarIframePath_: {
         type: String,
         value: () => {
@@ -57,12 +64,13 @@ class AppElement extends PolymerElement {
           params.set(
               'paramsencoded',
               btoa(window.location.search.replace(/^[?]/, '&')));
-          return `one-google-bar?${params}`;
+          return `chrome-untrusted://new-tab-page/one-google-bar?${params}`;
         },
       },
 
       /** @private */
       oneGoogleBarLoaded_: {
+        observer: 'oneGoogleBarLoadedChange_',
         type: Boolean,
         value: false,
       },
@@ -143,6 +151,12 @@ class AppElement extends PolymerElement {
         type: Boolean,
       },
 
+      /** @private {skia.mojom.SkColor} */
+      backgroundColor_: {
+        computed: 'computeBackgroundColor_(showBackgroundImage_, theme_)',
+        type: Object,
+      },
+
       /** @private */
       logoColor_: {
         type: String,
@@ -181,6 +195,8 @@ class AppElement extends PolymerElement {
     super();
     /** @private {!newTabPage.mojom.PageCallbackRouter} */
     this.callbackRouter_ = BrowserProxy.getInstance().callbackRouter;
+    /** @private {newTabPage.mojom.PageHandlerRemote} */
+    this.pageHandler_ = BrowserProxy.getInstance().handler;
     /** @private {!BackgroundManager} */
     this.backgroundManager_ = BackgroundManager.getInstance();
     /** @private {?number} */
@@ -223,6 +239,7 @@ class AppElement extends PolymerElement {
         }
       }
     });
+    this.eventTracker_.add(window, 'keydown', e => this.onWindowKeydown_(e));
     if (this.shouldPrintPerformance_) {
       // It is possible that the background image has already loaded by now.
       // If it has, we request it to re-send the load time so that we can
@@ -292,9 +309,8 @@ class AppElement extends PolymerElement {
       return;
     }
 
-    const {parts} =
-        await BrowserProxy.getInstance().handler.getOneGoogleBarParts(
-            window.location.search.replace(/^[?]/, '&'));
+    const {parts} = await this.pageHandler_.getOneGoogleBarParts(
+        window.location.search.replace(/^[?]/, '&'));
     if (!parts) {
       return;
     }
@@ -327,8 +343,7 @@ class AppElement extends PolymerElement {
     endOfBodyScript.appendChild(document.createTextNode(parts.endOfBodyScript));
     document.body.appendChild(endOfBodyScript);
 
-    BrowserProxy.getInstance().handler.onOneGoogleBarRendered(
-        BrowserProxy.getInstance().now());
+    this.pageHandler_.onOneGoogleBarRendered(BrowserProxy.getInstance().now());
   }
 
   /** @private */
@@ -428,8 +443,10 @@ class AppElement extends PolymerElement {
   }
 
   /** @private */
-  onVoiceSearchClick_() {
+  onOpenVoiceSearch_() {
     this.showVoiceSearchOverlay_ = true;
+    this.pageHandler_.onVoiceSearchAction(
+        newTabPage.mojom.VoiceSearchAction.ACTIVATE_SEARCH_BOX);
   }
 
   /** @private */
@@ -445,6 +462,24 @@ class AppElement extends PolymerElement {
   /** @private */
   onVoiceSearchOverlayClose_() {
     this.showVoiceSearchOverlay_ = false;
+  }
+
+  /**
+   * Handles <CTRL> + <SHIFT> + <.> (also <CMD> + <SHIFT> + <.> on mac) to open
+   * voice search.
+   * @param {KeyboardEvent} e
+   * @private
+   */
+  onWindowKeydown_(e) {
+    let ctrlKeyPressed = e.ctrlKey;
+    // <if expr="is_macosx">
+    ctrlKeyPressed = ctrlKeyPressed || e.metaKey;
+    // </if>
+    if (ctrlKeyPressed && e.code === 'Period' && e.shiftKey) {
+      this.showVoiceSearchOverlay_ = true;
+      this.pageHandler_.onVoiceSearchAction(
+          newTabPage.mojom.VoiceSearchAction.ACTIVATE_KEYBOARD);
+    }
   }
 
   /**
@@ -547,9 +582,21 @@ class AppElement extends PolymerElement {
    * @private
    */
   computeDoodleAllowed_() {
-    return !this.showBackgroundImage_ && this.theme_ &&
+    return loadTimeData.getBoolean('themeModeDoodlesEnabled') ||
+        !this.showBackgroundImage_ && this.theme_ &&
         this.theme_.type === newTabPage.mojom.ThemeType.DEFAULT &&
         !this.theme_.isDark;
+  }
+
+  /**
+   * @return {skia.mojom.SkColor}
+   * @private
+   */
+  computeBackgroundColor_() {
+    if (this.showBackgroundImage_) {
+      return null;
+    }
+    return this.theme_ && this.theme_.backgroundColor;
   }
 
   /**
@@ -589,31 +636,47 @@ class AppElement extends PolymerElement {
   /**
    * Handles messages from the OneGoogleBar iframe. The messages that are
    * handled include show bar on load and overlay updates.
+   *
    * 'overlaysUpdated' message includes the updated array of overlay rects that
    * are shown.
+   *
+   * When modal overlays are enabled, activate/deactivate controls if the
+   * OneGoogleBar is layered on top of #content with a backdrop. This would
+   * happen when OneGoogleBar has an overlay open.
    * @param {!Object} data
    * @private
    */
   handleOneGoogleBarMessage_(data) {
     if (data.messageType === 'loaded') {
+      if (!this.oneGoogleBarModalOverlaysEnabled_) {
+        const oneGoogleBar = $$(this, '#oneGoogleBar');
+        oneGoogleBar.style.clipPath = 'url(#oneGoogleBarClipPath)';
+        oneGoogleBar.style.zIndex = '1000';
+      }
       this.oneGoogleBarLoaded_ = true;
-      BrowserProxy.getInstance().handler.onOneGoogleBarRendered(
+      this.pageHandler_.onOneGoogleBarRendered(
           BrowserProxy.getInstance().now());
     } else if (data.messageType === 'overlaysUpdated') {
-      this.$.oneGoogleBarClipPath.querySelectorAll('rect:not(:first-child)')
-          .forEach(el => {
-            el.remove();
-          });
+      this.$.oneGoogleBarClipPath.querySelectorAll('rect').forEach(el => {
+        el.remove();
+      });
       const overlayRects = /** @type {!Array<!DOMRect>} */ (data.data);
       overlayRects.forEach(({x, y, width, height}) => {
         const rectElement =
             document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rectElement.setAttribute('x', x);
-        rectElement.setAttribute('y', y);
-        rectElement.setAttribute('width', width);
-        rectElement.setAttribute('height', height);
+        // Add 8px around every rect to ensure shadows are not cutoff.
+        rectElement.setAttribute('x', x - 8);
+        rectElement.setAttribute('y', y - 8);
+        rectElement.setAttribute('width', width + 16);
+        rectElement.setAttribute('height', height + 16);
         this.$.oneGoogleBarClipPath.appendChild(rectElement);
       });
+    } else if (data.messageType === 'activate') {
+      this.$.oneGoogleBarOverlayBackdrop.toggleAttribute('show', true);
+      $$(this, '#oneGoogleBar').style.zIndex = '1000';
+    } else if (data.messageType === 'deactivate') {
+      this.$.oneGoogleBarOverlayBackdrop.toggleAttribute('show', false);
+      $$(this, '#oneGoogleBar').style.zIndex = '0';
     }
   }
 
@@ -634,12 +697,62 @@ class AppElement extends PolymerElement {
       };
       this.eventTracker_.add(window, 'resize', onResize);
       onResize();
-      BrowserProxy.getInstance().handler.onPromoRendered(
-          BrowserProxy.getInstance().now());
+      this.pageHandler_.onPromoRendered(BrowserProxy.getInstance().now());
     } else if (data.messageType === 'link-clicked') {
-      BrowserProxy.getInstance().handler.onPromoLinkClicked(
-          BrowserProxy.getInstance().now());
+      this.pageHandler_.onPromoLinkClicked();
     }
+  }
+
+  /** @private */
+  oneGoogleBarLoadedChange_() {
+    if (this.oneGoogleBarLoaded_ && this.iframeOneGoogleBarEnabled_ &&
+        this.oneGoogleBarModalOverlaysEnabled_) {
+      this.setupShortcutDragDropOneGoogleBarWorkaround_();
+    }
+  }
+
+  /**
+   * During a shortcut drag, an iframe behind ntp-most-visited will prevent
+   * 'dragover' events from firing. To workaround this, 'pointer-events: none'
+   * can be set on the iframe. When doing this after the 'dragstart' event is
+   * fired is too late. We can instead set 'pointer-events: none' when the
+   * pointer enters ntp-most-visited.
+   *
+   * 'pointerenter' and pointerleave' events fire during drag. The iframe
+   * 'pointer-events' needs to be reset to the original value when 'dragend'
+   * fires if the pointer has left ntp-most-visited.
+   * @private
+   */
+  setupShortcutDragDropOneGoogleBarWorkaround_() {
+    const iframe = $$(this, '#oneGoogleBar');
+    let resetAtDragEnd = false;
+    let dragging = false;
+    let originalPointerEvents;
+    this.eventTracker_.add(this.$.mostVisited, 'pointerenter', () => {
+      if (dragging) {
+        resetAtDragEnd = false;
+        return;
+      }
+      originalPointerEvents = getComputedStyle(iframe).pointerEvents;
+      iframe.style.pointerEvents = 'none';
+    });
+    this.eventTracker_.add(this.$.mostVisited, 'pointerleave', () => {
+      if (dragging) {
+        resetAtDragEnd = true;
+        return;
+      }
+      iframe.style.pointerEvents = originalPointerEvents;
+    });
+    this.eventTracker_.add(this.$.mostVisited, 'dragstart', () => {
+      dragging = true;
+    });
+    this.eventTracker_.add(this.$.mostVisited, 'dragend', () => {
+      dragging = false;
+      if (resetAtDragEnd) {
+        resetAtDragEnd = false;
+        iframe.style.pointerEvents = originalPointerEvents;
+      }
+    });
   }
 
   /** @private */

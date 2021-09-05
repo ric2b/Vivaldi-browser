@@ -42,6 +42,9 @@ class UiDelegate {
   // Returns the current state of the controller.
   virtual AutofillAssistantState GetState() = 0;
 
+  // Returns the last navigation id that caused an error.
+  virtual int64_t GetErrorCausingNavigationId() const = 0;
+
   // Called when user interaction within the allowed touchable area was
   // detected. This should cause rerun of preconditions check.
   virtual void OnUserInteractionInsideTouchableArea() = 0;
@@ -65,8 +68,18 @@ class UiDelegate {
   // Returns the current progress; a percentage.
   virtual int GetProgress() const = 0;
 
+  // Returns the currently active progress step.
+  virtual base::Optional<int> GetProgressActiveStep() const = 0;
+
   // Returns whether the progress bar is visible.
   virtual bool GetProgressVisible() const = 0;
+
+  // Returns the current configuration of the step progress bar.
+  virtual base::Optional<ShowProgressBarProto::StepProgressBarConfiguration>
+  GetStepProgressBarConfiguration() const = 0;
+
+  // Returns whether the progress bar should show an error state.
+  virtual bool GetProgressBarErrorState() const = 0;
 
   // Returns the current set of user actions.
   virtual const std::vector<UserAction>& GetUserActions() const = 0;

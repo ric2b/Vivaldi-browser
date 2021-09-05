@@ -153,11 +153,9 @@ class CableMockBluetoothAdvertisement : public BluetoothAdvertisement {
 
   void ExpectUnregisterAndSucceed() {
     EXPECT_CALL(*this, Unregister(_, _))
-        .WillOnce(
-            ::testing::WithArg<0>(::testing::Invoke([](const auto& success_cb) {
-              base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                            success_cb);
-            })));
+        .WillOnce(::testing::WithArg<0>([](const auto& success_cb) {
+          base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, success_cb);
+        }));
   }
 
  private:
@@ -254,7 +252,7 @@ class CableMockAdapter : public MockBluetoothAdapter {
       advertisement = base::MakeRefCounted<CableMockBluetoothAdvertisement>();
       EXPECT_CALL(*advertisement, Unregister(_, _))
           .WillRepeatedly(::testing::WithArg<0>(
-              [](const auto& callback) { callback.Run(); }));
+              [](auto callback) { std::move(callback).Run(); }));
     }
 
     EXPECT_CALL(*this,

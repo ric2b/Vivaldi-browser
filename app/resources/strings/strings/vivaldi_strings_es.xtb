@@ -1,37 +1,37 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="es">
-<translation id="1089894737218087497">Instalación independiente</translation>
-<translation id="1682285232070778125">Establecer a Vivaldi como el navegador por defecto</translation>
-<translation id="1974060860693918893">Avanzada</translation>
-<translation id="2134216661302048561">El instalador de Vivaldi no ha terminado de instalar el navegador. ¿Seguro que quiere salir ahora?</translation>
+<translation id="1089894737218087497">Independiente</translation>
+<translation id="1682285232070778125">Definir Vivaldi como navegador por defecto</translation>
+<translation id="1974060860693918893">Avanzado</translation>
+<translation id="2134216661302048561">El instalador de Vivaldi no ha terminado de instalar el navegador. ¿Estás seguro de salir ahora?</translation>
 <translation id="2286454467119466181">Sencilla</translation>
-<translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Reservados todos los derechos. &lt;a&gt;Política de Privacidad&lt;/a&gt;</translation>
-<translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Reservados todos los derechos.</translation>
-<translation id="2611953850925269349">¿Quieres cerrar Vivaldi de todas formas?</translation>
-<translation id="3004507951429848293">Al pulsar el botón "Aceptar y actualizar" da su conformidad con los &lt;a&gt;Términos de Servicio&lt;/a&gt; de Vivaldi</translation>
-<translation id="335985608243443814">Explorar…</translation>
-<translation id="3485073444286678268">La carpeta de destino no es válida. Por favor, elija otra.</translation>
-<translation id="3642991949832251880">¿Cerrar Vivaldi de todos modos?</translation>
-<translation id="3784826321032465839">Instalar Vivaldi</translation>
-<translation id="3850557856045828465">Advertencia: Vivaldi no puede evitar que las extensiones registren tu historial de navegación. Para desactivar esta extensión en el modo incógnito, desmarca esta opción.</translation>
+<translation id="237789874664518125">© <ph name="YEAR" /> Vivaldi Technologies AS. Todos los derechos reservados. &lt;a&gt;Política de privacidad&lt;/a&gt;</translation>
+<translation id="2392002507524894126">© <ph name="YEAR" /> Vivaldi Technologies AS. Todos los derechos reservados.</translation>
+<translation id="2611953850925269349">¿Quieres salir de Vivaldi de todos modos?</translation>
+<translation id="3004507951429848293">Al presionar “Aceptar y actualizar” das tu conformidad con las &lt;a&gt;condiciones de servicio&lt;/a&gt; de Vivaldi</translation>
+<translation id="335985608243443814">Explorar...</translation>
+<translation id="3485073444286678268">La carpeta de destino es inválida. Por favor, elige otra.</translation>
+<translation id="3642991949832251880">¿Quieres salir de Vivaldi de todos modos?</translation>
+<translation id="3784826321032465839">Instalador de Vivaldi</translation>
+<translation id="3850557856045828465">Advertencia: Vivaldi no puede impedir que las extensiones registren tu historial de navegación. Desmarca esta opción para desactivar esta extensión en el modo de incógnito.</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4079588913451946215">Instalar para todos los usuarios</translation>
-<translation id="421958613172216971">Seleccione una carpeta</translation>
-<translation id="4234678621326711327">Instalar para un usuario</translation>
-<translation id="4322221081772213228">Al pulsar el botón "Aceptar e instalar" da su conformidad con los &lt;a&gt;Términos de Servicio&lt;/a&gt; de Vivaldi</translation>
+<translation id="4079588913451946215">Para todos los usuarios</translation>
+<translation id="421958613172216971">Selecciona una carpeta</translation>
+<translation id="4234678621326711327">Para un usuario</translation>
+<translation id="4322221081772213228">Al presionar “Aceptar e instalar” das tu conformidad con las &lt;a&gt;condiciones de servicio&lt;/a&gt; de Vivaldi</translation>
 <translation id="4380252528729894811">Carpeta de destino</translation>
 <translation id="4619978527973181021">Aceptar e instalar</translation>
 <translation id="479976146866774527">Instalando Vivaldi</translation>
-<translation id="5051728323101947360">Disponer a Vivaldi independiente como la app predeterminada</translation>
+<translation id="5051728323101947360">Permitir que Vivaldi independiente se encuentre disponible como aplicación por defecto</translation>
 <translation id="5247376421371319618">Aceptar y actualizar</translation>
-<translation id="5288672417093782294">Ir a las preferencias para las notificaciones de Vivaldi</translation>
+<translation id="5288672417093782294">Ir a los ajustes de notificaciones de Vivaldi</translation>
 <translation id="5302048478445481009">Idioma</translation>
-<translation id="5743878272102782872">Administrador de tareas de Vivaldi</translation>
-<translation id="6213772951145281007">Borrar las cookies y los datos de sitios web al salir de Vivaldi</translation>
-<translation id="6569282126279967574">¡Vaya! Vivaldi ha quebrado. ¿Quieres reiniciarlo ahora?</translation>
+<translation id="5743878272102782872">Administrador de tareas - Vivaldi</translation>
+<translation id="6213772951145281007">Eliminar las cookies y los datos de sitios al salir de Vivaldi</translation>
+<translation id="6569282126279967574">¡Vaya! Hubo un fallo en Vivaldi. ¿Quieres reiniciarlo ahora?</translation>
 <translation id="694714344624446243">Instalador de Vivaldi</translation>
 <translation id="7658239707568436148">Cancelar</translation>
-<translation id="8773751185824654197">Nota: Si  el navegador se actualiza mientras una instancia está ejecutándose, esa instancia se cerrará y al terminar volverá a relanzarse</translation>
+<translation id="8773751185824654197">Nota: Si Vivaldi se actualiza mientras se ejecuta una instancia, esta se cerrará y al terminar se reabrirá</translation>
 <translation id="933060950687965486">Tipo de instalación</translation>
 </translationbundle>

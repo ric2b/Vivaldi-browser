@@ -17,7 +17,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/win_util.h"
-#include "chrome/updater/server/win/updater_idl.h"
+#include "chrome/updater/app/server/win/updater_idl.h"
 #include "chrome/updater/util.h"
 #include "chrome/updater/win/task_scheduler.h"
 
@@ -30,19 +30,19 @@ constexpr base::char16 kTaskDescription[] = L"Update all applications.";
 
 }  // namespace
 
-bool RegisterUpdateAppsTask(const base::CommandLine& run_command) {
+bool RegisterWakeTask(const base::CommandLine& run_command) {
   auto task_scheduler = TaskScheduler::CreateInstance();
   if (!task_scheduler->RegisterTask(
           kTaskName, kTaskDescription, run_command,
           TaskScheduler::TriggerType::TRIGGER_TYPE_HOURLY, true)) {
-    LOG(ERROR) << "RegisterUpdateAppsTask failed.";
+    LOG(ERROR) << "RegisterWakeTask failed.";
     return false;
   }
-  VLOG(1) << "RegisterUpdateAppsTask succeeded.";
+  VLOG(1) << "RegisterWakeTask succeeded.";
   return true;
 }
 
-void UnregisterUpdateAppsTask() {
+void UnregisterWakeTask() {
   auto task_scheduler = TaskScheduler::CreateInstance();
   task_scheduler->DeleteTask(kTaskName);
 }

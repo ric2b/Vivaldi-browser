@@ -502,7 +502,12 @@ void RemotePlayback::AvailabilityChanged(
   if (new_availability == old_availability)
     return;
 
-  for (auto& callback : availability_callbacks_.Values())
+  // Copy the callbacks to a temporary vector to prevent iterator invalidations,
+  // in case the JS callbacks invoke watchAvailability().
+  HeapVector<Member<AvailabilityCallbackWrapper>> callbacks;
+  CopyValuesToVector(availability_callbacks_, callbacks);
+
+  for (auto& callback : callbacks)
     callback->Run(this, new_availability);
 }
 
@@ -605,7 +610,7 @@ void RemotePlayback::MaybeStartListeningForAvailability() {
   is_listening_ = true;
 }
 
-void RemotePlayback::Trace(Visitor* visitor) {
+void RemotePlayback::Trace(Visitor* visitor) const {
   visitor->Trace(availability_callbacks_);
   visitor->Trace(prompt_promise_resolver_);
   visitor->Trace(media_element_);

@@ -25,11 +25,12 @@
 #include <stddef.h>
 
 #include <iosfwd>
+#include <ostream>
 #include <string>
 #include <type_traits>
 
 #include "base/base_export.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/strings/char_traits.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece_forward.h"
@@ -148,6 +149,7 @@ template <typename STRING_TYPE> class BasicStringPiece {
  public:
   // Standard STL container boilerplate.
   typedef size_t size_type;
+  typedef typename STRING_TYPE::traits_type traits_type;
   typedef typename STRING_TYPE::value_type value_type;
   typedef const value_type* pointer;
   typedef const value_type& reference;
@@ -162,7 +164,7 @@ template <typename STRING_TYPE> class BasicStringPiece {
   // We provide non-explicit singleton constructors so users can pass
   // in a "const char*" or a "string" wherever a "StringPiece" is
   // expected (likewise for char16, string16, StringPiece16).
-  constexpr BasicStringPiece() : ptr_(NULL), length_(0) {}
+  constexpr BasicStringPiece() : ptr_(nullptr), length_(0) {}
   // TODO(crbug.com/1049498): Construction from nullptr is not allowed for
   // std::basic_string_view, so remove the special handling for it.
   // Note: This doesn't just use STRING_TYPE::traits_type::length(), since that

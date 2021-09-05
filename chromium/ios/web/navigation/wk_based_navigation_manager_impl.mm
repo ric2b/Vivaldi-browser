@@ -83,9 +83,8 @@ void WKBasedNavigationManagerImpl::OnNavigationItemCommitted() {
   DCHECK(item);
   delegate_->OnNavigationItemCommitted(item);
 
-  if (!wk_navigation_util::IsRestoreSessionUrl(item->GetURL())) {
-    RestoreVisibleItemState();
-  }
+  if (!wk_navigation_util::IsRestoreSessionUrl(item->GetURL()))
+    restored_visible_item_.reset();
 }
 
 void WKBasedNavigationManagerImpl::OnNavigationStarted(const GURL& url) {
@@ -110,6 +109,20 @@ void WKBasedNavigationManagerImpl::OnNavigationStarted(const GURL& url) {
                           restoration_timer_->Elapsed());
       restoration_timer_.reset();
     }
+
+    // Get the last committed item directly because the restoration is in
+    // progress so the item returned by the last committed item is the
+    // last_committed_web_view_item_ as the origins mistmatch.
+    int index = GetLastCommittedItemIndexInCurrentOrRestoredSession();
+    DCHECK(index != -1 || 0 == GetItemCount());
+    if (index != -1 &&
+        restored_visible_item_->GetUserAgentType() != UserAgentType::NONE) {
+      NavigationItemImpl* last_committed_item =
+          GetNavigationItemImplAtIndex(static_cast<size_t>(index));
+      last_committed_item->SetUserAgentType(
+          restored_visible_item_->GetUserAgentType());
+    }
+
     FinalizeSessionRestore();
   }
 }
@@ -134,28 +147,13 @@ void WKBasedNavigationManagerImpl::AddTransientItem(const GURL& url) {
   transient_item_->SetTimestamp(
       time_smoother_.GetSmoothedTime(base::Time::Now()));
 
-  // Transient item is only supposed to be added for pending non-app-specific
-  // navigations.
-  // TODO(crbug.com/865727): captive portal detection seems to call this code
-  // without there being a pending item. This may be an improper use of
-  // navigation manager.
-  NavigationItem* item = GetPendingItem();
-  if (!item)
-    item = GetLastCommittedItemWithUserAgentType();
-  // Item may still be null in captive portal case if chrome://newtab is the
-  // only entry in back/forward history.
-  if (item) {
-    DCHECK(item->GetUserAgentForInheritance() != UserAgentType::NONE);
-    transient_item_->SetUserAgentType(item->GetUserAgentForInheritance());
-  }
 }
 
 void WKBasedNavigationManagerImpl::AddPendingItem(
     const GURL& url,
     const web::Referrer& referrer,
     ui::PageTransition navigation_type,
-    NavigationInitiationType initiation_type,
-    UserAgentOverrideOption user_agent_override_option) {
+    NavigationInitiationType initiation_type) {
   DiscardNonCommittedItems();
 
   pending_item_index_ = -1;
@@ -166,9 +164,6 @@ void WKBasedNavigationManagerImpl::AddPendingItem(
       last_committed_item ? last_committed_item->GetURL() : GURL::EmptyGURL(),
       &transient_url_rewriters_);
   RemoveTransientURLRewriters();
-  UpdatePendingItemUserAgentType(user_agent_override_option,
-                                 GetLastCommittedItemWithUserAgentType(),
-                                 pending_item_.get());
 
   if (!next_pending_url_should_skip_serialization_.is_empty() &&
       url == next_pending_url_should_skip_serialization_) {
@@ -231,11 +226,6 @@ void WKBasedNavigationManagerImpl::AddPendingItem(
     if (!current_item) {
       current_item = pending_item_.get();
       SetNavigationItemInWKItem(current_wk_item, std::move(pending_item_));
-    }
-    if (user_agent_override_option == UserAgentOverrideOption::DESKTOP) {
-      current_item->SetUserAgentType(UserAgentType::DESKTOP);
-    } else if (user_agent_override_option == UserAgentOverrideOption::MOBILE) {
-      current_item->SetUserAgentType(UserAgentType::MOBILE);
     }
 
     pending_item_.reset();
@@ -414,7 +404,13 @@ bool WKBasedNavigationManagerImpl::ShouldBlockUrlDuringRestore(
   // Abort restore.
   DiscardNonCommittedItems();
   last_committed_item_index_ = web_view_cache_.GetCurrentItemIndex();
-  RestoreVisibleItemState();
+  if (restored_visible_item_->GetUserAgentType() != UserAgentType::NONE) {
+    NavigationItem* last_committed_item =
+        GetLastCommittedItemInCurrentOrRestoredSession();
+    last_committed_item->SetUserAgentType(
+        restored_visible_item_->GetUserAgentType());
+  }
+  restored_visible_item_.reset();
   FinalizeSessionRestore();
   return true;
 }
@@ -741,16 +737,12 @@ void WKBasedNavigationManagerImpl::UnsafeRestore(
     forward_items.push_back(std::move(items[index]));
   }
 
-  if (@available(iOS 13, *)) {
-    AddRestoreCompletionCallback(
-        base::BindOnce(&WKBasedNavigationManagerImpl::RestoreItemsState,
-                       base::Unretained(this), RestoreItemListType::kBackList,
-                       std::move(back_items)));
-    AddRestoreCompletionCallback(base::BindOnce(
-        &WKBasedNavigationManagerImpl::RestoreItemsState,
-        base::Unretained(this), RestoreItemListType::kForwardList,
-        std::move(forward_items)));
-  }
+  AddRestoreCompletionCallback(base::BindOnce(
+      &WKBasedNavigationManagerImpl::RestoreItemsState, base::Unretained(this),
+      RestoreItemListType::kBackList, std::move(back_items)));
+  AddRestoreCompletionCallback(base::BindOnce(
+      &WKBasedNavigationManagerImpl::RestoreItemsState, base::Unretained(this),
+      RestoreItemListType::kForwardList, std::move(forward_items)));
 
   LoadURLWithParams(params);
 
@@ -794,17 +786,6 @@ void WKBasedNavigationManagerImpl::RestoreItemsState(
       cached_item->RestoreStateFromItem(restore_item);
     }
   }
-}
-
-void WKBasedNavigationManagerImpl::RestoreVisibleItemState() {
-  NavigationItemImpl* last_committed_item =
-      GetLastCommittedItemInCurrentOrRestoredSession();
-  if (@available(iOS 13, *)) {
-    if (restored_visible_item_ && last_committed_item) {
-      last_committed_item->RestoreStateFromItem(restored_visible_item_.get());
-    }
-  }
-  restored_visible_item_.reset();
 }
 
 void WKBasedNavigationManagerImpl::LoadURLWithParams(
@@ -869,6 +850,7 @@ WKBasedNavigationManagerImpl::GetLastCommittedItemInCurrentOrRestoredSession()
     DCHECK_EQ(0, GetItemCount());
     return nullptr;
   }
+
   NavigationItemImpl* last_committed_item =
       GetNavigationItemImplAtIndex(static_cast<size_t>(index));
   if (last_committed_item && GetWebState() &&

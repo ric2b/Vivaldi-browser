@@ -12,15 +12,19 @@
 #include "ash/system/message_center/unified_message_center_view.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/unified/unified_system_tray.h"
+#include "base/scoped_observer.h"
 #include "base/strings/string_util.h"
 #include "base/test/icu_test_util.h"
 #include "chrome/browser/ui/ash/assistant/assistant_test_mixin.h"
+#include "chrome/browser/ui/ash/assistant/test_support/test_util.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
 #include "content/public/test/browser_test.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "ui/aura/window.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/message_center/message_center.h"
+#include "ui/message_center/message_center_observer.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/views/notification_view_md.h"
 
@@ -29,37 +33,37 @@ namespace assistant {
 
 namespace {
 
-// Please remember to set auth token when running in |kProxy| mode.
+using message_center::MessageCenter;
+using message_center::MessageCenterObserver;
+
+// Please remember to set auth token when *not* running in |kReplay| mode.
 constexpr auto kMode = FakeS3Mode::kReplay;
+
 // Update this when you introduce breaking changes to existing tests.
 constexpr int kVersion = 1;
 
-// TODO(b:153496343): Move generic helpers to a more generic location for reuse.
-// Helpers ---------------------------------------------------------------------
+// Macros ----------------------------------------------------------------------
 
-// Finds any descendents of |parent| with the desired |class_name| and pushes
-// them onto the strongly typed |result| vector.
-// NOTE: Callers are expected to ensure that casting to <T> makes sense.
-template <typename T>
-void FindDescendentsOfClass(views::View* parent,
-                            std::string class_name,
-                            std::vector<T*>* result) {
-  for (auto* child : parent->children()) {
-    if (child->GetClassName() == class_name)
-      result->push_back(static_cast<T*>(child));
-    FindDescendentsOfClass(child, class_name, result);
+#define EXPECT_VISIBLE_NOTIFICATIONS_BY_PREFIXED_ID(prefix_)                  \
+  {                                                                           \
+    if (!FindVisibleNotificationsByPrefixedId(prefix_).empty())               \
+      return;                                                                 \
+                                                                              \
+    MockMessageCenterObserver mock;                                           \
+    ScopedObserver<MessageCenter, MessageCenterObserver> observer_{&mock};    \
+    observer_.Add(MessageCenter::Get());                                      \
+                                                                              \
+    base::RunLoop run_loop;                                                   \
+    EXPECT_CALL(mock, OnNotificationAdded)                                    \
+        .WillOnce(                                                            \
+            testing::Invoke([&run_loop](const std::string& notification_id) { \
+              if (!FindVisibleNotificationsByPrefixedId(prefix_).empty())     \
+                run_loop.QuitClosure().Run();                                 \
+            }));                                                              \
+    run_loop.Run();                                                           \
   }
-}
 
-// Finds any descendents of |parent| with class name equal to the static class
-// variable |kViewClassName| and pushes them onto the strongly typed |result|
-// vector.
-// NOTE: This variant of FindDescendentsOfClass is safer than the three argument
-// variant and its usage should be preferred where possible.
-template <typename T>
-void FindDescendentsOfClass(views::View* parent, std::vector<T*>* result) {
-  FindDescendentsOfClass(parent, T::kViewClassName, result);
-}
+// Helpers ---------------------------------------------------------------------
 
 // Returns the status area widget.
 ash::StatusAreaWidget* FindStatusAreaWidget() {
@@ -70,16 +74,14 @@ ash::StatusAreaWidget* FindStatusAreaWidget() {
 
 // Returns the set of Assistant notifications (as indicated by application id).
 message_center::NotificationList::Notifications FindAssistantNotifications() {
-  return message_center::MessageCenter::Get()->FindNotificationsByAppId(
-      "assistant");
+  return MessageCenter::Get()->FindNotificationsByAppId("assistant");
 }
 
 // Returns visible notifications having id starting with |prefix|.
 std::vector<message_center::Notification*> FindVisibleNotificationsByPrefixedId(
     const std::string& prefix) {
   std::vector<message_center::Notification*> notifications;
-  for (auto* notification :
-       message_center::MessageCenter::Get()->GetVisibleNotifications()) {
+  for (auto* notification : MessageCenter::Get()->GetVisibleNotifications()) {
     if (base::StartsWith(notification->id(), prefix,
                          base::CompareCase::SENSITIVE)) {
       notifications.push_back(notification);
@@ -141,6 +143,18 @@ void TapOnAndWait(const views::Widget* widget) {
   base::RunLoop().RunUntilIdle();
 }
 
+// Mocks -----------------------------------------------------------------------
+
+class MockMessageCenterObserver
+    : public testing::NiceMock<MessageCenterObserver> {
+ public:
+  // MessageCenterObserver:
+  MOCK_METHOD(void,
+              OnNotificationAdded,
+              (const std::string& notification_id),
+              (override));
+};
+
 }  // namespace
 
 // AssistantTimersBrowserTest --------------------------------------------------
@@ -172,6 +186,34 @@ class AssistantTimersBrowserTest : public MixinBasedInProcessBrowserTest {
 };
 
 // Tests -----------------------------------------------------------------------
+
+// Timer notifications should be dismissed when disabling Assistant in settings.
+IN_PROC_BROWSER_TEST_F(AssistantTimersBrowserTest,
+                       ShouldDismissTimerNotificationsWhenDisablingAssistant) {
+  tester()->StartAssistantAndWaitForReady();
+
+  ShowAssistantUi();
+  EXPECT_TRUE(tester()->IsVisible());
+
+  // Confirm no Assistant notifications are currently being shown.
+  EXPECT_TRUE(FindAssistantNotifications().empty());
+
+  // Start a timer for one minute.
+  tester()->SendTextQuery("Set a timer for 1 minute.");
+
+  // Check for a stable substring of the expected answers.
+  tester()->ExpectTextResponse("1 min.");
+
+  // Expect that an Assistant timer notification is now showing.
+  EXPECT_VISIBLE_NOTIFICATIONS_BY_PREFIXED_ID("assistant/timer");
+
+  // Disable Assistant.
+  tester()->SetAssistantEnabled(false);
+  base::RunLoop().RunUntilIdle();
+
+  // Confirm that our Assistant timer notification has been dismissed.
+  EXPECT_TRUE(FindAssistantNotifications().empty());
+}
 
 // Pressing the "STOP" action button in a timer notification should result in
 // the timer being removed.
@@ -207,9 +249,9 @@ IN_PROC_BROWSER_TEST_F(AssistantTimersBrowserTest,
   auto action_buttons = FindActionButtonsForNotification(notifications.at(0));
   EXPECT_EQ(2u, action_buttons.size());
 
-  // Tap the "STOP" action button in the notification.
-  EXPECT_EQ(base::UTF8ToUTF16("STOP"), action_buttons.at(0)->GetText());
-  TapOnAndWait(action_buttons.at(0));
+  // Tap the "CANCEL" action button in the notification.
+  EXPECT_EQ(base::UTF8ToUTF16("CANCEL"), action_buttons.at(1)->GetText());
+  TapOnAndWait(action_buttons.at(1));
 
   ShowAssistantUi();
   EXPECT_TRUE(tester()->IsVisible());

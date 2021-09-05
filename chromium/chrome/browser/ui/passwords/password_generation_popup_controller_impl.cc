@@ -255,10 +255,6 @@ void PasswordGenerationPopupControllerImpl::GeneratedPasswordRejected() {
   Hide(PopupHidingReason::kUserAborted);
 }
 
-void PasswordGenerationPopupControllerImpl::DidAttachInterstitialPage() {
-  Hide(PopupHidingReason::kAttachInterstitialPage);
-}
-
 void PasswordGenerationPopupControllerImpl::WebContentsDestroyed() {
   Hide(PopupHidingReason::kTabGone);
 }
@@ -308,6 +304,11 @@ void PasswordGenerationPopupControllerImpl::SetSelected() {
 
 gfx::NativeView PasswordGenerationPopupControllerImpl::container_view() const {
   return controller_common_.container_view;
+}
+
+content::WebContents* PasswordGenerationPopupControllerImpl::GetWebContents()
+    const {
+  return WebContentsObserver::web_contents();
 }
 
 const gfx::RectF& PasswordGenerationPopupControllerImpl::element_bounds()

@@ -9,13 +9,11 @@
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/ui/page_action/page_action_icon_type.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/custom_tab_bar_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views/web_apps/web_app_frame_toolbar_view.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
-#include "chrome/browser/web_applications/system_web_app_manager.h"
-#include "chrome/browser/web_applications/system_web_app_manager_browsertest.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -156,21 +154,6 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewBrowserTest,
 #endif
 }
 
-using SystemWebAppNonClientFrameViewBrowserTest =
-    web_app::SystemWebAppManagerBrowserTest;
-
-// System Web Apps don't get the web app menu button.
-IN_PROC_BROWSER_TEST_P(SystemWebAppNonClientFrameViewBrowserTest,
-                       HideWebAppMenuButton) {
-  Browser* app_browser =
-      WaitForSystemAppInstallAndLaunch(web_app::SystemAppType::SETTINGS);
-  EXPECT_EQ(nullptr, BrowserView::GetBrowserViewForBrowser(app_browser)
-                         ->frame()
-                         ->GetFrameView()
-                         ->web_app_frame_toolbar_for_testing()
-                         ->GetAppMenuButton());
-}
-
 // Checks that the title bar for hosted app windows is hidden when in fullscreen
 // for tab mode.
 IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewBrowserTest,
@@ -179,7 +162,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewBrowserTest,
   EXPECT_GT(app_frame_view_->GetTopInset(false), 0);
 
   static_cast<content::WebContentsDelegate*>(app_browser_)
-      ->EnterFullscreenModeForTab(web_contents_, web_contents_->GetURL(), {});
+      ->EnterFullscreenModeForTab(web_contents_->GetMainFrame(), {});
 
   EXPECT_EQ(app_frame_view_->GetTopInset(false), 0);
 }
@@ -192,7 +175,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewBrowserTest,
   ui_test_utils::NavigateToURL(app_browser_, GURL("http://example.com"));
 
   static_cast<content::WebContentsDelegate*>(app_browser_)
-      ->EnterFullscreenModeForTab(web_contents_, web_contents_->GetURL(), {});
+      ->EnterFullscreenModeForTab(web_contents_->GetMainFrame(), {});
 
   EXPECT_TRUE(
       app_frame_view_->browser_view()->toolbar()->custom_tab_bar()->IsDrawn());
@@ -270,9 +253,3 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewBrowserTest, SaveCardIcon) {
   EXPECT_TRUE(app_frame_view_->Contains(icon));
   EXPECT_TRUE(icon->GetVisible());
 }
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         SystemWebAppNonClientFrameViewBrowserTest,
-                         ::testing::Values(web_app::ProviderType::kBookmarkApps,
-                                           web_app::ProviderType::kWebApps),
-                         web_app::ProviderTypeParamToString);

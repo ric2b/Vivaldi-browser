@@ -11,6 +11,7 @@
 
 #include "base/bind_helpers.h"
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -36,13 +37,9 @@ namespace password_manager {
 
 class PasswordManagerOnboardingTest : public testing::Test {
  public:
-  PasswordManagerOnboardingTest() = default;
-
   void SetUp() override {
-    store_ = new TestPasswordStore;
     store_->Init(nullptr);
 
-    prefs_.reset(new TestingPrefServiceSimple());
     prefs_->registry()->RegisterIntegerPref(
         prefs::kPasswordManagerOnboardingState,
         static_cast<int>(OnboardingState::kDoNotShow));
@@ -63,7 +60,7 @@ class PasswordManagerOnboardingTest : public testing::Test {
 
   PasswordForm MakeSimpleForm(int id) {
     PasswordForm form;
-    form.origin = GURL("https://example.org/");
+    form.url = GURL("https://example.org/");
     form.signon_realm = "https://example.org/";
     form.username_value = ASCIIToUTF16("username") + base::NumberToString16(id);
     form.password_value = ASCIIToUTF16("p4ssword") + base::NumberToString16(id);
@@ -73,7 +70,7 @@ class PasswordManagerOnboardingTest : public testing::Test {
   PasswordForm MakeSimpleBlacklistedForm(int id) {
     PasswordForm form;
     std::string link = "https://example" + base::NumberToString(id) + ".org/";
-    form.origin = GURL(link);
+    form.url = GURL(link);
     form.signon_realm = link;
     form.blacklisted_by_user = true;
     return form;
@@ -81,8 +78,10 @@ class PasswordManagerOnboardingTest : public testing::Test {
 
  protected:
   base::test::TaskEnvironment task_environment_;
-  scoped_refptr<TestPasswordStore> store_;
-  std::unique_ptr<TestingPrefServiceSimple> prefs_;
+  scoped_refptr<TestPasswordStore> store_ =
+      base::MakeRefCounted<TestPasswordStore>();
+  std::unique_ptr<TestingPrefServiceSimple> prefs_ =
+      std::make_unique<TestingPrefServiceSimple>();
 };
 
 TEST_F(PasswordManagerOnboardingTest, CredentialsCountUnderThreshold) {

@@ -60,7 +60,9 @@
 #include "content/browser/tracing/memory_instrumentation_util.h"
 #include "content/browser/utility_process_host.h"
 #include "content/child/field_trial.h"
+#include "content/common/android/cpu_time_metrics.h"
 #include "content/common/content_constants_internal.h"
+#include "content/common/mojo_core_library_support.h"
 #include "content/common/url_schemes.h"
 #include "content/gpu/in_process_gpu_thread.h"
 #include "content/public/app/content_main_delegate.h"
@@ -74,6 +76,7 @@
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/network_service_util.h"
 #include "content/public/common/sandbox_init.h"
+#include "content/public/common/zygote/zygote_buildflags.h"
 #include "content/public/gpu/content_gpu_client.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/utility/content_utility_client.h"
@@ -82,12 +85,16 @@
 #include "gin/v8_initializer.h"
 #include "media/base/media.h"
 #include "media/media_buildflags.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "mojo/public/cpp/platform/platform_channel.h"
+#include "mojo/public/cpp/system/dynamic_library_support.h"
+#include "mojo/public/cpp/system/invitation.h"
+#include "mojo/public/mojom/base/binder.mojom.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/cpp/features.h"
 #include "services/service_manager/embedder/switches.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 #include "services/service_manager/sandbox/switches.h"
-#include "services/service_manager/zygote/common/zygote_buildflags.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
 #include "ui/base/ui_base_paths.h"
@@ -115,11 +122,11 @@
 #include "content/public/common/content_descriptors.h"
 
 #if !defined(OS_MACOSX)
-#include "services/service_manager/zygote/common/zygote_fork_delegate_linux.h"
+#include "content/public/common/zygote/zygote_fork_delegate_linux.h"
 #endif
 #if !defined(OS_MACOSX) && !defined(OS_ANDROID)
+#include "content/zygote/zygote_main.h"
 #include "sandbox/linux/services/libc_interceptor.h"
-#include "services/service_manager/zygote/zygote_main.h"
 #endif
 
 #endif  // OS_POSIX || OS_FUCHSIA
@@ -127,10 +134,9 @@
 #if defined(OS_LINUX)
 #include "base/native_library.h"
 #include "base/rand_util.h"
-#include "services/service_manager/zygote/common/common_sandbox_support_linux.h"
+#include "content/public/common/zygote/sandbox_support_linux.h"
 #include "third_party/blink/public/platform/web_font_render_style.h"
 #include "third_party/boringssl/src/include/openssl/crypto.h"
-#include "third_party/boringssl/src/include/openssl/rand.h"
 #include "third_party/skia/include/core/SkFontMgr.h"
 #include "third_party/skia/include/ports/SkFontMgr_android.h"
 #include "third_party/webrtc_overrides/init_webrtc.h"  // nogncheck
@@ -149,11 +155,12 @@
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
 #include "content/browser/sandbox_host_linux.h"
+#include "content/browser/zygote_host/zygote_host_impl_linux.h"
+#include "content/common/zygote/zygote_communication_linux.h"
+#include "content/common/zygote/zygote_handle_impl_linux.h"
+#include "content/public/common/zygote/sandbox_support_linux.h"
+#include "content/public/common/zygote/zygote_handle.h"
 #include "media/base/media_switches.h"
-#include "services/service_manager/zygote/common/common_sandbox_support_linux.h"
-#include "services/service_manager/zygote/common/zygote_handle.h"
-#include "services/service_manager/zygote/host/zygote_communication_linux.h"
-#include "services/service_manager/zygote/host/zygote_host_impl_linux.h"
 #endif
 
 #if defined(OS_ANDROID)
@@ -231,15 +238,20 @@ pid_t LaunchZygoteHelper(base::CommandLine* cmd_line,
   // Append any switches from the browser process that need to be forwarded on
   // to the zygote/renderers.
   static const char* const kForwardSwitches[] = {
-      switches::kAndroidFontsPath, switches::kClearKeyCdmPathForTesting,
+      switches::kAndroidFontsPath,
+      switches::kClearKeyCdmPathForTesting,
       switches::kEnableLogging,  // Support, e.g., --enable-logging=stderr.
       // Need to tell the zygote that it is headless so that we don't try to use
       // the wrong type of main delegate.
       switches::kHeadless,
       // Zygote process needs to know what resources to have loaded when it
       // becomes a renderer process.
-      switches::kForceDeviceScaleFactor, switches::kLoggingLevel,
-      switches::kPpapiInProcess, switches::kRegisterPepperPlugins, switches::kV,
+      switches::kForceDeviceScaleFactor,
+      switches::kLoggingLevel,
+      switches::kMojoCoreLibraryPath,
+      switches::kPpapiInProcess,
+      switches::kRegisterPepperPlugins,
+      switches::kV,
       switches::kVModule,
   };
   cmd_line->CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),
@@ -251,10 +263,9 @@ pid_t LaunchZygoteHelper(base::CommandLine* cmd_line,
   // sandboxed processes to talk to it.
   base::FileHandleMappingVector additional_remapped_fds;
   additional_remapped_fds.emplace_back(
-      SandboxHostLinux::GetInstance()->GetChildSocket(),
-      service_manager::GetSandboxFD());
+      SandboxHostLinux::GetInstance()->GetChildSocket(), GetSandboxFD());
 
-  return service_manager::ZygoteHostImpl::GetInstance()->LaunchZygote(
+  return ZygoteHostImpl::GetInstance()->LaunchZygote(
       cmd_line, control_fd, std::move(additional_remapped_fds));
 }
 
@@ -276,15 +287,15 @@ void InitializeZygoteSandboxForBrowserProcess(
   }
 
   // Tickle the zygote host so it forks now.
-  service_manager::ZygoteHostImpl::GetInstance()->Init(parsed_command_line);
-  service_manager::CreateUnsandboxedZygote(base::BindOnce(LaunchZygoteHelper));
-  service_manager::ZygoteHandle generic_zygote =
-      service_manager::CreateGenericZygote(base::BindOnce(LaunchZygoteHelper));
+  ZygoteHostImpl::GetInstance()->Init(parsed_command_line);
+  CreateUnsandboxedZygote(base::BindOnce(LaunchZygoteHelper));
+  ZygoteHandle generic_zygote =
+      CreateGenericZygote(base::BindOnce(LaunchZygoteHelper));
 
   // TODO(kerrnel): Investigate doing this without the ZygoteHostImpl as a
   // proxy. It is currently done this way due to concerns about race
   // conditions.
-  service_manager::ZygoteHostImpl::GetInstance()->SetRendererSandboxStatus(
+  ZygoteHostImpl::GetInstance()->SetRendererSandboxStatus(
       generic_zygote->GetSandboxStatus());
 }
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
@@ -330,15 +341,9 @@ void PreloadLibraryCdms() {
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
 void PreSandboxInit() {
-#if defined(ARCH_CPU_ARM_FAMILY)
-  // On ARM, BoringSSL requires access to /proc/cpuinfo to determine processor
-  // features. Query this before entering the sandbox.
-  CRYPTO_library_init();
-#endif
-
-  // Pass BoringSSL a copy of the /dev/urandom file descriptor so RAND_bytes
-  // will work inside the sandbox.
-  RAND_set_urandom_fd(base::GetUrandomFD());
+  // Pre-acquire resources needed by BoringSSL. See
+  // https://boringssl.googlesource.com/boringssl/+/HEAD/SANDBOXING.md
+  CRYPTO_pre_sandbox_init();
 
 #if BUILDFLAG(ENABLE_PLUGINS)
   // Ensure access to the Pepper plugins before the sandbox is turned on.
@@ -387,6 +392,24 @@ void PreSandboxInit() {
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
 #endif  // OS_LINUX
+
+class ControlInterfaceBinderImpl : public mojo_base::mojom::Binder {
+ public:
+  ControlInterfaceBinderImpl() = default;
+  ~ControlInterfaceBinderImpl() override = default;
+
+  // mojo_base::mojom::Binder:
+  void Bind(mojo::GenericPendingReceiver receiver) override {
+    GetContentClient()->browser()->BindBrowserControlInterface(
+        std::move(receiver));
+  }
+};
+
+void RunControlInterfaceBinder(mojo::ScopedMessagePipeHandle pipe) {
+  mojo::MakeSelfOwnedReceiver(
+      std::make_unique<ControlInterfaceBinderImpl>(),
+      mojo::PendingReceiver<mojo_base::mojom::Binder>(std::move(pipe)));
+}
 
 }  // namespace
 
@@ -445,8 +468,7 @@ int RunZygote(ContentMainDelegate* delegate) {
 #endif
   };
 
-  std::vector<std::unique_ptr<service_manager::ZygoteForkDelegate>>
-      zygote_fork_delegates;
+  std::vector<std::unique_ptr<ZygoteForkDelegate>> zygote_fork_delegates;
   delegate->ZygoteStarting(&zygote_fork_delegates);
   media::InitializeMediaLibrary();
 
@@ -455,7 +477,7 @@ int RunZygote(ContentMainDelegate* delegate) {
 #endif
 
   // This function call can return multiple times, once per fork().
-  if (!service_manager::ZygoteMain(std::move(zygote_fork_delegates))) {
+  if (!ZygoteMain(std::move(zygote_fork_delegates))) {
     return 1;
   }
 
@@ -821,13 +843,26 @@ int ContentMainRunnerImpl::Run(bool start_service_manager_only) {
       *base::CommandLine::ForCurrentProcess();
   std::string process_type =
       command_line.GetSwitchValueASCII(switches::kProcessType);
+  // Run this logic on all child processes.
+  if (!process_type.empty()) {
+    if (process_type != service_manager::switches::kZygoteProcess) {
+      // Zygotes will run this at a later point in time when the command line
+      // has been updated.
+      InitializeFieldTrialAndFeatureList();
+      delegate_->PostFieldTrialInitialization();
+    }
 
-  // Run this logic on all child processes. Zygotes will run this at a later
-  // point in time when the command line has been updated.
-  if (!process_type.empty() &&
-      process_type != service_manager::switches::kZygoteProcess) {
-    InitializeFieldTrialAndFeatureList();
-    delegate_->PostFieldTrialInitialization();
+#if defined(OS_LINUX)
+    // If dynamic Mojo Core is being used, ensure that it's loaded very early in
+    // the child/zygote process, before any sandbox is initialized. The library
+    // is not fully initialized with IPC support until a ChildProcess is later
+    // constructed, as initialization spawns a background thread which would be
+    // unsafe here.
+    if (IsMojoCoreSharedLibraryEnabled()) {
+      CHECK_EQ(mojo::LoadCoreLibrary(GetMojoCoreSharedLibraryPath()),
+               MOJO_RESULT_OK);
+    }
+#endif  // defined(OS_LINUX)
   }
 
   MainFunctionParams main_params(command_line);
@@ -849,7 +884,9 @@ int ContentMainRunnerImpl::Run(bool start_service_manager_only) {
 
 int ContentMainRunnerImpl::RunServiceManager(MainFunctionParams& main_params,
                                              bool start_service_manager_only) {
-  TRACE_EVENT0("startup", "ContentMainRunnerImpl::RunServiceManager");
+  TRACE_EVENT_INSTANT0("startup",
+                       "ContentMainRunnerImpl::RunServiceManager (begin)",
+                       TRACE_EVENT_SCOPE_THREAD);
   if (is_browser_main_loop_started_)
     return -1;
 
@@ -893,6 +930,7 @@ int ContentMainRunnerImpl::RunServiceManager(MainFunctionParams& main_params,
     // but before the IO thread is started.
     if (base::FeatureList::IsEnabled(base::HangWatcher::kEnableHangWatcher)) {
       hang_watcher_ = new base::HangWatcher();
+      hang_watcher_->Start();
       ANNOTATE_LEAKING_OBJECT_PTR(hang_watcher_);
     }
 
@@ -904,6 +942,10 @@ int ContentMainRunnerImpl::RunServiceManager(MainFunctionParams& main_params,
     BrowserTaskExecutor::PostFeatureListSetup();
 
     tracing::InitTracingPostThreadPoolStartAndFeatureList();
+
+#if defined(OS_ANDROID)
+    SetupCpuTimeMetrics();
+#endif
 
     if (should_start_service_manager_only)
       ForceInProcessNetworkService(true);
@@ -918,6 +960,17 @@ int ContentMainRunnerImpl::RunServiceManager(MainFunctionParams& main_params,
 
     service_manager_environment_ = std::make_unique<ServiceManagerEnvironment>(
         BrowserTaskExecutor::CreateIOThread());
+
+    const base::CommandLine& command_line =
+        *base::CommandLine::ForCurrentProcess();
+    if (mojo::PlatformChannel::CommandLineHasPassedEndpoint(command_line)) {
+      mojo::PlatformChannelEndpoint endpoint =
+          mojo::PlatformChannel::RecoverPassedEndpointFromCommandLine(
+              command_line);
+      auto invitation = mojo::IncomingInvitation::Accept(std::move(endpoint));
+      RunControlInterfaceBinder(invitation.ExtractMessagePipe(0));
+    }
+
     download::SetIOTaskRunner(
         service_manager_environment_->io_thread()->task_runner());
 

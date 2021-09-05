@@ -603,8 +603,10 @@ TEST_F(PasswordAccessoryControllerTest, OnManualGenerationRequested) {
 
 TEST_F(PasswordAccessoryControllerTest, AddsSaveToggleIfIsBlacklisted) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      password_manager::features::kRecoverFromNeverSaveAndroid);
+  scoped_feature_list.InitWithFeatures(
+      {password_manager::features::kRecoverFromNeverSaveAndroid,
+       autofill::features::kAutofillKeyboardAccessory},
+      {});
   cache()->SaveCredentialsAndBlacklistedForOrigin(
       {}, CredentialCache::IsOriginBlacklisted(true),
       url::Origin::Create(GURL(kExampleSite)));
@@ -628,8 +630,10 @@ TEST_F(PasswordAccessoryControllerTest, AddsSaveToggleIfIsBlacklisted) {
 TEST_F(PasswordAccessoryControllerTest,
        NoSaveToggleIfIsBlacklistedAndSavingDisabled) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      password_manager::features::kRecoverFromNeverSaveAndroid);
+  scoped_feature_list.InitWithFeatures(
+      {password_manager::features::kRecoverFromNeverSaveAndroid,
+       autofill::features::kAutofillKeyboardAccessory},
+      {});
 
   // Simulate saving being disabled (e.g. being in incognito or having password
   // saving disabled from settings).
@@ -653,8 +657,10 @@ TEST_F(PasswordAccessoryControllerTest,
 
 TEST_F(PasswordAccessoryControllerTest, AddsSaveToggleIfWasBlacklisted) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      password_manager::features::kRecoverFromNeverSaveAndroid);
+  scoped_feature_list.InitWithFeatures(
+      {password_manager::features::kRecoverFromNeverSaveAndroid,
+       autofill::features::kAutofillKeyboardAccessory},
+      {});
   cache()->SaveCredentialsAndBlacklistedForOrigin(
       {}, CredentialCache::IsOriginBlacklisted(true),
       url::Origin::Create(GURL(kExampleSite)));
@@ -679,6 +685,58 @@ TEST_F(PasswordAccessoryControllerTest, AddsSaveToggleIfWasBlacklisted) {
       /*is_manual_generation_available=*/false);
 }
 
+TEST_F(PasswordAccessoryControllerTest,
+       RecordsAccessoryImpressionsForBlacklisted) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {password_manager::features::kRecoverFromNeverSaveAndroid,
+       autofill::features::kAutofillKeyboardAccessory},
+      {});
+
+  base::HistogramTester histogram_tester;
+
+  cache()->SaveCredentialsAndBlacklistedForOrigin(
+      {}, CredentialCache::IsOriginBlacklisted(true),
+      url::Origin::Create(GURL(kExampleSite)));
+  ON_CALL(*password_client(), IsSavingAndFillingEnabled(GURL(kExampleSite)))
+      .WillByDefault(Return(true));
+
+  EXPECT_CALL(mock_manual_filling_controller_, RefreshSuggestions(_));
+  controller()->RefreshSuggestionsForField(
+      FocusedFieldType::kFillablePasswordField,
+      /*is_manual_generation_available=*/false);
+
+  histogram_tester.ExpectUniqueSample(
+      "KeyboardAccessory.DisabledSavingAccessoryImpressions", true, 1);
+}
+
+TEST_F(PasswordAccessoryControllerTest, NoAccessoryImpressionsIfUnblacklisted) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {password_manager::features::kRecoverFromNeverSaveAndroid,
+       autofill::features::kAutofillKeyboardAccessory},
+      {});
+  base::HistogramTester histogram_tester;
+
+  cache()->SaveCredentialsAndBlacklistedForOrigin(
+      {}, CredentialCache::IsOriginBlacklisted(true),
+      url::Origin::Create(GURL(kExampleSite)));
+  // Simulate unblacklistig.
+  cache()->SaveCredentialsAndBlacklistedForOrigin(
+      {}, CredentialCache::IsOriginBlacklisted(false),
+      url::Origin::Create(GURL(kExampleSite)));
+
+  ON_CALL(*password_client(), IsSavingAndFillingEnabled(GURL(kExampleSite)))
+      .WillByDefault(Return(true));
+  EXPECT_CALL(mock_manual_filling_controller_, RefreshSuggestions(_));
+  controller()->RefreshSuggestionsForField(
+      FocusedFieldType::kFillablePasswordField,
+      /*is_manual_generation_available=*/false);
+
+  histogram_tester.ExpectTotalCount(
+      "KeyboardAccessory.DisabledSavingAccessoryImpressions", 0);
+}
+
 TEST_F(PasswordAccessoryControllerTest, SavePasswordsToggledUpdatesCache) {
   url::Origin example_origin = url::Origin::Create(GURL(kExampleSite));
   EXPECT_CALL(*password_client(), UpdateFormManagers);
@@ -700,7 +758,7 @@ TEST_F(PasswordAccessoryControllerTest, SavePasswordsDisabledUpdatesStore) {
   expected_form.blacklisted_by_user = true;
   expected_form.scheme = autofill::PasswordForm::Scheme::kHtml;
   expected_form.signon_realm = kExampleSignonRealm;
-  expected_form.origin = GURL(kExampleSite);
+  expected_form.url = GURL(kExampleSite);
   expected_form.date_created = base::Time::Now();
   EXPECT_CALL(*mock_password_store_, AddLogin(Eq(expected_form)));
   controller()->OnToggleChanged(

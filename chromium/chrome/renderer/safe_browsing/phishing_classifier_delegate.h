@@ -38,21 +38,6 @@ enum class SBPhishingClassifierEvent {
   kMaxValue = kDestructedBeforeClassificationDone,
 };
 
-class PhishingClassifierFilter : public mojom::PhishingModelSetter {
- public:
-  PhishingClassifierFilter();
-  ~PhishingClassifierFilter() override;
-
-  static void Create(
-      mojo::PendingReceiver<mojom::PhishingModelSetter> receiver);
-
- private:
-  // mojom::PhishingModelSetter
-  void SetPhishingModel(const std::string& model) override;
-
-  DISALLOW_COPY_AND_ASSIGN(PhishingClassifierFilter);
-};
-
 class PhishingClassifierDelegate : public content::RenderFrameObserver,
                                    public mojom::PhishingDetector {
  public:
@@ -62,6 +47,9 @@ class PhishingClassifierDelegate : public content::RenderFrameObserver,
   static PhishingClassifierDelegate* Create(content::RenderFrame* render_frame,
                                             PhishingClassifier* classifier);
   ~PhishingClassifierDelegate() override;
+
+  // mojom::PhishingDetector
+  void SetPhishingModel(const std::string& model) override;
 
   // Called by the RenderFrame once there is a phishing scorer available.
   // The scorer is passed on to the classifier.
@@ -78,10 +66,11 @@ class PhishingClassifierDelegate : public content::RenderFrameObserver,
 
   // Called by the RenderFrame when a page has started loading in the given
   // WebFrame.  Typically, this will cause any pending classification to be
-  // cancelled.  However, if the navigation is within the same page, we
-  // continue running the current classification.
-  void DidCommitProvisionalLoad(bool is_same_document_navigation,
-                                ui::PageTransition transition) override;
+  // cancelled.
+  void DidCommitProvisionalLoad(ui::PageTransition transition) override;
+  // Called by the RenderFrame when the same-document navigation has been
+  // committed. We continue running the current classification.
+  void DidFinishSameDocumentNavigation() override;
 
  private:
   friend class PhishingClassifierDelegateTest;

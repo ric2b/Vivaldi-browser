@@ -187,16 +187,14 @@ base::string16 ProfileMenuView::GetAccessibleWindowTitle() const {
 
 void ProfileMenuView::OnManageGoogleAccountButtonClicked() {
   RecordClick(ActionableItem::kManageGoogleAccountButton);
-  // TODO(crbug.com/995757): Remove user action.
-  base::RecordAction(
-      base::UserMetricsAction("ProfileChooser_ManageGoogleAccountClicked"));
+  if (!perform_menu_actions())
+    return;
 
   Profile* profile = browser()->profile();
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(profile);
   DCHECK(
       identity_manager->HasPrimaryAccount(signin::ConsentLevel::kNotRequired));
-
   NavigateToGoogleAccountPage(
       profile, identity_manager
                    ->GetPrimaryAccountInfo(signin::ConsentLevel::kNotRequired)
@@ -205,32 +203,30 @@ void ProfileMenuView::OnManageGoogleAccountButtonClicked() {
 
 void ProfileMenuView::OnPasswordsButtonClicked() {
   RecordClick(ActionableItem::kPasswordsButton);
-  // TODO(crbug.com/995757): Remove user action.
-  base::RecordAction(
-      base::UserMetricsAction("ProfileChooser_PasswordsClicked"));
+  if (!perform_menu_actions())
+    return;
   NavigateToManagePasswordsPage(
       browser(), password_manager::ManagePasswordsReferrer::kProfileChooser);
 }
 
 void ProfileMenuView::OnCreditCardsButtonClicked() {
   RecordClick(ActionableItem::kCreditCardsButton);
-  // TODO(crbug.com/995757): Remove user action.
-  base::RecordAction(base::UserMetricsAction("ProfileChooser_PaymentsClicked"));
+  if (!perform_menu_actions())
+    return;
   chrome::ShowSettingsSubPage(browser(), chrome::kPaymentsSubPage);
 }
 
 void ProfileMenuView::OnAddressesButtonClicked() {
   RecordClick(ActionableItem::kAddressesButton);
-  // TODO(crbug.com/995757): Remove user action.
-  base::RecordAction(
-      base::UserMetricsAction("ProfileChooser_AddressesClicked"));
+  if (!perform_menu_actions())
+    return;
   chrome::ShowSettingsSubPage(browser(), chrome::kAddressesSubPage);
 }
 
 void ProfileMenuView::OnGuestProfileButtonClicked() {
   RecordClick(ActionableItem::kGuestProfileButton);
-  // TODO(crbug.com/995757): Remove user action.
-  base::RecordAction(base::UserMetricsAction("ProfileChooser_GuestClicked"));
+  if (!perform_menu_actions())
+    return;
   PrefService* service = g_browser_process->local_state();
   DCHECK(service);
   DCHECK(service->GetBoolean(prefs::kBrowserGuestModeEnabled));
@@ -239,13 +235,15 @@ void ProfileMenuView::OnGuestProfileButtonClicked() {
 
 void ProfileMenuView::OnExitProfileButtonClicked() {
   RecordClick(ActionableItem::kExitProfileButton);
-  // TODO(crbug.com/995757): Remove user action.
-  base::RecordAction(base::UserMetricsAction("ProfileChooser_CloseAllClicked"));
+  if (!perform_menu_actions())
+    return;
   profiles::CloseProfileWindows(browser()->profile());
 }
 
 void ProfileMenuView::OnSyncSettingsButtonClicked() {
   RecordClick(ActionableItem::kSyncSettingsButton);
+  if (!perform_menu_actions())
+    return;
   chrome::ShowSettingsSubPage(browser(), chrome::kSyncSetupSubPage);
 }
 
@@ -256,9 +254,8 @@ void ProfileMenuView::OnSyncErrorButtonClicked(
   chrome::AttemptUserExit();
 #else
   RecordClick(ActionableItem::kSyncErrorButton);
-  // TODO(crbug.com/995757): Remove user action.
-  base::RecordAction(
-      base::UserMetricsAction("ProfileChooser_SignInAgainClicked"));
+  if (!perform_menu_actions())
+    return;
   switch (error) {
     case sync_ui_util::MANAGED_USER_UNRECOVERABLE_ERROR:
       chrome::ShowSettingsSubPage(browser(), chrome::kSignOutSubPage);
@@ -309,6 +306,8 @@ void ProfileMenuView::OnSyncErrorButtonClicked(
 
 void ProfileMenuView::OnSigninAccountButtonClicked(AccountInfo account) {
   RecordClick(ActionableItem::kSigninAccountButton);
+  if (!perform_menu_actions())
+    return;
   Hide();
   signin_ui_util::EnableSyncFromPromo(
       browser(), account,
@@ -319,8 +318,8 @@ void ProfileMenuView::OnSigninAccountButtonClicked(AccountInfo account) {
 #if !defined(OS_CHROMEOS)
 void ProfileMenuView::OnSignoutButtonClicked() {
   RecordClick(ActionableItem::kSignoutButton);
-  // TODO(crbug.com/995757): Remove user action.
-  base::RecordAction(base::UserMetricsAction("Signin_Signout_FromUserMenu"));
+  if (!perform_menu_actions())
+    return;
   Hide();
   // Sign out from all accounts.
   browser()->signin_view_controller()->ShowGaiaLogoutTab(
@@ -330,6 +329,8 @@ void ProfileMenuView::OnSignoutButtonClicked() {
 
 void ProfileMenuView::OnSigninButtonClicked() {
   RecordClick(ActionableItem::kSigninButton);
+  if (!perform_menu_actions())
+    return;
   Hide();
   browser()->signin_view_controller()->ShowSignin(
       profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN,
@@ -339,8 +340,8 @@ void ProfileMenuView::OnSigninButtonClicked() {
 void ProfileMenuView::OnOtherProfileSelected(
     const base::FilePath& profile_path) {
   RecordClick(ActionableItem::kOtherProfileButton);
-  // TODO(crbug.com/995757): Remove user action.
-  base::RecordAction(base::UserMetricsAction("ProfileChooser_ProfileClicked"));
+  if (!perform_menu_actions())
+    return;
   Hide();
   profiles::SwitchToProfile(profile_path, /*always_create=*/false,
                             ProfileManager::CreateCallback());
@@ -348,29 +349,32 @@ void ProfileMenuView::OnOtherProfileSelected(
 
 void ProfileMenuView::OnAddNewProfileButtonClicked() {
   RecordClick(ActionableItem::kAddNewProfileButton);
+  if (!perform_menu_actions())
+    return;
   UserManager::Show(/*profile_path_to_focus=*/base::FilePath(),
                     profiles::USER_MANAGER_OPEN_CREATE_USER_PAGE);
 }
 
 void ProfileMenuView::OnManageProfilesButtonClicked() {
   RecordClick(ActionableItem::kManageProfilesButton);
-  // TODO(crbug.com/995757): Remove user action.
-  base::RecordAction(base::UserMetricsAction("ProfileChooser_ManageClicked"));
+  if (!perform_menu_actions())
+    return;
   UserManager::Show(base::FilePath(),
                     profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
 }
 
 void ProfileMenuView::OnEditProfileButtonClicked() {
   RecordClick(ActionableItem::kEditProfileButton);
+  if (!perform_menu_actions())
+    return;
   chrome::ShowSettingsSubPage(browser(), chrome::kManageProfileSubPage);
 }
 #endif  // defined(OS_CHROMEOS)
 
 void ProfileMenuView::OnCookiesClearedOnExitLinkClicked() {
   RecordClick(ActionableItem::kCookiesClearedOnExitLink);
-  // TODO(crbug.com/995757): Remove user action.
-  base::RecordAction(
-      base::UserMetricsAction("ProfileChooser_CookieSettingsClicked"));
+  if (!perform_menu_actions())
+    return;
   chrome::ShowSettingsSubPage(browser(), chrome::kContentSettingsSubPage +
                                              std::string("/") +
                                              chrome::kCookieSettingsSubPage);

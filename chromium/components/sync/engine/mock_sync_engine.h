@@ -48,12 +48,10 @@ class MockSyncEngine : public SyncEngine {
   MOCK_METHOD0(StopSyncingForShutdown, void());
   MOCK_METHOD1(Shutdown, void(ShutdownReason));
   MOCK_METHOD0(EnableEncryptEverything, void());
-  MOCK_CONST_METHOD0(GetUserShare, UserShare*());
   MOCK_CONST_METHOD0(GetDetailedStatus, const SyncStatus&());
   MOCK_CONST_METHOD1(HasUnsyncedItemsForTest,
                      void(base::OnceCallback<void(bool)>));
   MOCK_CONST_METHOD1(GetModelSafeRoutingInfo, void(ModelSafeRoutingInfo*));
-  MOCK_CONST_METHOD0(FlushDirectory, void());
   MOCK_METHOD0(RequestBufferedProtocolEventsAndEnableForwarding, void());
   MOCK_METHOD0(DisableProtocolEventForwarding, void());
   MOCK_METHOD0(EnableDirectoryTypeDebugInfoForwarding, void());

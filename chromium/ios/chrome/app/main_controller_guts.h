@@ -23,10 +23,6 @@ class ChromeBrowserState;
 // ownership of Scene-related objects to SceneController.
 @protocol MainControllerGuts <StartupInformation, BrowsingDataCommands>
 
-// Parameters received at startup time when the app is launched from another
-// app.
-@property(nonatomic, strong) AppStartupParameters* startupParameters;
-
 // Keeps track of the restore state during startup.
 @property(nonatomic, strong) CrashRestoreHelper* restoreHelper;
 
@@ -41,7 +37,7 @@ class ChromeBrowserState;
                           completionBlock:(ProceduralBlock)completionBlock;
 // MainController tracks EULA acceptance and performs delayed tasks when the
 // first run UI is dismissed.
-- (void)prepareForFirstRunUI;
+- (void)prepareForFirstRunUI:(SceneState*)presentingScene;
 // Returns whether or not the app can launch in incognito mode.
 - (BOOL)canLaunchInIncognito;
 

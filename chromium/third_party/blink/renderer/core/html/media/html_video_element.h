@@ -53,12 +53,13 @@ class CORE_EXPORT HTMLVideoElement final
       public ImageBitmapSource,
       public Supplementable<HTMLVideoElement> {
   DEFINE_WRAPPERTYPEINFO();
+  USING_GARBAGE_COLLECTED_MIXIN(HTMLVideoElement);
 
  public:
   static const int kNoAlreadyUploadedFrame = -1;
 
-  HTMLVideoElement(Document&);
-  void Trace(Visitor*) override;
+  explicit HTMLVideoElement(Document&);
+  void Trace(Visitor*) const override;
 
   bool HasPendingActivity() const final;
 
@@ -149,15 +150,12 @@ class CORE_EXPORT HTMLVideoElement final
       int already_uploaded_id,
       WebMediaPlayer::VideoFrameUploadMetadata* out_metadata);
 
-  bool ShouldDisplayPosterImage() const { return GetDisplayMode() == kPoster; }
-
   bool HasAvailableVideoFrame() const;
 
   KURL PosterImageURL() const override;
 
   // CanvasImageSource implementation
   scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
-                                               AccelerationHint,
                                                const FloatSize&) override;
   bool IsVideoElement() const override { return true; }
   bool WouldTaintOrigin() const override;
@@ -201,13 +199,6 @@ class CORE_EXPORT HTMLVideoElement final
   void SetIsEffectivelyFullscreen(blink::WebFullscreenVideoStatus);
   void SetIsDominantVisibleContent(bool is_dominant);
 
-  void SetImageForTest(ImageResourceContent* content) {
-    if (!image_loader_)
-      image_loader_ = MakeGarbageCollected<HTMLImageLoader>(this);
-    image_loader_->SetImageForTest(content);
-    SetDisplayMode(kPoster);
-  }
-
   VideoWakeLock* wake_lock_for_tests() const { return wake_lock_; }
 
  protected:
@@ -231,6 +222,7 @@ class CORE_EXPORT HTMLVideoElement final
   bool LayoutObjectIsNeeded(const ComputedStyle&) const override;
   LayoutObject* CreateLayoutObject(const ComputedStyle&, LegacyLayout) override;
   void AttachLayoutTree(AttachContext&) override;
+  void UpdatePosterImage();
   void ParseAttribute(const AttributeModificationParams&) override;
   bool IsPresentationAttribute(const QualifiedName&) const override;
   void CollectStyleForPresentationAttribute(
@@ -240,12 +232,10 @@ class CORE_EXPORT HTMLVideoElement final
   bool IsURLAttribute(const Attribute&) const override;
   const AtomicString ImageSourceURL() const override;
 
-  void UpdateDisplayState() override;
   void OnPlay() final;
   void OnLoadStarted() final;
   void OnLoadFinished() final;
   void DidMoveToNewDocument(Document& old_document) override;
-  void SetDisplayMode(DisplayMode) override;
 
   void UpdatePictureInPictureAvailability();
 

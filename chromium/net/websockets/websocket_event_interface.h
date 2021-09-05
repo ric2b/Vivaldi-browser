@@ -48,8 +48,7 @@ class NET_EXPORT WebSocketEventInterface {
   virtual void OnAddChannelResponse(
       std::unique_ptr<WebSocketHandshakeResponseInfo> response,
       const std::string& selected_subprotocol,
-      const std::string& extensions,
-      int64_t send_flow_control_quota) = 0;
+      const std::string& extensions) = 0;
 
   // Called when a data frame has been received from the remote host and needs
   // to be forwarded to the renderer process.
@@ -64,9 +63,9 @@ class NET_EXPORT WebSocketEventInterface {
   // out. The network service should not read more from network until that.
   virtual bool HasPendingDataFrames() = 0;
 
-  // Called to provide more send quota for this channel to the renderer
-  // process.
-  virtual void OnSendFlowControlQuotaAdded(int64_t quota) = 0;
+  // Called once for each call to SendFrame() once the frame has been passed to
+  // the OS.
+  virtual void OnSendDataFrameDone() = 0;
 
   // Called when the remote server has Started the WebSocket Closing
   // Handshake. The client should not attempt to send any more messages after

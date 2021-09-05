@@ -10,6 +10,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/post_task.h"
 #include "ios/web/public/test/error_test_util.h"
+#import "ios/web/public/test/js_test_util.h"
 #include "ios/web/public/thread/web_task_traits.h"
 #include "ios/web/test/test_url_constants.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -64,6 +65,11 @@ base::RefCountedMemory* TestWebClient::GetDataResourceBytes(
 NSString* TestWebClient::GetDocumentStartScriptForMainFrame(
     BrowserState* browser_state) const {
   return early_page_script_ ? early_page_script_ : @"";
+}
+
+NSString* TestWebClient::GetDocumentStartScriptForAllFrames(
+    BrowserState* browser_state) const {
+  return web::test::GetPageScript(@"all_frames_web_test_bundle");
 }
 
 void TestWebClient::SetPluginNotSupportedText(const base::string16& text) {

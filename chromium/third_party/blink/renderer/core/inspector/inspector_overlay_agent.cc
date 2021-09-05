@@ -38,7 +38,7 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_data.h"
-#include "third_party/blink/public/resources/grit/blink_resources.h"
+#include "third_party/blink/public/resources/grit/inspector_overlay_resources_map.h"
 #include "third_party/blink/public/web/web_widget_client.h"
 #include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
@@ -120,7 +120,7 @@ void InspectTool::Init(InspectorOverlayAgent* overlay,
 }
 
 int InspectTool::GetDataResourceId() {
-  return IDR_INSPECT_TOOL_HIGHLIGHT_HTML;
+  return IDR_INSPECT_TOOL_HIGHLIGHT_JS;
 }
 
 bool InspectTool::HandleInputEvent(LocalFrameView* frame_view,
@@ -204,7 +204,7 @@ bool InspectTool::HideOnHideHighlight() {
   return false;
 }
 
-void InspectTool::Trace(Visitor* visitor) {
+void InspectTool::Trace(Visitor* visitor) const {
   visitor->Trace(overlay_);
 }
 
@@ -223,15 +223,16 @@ Hinge::Hinge(FloatQuad quad,
 int Hinge::GetDataResourceId() {
   // TODO (soxia): In the future, we should make the hinge working properly
   // with tools using different resources.
-  return IDR_INSPECT_TOOL_HIGHLIGHT_HTML;
+  return IDR_INSPECT_TOOL_HIGHLIGHT_JS;
 }
 
-void Hinge::Trace(Visitor* visitor) {
+void Hinge::Trace(Visitor* visitor) const {
   visitor->Trace(overlay_);
 }
 
 void Hinge::Draw(float scale) {
-  InspectorHighlight highlight(scale);
+  // scaling is applied at the drawHighlight code.
+  InspectorHighlight highlight(1.f);
   highlight.AppendQuad(quad_, content_color_, outline_color_);
   overlay_->EvaluateInOverlay("drawHighlight", highlight.AsProtocolValue());
 }
@@ -321,7 +322,7 @@ class InspectorOverlayAgent::InspectorOverlayChromeClient final
                                InspectorOverlayAgent& overlay)
       : client_(&client), overlay_(&overlay) {}
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(client_);
     visitor->Trace(overlay_);
     EmptyChromeClient::Trace(visitor);
@@ -379,7 +380,7 @@ InspectorOverlayAgent::~InspectorOverlayAgent() {
   DCHECK(!overlay_page_);
 }
 
-void InspectorOverlayAgent::Trace(Visitor* visitor) {
+void InspectorOverlayAgent::Trace(Visitor* visitor) const {
   visitor->Trace(frame_impl_);
   visitor->Trace(inspected_frames_);
   visitor->Trace(overlay_page_);
@@ -728,40 +729,30 @@ Response InspectorOverlayAgent::getHighlightObjectForTest(
     Maybe<bool> include_distance,
     Maybe<bool> include_style,
     Maybe<String> colorFormat,
+    Maybe<bool> show_accessibility_info,
     std::unique_ptr<protocol::DictionaryValue>* result) {
   Node* node = nullptr;
   Response response = dom_agent_->AssertNode(node_id, node);
   if (!response.IsSuccess())
     return response;
-  bool is_locked_ancestor = false;
 
-  // If |node| is in a display locked subtree, highlight the highest locked
-  // ancestor element instead.
-  if (Node* locked_ancestor =
-          DisplayLockUtilities::HighestLockedExclusiveAncestor(*node)) {
-    node = locked_ancestor;
-    is_locked_ancestor = true;
-  }
-
-  InspectorHighlightConfig config = InspectorHighlight::DefaultConfig();
-  config.show_styles = include_style.fromMaybe(false);
-
+  auto config = std::make_unique<InspectorHighlightConfig>(
+      InspectorHighlight::DefaultConfig());
+  config->show_styles = include_style.fromMaybe(false);
+  config->show_accessibility_info = show_accessibility_info.fromMaybe(true);
   String format = colorFormat.fromMaybe("hex");
-
   namespace ColorFormatEnum = protocol::Overlay::ColorFormatEnum;
   if (format == ColorFormatEnum::Hsl) {
-    config.color_format = ColorFormat::HSL;
+    config->color_format = ColorFormat::HSL;
   } else if (format == ColorFormatEnum::Rgb) {
-    config.color_format = ColorFormat::RGB;
+    config->color_format = ColorFormat::RGB;
   } else {
-    config.color_format = ColorFormat::HEX;
+    config->color_format = ColorFormat::HEX;
   }
 
-  InspectorHighlight highlight(node, config, InspectorHighlightContrastInfo(),
-                               true /* append_element_info */,
-                               include_distance.fromMaybe(false),
-                               is_locked_ancestor);
-  *result = highlight.AsProtocolValue();
+  NodeHighlightTool tool(node, "" /* selector_list */, std::move(config));
+  *result = tool.GetNodeInspectorHighlightAsJson(
+      true /* append_element_info */, include_distance.fromMaybe(false));
   return Response::Success();
 }
 
@@ -902,6 +893,18 @@ void InspectorOverlayAgent::PaintOverlayPage() {
   if (!view || !frame)
     return;
 
+  auto now = base::Time::Now();
+  if (!backend_node_id_changed_ &&
+      now - last_paint_time_ < base::TimeDelta::FromMilliseconds(100)) {
+    OverlayMainFrame()->View()->UpdateAllLifecyclePhases(
+        DocumentUpdateReason::kInspector);
+    return;
+  }
+  if (backend_node_id_changed_) {
+    backend_node_id_changed_ = false;
+  }
+  last_paint_time_ = now;
+
   LocalFrame* overlay_frame = OverlayMainFrame();
   // To make overlay render the same size text with any emulation scale,
   // compensate the emulation scale using page scale.
@@ -975,6 +978,8 @@ void InspectorOverlayAgent::LoadFrameForTool(int data_resource_id) {
 
   overlay_settings.GetGenericFontFamilySettings().UpdateStandard(
       settings.GetGenericFontFamilySettings().Standard());
+  overlay_settings.GetGenericFontFamilySettings().UpdateFixed(
+      settings.GetGenericFontFamilySettings().Fixed());
   overlay_settings.GetGenericFontFamilySettings().UpdateSerif(
       settings.GetGenericFontFamilySettings().Serif());
   overlay_settings.GetGenericFontFamilySettings().UpdateSansSerif(
@@ -1003,13 +1008,13 @@ void InspectorOverlayAgent::LoadFrameForTool(int data_resource_id) {
   frame->View()->SetBaseBackgroundColor(Color::kTransparent);
 
   scoped_refptr<SharedBuffer> data = SharedBuffer::Create();
+
   data->Append("<style>", static_cast<size_t>(7));
-  data->Append(UncompressResourceAsBinary(IDR_INSPECT_TOOL_COMMON_CSS));
+  data->Append(UncompressResourceAsBinary(IDR_INSPECT_COMMON_CSS));
   data->Append("</style>", static_cast<size_t>(8));
   data->Append("<script>", static_cast<size_t>(8));
-  data->Append(UncompressResourceAsBinary(IDR_INSPECT_TOOL_COMMON_JS));
-  data->Append("</script>", static_cast<size_t>(9));
   data->Append(UncompressResourceAsBinary(frame_resource_name_));
+  data->Append("</script>", static_cast<size_t>(9));
 
   frame->ForceSynchronousDocumentInstall("text/html", data);
 
@@ -1032,6 +1037,8 @@ void InspectorOverlayAgent::LoadFrameForTool(int data_resource_id) {
   EvaluateInOverlay("setPlatform", "mac");
 #elif defined(OS_POSIX)
   EvaluateInOverlay("setPlatform", "linux");
+#else
+  EvaluateInOverlay("setPlatform", "other");
 #endif
 }
 
@@ -1180,6 +1187,7 @@ void InspectorOverlayAgent::Inspect(Node* inspected_node) {
   DOMNodeId backend_node_id = DOMNodeIds::IdForNode(node);
   if (!enabled_.Get()) {
     backend_node_id_to_inspect_ = backend_node_id;
+    backend_node_id_changed_ = true;
     return;
   }
 
@@ -1264,7 +1272,7 @@ void InspectorOverlayAgent::EnsureEnableFrameOverlay() {
 void InspectorOverlayAgent::SetInspectTool(InspectTool* inspect_tool) {
   LocalFrameView* view = frame_impl_->GetFrameView();
   LocalFrame* frame = GetFrame();
-  if (!view || !frame)
+  if (!view || !frame || !enabled_.Get())
     return;
 
   if (inspect_tool_)
@@ -1315,6 +1323,10 @@ InspectorOverlayAgent::ToGridHighlightConfig(
   }
   std::unique_ptr<InspectorGridHighlightConfig> highlight_config =
       std::make_unique<InspectorGridHighlightConfig>();
+  highlight_config->show_positive_line_numbers =
+      config->getShowPositiveLineNumbers(false);
+  highlight_config->show_negative_line_numbers =
+      config->getShowNegativeLineNumbers(false);
   highlight_config->show_grid_extension_lines =
       config->getShowGridExtensionLines(false);
   highlight_config->grid_border_dash = config->getGridBorderDash(false);
@@ -1341,6 +1353,8 @@ InspectorOverlayAgent::ToHighlightConfig(
   std::unique_ptr<InspectorHighlightConfig> highlight_config =
       std::make_unique<InspectorHighlightConfig>();
   highlight_config->show_info = config->getShowInfo(false);
+  highlight_config->show_accessibility_info =
+      config->getShowAccessibilityInfo(true);
   highlight_config->show_styles = config->getShowStyles(false);
   highlight_config->show_rulers = config->getShowRulers(false);
   highlight_config->show_extension_lines = config->getShowExtensionLines(false);

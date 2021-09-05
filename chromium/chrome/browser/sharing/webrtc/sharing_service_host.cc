@@ -21,6 +21,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/p2p.mojom.h"
 #include "services/network/public/mojom/p2p_trusted.mojom.h"
@@ -281,7 +282,12 @@ SharingWebRtcConnectionHost* SharingServiceHost::CreateConnection(
           std::move(pipes->trusted_socket_manager.remote)));
   DCHECK(result.second);
 
+  // Use a transient NetworkIsolationKey to avoid sharing proxy connections or
+  // DNS cache with anything else. Since these requests aren't at all web
+  // exposed, this should be sufficient to prevent leaking anything with or
+  // between different first party contexts.
   GetNetworkContext()->CreateP2PSocketManager(
+      net::NetworkIsolationKey::CreateTransient(),
       std::move(pipes->socket_manager_client.remote),
       std::move(pipes->trusted_socket_manager.receiver),
       std::move(pipes->socket_manager.receiver));
@@ -321,6 +327,8 @@ network::mojom::NetworkContext* SharingServiceHost::GetNetworkContext() {
       network::mojom::NetworkContextParams::New();
   context_params->user_agent = "";
   context_params->accept_language = "en-us,en";
+  context_params->cert_verifier_params = content::GetCertVerifierParams(
+      network::mojom::CertVerifierCreationParams::New());
 
   content::GetNetworkService()->CreateNetworkContext(
       network_context_.BindNewPipeAndPassReceiver(), std::move(context_params));

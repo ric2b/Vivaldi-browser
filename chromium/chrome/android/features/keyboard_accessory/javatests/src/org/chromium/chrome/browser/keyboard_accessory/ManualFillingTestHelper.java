@@ -4,10 +4,10 @@
 
 package org.chromium.chrome.browser.keyboard_accessory;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.matcher.ViewMatchers.isAssignableFrom;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.isRoot;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.isRoot;
 
 import static org.hamcrest.core.AllOf.allOf;
 
@@ -22,17 +22,17 @@ import static org.chromium.ui.base.LocalizationUtils.setRtlForTesting;
 
 import android.app.Activity;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.espresso.PerformException;
-import android.support.test.espresso.UiController;
-import android.support.test.espresso.ViewAction;
-import android.support.test.espresso.ViewInteraction;
-import android.support.test.espresso.matcher.BoundedMatcher;
 import android.text.method.PasswordTransformationMethod;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.espresso.PerformException;
+import androidx.test.espresso.UiController;
+import androidx.test.espresso.ViewAction;
+import androidx.test.espresso.ViewInteraction;
+import androidx.test.espresso.matcher.BoundedMatcher;
 
 import com.google.android.material.tabs.TabLayout;
 
@@ -108,6 +108,12 @@ public class ManualFillingTestHelper {
         ChromeWindow.setKeyboardVisibilityDelegateFactory(keyboardDelegate);
         mActivityTestRule.startMainActivityWithURL(mEmbeddedTestServer.getURL(url));
         setRtlForTesting(isRtl);
+        updateWebContentsDependentState();
+        cacheCredentials(new String[0], new String[0], false); // This caches the empty state.
+        if (waitForNode) DOMUtils.waitForNonZeroNodeBounds(mWebContentsRef.get(), PASSWORD_NODE_ID);
+    }
+
+    public void updateWebContentsDependentState() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             ChromeActivity activity = mActivityTestRule.getActivity();
             mWebContentsRef.set(activity.getActivityTab().getWebContents());
@@ -123,8 +129,6 @@ public class ManualFillingTestHelper {
             getManualFillingCoordinator().registerSheetDataProvider(
                     AccessoryTabType.PASSWORDS, mSheetSuggestionsProvider);
         });
-        if (waitForNode) DOMUtils.waitForNonZeroNodeBounds(mWebContentsRef.get(), PASSWORD_NODE_ID);
-        cacheCredentials(new String[0], new String[0], false); // This caches the empty state.
     }
 
     public void clear() {
@@ -259,7 +263,7 @@ public class ManualFillingTestHelper {
 
     public DropdownPopupWindowInterface waitForAutofillPopup(String filterInput) {
         final WebContents webContents = mActivityTestRule.getActivity().getCurrentWebContents();
-        final ViewGroup view = webContents.getViewAndroidDelegate().getContainerView();
+        final View view = webContents.getViewAndroidDelegate().getContainerView();
 
         // Wait for InputConnection to be ready and fill the filterInput. Then wait for the anchor.
         CriteriaHelper.pollUiThread(
@@ -447,7 +451,7 @@ public class ManualFillingTestHelper {
     }
 
     /**
-     * Use like {@link android.support.test.espresso.Espresso#onView}. It waits for a view matching
+     * Use like {@link androidx.test.espresso.Espresso#onView}. It waits for a view matching
      * the given |matcher| to be displayed and allows to chain checks/performs on the result.
      * @param matcher The matcher matching exactly the view that is expected to be displayed.
      * @return An interaction on the view matching |matcher|.

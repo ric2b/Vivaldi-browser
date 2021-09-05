@@ -5,7 +5,9 @@
 #include "components/viz/service/display/display.h"
 
 #include <stddef.h>
+#include <algorithm>
 #include <limits>
+#include <utility>
 
 #include "base/debug/dump_without_crashing.h"
 #include "base/metrics/histogram_macros.h"
@@ -55,6 +57,14 @@ namespace viz {
 
 namespace {
 
+enum class TypeOfVideoInFrame {
+  kNoVideo = 0,
+  kVideo = 1,
+
+  // This should be the last entry/largest value above.
+  kMaxValue = kVideo,
+};
+
 const DrawQuad::Material kNonSplittableMaterials[] = {
     // Exclude debug quads from quad splitting
     DrawQuad::Material::kDebugBorder,
@@ -97,8 +107,11 @@ gfx::PresentationFeedback SanitizePresentationFeedback(
   // therefore the timestamp can be slightly in the future in comparison with
   // base::TimeTicks::Now(). Such presentation feedbacks should not be rejected.
   // See https://crbug.com/1040178
+  // Sometimes we snap the feedback's time stamp to the nearest vsync, and that
+  // can be offset by one vsync-internal. These feedback has kVSync set.
   const auto allowed_delta_from_future =
-      ((feedback.flags & gfx::PresentationFeedback::kHWClock) != 0)
+      ((feedback.flags & (gfx::PresentationFeedback::kHWClock |
+                          gfx::PresentationFeedback::kVSync)) != 0)
           ? kAllowedDeltaFromFuture
           : base::TimeDelta();
   if (feedback.timestamp > now + allowed_delta_from_future) {
@@ -165,25 +178,41 @@ gfx::Rect SafeConvertRectForRegion(const gfx::Rect& r) {
   return safe_rect;
 }
 
-// Computes the accumulated area of all the rectangles in the list of |rects|.
-int ComputeArea(const std::vector<gfx::Rect>& rects) {
-  int area = 0;
-  for (const auto& r : rects)
-    area += r.size().GetArea();
-  return area;
-}
-
 // Decides whether or not a DrawQuad should be split into a more complex visible
 // region in order to avoid overdraw.
 bool CanSplitQuad(const DrawQuad::Material m,
-                  const int visible_region_area,
-                  const int visible_region_bounding_area,
-                  const int minimum_fragments_reduced,
+                  const std::vector<gfx::Rect>& visible_region_rects,
+                  const gfx::Size& visible_region_bounding_size,
+                  int minimum_fragments_reduced,
                   const float device_scale_factor) {
-  return !base::Contains(kNonSplittableMaterials, m) &&
-         (visible_region_bounding_area - visible_region_area) *
-                 device_scale_factor * device_scale_factor >
-             minimum_fragments_reduced;
+  if (base::Contains(kNonSplittableMaterials, m))
+    return false;
+
+  base::CheckedNumeric<int> area = 0;
+  for (const auto& r : visible_region_rects) {
+    area += r.size().GetCheckedArea();
+    // In calculations below, assume false if this addition overflows.
+    if (!area.IsValid()) {
+      return false;
+    }
+  }
+
+  base::CheckedNumeric<int> visible_region_bounding_area =
+      visible_region_bounding_size.GetCheckedArea();
+  if (!visible_region_bounding_area.IsValid()) {
+    // In calculations below, assume true if this overflows.
+    return true;
+  }
+
+  area = visible_region_bounding_area - area;
+  if (!area.IsValid()) {
+    // In calculations below, assume false if this subtraction underflows.
+    return false;
+  }
+
+  int int_area = area.ValueOrDie();
+  return int_area * device_scale_factor * device_scale_factor >
+         minimum_fragments_reduced;
 }
 
 // Attempts to consolidate rectangles that were only split because of the
@@ -521,10 +550,13 @@ void Display::InitializeRenderer(bool enable_shared_images) {
 
   // Outputting a partial list of quads might not work in cases where contents
   // outside the damage rect might be needed by the renderer.
+  bool might_invalidate_outside_damage =
+      !output_surface_->capabilities().only_invalidates_damage_rect ||
+      overlay_processor_->IsOverlaySupported();
   bool output_partial_list =
-      output_surface_->capabilities().only_invalidates_damage_rect &&
       renderer_->use_partial_swap() &&
-      !overlay_processor_->IsOverlaySupported();
+      (!might_invalidate_outside_damage ||
+       output_surface_->capabilities().supports_target_damage);
 
   aggregator_ = std::make_unique<SurfaceAggregator>(
       surface_manager_, resource_provider_.get(), output_partial_list,
@@ -611,9 +643,32 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
   {
     FrameRateDecider::ScopedAggregate scoped_aggregate(
         frame_rate_decider_.get());
-    frame =
-        aggregator_->Aggregate(current_surface_id_, expected_display_time,
-                               current_display_transform, ++swapped_trace_id_);
+    gfx::Rect target_damage_bounding_rect;
+    if (output_surface_->capabilities().supports_target_damage)
+      target_damage_bounding_rect = renderer_->GetTargetDamageBoundingRect();
+
+    frame = aggregator_->Aggregate(
+        current_surface_id_, expected_display_time, current_display_transform,
+        target_damage_bounding_rect, ++swapped_trace_id_);
+  }
+
+  // Records whether the aggregated frame contains video or not.
+  // TODO(vikassoni) : Extend this capability to record whether a video frame is
+  // inline or fullscreen.
+  UMA_HISTOGRAM_ENUMERATION("Compositing.SurfaceAggregator.FrameContainsVideo",
+                            frame.metadata.may_contain_video
+                                ? TypeOfVideoInFrame::kVideo
+                                : TypeOfVideoInFrame::kNoVideo);
+
+  if (frame.metadata.delegated_ink_metadata) {
+    TRACE_EVENT_INSTANT2(
+        "viz", "Delegated Ink Metadata was aggregated for DrawAndSwap.",
+        TRACE_EVENT_SCOPE_THREAD, "point",
+        frame.metadata.delegated_ink_metadata->point().ToString(), "area",
+        frame.metadata.delegated_ink_metadata->presentation_area().ToString());
+    // TODO(1052145): This metadata will be stored here and used to determine
+    // which points should be drawn onto the back buffer (via Skia or OS APIs)
+    // before being swapped onto the screen.
   }
 
 #if defined(OS_ANDROID)
@@ -1039,9 +1094,12 @@ void Display::RemoveOverdrawQuads(CompositorFrame* frame) {
                  settings_.kMaximumOccluderComplexity) {
             gfx::Rect smallest_rect = *occlusion_in_target_space.begin();
             for (const auto& occluding_rect : occlusion_in_target_space) {
-              if (occluding_rect.size().GetArea() <
-                  smallest_rect.size().GetArea())
+              if (occluding_rect.size().GetCheckedArea().ValueOrDefault(
+                      INT_MAX) <
+                  smallest_rect.size().GetCheckedArea().ValueOrDefault(
+                      INT_MAX)) {
                 smallest_rect = occluding_rect;
+              }
             }
             occlusion_in_target_space.Subtract(smallest_rect);
           }
@@ -1130,8 +1188,8 @@ void Display::RemoveOverdrawQuads(CompositorFrame* frame) {
             !visible_region.Intersects(render_pass_quads_in_content_space) &&
             ReduceComplexity(visible_region, settings_.quad_split_limit,
                              &cached_visible_region_) &&
-            CanSplitQuad(quad->material, ComputeArea(cached_visible_region_),
-                         visible_region.bounds().size().GetArea(),
+            CanSplitQuad(quad->material, cached_visible_region_,
+                         visible_region.bounds().size(),
                          settings_.minimum_fragments_reduced,
                          device_scale_factor_);
         if (should_split_quads) {

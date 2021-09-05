@@ -64,10 +64,12 @@
 <translation id="2522350507219695259">Kalibratu da</translation>
 <translation id="252373100621549798">Pantaila ezezaguna</translation>
 <translation id="2545651323591713692">Atzeratu</translation>
+<translation id="2570734079541893434">Kudeatu ezarpenak</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{1 h barru}other{# h barru}}</translation>
 <translation id="2583543531130364912">Kalibratu ukipen-pantaila</translation>
 <translation id="2666092431469916601">Goiko elementua</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" /> gailutik partekatu da</translation>
+<translation id="271033894570825754">Berria</translation>
 <translation id="2743387203779672305">Kopiatu arbelean</translation>
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" /> (<ph name="PRICE" />)</translation>
 <translation id="2803313416453193357">Ireki karpeta</translation>
@@ -135,6 +137,7 @@
 <translation id="5463830097259460683">Emojiak eta ikurrak</translation>
 <translation id="5476505524087279545">desautatu</translation>
 <translation id="547979256943495781">Biltegia eskuinaldean dago</translation>
+<translation id="5528053674512161860">Ezin izan da kargatu orria ez dagoelako instalatuta garatzailearen erabiltzaile-interfazearen modulua (dev_ui)</translation>
 <translation id="5574202486608032840"><ph name="IDS_SHORT_PRODUCT_OS_NAME" /> sistema</translation>
 <translation id="5583640892426849032">Atzera tekla</translation>
 <translation id="5613020302032141669">Ezkerrera gezia</translation>
@@ -152,10 +155,12 @@
 <translation id="6040143037577758943">Itxi</translation>
 <translation id="6119846243427417423">aktibatu</translation>
 <translation id="6129953537138746214">Zuriunea</translation>
+<translation id="6134259848159370930">Bilatu gailuan, aplikazioetan, ezarpenetan eta sarean</translation>
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/seg</translation>
 <translation id="6156262341071374681">Erakutsi aplikazio guztiak</translation>
 <translation id="6165508094623778733">Lortu informazio gehiago</translation>
+<translation id="6166852626429024716">Bilatu gailuan, aplikazioetan, ezarpenetan, sarean…</translation>
 <translation id="6264365405983206840">Hautatu &amp;guztiak</translation>
 <translation id="6351032674660237738">APLIKAZIOEN IRADOKIZUNAK</translation>
 <translation id="6364916375976753737">Joan ezkerrera</translation>
@@ -192,7 +197,6 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{1 minutu gelditzen da}other{# minutu gelditzen dira}}</translation>
 <translation id="7319740667687257810">Abiarazlea, ikuspegi partziala</translation>
-<translation id="7352651011704765696">Arazoren bat izan da</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{Duela 1 min}other{Duela # min}}</translation>
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{1 minutu bat gelditzen da}other{# minutu gelditzen dira}}</translation>
@@ -205,6 +209,7 @@
 <translation id="7848989271541991537"><ph name="PAGE_NUMBER" />. orriko <ph name="ROW_NUMBER" />. errenkadako <ph name="COLUMN_NUMBER" /> zutabera eraman da.</translation>
 <translation id="7879499977785298635">Ez blokeatu</translation>
 <translation id="7907591526440419938">Ireki fitxategia</translation>
+<translation id="7952747673138230804">Chrome OS sistemak araka dezakezun eduki berriari buruzko iradokizunak erakusten ditu. Kalitatea hobetzeko balio duten estatistikak bidaltzen ditu, erabilera-datuak partekatzea aukeratu baduzu. <ph name="MANAGE_SETTINGS" /></translation>
 <translation id="7969046989155602842">Command</translation>
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{Irakurri gabeko jakinarazpen bat baino gehiago dago}other{Irakurri gabeko # jakinarazpen baino gehiago daude}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{1 min barru}other{# min barru}}</translation>
@@ -231,6 +236,7 @@
 <translation id="8602707065186045623"><ph name="SAVEAS_EXTENSION_TYPE" /> fitxategia (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8649597172973390955">Biltegia beti dago ikusgai</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> KB/s</translation>
+<translation id="8685326675965865247">Bilatu gailuan, aplikazioetan, ezarpenetan eta sarean. Aplikazio batetik bestera pasatzeko, erabili gezi-teklak.</translation>
 <translation id="8725488761726303204">eta beste <ph name="NUMBER" /></translation>
 <translation id="8730621377337864115">Eginda</translation>
 <translation id="8772073294905169192">{HOURS,plural, =1{1 h}other{# h}}</translation>

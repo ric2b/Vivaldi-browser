@@ -13,8 +13,8 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/launcher/app_service/app_service_app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
 #include "components/favicon/content/content_favicon_driver.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/app_window/native_app_window.h"
@@ -121,7 +121,8 @@ void AppServiceAppWindowLauncherItemController::OnWindowTitleChanged(
   if (!IsChromeApp())
     return;
 
-  ui::BaseWindow* const base_window = GetAppWindow(window);
+  ui::BaseWindow* const base_window =
+      GetAppWindow(window, true /*include_hidden*/);
 
   // For Chrome apps, use the window title (if set) to differentiate
   // show_in_shelf window shelf items instead of the default behavior of using

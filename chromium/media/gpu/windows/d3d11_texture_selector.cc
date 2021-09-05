@@ -152,7 +152,7 @@ std::unique_ptr<TextureSelector> TextureSelector::Create(
 
   // If we're trying to produce an output texture that's different from what
   // the decoder is providing, then we need to copy it.
-  needs_texture_copy = (decoder_output_format != output_dxgi_format);
+  needs_texture_copy |= (decoder_output_format != output_dxgi_format);
 
   // Force texture copy on if requested for debugging.
   if (base::FeatureList::IsEnabled(kD3D11VideoDecoderAlwaysCopy))

@@ -34,7 +34,7 @@ namespace css_test_helpers {
 TestStyleSheet::~TestStyleSheet() = default;
 
 TestStyleSheet::TestStyleSheet() {
-  document_ = MakeGarbageCollected<Document>();
+  document_ = Document::CreateForTest();
   TextPosition position;
   style_sheet_ = CSSStyleSheet::CreateInline(*document_, NullURL(), position,
                                              UTF8Encoding());
@@ -49,7 +49,7 @@ CSSRuleList* TestStyleSheet::CssRules() {
 
 RuleSet& TestStyleSheet::GetRuleSet() {
   RuleSet& rule_set = style_sheet_->Contents()->EnsureRuleSet(
-      MediaQueryEvaluator(), kRuleHasNoSpecialState);
+      MediaQueryEvaluator(document_->GetFrame()), kRuleHasNoSpecialState);
   rule_set.CompactRulesIfNeeded();
   return rule_set;
 }

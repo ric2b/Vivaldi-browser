@@ -8,7 +8,6 @@ import android.app.Activity;
 
 import androidx.annotation.NonNull;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.feed.FeedLoggingBridge;
 import org.chromium.chrome.browser.feed.library.api.client.knowncontent.ContentMetadata;
@@ -33,13 +32,15 @@ import java.util.HashMap;
  * Handles the actions user can trigger on the feed.
  */
 public class FeedActionHandler implements ActionApi {
+    private final Options mOptions;
     private final NativePageNavigationDelegate mDelegate;
     private final Runnable mSuggestionConsumedObserver;
     private final FeedLoggingBridge mLoggingBridge;
     private final Activity mActivity;
     private final Profile mProfile;
     private static final String TAG = "FeedActionHandler";
-    private static final String FEEDBACK_REPORT_TYPE = "USER_INITIATED_FEEDBACK_REPORT";
+    private static final String FEEDBACK_REPORT_TYPE =
+            "com.google.chrome.feed.USER_INITIATED_FEEDBACK_REPORT";
 
     // This must match the FeedSendFeedbackType enum in enums.xml.
     public @interface FeedFeedbackType {
@@ -54,6 +55,14 @@ public class FeedActionHandler implements ActionApi {
     public static final String CARD_PUBLISHING_DATE = "CardPublishingDate";
     public static final String CARD_TITLE = "CardTitle";
 
+    /** Options for handling actions */
+    public static class Options {
+        public boolean inhibitDownload;
+        public boolean inhibitOpenInIncognito;
+        public boolean inhibitOpenInNewTab;
+        public boolean inhibitLearnMore;
+    }
+
     /**
      * @param delegate The {@link NativePageNavigationDelegate} that this handler calls when
      * handling some of the actions.
@@ -61,11 +70,10 @@ public class FeedActionHandler implements ActionApi {
      * consumed by the user.
      * @param loggingBridge Reports pages visiting time.
      */
-    public FeedActionHandler(@NonNull NativePageNavigationDelegate delegate,
-            @NonNull Runnable suggestionConsumedObserver,
-            @NonNull FeedLoggingBridge loggingBridge,
-            Activity activity,
-            Profile profile) {
+    public FeedActionHandler(Options options, @NonNull NativePageNavigationDelegate delegate,
+            @NonNull Runnable suggestionConsumedObserver, @NonNull FeedLoggingBridge loggingBridge,
+            Activity activity, Profile profile) {
+        mOptions = options;
         mDelegate = delegate;
         mSuggestionConsumedObserver = suggestionConsumedObserver;
         mLoggingBridge = loggingBridge;
@@ -86,6 +94,7 @@ public class FeedActionHandler implements ActionApi {
 
     @Override
     public void openUrlInIncognitoMode(String url) {
+        assert !mOptions.inhibitOpenInIncognito;
         mDelegate.openUrl(WindowOpenDisposition.OFF_THE_RECORD, createLoadUrlParams(url));
         mSuggestionConsumedObserver.run();
         mLoggingBridge.reportFeedInteraction();
@@ -93,18 +102,19 @@ public class FeedActionHandler implements ActionApi {
 
     @Override
     public boolean canOpenUrlInIncognitoMode() {
-        return mDelegate.isOpenInIncognitoEnabled();
+        return !mOptions.inhibitOpenInIncognito && mDelegate.isOpenInIncognitoEnabled();
     }
 
     @Override
     public void openUrlInNewTab(String url) {
+        assert !mOptions.inhibitOpenInNewTab;
         openAndRecord(WindowOpenDisposition.NEW_BACKGROUND_TAB, createLoadUrlParams(url));
         mLoggingBridge.reportFeedInteraction();
     }
 
     @Override
     public boolean canOpenUrlInNewTab() {
-        return true;
+        return !mOptions.inhibitOpenInNewTab;
     }
 
     @Override
@@ -119,6 +129,7 @@ public class FeedActionHandler implements ActionApi {
 
     @Override
     public void downloadUrl(ContentMetadata contentMetadata) {
+        assert !mOptions.inhibitDownload;
         mDelegate.openUrl(
                 WindowOpenDisposition.SAVE_TO_DISK, createLoadUrlParams(contentMetadata.getUrl()));
         mSuggestionConsumedObserver.run();
@@ -127,7 +138,7 @@ public class FeedActionHandler implements ActionApi {
 
     @Override
     public boolean canDownloadUrl() {
-        return true;
+        return !mOptions.inhibitDownload;
     }
 
     @Override
@@ -151,11 +162,13 @@ public class FeedActionHandler implements ActionApi {
             feedContext.put(CARD_TITLE, title);
         }
 
+        // Identifies this feedback as coming from chrome android (as opposed to desktop).
+        // This string is not used for allow list matching on the server.
         String feedbackContext = "mobile_browser";
         // Reports for Chrome mobile must have a contextTag of the form
-        // com.chrome.canary.USER_INITIATED_FEEDBACK_REPORT, or they will be discarded.
-        String contextTag =
-                ContextUtils.getApplicationContext().getPackageName() + "." + FEEDBACK_REPORT_TYPE;
+        // com.chrome.feed.USER_INITIATED_FEEDBACK_REPORT, or they will be discarded
+        // for not matching an allow list rule.
+        String contextTag = FEEDBACK_REPORT_TYPE;
 
         HelpAndFeedback.getInstance().showFeedback(mActivity, mProfile, contentMetadata.getUrl(),
                 contextTag, feedContext, feedbackContext);
@@ -165,13 +178,14 @@ public class FeedActionHandler implements ActionApi {
 
     @Override
     public void learnMore() {
+        assert !mOptions.inhibitLearnMore;
         mDelegate.navigateToHelpPage();
         mLoggingBridge.reportFeedInteraction();
     }
 
     @Override
     public boolean canLearnMore() {
-        return true;
+        return !mOptions.inhibitLearnMore;
     }
 
     private LoadUrlParams createLoadUrlParams(String url) {

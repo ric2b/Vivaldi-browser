@@ -5,6 +5,7 @@
 #include "chrome/browser/browsing_data/browsing_data_important_sites_util.h"
 
 #include "base/scoped_observer.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 
 namespace {
@@ -55,8 +56,8 @@ void BrowsingDataTaskObserver::OnBrowsingDataRemoverDone() {
 
 namespace browsing_data_important_sites_util {
 
-void Remove(int remove_mask,
-            int origin_mask,
+void Remove(uint64_t remove_mask,
+            uint64_t origin_mask,
             browsing_data::TimePeriod time_period,
             std::unique_ptr<content::BrowsingDataFilterBuilder> filter_builder,
             content::BrowsingDataRemover* remover,
@@ -64,8 +65,8 @@ void Remove(int remove_mask,
   auto* observer =
       new BrowsingDataTaskObserver(remover, std::move(callback), 2);
 
-  int filterable_mask = 0;
-  int nonfilterable_mask = remove_mask;
+  uint64_t filterable_mask = 0;
+  uint64_t nonfilterable_mask = remove_mask;
 
   if (!filter_builder->IsEmptyBlacklist()) {
     filterable_mask =
@@ -77,20 +78,22 @@ void Remove(int remove_mask,
   }
   browsing_data::RecordDeletionForPeriod(time_period);
 
-  if (filterable_mask) {
-    remover->RemoveWithFilterAndReply(
-        browsing_data::CalculateBeginDeleteTime(time_period),
-        browsing_data::CalculateEndDeleteTime(time_period), filterable_mask,
-        origin_mask, std::move(filter_builder), observer);
-  } else {
-    observer->OnBrowsingDataRemoverDone();
-  }
-
   if (nonfilterable_mask) {
     remover->RemoveAndReply(
         browsing_data::CalculateBeginDeleteTime(time_period),
         browsing_data::CalculateEndDeleteTime(time_period), nonfilterable_mask,
         origin_mask, observer);
+  } else {
+    observer->OnBrowsingDataRemoverDone();
+  }
+
+  // Cookie deletion could be deferred until all other data types are deleted.
+  // As cookie deletion may be filtered, this needs to happen last.
+  if (filterable_mask) {
+    remover->RemoveWithFilterAndReply(
+        browsing_data::CalculateBeginDeleteTime(time_period),
+        browsing_data::CalculateEndDeleteTime(time_period), filterable_mask,
+        origin_mask, std::move(filter_builder), observer);
   } else {
     observer->OnBrowsingDataRemoverDone();
   }

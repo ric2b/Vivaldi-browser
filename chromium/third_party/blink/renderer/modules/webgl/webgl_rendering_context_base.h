@@ -33,6 +33,7 @@
 #include "base/numerics/checked_math.h"
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
+#include "device/vr/public/mojom/vr_service.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
@@ -40,6 +41,7 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
+#include "third_party/blink/renderer/core/html/canvas/ukm_parameters.h"
 #include "third_party/blink/renderer/core/layout/content_change_type.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
@@ -67,7 +69,7 @@ namespace gpu {
 namespace gles2 {
 class GLES2Interface;
 }
-}
+}  // namespace gpu
 
 namespace blink {
 
@@ -137,6 +139,10 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     if (Host()->IsOffscreenCanvas())
       return nullptr;
     return static_cast<HTMLCanvasElement*>(Host());
+  }
+
+  base::Optional<UkmParameters> ukm_parameters() const {
+    return Host()->ukm_parameters();
   }
 
   virtual String ContextName() const = 0;
@@ -572,7 +578,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
 
   unsigned MaxVertexAttribs() const { return max_vertex_attribs_; }
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   // Returns approximate gpu memory allocated per pixel.
   int ExternallyAllocatedBufferCountPerPixel() override;
@@ -592,11 +598,10 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     Member<WebGLTexture> texture2d_array_binding_;
     Member<WebGLTexture> texture_video_image_binding_;
 
-    void Trace(Visitor*);
+    void Trace(Visitor*) const;
   };
 
-  scoped_refptr<StaticBitmapImage> GetImage(
-      AccelerationHint = kPreferAcceleration) override;
+  scoped_refptr<StaticBitmapImage> GetImage() override;
   void SetFilterQuality(SkFilterQuality) override;
   bool IsWebGL2OrHigher() {
     return context_type_ == Platform::kWebGL2ContextType ||
@@ -608,7 +613,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void commit();
 
   ScriptPromise makeXRCompatible(ScriptState*, ExceptionState&);
-  bool IsXRCompatible();
+  bool IsXRCompatible() const;
 
   void UpdateNumberOfUserAllocatedMultisampledRenderbuffers(int delta);
 
@@ -681,6 +686,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void DrawingBufferClientRestoreMaskAndClearValues() override;
   void DrawingBufferClientRestorePixelPackParameters() override;
   void DrawingBufferClientRestoreTexture2DBinding() override;
+  void DrawingBufferClientRestoreTextureCubeMapBinding() override;
   void DrawingBufferClientRestoreRenderbufferBinding() override;
   void DrawingBufferClientRestoreFramebufferBinding() override;
   void DrawingBufferClientRestorePixelUnpackBufferBinding() override;
@@ -788,7 +794,16 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   Member<WebGLFramebuffer> framebuffer_binding_;
   Member<WebGLRenderbuffer> renderbuffer_binding_;
 
+  static bool MakeXrCompatibleSync(CanvasRenderingContextHost* host);
+  static bool IsXrCompatibleFromResult(
+      device::mojom::blink::XrCompatibleResult result);
+  static bool DidGpuRestart(device::mojom::blink::XrCompatibleResult result);
+  void MakeXrCompatibleAsync();
+  void OnMakeXrCompatibleFinished(
+      device::mojom::blink::XrCompatibleResult xr_compatible_result);
+  void CompleteXrCompatiblePromiseIfPending();
   bool xr_compatible_;
+  Member<ScriptPromiseResolver> make_xr_compatible_resolver_;
 
   HeapVector<TextureUnitState> texture_units_;
   wtf_size_t active_texture_unit_;
@@ -886,7 +901,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     // This is only used for keeping the JS wrappers of extensions alive.
     virtual WebGLExtension* GetExtensionObjectIfAlreadyEnabled() = 0;
 
-    virtual void Trace(Visitor* visitor) {}
+    virtual void Trace(Visitor* visitor) const {}
     const char* NameInHeapSnapshot() const override {
       return "ExtensionTracker";
     }
@@ -932,7 +947,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
       return extension_;
     }
 
-    void Trace(Visitor* visitor) override {
+    void Trace(Visitor* visitor) const override {
       visitor->Trace(extension_);
       ExtensionTracker::Trace(visitor);
     }
@@ -1593,6 +1608,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
 
   virtual void RestoreCurrentFramebuffer();
   void RestoreCurrentTexture2D();
+  void RestoreCurrentTextureCubeMap();
 
   void FindNewMaxNonDefaultTextureUnit();
 
@@ -1764,10 +1780,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   const Platform::ContextType context_type_;
 
   bool IsPaintable() const final { return GetDrawingBuffer(); }
-
-  // Returns true if the context is compatible with the XR device as defined
-  // by https://immersive-web.github.io/webxr/spec/latest/#contextcompatibility
-  bool ContextCreatedOnXRCompatibleAdapter();
 
   bool CopyRenderingResultsFromDrawingBuffer(CanvasResourceProvider*,
                                              SourceDrawingBuffer);

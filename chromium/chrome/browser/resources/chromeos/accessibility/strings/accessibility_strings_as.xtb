@@ -63,7 +63,7 @@
 <translation id="1360699455582016846">ৰাউটিং কী <ph name="ROUTING_KEY_NUMBER" />ৰ তলৰ বস্তুত ক্লিক কৰক</translation>
 <translation id="1377925789329510816">এইটো শেষ শিৰোনাম। প্ৰথম শিৰোনামলৈ যাবলৈ Search+H টিপক বা এই পৃষ্ঠাৰ দ্বিতীয় শিৰোনামলৈ যাবলৈ Search+Shift+H টিপক।</translation>
 <translation id="138218114945450791">পাতল নীলা</translation>
-<translation id="1383876407941801731">সন্ধান</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1396114365388024581">tablst</translation>
 <translation id="1405567553485452995">পাতল সেউজীয়া</translation>
 <translation id="1417889266572670458">সাগৰৰ দৰে নীলা</translation>
@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">সোঁফাললৈ স্ক্ৰ’ল কৰক</translation>
 <translation id="1781173782405573156">পাৰ হৈ যাব পৰা চাবি</translation>
 <translation id="1787176709638001873">পাছৱর্ড সম্পাদনা কৰা পাঠ</translation>
+<translation id="180203835522132923">Search + O, তাৰ পাছত W</translation>
 <translation id="1810107444790159527">সূচী বাকচ</translation>
 <translation id="1812527064848182527">লেণ্ডস্কে’প</translation>
 <translation id="1829244130665387512">পৃষ্ঠাত বিচাৰক</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">দুটা আঙুলি বাওঁফাললৈ ছোৱাইপ কৰক</translation>
 <translation id="2998131015536248178">পূৰ্বৱৰ্তী বৰ্ণ</translation>
 <translation id="2999559350546931576">তীব্ৰতা হ্ৰাস কৰক</translation>
+<translation id="3009352964623081324">Search + O, তাৰ পাছত S। কণ্ঠধ্বনিসমূহ ইনষ্টল, পৰিচালনা আৰু কাষ্টমাইজ কৰিবলৈ ব্যৱহাৰ কৰক।</translation>
 <translation id="3014130421870723208">@ed 8dot</translation>
 <translation id="3030432017085518523">মেনুত থকা বস্তুৰ ৰেডিঅ’ বুটাম</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{ঊৰ্দ্ধকমা}one{#টা ঊৰ্দ্ধকমা}other{#টা ঊৰ্দ্ধকমা}}</translation>
@@ -453,6 +455,7 @@
 <translation id="4505167975768625962">অন্তর্ভুক্তিকৰণ</translation>
 <translation id="4511186779140817916">চাফা বাদামৰ দৰে</translation>
 <translation id="451510441928265982">পূর্বৱর্তী স্তৰ ২ৰ শিৰোনাম নাই</translation>
+<translation id="4515799157838123044">পটভূমিৰ সমল ধূসৰ কৰক</translation>
 <translation id="4517854969512651305">মান বৃদ্ধি কৰক</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{শ্লেশ্ব}one{#টা শ্লেশ্ব}other{#টা শ্লেশ্ব}}</translation>
 <translation id="4537277403911487429">পৰৱর্তী একে ধৰণৰ বস্তু</translation>
@@ -704,6 +707,7 @@
 <translation id="6628427060004938651">অংশ</translation>
 <translation id="6637586476836377253">লগ</translation>
 <translation id="6657128831881431364">প্ৰগতিৰ হাৰ নির্দেশ কৰা দণ্ড</translation>
+<translation id="6660819301598582123">অসমৰ এশিঙীয়া গঁড় পৃথিৱী বিখ্যাত।</translation>
 <translation id="667999046851023355">নথি</translation>
 <translation id="6688209025607531203">ম'ডেল বহিৰ্ভূত সতৰ্কবাণী</translation>
 <translation id="6689672606256159458">গাঢ় ছেলম'ন</translation>
@@ -739,7 +743,6 @@
 <translation id="6951482098621102657">কোনো পৰৱর্তী স্তৰ ৫ৰ শিৰোনাম নাই</translation>
 <translation id="6955705049214951590">অস্পষ্ট গোলাপী</translation>
 <translation id="696356426651109308">আৰম্ভণিলৈ যাওক</translation>
-<translation id="699159175332639490">Search + O + W</translation>
 <translation id="6994042831499278539">প্ৰসংগৰ কাৰণে শব্দাৱলী</translation>
 <translation id="6996566555547746822">পৰৱৰ্তী কম্ব’ বাকচ</translation>
 <translation id="6997224546856374593">বৰফলাৰ আখৰ পঢ়োঁতে:</translation>
@@ -764,7 +767,7 @@
 <translation id="7137397390322864165">ছেলম'ন</translation>
 <translation id="7140168702531682811">ছুপাৰস্ক্ৰিপ্ট</translation>
 <translation id="7143034430156387447">৬ আৰু ৮ বিন্দু ব্ৰেইলিৰ মাজত ট’গ’ল কৰক</translation>
-<translation id="7143207342074048698">সংযোগ কৰি থকা হৈছে</translation>
+<translation id="7143207342074048698">সংযোগ হৈছে</translation>
 <translation id="7153618581592392745">লেভেণ্ডাৰ</translation>
 <translation id="7157306005867877619">সাৰাংশ</translation>
 <translation id="7161771961008409533">পপ-আপৰ বুটাম</translation>
@@ -808,6 +811,7 @@
 <translation id="743783356331413498">উদাহৰণ</translation>
 <translation id="7439060726180460871">ডাইৰেক্টৰী</translation>
 <translation id="744163271241493234">পাছৱৰ্ড সম্পাদক</translation>
+<translation id="7484805699335881122">উপাদানৰ প্ৰকাৰ আৰু উদ্ধৃত, মচা, ব’ল্ড কৰা, বন্ধনীযুক্ত অথবা বৰফলাত থকা পাঠ কওঁতে কণ্ঠস্বৰৰ তীব্ৰতাৰ স্তৰ সলনি কৰক।</translation>
 <translation id="7491962110804786152">টেব</translation>
 <translation id="7505149250476994901">আখৰৰ আগত "cap" বুলি কওক</translation>
 <translation id="7518543783849163354">সাময়িকভাৱে ChromeVoxৰ কথা কোৱা বন্ধ কৰিবলৈ নিয়ন্ত্ৰণ বুটামটো টিপক।</translation>

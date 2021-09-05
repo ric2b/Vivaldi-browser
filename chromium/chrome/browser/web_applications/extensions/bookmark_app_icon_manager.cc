@@ -4,8 +4,17 @@
 
 #include "chrome/browser/web_applications/extensions/bookmark_app_icon_manager.h"
 
+#include <map>
+#include <string>
+#include <utility>
+
+#include "base/bind.h"
 #include "base/check_op.h"
+#include "base/files/file_util.h"
 #include "base/notreached.h"
+#include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
+#include "chrome/browser/extensions/menu_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_registrar.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
@@ -13,7 +22,9 @@
 #include "extensions/browser/image_loader.h"
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
+#include "extensions/common/manifest_handlers/web_app_shortcut_icons_handler.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 
@@ -85,12 +96,78 @@ void ReadExtensionIcons(Profile* profile,
       base::BindOnce(&OnExtensionIconsLoaded, std::move(callback)));
 }
 
+SkBitmap ReadShortcutsMenuIconBlocking(const base::FilePath& path) {
+  // Read icon data from disk.
+  std::string icon_data;
+  if (path.empty() || !base::ReadFileToString(path, &icon_data)) {
+    return SkBitmap();
+  }
+
+  SkBitmap bitmap;
+  if (!gfx::PNGCodec::Decode(
+          reinterpret_cast<const unsigned char*>(icon_data.c_str()),
+          icon_data.size(), &bitmap)) {
+    return SkBitmap();
+  }
+
+  return bitmap;
+}
+
+// Performs blocking I/O. May be called on another thread.
+ShortcutsMenuIconsBitmaps ReadShortcutsMenuIconsBlocking(
+    const std::vector<std::vector<ImageLoader::ImageRepresentation>>&
+        shortcuts_menu_images_reps) {
+  ShortcutsMenuIconsBitmaps results;
+  for (const auto& image_reps : shortcuts_menu_images_reps) {
+    std::map<SquareSizePx, SkBitmap> result;
+    for (const auto& image_rep : image_reps) {
+      SkBitmap bitmap =
+          ReadShortcutsMenuIconBlocking(image_rep.resource.GetFilePath());
+      if (!bitmap.empty())
+        result[image_rep.desired_size.width()] = std::move(bitmap);
+    }
+    // We always push_back (even when result is empty) to keep a given
+    // std::map's index in sync with that of its corresponding shortcuts menu
+    // item.
+    results.push_back(std::move(result));
+  }
+  return results;
+}
+
+std::vector<std::vector<ImageLoader::ImageRepresentation>>
+CreateShortcutsMenuIconsImageRepresentations(
+    Profile* profile,
+    const web_app::AppId& app_id,
+    const std::vector<std::vector<SquareSizePx>>& shortcuts_menu_icons_sizes) {
+  const Extension* web_app = GetBookmarkApp(profile, app_id);
+  DCHECK(web_app);
+
+  std::vector<std::vector<ImageLoader::ImageRepresentation>> results;
+  for (size_t i = 0; i < shortcuts_menu_icons_sizes.size(); ++i) {
+    std::vector<ImageLoader::ImageRepresentation> result;
+    for (const auto& icon_size : shortcuts_menu_icons_sizes[i]) {
+      ExtensionResource resource = WebAppShortcutIconsInfo::GetIconResource(
+          web_app, i, icon_size, ExtensionIconSet::MATCH_EXACTLY);
+      ImageLoader::ImageRepresentation image_rep{
+          resource, ImageLoader::ImageRepresentation::NEVER_RESIZE,
+          gfx::Size{icon_size, icon_size}, /*scale_factor=*/0.0f};
+      result.emplace_back(std::move(image_rep));
+    }
+    results.emplace_back(std::move(result));
+  }
+  return results;
+}
+
 }  // anonymous namespace
 
 BookmarkAppIconManager::BookmarkAppIconManager(Profile* profile)
     : profile_(profile) {}
 
 BookmarkAppIconManager::~BookmarkAppIconManager() = default;
+
+void BookmarkAppIconManager::Start() {}
+
+void BookmarkAppIconManager::Shutdown() {}
 
 bool BookmarkAppIconManager::HasIcons(
     const web_app::AppId& app_id,
@@ -142,13 +219,28 @@ void BookmarkAppIconManager::ReadAllIcons(const web_app::AppId& app_id,
                      std::move(callback));
 }
 
-void BookmarkAppIconManager::ReadAllShortcutIcons(
+void BookmarkAppIconManager::ReadAllShortcutsMenuIcons(
     const web_app::AppId& app_id,
-    ReadShortcutIconsCallback callback) const {
-  // TODO(https://crbug.com/926083): This needs to be implemented to support
-  // Manifest update and local installs.
-  NOTIMPLEMENTED();
-  std::move(callback).Run(std::vector<std::map<SquareSizePx, SkBitmap>>());
+    ReadShortcutsMenuIconsCallback callback) const {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  const Extension* web_app = GetBookmarkApp(profile_, app_id);
+  DCHECK(web_app);
+
+  if (!web_app) {
+    std::move(callback).Run(ShortcutsMenuIconsBitmaps{});
+    return;
+  }
+  std::vector<std::vector<ImageLoader::ImageRepresentation>> img_reps =
+      CreateShortcutsMenuIconsImageRepresentations(
+          profile_, app_id,
+          GetBookmarkAppDownloadedShortcutsMenuIconsSizes(web_app));
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
+      base::BindOnce(ReadShortcutsMenuIconsBlocking, std::move(img_reps)),
+      std::move(callback));
 }
 
 void BookmarkAppIconManager::ReadSmallestIcon(const web_app::AppId& app_id,
@@ -166,6 +258,12 @@ void BookmarkAppIconManager::ReadSmallestCompressedIcon(
   NOTIMPLEMENTED();
   DCHECK(HasSmallestIcon(app_id, icon_size_in_px));
   std::move(callback).Run(std::vector<uint8_t>());
+}
+
+SkBitmap BookmarkAppIconManager::GetFavicon(
+    const web_app::AppId& app_id) const {
+  auto* menu_manager = extensions::MenuManager::Get(profile_);
+  return menu_manager->GetIconForExtension(app_id).AsBitmap();
 }
 
 }  // namespace extensions

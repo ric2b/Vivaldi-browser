@@ -9,6 +9,10 @@
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view.h"
 
+// namespace views {
+// class FocusSearch;
+// }
+
 namespace ash {
 
 class FeaturePodButton;
@@ -17,7 +21,6 @@ class TopShortcutsView;
 class NotificationHiddenView;
 class PageIndicatorView;
 class UnifiedManagedDeviceView;
-class UnifiedMessageCenterView;
 class UnifiedSystemInfoView;
 class UnifiedSystemTrayController;
 
@@ -125,12 +128,6 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View,
   // call SetTransform() to move this view in order to avoid resizing.
   bool IsTransformEnabled() const;
 
-  // Update the top of the SystemTray part to imitate notification list
-  // scrolling under SystemTray. |rect_below_scroll| is the region of
-  // notifications covered by SystemTray part, and its coordinate is relative to
-  // UnifiedSystemTrayView. It can be empty.
-  void SetNotificationRectBelowScroll(const gfx::Rect& rect_below_scroll);
-
   // Returns the number of visible feature pods.
   int GetVisibleFeaturePodCount() const;
 
@@ -142,6 +139,7 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View,
   bool IsDetailedViewShown() const;
 
   // views::View:
+  gfx::Size CalculatePreferredSize() const override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   void ChildPreferredSizeChanged(views::View* child) override;
   const char* GetClassName() const override;
@@ -168,8 +166,12 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View,
 
   View* detailed_view() { return detailed_view_container_; }
   View* detailed_view_for_testing() { return detailed_view_container_; }
+  PageIndicatorView* page_indicator_view_for_test() {
+    return page_indicator_view_;
+  }
 
  private:
+  class SystemTrayContainer;
   friend class UnifiedMessageCenterBubbleTest;
 
   // Get first and last focusable child views. These functions are used to
@@ -177,8 +179,6 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View,
   // when focus is acquired from another widget.
   View* GetFirstFocusableChild();
   View* GetLastFocusableChild();
-
-  class FocusSearch;
 
   double expanded_amount_;
 
@@ -192,9 +192,8 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View,
   PageIndicatorView* const page_indicator_view_;
   UnifiedSlidersContainerView* const sliders_container_;
   UnifiedSystemInfoView* const system_info_view_;
-  views::View* const system_tray_container_;
+  SystemTrayContainer* const system_tray_container_;
   views::View* const detailed_view_container_;
-  UnifiedMessageCenterView* message_center_view_ = nullptr;
 
   // Null if kManagedDeviceUIRedesign is disabled.
   UnifiedManagedDeviceView* managed_device_view_ = nullptr;
@@ -205,7 +204,7 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View,
   // The view that is saved by calling SaveFocus().
   views::View* saved_focused_view_ = nullptr;
 
-  const std::unique_ptr<FocusSearch> focus_search_;
+  const std::unique_ptr<views::FocusSearch> focus_search_;
 
   views::FocusManager* focus_manager_ = nullptr;
 

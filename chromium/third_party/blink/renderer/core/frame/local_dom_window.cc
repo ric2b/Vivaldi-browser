@@ -37,8 +37,10 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_screen_info.h"
 #include "third_party/blink/renderer/bindings/core/v8/binding_security.h"
+#include "third_party/blink/renderer/bindings/core/v8/isolated_world_csp.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_scroll_to_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_void_function.h"
@@ -53,7 +55,6 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_media.h"
 #include "third_party/blink/renderer/core/dom/document_init.h"
-#include "third_party/blink/renderer/core/dom/dom_implementation.h"
 #include "third_party/blink/renderer/core/dom/events/add_event_listener_options_resolved.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatch_forbidden_scope.h"
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
@@ -68,6 +69,7 @@
 #include "third_party/blink/renderer/core/events/hash_change_event.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/events/pop_state_event.h"
+#include "third_party/blink/renderer/core/execution_context/agent_metrics_collector.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/execution_context/security_context_init.h"
 #include "third_party/blink/renderer/core/execution_context/window_agent.h"
@@ -102,6 +104,7 @@
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/loader/appcache/application_cache.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
+#include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/create_window.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -117,19 +120,18 @@
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
+#include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/scheduler/public/dummy_schedulers.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
+#include "third_party/blink/renderer/platform/widget/frame_widget.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
+#include "v8/include/v8.h"
 
 namespace blink {
-
-// Timeout for link preloads to be used after window.onload
-static constexpr base::TimeDelta kUnusedPreloadTimeout =
-    base::TimeDelta::FromSeconds(3);
 
 static void UpdateSuddenTerminationStatus(
     LocalDOMWindow* dom_window,
@@ -227,29 +229,28 @@ static void UntrackAllBeforeUnloadEventListeners(LocalDOMWindow* dom_window) {
       blink::mojom::SuddenTerminationDisablerType::kBeforeUnloadHandler);
 }
 
-LocalDOMWindow::LocalDOMWindow(LocalFrame& frame)
+LocalDOMWindow::LocalDOMWindow(LocalFrame& frame, WindowAgent* agent)
     : DOMWindow(frame),
-      ExecutionContext(V8PerIsolateData::MainThreadIsolate()),
+      ExecutionContext(V8PerIsolateData::MainThreadIsolate(), agent),
       visualViewport_(MakeGarbageCollected<DOMVisualViewport>(this)),
-      unused_preloads_timer_(frame.GetTaskRunner(TaskType::kInternalDefault),
-                             this,
-                             &LocalDOMWindow::WarnUnusedPreloads),
       should_print_when_finished_loading_(false),
       input_method_controller_(
           MakeGarbageCollected<InputMethodController>(*this, frame)),
       spell_checker_(MakeGarbageCollected<SpellChecker>(*this)),
       text_suggestion_controller_(
-          MakeGarbageCollected<TextSuggestionController>(*this)) {}
+          MakeGarbageCollected<TextSuggestionController>(*this)),
+      isolated_world_csp_map_(
+          MakeGarbageCollected<
+              HeapHashMap<int, Member<ContentSecurityPolicy>>>()) {}
 
-void LocalDOMWindow::ClearDocument() {
-  if (!document_)
-    return;
-
-  DCHECK(!document_->IsActive());
-
-  unused_preloads_timer_.Stop();
-  document_->ClearDOMWindow();
-  document_ = nullptr;
+void LocalDOMWindow::ResetWindowAgent(WindowAgent* agent) {
+  GetAgent()->DetachContext(this);
+  if (auto* agent_metrics = GetFrame()->GetPage()->GetAgentMetricsCollector())
+    agent_metrics->DidDetachWindow(*this);
+  ResetAgent(agent);
+  GetAgent()->AttachContext(this);
+  if (auto* agent_metrics = GetFrame()->GetPage()->GetAgentMetricsCollector())
+    agent_metrics->DidAttachWindow(*this);
 }
 
 void LocalDOMWindow::AcceptLanguagesChanged() {
@@ -257,6 +258,34 @@ void LocalDOMWindow::AcceptLanguagesChanged() {
     navigator_->SetLanguagesDirty();
 
   DispatchEvent(*Event::Create(event_type_names::kLanguagechange));
+}
+
+ScriptValue LocalDOMWindow::event(ScriptState* script_state) const {
+  // If current event is null, return undefined.
+  if (!current_event_) {
+    return ScriptValue(script_state->GetIsolate(),
+                       ToV8(ToV8UndefinedGenerator(), script_state));
+  }
+
+  // Track usage of window.event when the event's target is inside V0 shadow
+  // tree.
+  if (current_event_->target()) {
+    Node* target_node = current_event_->target()->ToNode();
+    if (target_node && target_node->IsInV0ShadowTree()) {
+      UseCounter::Count(document(), WebFeature::kWindowEventInV0ShadowTree);
+    }
+  }
+
+  return ScriptValue(script_state->GetIsolate(),
+                     ToV8(CurrentEvent(), script_state));
+}
+
+Event* LocalDOMWindow::CurrentEvent() const {
+  return current_event_.Get();
+}
+
+void LocalDOMWindow::SetCurrentEvent(Event* new_event) {
+  current_event_ = new_event;
 }
 
 TrustedTypePolicyFactory* LocalDOMWindow::trustedTypes() const {
@@ -295,7 +324,31 @@ bool LocalDOMWindow::ShouldInstallV8Extensions() const {
 }
 
 ContentSecurityPolicy* LocalDOMWindow::GetContentSecurityPolicyForWorld() {
-  return document()->GetContentSecurityPolicyForWorld();
+  v8::Isolate* isolate = GetIsolate();
+  v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Context> v8_context = isolate->GetCurrentContext();
+
+  // This can be called before we enter v8, hence the context might be empty,
+  // which implies we are not in an isolated world.
+  if (v8_context.IsEmpty())
+    return GetContentSecurityPolicy();
+
+  DOMWrapperWorld& world = DOMWrapperWorld::Current(isolate);
+  if (!world.IsIsolatedWorld())
+    return GetContentSecurityPolicy();
+
+  int32_t world_id = world.GetWorldId();
+  auto it = isolated_world_csp_map_->find(world_id);
+  if (it != isolated_world_csp_map_->end())
+    return it->value;
+
+  ContentSecurityPolicy* policy =
+      IsolatedWorldCSP::Get().CreateIsolatedWorldCSP(*this, world_id);
+  if (!policy)
+    return GetContentSecurityPolicy();
+
+  isolated_world_csp_map_->insert(world_id, policy);
+  return policy;
 }
 
 const KURL& LocalDOMWindow::Url() const {
@@ -339,15 +392,64 @@ const SecurityContext& LocalDOMWindow::GetSecurityContext() const {
 
 bool LocalDOMWindow::CanExecuteScripts(
     ReasonForCallingCanExecuteScripts reason) {
-  return document()->CanExecuteScripts(reason);
+  if (!GetFrame())
+    return false;
+
+  // Normally, scripts are not allowed in sandboxed contexts that disallow them.
+  // However, there is an exception for cases when the script should bypass the
+  // main world's CSP (such as for privileged isolated worlds). See
+  // https://crbug.com/811528.
+  if (IsSandboxed(network::mojom::blink::WebSandboxFlags::kScripts) &&
+      !ContentSecurityPolicy::ShouldBypassMainWorld(this)) {
+    // FIXME: This message should be moved off the console once a solution to
+    // https://bugs.webkit.org/show_bug.cgi?id=103274 exists.
+    if (reason == kAboutToExecuteScript) {
+      AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+          mojom::blink::ConsoleMessageSource::kSecurity,
+          mojom::blink::ConsoleMessageLevel::kError,
+          "Blocked script execution in '" + Url().ElidedString() +
+              "' because the document's frame is sandboxed and the "
+              "'allow-scripts' permission is not set."));
+    }
+    return false;
+  }
+
+  WebContentSettingsClient* settings_client =
+      GetFrame()->GetContentSettingsClient();
+  bool script_enabled = GetFrame()->GetSettings()->GetScriptEnabled();
+  if (settings_client)
+    script_enabled = settings_client->AllowScript(script_enabled);
+  if (!script_enabled && reason == kAboutToExecuteScript && settings_client)
+    settings_client->DidNotAllowScript();
+  return script_enabled;
 }
 
 void LocalDOMWindow::ExceptionThrown(ErrorEvent* event) {
   MainThreadDebugger::Instance()->ExceptionThrown(this, event);
 }
 
+// https://w3c.github.io/webappsec-referrer-policy/#determine-requests-referrer
 String LocalDOMWindow::OutgoingReferrer() const {
-  return document()->OutgoingReferrer();
+  // Step 3.1: "If environment's global object is a Window object, then"
+  // Step 3.1.1: "Let document be the associated Document of environment's
+  // global object."
+
+  // Step 3.1.2: "If document's origin is an opaque origin, return no referrer."
+  if (GetSecurityOrigin()->IsOpaque())
+    return String();
+
+  // Step 3.1.3: "While document is an iframe srcdoc document, let document be
+  // document's browsing context's browsing context container's node document."
+  LocalFrame* referrer_frame = GetFrame();
+  while (referrer_frame->GetDocument()->IsSrcdocDocument()) {
+    // Srcdoc documents must be local within the containing frame.
+    referrer_frame = To<LocalFrame>(referrer_frame->Tree().Parent());
+    // Srcdoc documents cannot be top-level documents, by definition,
+    // because they need to be contained in iframes with the srcdoc.
+    DCHECK(referrer_frame);
+  }
+  // Step: 3.1.4: "Let referrerSource be document's URL."
+  return referrer_frame->GetDocument()->Url().StrippedForUseAsReferrer();
 }
 
 network::mojom::ReferrerPolicy LocalDOMWindow::GetReferrerPolicy() const {
@@ -551,26 +653,66 @@ void LocalDOMWindow::CountUse(mojom::WebFeature feature) {
 }
 
 void LocalDOMWindow::CountDeprecation(mojom::WebFeature feature) {
-  document()->CountDeprecation(feature);
+  // TODO(yoichio): We should remove these counters when v0 APIs are removed.
+  // crbug.com/946875.
+  if (feature == WebFeature::kHTMLImports &&
+      GetOriginTrialContext()->IsFeatureEnabled(
+          OriginTrialFeature::kHTMLImports)) {
+    CountUse(WebFeature::kHTMLImportsOnReverseOriginTrials);
+  } else if (feature == WebFeature::kElementCreateShadowRoot &&
+             GetOriginTrialContext()->IsFeatureEnabled(
+                 OriginTrialFeature::kShadowDOMV0)) {
+    CountUse(WebFeature::kElementCreateShadowRootOnReverseOriginTrials);
+  } else if (feature == WebFeature::kDocumentRegisterElement &&
+             GetOriginTrialContext()->IsFeatureEnabled(
+                 OriginTrialFeature::kCustomElementsV0)) {
+    CountUse(WebFeature::kDocumentRegisterElementOnReverseOriginTrials);
+  }
+
+  if (!GetFrame())
+    return;
+
+  // Don't count usage of WebComponentsV0 for chrome:// URLs, but still report
+  // the deprecation messages.
+  auto* loader = GetFrame()->Loader().GetDocumentLoader();
+  if (Url().ProtocolIs("chrome") &&
+      (feature == WebFeature::kHTMLImports ||
+       feature == WebFeature::kElementCreateShadowRoot ||
+       feature == WebFeature::kDocumentRegisterElement)) {
+    Deprecation::DeprecationWarningOnly(loader, feature);
+  } else {
+    Deprecation::CountDeprecation(loader, feature);
+  }
+}
+
+void LocalDOMWindow::CountUseOnlyInCrossOriginIframe(
+    mojom::blink::WebFeature feature) {
+  if (GetFrame() && GetFrame()->IsCrossOriginToMainFrame())
+    CountUse(feature);
 }
 
 Document* LocalDOMWindow::InstallNewDocument(const DocumentInit& init) {
   DCHECK_EQ(init.GetFrame(), GetFrame());
+  DCHECK(!document_ || !document_->IsActive());
 
-  ClearDocument();
+  bool is_first_document = !document_;
 
-  document_ = DOMImplementation::createDocument(init);
+  // Explicitly null document_ here so that it is always null when Document's
+  // constructor is running. This ensures that no code running from the
+  // constructor obeserves a situation where dom_window_->document() is a
+  // a different Document.
+  document_ = nullptr;
+  document_ = init.CreateDocument();
   document_->Initialize();
-
-  // The CSP delegate doesn't have access to all of the state it needs until
-  // document_ is set.
-  if (GetSecurityContext().BindCSPImmediately()) {
-    GetSecurityContext().GetContentSecurityPolicy()->BindToDelegate(
-        GetContentSecurityPolicyDelegate());
-  }
 
   if (!GetFrame())
     return document_;
+
+  if (is_first_document) {
+    GetAgent()->AttachContext(this);
+    if (auto* agent_metrics = GetFrame()->GetPage()->GetAgentMetricsCollector())
+      agent_metrics->DidAttachWindow(*this);
+  }
 
   GetFrame()->GetScriptController().UpdateDocument();
   document_->GetViewportData().UpdateViewportDescription();
@@ -720,12 +862,18 @@ MediaQueryList* LocalDOMWindow::matchMedia(const String& media) {
 }
 
 void LocalDOMWindow::FrameDestroyed() {
+  // Some unit tests manually call FrameDestroyed(). Don't run it a second time.
+  if (!GetFrame())
+    return;
   // In the Reset() case, this Document::Shutdown() early-exits because it was
   // already called earlier in the commit process.
   // TODO(japhet): Can we merge this function and Reset()? At least, this
   // function should be renamed to Detach(), since in the Reset() case the frame
   // is not being destroyed.
   document()->Shutdown();
+  GetAgent()->DetachContext(this);
+  if (auto* agent_metrics = GetFrame()->GetPage()->GetAgentMetricsCollector())
+    agent_metrics->DidDetachWindow(*this);
   NotifyContextDestroyed();
   RemoveAllEventListeners();
   DisconnectFromFrame();
@@ -855,13 +1003,13 @@ FrameConsole* LocalDOMWindow::GetFrameConsole() const {
   return &GetFrame()->Console();
 }
 
-ApplicationCache* LocalDOMWindow::applicationCache() const {
+ApplicationCache* LocalDOMWindow::applicationCache() {
   DCHECK(RuntimeEnabledFeatures::AppCacheEnabled(this));
   if (!IsCurrentlyDisplayedInFrame())
     return nullptr;
-  if (!isSecureContext()) {
+  if (!IsSecureContext()) {
     Deprecation::CountDeprecation(
-        document(), WebFeature::kApplicationCacheAPIInsecureOrigin);
+        this, WebFeature::kApplicationCacheAPIInsecureOrigin);
   }
   if (!application_cache_)
     application_cache_ = MakeGarbageCollected<ApplicationCache>(GetFrame());
@@ -877,18 +1025,17 @@ Navigator* LocalDOMWindow::navigator() const {
 void LocalDOMWindow::SchedulePostMessage(
     MessageEvent* event,
     scoped_refptr<const SecurityOrigin> target,
-    Document* source) {
+    LocalDOMWindow* source) {
   // Allowing unbounded amounts of messages to build up for a suspended context
   // is problematic; consider imposing a limit or other restriction if this
   // surfaces often as a problem (see crbug.com/587012).
-  std::unique_ptr<SourceLocation> location =
-      SourceLocation::Capture(source->GetExecutionContext());
-  document_->GetTaskRunner(TaskType::kPostedMessage)
-      ->PostTask(FROM_HERE,
-                 WTF::Bind(&LocalDOMWindow::DispatchPostMessage,
-                           WrapPersistent(this), WrapPersistent(event),
-                           std::move(target), std::move(location),
-                           source->GetExecutionContext()->GetAgentClusterID()));
+  std::unique_ptr<SourceLocation> location = SourceLocation::Capture(source);
+  GetTaskRunner(TaskType::kPostedMessage)
+      ->PostTask(
+          FROM_HERE,
+          WTF::Bind(&LocalDOMWindow::DispatchPostMessage, WrapPersistent(this),
+                    WrapPersistent(event), std::move(target),
+                    std::move(location), source->GetAgent()->cluster_id()));
   probe::AsyncTaskScheduled(this, "postMessage", event->async_task_id());
 }
 
@@ -936,7 +1083,7 @@ void LocalDOMWindow::DispatchMessageEventWithOriginCheck(
 
   KURL sender(event->origin());
   if (!document()->GetContentSecurityPolicy()->AllowConnectToSource(
-          sender, RedirectStatus::kNoRedirect,
+          sender, sender, RedirectStatus::kNoRedirect,
           ReportingDisposition::kSuppressReporting)) {
     UseCounter::Count(
         document(), WebFeature::kPostMessageIncomingWouldBeBlockedByConnectSrc);
@@ -992,11 +1139,13 @@ Element* LocalDOMWindow::frameElement() const {
 void LocalDOMWindow::blur() {}
 
 void LocalDOMWindow::print(ScriptState* script_state) {
-  // Don't print after detach begins, even if GetFrame() hasn't been nulled out yet.
-  // TODO(crbug.com/1063150): When a frame is being detached for a swap, the document has already
-  // been Shutdown() and is no longer in a consistent state, even though GetFrame() is not yet
-  // nulled out. This is an ordering violation, and checking whether we're in the middle of detach
-  // here is probably not the right long-term fix.
+  // Don't print after detach begins, even if GetFrame() hasn't been nulled out
+  // yet.
+  // TODO(crbug.com/1063150): When a frame is being detached for a swap, the
+  // document has already been Shutdown() and is no longer in a consistent
+  // state, even though GetFrame() is not yet nulled out. This is an ordering
+  // violation, and checking whether we're in the middle of detach here is
+  // probably not the right long-term fix.
   if (!GetFrame() || !GetFrame()->IsAttached())
     return;
 
@@ -1011,10 +1160,9 @@ void LocalDOMWindow::print(ScriptState* script_state) {
   }
 
   if (!GetFrame()->IsMainFrame() && !GetFrame()->IsCrossOriginToMainFrame()) {
-    document()->CountUse(WebFeature::kSameOriginIframeWindowPrint);
+    CountUse(WebFeature::kSameOriginIframeWindowPrint);
   }
-  document()->CountUseOnlyInCrossOriginIframe(
-      WebFeature::kCrossOriginWindowPrint);
+  CountUseOnlyInCrossOriginIframe(WebFeature::kCrossOriginWindowPrint);
 
   should_print_when_finished_loading_ = false;
   GetFrame()->GetPage()->GetChromeClient().Print(GetFrame());
@@ -1023,7 +1171,7 @@ void LocalDOMWindow::print(ScriptState* script_state) {
 void LocalDOMWindow::stop() {
   if (!GetFrame())
     return;
-  GetFrame()->Loader().StopAllLoaders();
+  GetFrame()->Loader().StopAllLoaders(/*abort_client=*/true);
 }
 
 void LocalDOMWindow::alert(ScriptState* script_state, const String& message) {
@@ -1052,10 +1200,9 @@ void LocalDOMWindow::alert(ScriptState* script_state, const String& message) {
     return;
 
   if (!GetFrame()->IsMainFrame() && !GetFrame()->IsCrossOriginToMainFrame()) {
-    document()->CountUse(WebFeature::kSameOriginIframeWindowAlert);
+    CountUse(WebFeature::kSameOriginIframeWindowAlert);
   }
-  document()->CountUseOnlyInCrossOriginIframe(
-      WebFeature::kCrossOriginWindowAlert);
+  CountUseOnlyInCrossOriginIframe(WebFeature::kCrossOriginWindowAlert);
 
   page->GetChromeClient().OpenJavaScriptAlert(GetFrame(), message);
 }
@@ -1086,10 +1233,9 @@ bool LocalDOMWindow::confirm(ScriptState* script_state, const String& message) {
     return false;
 
   if (!GetFrame()->IsMainFrame() && !GetFrame()->IsCrossOriginToMainFrame()) {
-    document()->CountUse(WebFeature::kSameOriginIframeWindowConfirm);
+    CountUse(WebFeature::kSameOriginIframeWindowConfirm);
   }
-  document()->CountUseOnlyInCrossOriginIframe(
-      WebFeature::kCrossOriginWindowConfirm);
+  CountUseOnlyInCrossOriginIframe(WebFeature::kCrossOriginWindowConfirm);
 
   return page->GetChromeClient().OpenJavaScriptConfirm(GetFrame(), message);
 }
@@ -1127,10 +1273,9 @@ String LocalDOMWindow::prompt(ScriptState* script_state,
     return return_value;
 
   if (!GetFrame()->IsMainFrame() && !GetFrame()->IsCrossOriginToMainFrame()) {
-    document()->CountUse(WebFeature::kSameOriginIframeWindowPrompt);
+    CountUse(WebFeature::kSameOriginIframeWindowPrompt);
   }
-  document()->CountUseOnlyInCrossOriginIframe(
-      WebFeature::kCrossOriginWindowPrompt);
+  CountUseOnlyInCrossOriginIframe(WebFeature::kCrossOriginWindowPrompt);
 
   return String();
 }
@@ -1309,6 +1454,40 @@ double LocalDOMWindow::scrollY() const {
   double viewport_y = view->LayoutViewport()->GetScrollOffset().Height();
   return AdjustForAbsoluteZoom::AdjustScroll(viewport_y,
                                              GetFrame()->PageZoomFactor());
+}
+
+HeapVector<Member<DOMRect>> LocalDOMWindow::getWindowSegments() const {
+  HeapVector<Member<DOMRect>> window_segments;
+  LocalFrame* frame = GetFrame();
+  if (!frame)
+    return window_segments;
+
+  Page* page = frame->GetPage();
+  if (!page)
+    return window_segments;
+
+  WebVector<WebRect> web_segments =
+      frame->GetWidgetForLocalRoot()->WindowSegments();
+
+  // The rect passed to us from content is in DIP, relative to the main
+  // frame/widget. This doesn't take the page's zoom factor into account so we
+  // must scale by the inverse of the page zoom in order to get correct client
+  // coordinates.
+  // Note that when use-zoom-for-dsf is enabled, WindowToViewportScalar will
+  // be the device scale factor, and PageZoomFactor will be the combination
+  // of the device scale factor and the zoom percent of the page.
+  ChromeClient& chrome_client = page->GetChromeClient();
+  const float window_to_viewport_factor =
+      chrome_client.WindowToViewportScalar(frame, 1.0f);
+  const float page_zoom_factor = frame->PageZoomFactor();
+  const float scale_factor = window_to_viewport_factor / page_zoom_factor;
+  for (auto const& web_segment : web_segments) {
+    blink::FloatQuad quad = blink::FloatQuad(web_segment);
+    quad.Scale(scale_factor, scale_factor);
+    window_segments.push_back(DOMRect::FromFloatRect(quad.BoundingBox()));
+  }
+
+  return window_segments;
 }
 
 DOMVisualViewport* LocalDOMWindow::visualViewport() {
@@ -1587,22 +1766,6 @@ void LocalDOMWindow::cancelAnimationFrame(int id) {
     document->CancelAnimationFrame(id);
 }
 
-int LocalDOMWindow::requestPostAnimationFrame(
-    V8FrameRequestCallback* callback) {
-  if (Document* doc = document()) {
-    FrameRequestCallbackCollection::V8FrameCallback* frame_callback =
-        MakeGarbageCollected<FrameRequestCallbackCollection::V8FrameCallback>(
-            callback);
-    return doc->RequestPostAnimationFrame(frame_callback);
-  }
-  return 0;
-}
-
-void LocalDOMWindow::cancelPostAnimationFrame(int id) {
-  if (Document* doc = this->document())
-    doc->CancelPostAnimationFrame(id);
-}
-
 void LocalDOMWindow::queueMicrotask(V8VoidFunction* callback) {
   Microtask::EnqueueMicrotask(
       WTF::Bind(&V8VoidFunction::InvokeAndReportException,
@@ -1617,13 +1780,20 @@ void LocalDOMWindow::SetOriginPolicyIds(const Vector<String>& ids) {
   origin_policy_ids_ = ids;
 }
 
+bool LocalDOMWindow::originIsolationRestricted() const {
+  return origin_isolation_restricted_;
+}
+
+void LocalDOMWindow::SetOriginIsolationRestricted(bool value) {
+  origin_isolation_restricted_ = value;
+}
+
 int LocalDOMWindow::requestIdleCallback(V8IdleRequestCallback* callback,
                                         const IdleRequestOptions* options) {
-  if (Document* document = this->document()) {
-    return document->RequestIdleCallback(
-        ScriptedIdleTaskController::V8IdleTask::Create(callback), options);
-  }
-  return 0;
+  if (!GetFrame())
+    return 0;
+  return document_->RequestIdleCallback(
+      ScriptedIdleTaskController::V8IdleTask::Create(callback), options);
 }
 
 void LocalDOMWindow::cancelIdleCallback(int id) {
@@ -1660,10 +1830,11 @@ External* LocalDOMWindow::external() {
 }
 
 bool LocalDOMWindow::isSecureContext() const {
-  if (!GetFrame())
-    return false;
+  return GetFrame() && IsSecureContext();
+}
 
-  return document()->IsSecureContext();
+void LocalDOMWindow::ClearIsolatedWorldCSPForTesting(int32_t world_id) {
+  isolated_world_csp_map_->erase(world_id);
 }
 
 void LocalDOMWindow::AddedEventListener(
@@ -1719,22 +1890,6 @@ void LocalDOMWindow::RemovedEventListener(
   }
 }
 
-void LocalDOMWindow::WarnUnusedPreloads(TimerBase* base) {
-  if (!document() || !document()->Fetcher())
-    return;
-  Vector<KURL> urls = document()->Fetcher()->GetUrlsOfUnusedPreloads();
-  for (const KURL& url : urls) {
-    String message =
-        "The resource " + url.GetString() + " was preloaded using link " +
-        "preload but not used within a few seconds from the window's load " +
-        "event. Please make sure it has an appropriate `as` value and it is " +
-        "preloaded intentionally.";
-    GetFrameConsole()->AddMessage(MakeGarbageCollected<ConsoleMessage>(
-        mojom::ConsoleMessageSource::kJavaScript,
-        mojom::ConsoleMessageLevel::kWarning, message));
-  }
-}
-
 void LocalDOMWindow::DispatchLoadEvent() {
   Event& load_event = *Event::Create(event_type_names::kLoad);
   DocumentLoader* document_loader =
@@ -1745,13 +1900,6 @@ void LocalDOMWindow::DispatchLoadEvent() {
     timing.MarkLoadEventStart();
     DispatchEvent(load_event, document());
     timing.MarkLoadEventEnd();
-    // If fetcher->countPreloads() is not empty here, it's full of link
-    // preloads, as speculatove preloads were cleared at DCL.
-    if (GetFrame() &&
-        document_loader == GetFrame()->Loader().GetDocumentLoader() &&
-        document()->Fetcher()->CountPreloads()) {
-      unused_preloads_timer_.StartOneShot(kUnusedPreloadTimeout, FROM_HERE);
-    }
   } else {
     DispatchEvent(load_event, document());
   }
@@ -1851,23 +1999,20 @@ DOMWindow* LocalDOMWindow::open(v8::Isolate* isolate,
     return nullptr;
   if (!incumbent_window->GetFrame())
     return nullptr;
-  Document* active_document = incumbent_window->document();
-  if (!active_document)
-    return nullptr;
   LocalFrame* entered_window_frame = entered_window->GetFrame();
   if (!entered_window_frame)
     return nullptr;
 
-  UseCounter::Count(*active_document, WebFeature::kDOMWindowOpen);
+  UseCounter::Count(*incumbent_window, WebFeature::kDOMWindowOpen);
   if (!features.IsEmpty())
-    UseCounter::Count(*active_document, WebFeature::kDOMWindowOpenFeatures);
+    UseCounter::Count(*incumbent_window, WebFeature::kDOMWindowOpenFeatures);
 
   KURL completed_url =
       url_string.IsEmpty()
           ? KURL(g_empty_string)
           : entered_window_frame->GetDocument()->CompleteURL(url_string);
   if (!completed_url.IsEmpty() && !completed_url.IsValid()) {
-    UseCounter::Count(active_document, WebFeature::kWindowOpenWithInvalidURL);
+    UseCounter::Count(incumbent_window, WebFeature::kWindowOpenWithInvalidURL);
     exception_state.ThrowDOMException(
         DOMExceptionCode::kSyntaxError,
         "Unable to open a window with invalid URL '" +
@@ -1877,7 +2022,7 @@ DOMWindow* LocalDOMWindow::open(v8::Isolate* isolate,
 
   WebWindowFeatures window_features = GetWindowFeaturesFromString(features);
 
-  FrameLoadRequest frame_request(active_document,
+  FrameLoadRequest frame_request(incumbent_window->document(),
                                  ResourceRequest(completed_url));
   frame_request.SetFeaturesForWindowOpen(window_features);
 
@@ -1888,9 +2033,9 @@ DOMWindow* LocalDOMWindow::open(v8::Isolate* isolate,
   // for generating an embedder-initiated navigation's referrer, so we need to
   // ensure the proper referrer is set now.
   Referrer referrer = SecurityPolicy::GenerateReferrer(
-      active_document->GetReferrerPolicy(), completed_url,
+      incumbent_window->GetReferrerPolicy(), completed_url,
       window_features.noreferrer ? Referrer::NoReferrer()
-                                 : active_document->OutgoingReferrer());
+                                 : incumbent_window->OutgoingReferrer());
   frame_request.GetResourceRequest().SetReferrerString(referrer.referrer);
   frame_request.GetResourceRequest().SetReferrerPolicy(
       referrer.referrer_policy);
@@ -1908,7 +2053,7 @@ DOMWindow* LocalDOMWindow::open(v8::Isolate* isolate,
   if (window_features.x_set || window_features.y_set) {
     // This runs after FindOrCreateFrameForNavigation() so blocked popups are
     // not counted.
-    UseCounter::Count(*active_document,
+    UseCounter::Count(*incumbent_window,
                       WebFeature::kDOMWindowOpenPositioningFeatures);
   }
 
@@ -1929,11 +2074,11 @@ DOMWindow* LocalDOMWindow::open(v8::Isolate* isolate,
   if (window_features.noopener)
     return nullptr;
   if (!result.new_window)
-    result.frame->Client()->SetOpener(GetFrame());
+    result.frame->SetOpener(GetFrame());
   return result.frame->DomWindow();
 }
 
-void LocalDOMWindow::Trace(Visitor* visitor) {
+void LocalDOMWindow::Trace(Visitor* visitor) const {
   visitor->Trace(document_);
   visitor->Trace(screen_);
   visitor->Trace(history_);
@@ -1951,13 +2096,25 @@ void LocalDOMWindow::Trace(Visitor* visitor) {
   visitor->Trace(application_cache_);
   visitor->Trace(visualViewport_);
   visitor->Trace(event_listener_observers_);
+  visitor->Trace(current_event_);
   visitor->Trace(trusted_types_);
   visitor->Trace(input_method_controller_);
   visitor->Trace(spell_checker_);
   visitor->Trace(text_suggestion_controller_);
+  visitor->Trace(isolated_world_csp_map_);
   DOMWindow::Trace(visitor);
   ExecutionContext::Trace(visitor);
   Supplementable<LocalDOMWindow>::Trace(visitor);
+}
+
+ukm::UkmRecorder* LocalDOMWindow::UkmRecorder() {
+  DCHECK(document_);
+  return document_->UkmRecorder();
+}
+
+ukm::SourceId LocalDOMWindow::UkmSourceID() const {
+  DCHECK(document_);
+  return document_->UkmSourceID();
 }
 
 }  // namespace blink

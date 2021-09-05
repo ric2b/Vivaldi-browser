@@ -16,7 +16,9 @@ import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.settings.AutofillEditorBase;
 import org.chromium.chrome.browser.preferences.Pref;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.WebContents;
 
 import java.util.ArrayList;
@@ -374,15 +376,16 @@ public class PersonalDataManager {
         // LastFour or a Google specific string for Google-issued cards. This is used for displaying
         // the card in PaymentMethods in Settings.
         private String mCardLabel;
+        private String mNickname;
 
         @CalledByNative("CreditCard")
         public static CreditCard create(String guid, String origin, boolean isLocal,
                 boolean isCached, String name, String number, String mObfuscatedNumber,
                 String month, String year, String basicCardIssuerNetwork, int iconId,
-                String billingAddressId, String serverId, String cardLabel) {
+                String billingAddressId, String serverId, String cardLabel, String nickname) {
             return new CreditCard(guid, origin, isLocal, isCached, name, number, mObfuscatedNumber,
                     month, year, basicCardIssuerNetwork, iconId, billingAddressId, serverId,
-                    cardLabel);
+                    cardLabel, nickname);
         }
 
         public CreditCard(String guid, String origin, boolean isLocal, boolean isCached,
@@ -391,13 +394,13 @@ public class PersonalDataManager {
                 String serverId) {
             this(guid, origin, isLocal, isCached, name, number, obfuscatedNumber, month, year,
                     basicCardIssuerNetwork, issuerIconDrawableId, billingAddressId, serverId,
-                    /* cardLabel= */ obfuscatedNumber);
+                    /* cardLabel= */ obfuscatedNumber, /* nickname= */ "");
         }
 
         public CreditCard(String guid, String origin, boolean isLocal, boolean isCached,
                 String name, String number, String obfuscatedNumber, String month, String year,
                 String basicCardIssuerNetwork, int issuerIconDrawableId, String billingAddressId,
-                String serverId, String cardLabel) {
+                String serverId, String cardLabel, String nickname) {
             mGUID = guid;
             mOrigin = origin;
             mIsLocal = isLocal;
@@ -412,6 +415,7 @@ public class PersonalDataManager {
             mBillingAddressId = billingAddressId;
             mServerId = serverId;
             mCardLabel = cardLabel;
+            mNickname = nickname;
         }
 
         public CreditCard() {
@@ -503,6 +507,11 @@ public class PersonalDataManager {
             return mCardLabel;
         }
 
+        @CalledByNative("CreditCard")
+        public String getNickname() {
+            return mNickname;
+        }
+
         @VisibleForTesting
         public void setGUID(String guid) {
             mGUID = guid;
@@ -548,6 +557,10 @@ public class PersonalDataManager {
 
         public void setCardLabel(String cardLabel) {
             mCardLabel = cardLabel;
+        }
+
+        public void setNickname(String nickname) {
+            mNickname = nickname;
         }
 
         public boolean hasValidCreditCardExpirationDate() {
@@ -990,14 +1003,14 @@ public class PersonalDataManager {
      * @return Whether the Autofill feature for Profiles (addresses) is enabled.
      */
     public static boolean isAutofillProfileEnabled() {
-        return PrefServiceBridge.getInstance().getBoolean(Pref.AUTOFILL_PROFILE_ENABLED);
+        return getPrefService().getBoolean(Pref.AUTOFILL_PROFILE_ENABLED);
     }
 
     /**
      * @return Whether the Autofill feature for Credit Cards is enabled.
      */
     public static boolean isAutofillCreditCardEnabled() {
-        return PrefServiceBridge.getInstance().getBoolean(Pref.AUTOFILL_CREDIT_CARD_ENABLED);
+        return getPrefService().getBoolean(Pref.AUTOFILL_CREDIT_CARD_ENABLED);
     }
 
     /**
@@ -1005,7 +1018,7 @@ public class PersonalDataManager {
      * @param enable True to disable profile Autofill, false otherwise.
      */
     public static void setAutofillProfileEnabled(boolean enable) {
-        PrefServiceBridge.getInstance().setBoolean(Pref.AUTOFILL_PROFILE_ENABLED, enable);
+        getPrefService().setBoolean(Pref.AUTOFILL_PROFILE_ENABLED, enable);
     }
 
     /**
@@ -1013,15 +1026,14 @@ public class PersonalDataManager {
      * @param enable True to disable credit card Autofill, false otherwise.
      */
     public static void setAutofillCreditCardEnabled(boolean enable) {
-        PrefServiceBridge.getInstance().setBoolean(Pref.AUTOFILL_CREDIT_CARD_ENABLED, enable);
+        getPrefService().setBoolean(Pref.AUTOFILL_CREDIT_CARD_ENABLED, enable);
     }
 
     /**
      * @return Whether the Autofill feature for FIDO authentication is enabled.
      */
     public static boolean isAutofillCreditCardFidoAuthEnabled() {
-        return PrefServiceBridge.getInstance().getBoolean(
-                Pref.AUTOFILL_CREDIT_CARD_FIDO_AUTH_ENABLED);
+        return getPrefService().getBoolean(Pref.AUTOFILL_CREDIT_CARD_FIDO_AUTH_ENABLED);
     }
 
     /**
@@ -1031,8 +1043,7 @@ public class PersonalDataManager {
      * @param enable True to enable credit card FIDO authentication, false otherwise.
      */
     public static void setAutofillCreditCardFidoAuthEnabled(boolean enable) {
-        PrefServiceBridge.getInstance().setBoolean(
-                Pref.AUTOFILL_CREDIT_CARD_FIDO_AUTH_ENABLED, enable);
+        getPrefService().setBoolean(Pref.AUTOFILL_CREDIT_CARD_FIDO_AUTH_ENABLED, enable);
     }
 
     /**
@@ -1086,6 +1097,10 @@ public class PersonalDataManager {
      */
     public static long getRequestTimeoutMS() {
         return DateUtils.SECOND_IN_MILLIS * sRequestTimeoutSeconds;
+    }
+
+    private static PrefService getPrefService() {
+        return UserPrefs.get(Profile.getLastUsedRegularProfile());
     }
 
     @NativeMethods

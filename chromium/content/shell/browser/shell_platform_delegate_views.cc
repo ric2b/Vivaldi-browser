@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -76,7 +78,10 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
  public:
   enum UIControl { BACK_BUTTON, FORWARD_BUTTON, STOP_BUTTON };
 
-  ShellWindowDelegateView(Shell* shell) : shell_(shell) {}
+  explicit ShellWindowDelegateView(Shell* shell) : shell_(shell) {
+    SetHasWindowSizeControls(true);
+    InitShellWindow();
+  }
 
   ~ShellWindowDelegateView() override {}
 
@@ -220,10 +225,10 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
 
     if (!Shell::ShouldHideToolbar())
       layout->AddPaddingRow(0, 5);
-
-    InitAccelerators();
   }
   void InitAccelerators() {
+    // This function must be called when part of the widget hierarchy.
+    DCHECK(GetWidget());
     static const ui::KeyboardCode keys[] = {ui::VKEY_F5, ui::VKEY_BROWSER_BACK,
                                             ui::VKEY_BROWSER_FORWARD};
     for (size_t i = 0; i < base::size(keys); ++i) {
@@ -264,16 +269,7 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
   }
 
   // Overridden from WidgetDelegateView
-  bool CanResize() const override { return true; }
-  bool CanMaximize() const override { return true; }
-  bool CanMinimize() const override { return true; }
   base::string16 GetWindowTitle() const override { return title_; }
-  void WindowClosing() override {
-    if (shell_) {
-      delete shell_;
-      shell_ = nullptr;
-    }
-  }
 
   // Overridden from View
   gfx::Size GetMinimumSize() const override {
@@ -281,12 +277,7 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
     // (preferred) size.
     return gfx::Size();
   }
-  void ViewHierarchyChanged(
-      const views::ViewHierarchyChangedDetails& details) override {
-    if (details.is_add && details.child == this) {
-      InitShellWindow();
-    }
-  }
+  void AddedToWidget() override { InitAccelerators(); }
 
   // Overridden from AcceleratorTarget:
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
@@ -306,8 +297,7 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
   }
 
  private:
-  // Hold a reference of Shell for deleting it when the window is closing
-  Shell* shell_;
+  std::unique_ptr<Shell> shell_;
 
   // Window title
   base::string16 title_;

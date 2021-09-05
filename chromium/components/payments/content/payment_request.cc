@@ -14,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "components/payments/content/can_make_payment_query_factory.h"
 #include "components/payments/content/content_payment_request_delegate.h"
+#include "components/payments/content/payment_app.h"
 #include "components/payments/content/payment_details_converter.h"
 #include "components/payments/content/payment_request_converter.h"
 #include "components/payments/content/payment_request_web_contents_manager.h"
@@ -23,7 +24,6 @@
 #include "components/payments/core/features.h"
 #include "components/payments/core/method_strings.h"
 #include "components/payments/core/native_error_strings.h"
-#include "components/payments/core/payment_app.h"
 #include "components/payments/core/payment_details.h"
 #include "components/payments/core/payment_details_validation.h"
 #include "components/payments/core/payment_prefs.h"
@@ -96,7 +96,7 @@ PaymentRequest::PaymentRequest(
           render_frame_host->GetLastCommittedURL())),
       frame_security_origin_(render_frame_host->GetLastCommittedOrigin()),
       observer_for_testing_(observer_for_testing),
-      journey_logger_(delegate_->IsIncognito(),
+      journey_logger_(delegate_->IsOffTheRecord(),
                       ukm::GetSourceIdForWebContentsDocument(web_contents)) {
   receiver_.Bind(std::move(receiver));
   // OnConnectionTerminated will be called when the Mojo pipe is closed. This
@@ -186,10 +186,7 @@ void PaymentRequest::Init(
       web_contents_, initiator_frame, top_level_origin_, frame_origin_,
       frame_security_origin_, spec_.get(),
       /*delegate=*/this, delegate_->GetApplicationLocale(),
-      delegate_->GetPersonalDataManager(), delegate_.get(),
-      base::BindRepeating(&PaymentRequest::SetInvokedServiceWorkerIdentity,
-                          weak_ptr_factory_.GetWeakPtr()),
-      &journey_logger_);
+      delegate_->GetPersonalDataManager(), delegate_.get(), &journey_logger_);
 
   journey_logger_.SetRequestedInformation(
       spec_->request_shipping(), spec_->request_payer_email(),
@@ -343,8 +340,8 @@ void PaymentRequest::UpdateWith(mojom::PaymentDetailsPtr details) {
   }
 
   if (state()->selected_app() && state()->IsPaymentAppInvoked() &&
-      payment_handler_host_.is_waiting_for_payment_details_update()) {
-    payment_handler_host_.UpdateWith(
+      state()->selected_app()->IsWaitingForPaymentDetailsUpdate()) {
+    state()->selected_app()->UpdateWith(
         PaymentDetailsConverter::ConvertToPaymentRequestDetailsUpdate(
             details, state()->selected_app()->HandlesShippingAddress(),
             base::BindRepeating(&PaymentApp::IsValidForPaymentMethodIdentifier,
@@ -386,9 +383,9 @@ void PaymentRequest::OnPaymentDetailsNotUpdated() {
 
   spec_->RecomputeSpecForDetails();
 
-  if (state()->IsPaymentAppInvoked() &&
-      payment_handler_host_.is_waiting_for_payment_details_update()) {
-    payment_handler_host_.OnPaymentDetailsNotUpdated();
+  if (state()->IsPaymentAppInvoked() && state()->selected_app() &&
+      state()->selected_app()->IsWaitingForPaymentDetailsUpdate()) {
+    state()->selected_app()->OnPaymentDetailsNotUpdated();
   }
 }
 
@@ -412,18 +409,16 @@ void PaymentRequest::Abort() {
   // The abort is only successful if the payment app wasn't yet invoked.
   // TODO(crbug.com/716546): Add a merchant abort metric
 
-  bool accepting_abort = !state_->IsPaymentAppInvoked();
-  if (accepting_abort)
-    RecordFirstAbortReason(JourneyLogger::ABORT_REASON_ABORTED_BY_MERCHANT);
-
-  if (client_.is_bound())
-    client_->OnAbort(accepting_abort);
-
   if (observer_for_testing_)
     observer_for_testing_->OnAbortCalled();
 
-  if (accepting_abort)
-    state_->OnAbort();
+  if (!state_->IsPaymentAppInvoked() || !state_->selected_app()) {
+    OnAbortResult(/*aborted=*/true);
+    return;
+  }
+
+  state_->selected_app()->AbortPaymentApp(base::BindOnce(
+      &PaymentRequest::OnAbortResult, weak_ptr_factory_.GetWeakPtr()));
 }
 
 void PaymentRequest::Complete(mojom::PaymentComplete result) {
@@ -565,7 +560,7 @@ void PaymentRequest::AreRequestedMethodsSupportedCallback(
     bool methods_supported,
     const std::string& error_message) {
   if (is_show_called_ && observer_for_testing_)
-    observer_for_testing_->OnShowAppsReady();
+    observer_for_testing_->OnShowAppsReady(weak_ptr_factory_.GetWeakPtr());
 
   if (methods_supported) {
     if (SatisfiesSkipUIConstraints())
@@ -668,7 +663,11 @@ void PaymentRequest::OnPaymentResponseAvailable(
                            : JourneyLogger::Event::EVENT_SELECTED_OTHER;
       break;
     }
+    case PaymentApp::Type::UNDEFINED:
+      // Intentionally fall through.
     case PaymentApp::Type::NATIVE_MOBILE_APP:
+      // Intentionally fall through.
+    case PaymentApp::Type::INTERNAL:
       NOTREACHED();
       break;
   }
@@ -707,12 +706,6 @@ void PaymentRequest::OnShippingAddressSelected(
 
 void PaymentRequest::OnPayerInfoSelected(mojom::PayerDetailPtr payer_info) {
   client_->OnPayerDetailChange(std::move(payer_info));
-}
-
-void PaymentRequest::SetInvokedServiceWorkerIdentity(const url::Origin& origin,
-                                                     int64_t registration_id) {
-  payment_handler_host_.set_sw_origin_for_logs(origin);
-  payment_handler_host_.set_registration_id_for_logs(registration_id);
 }
 
 void PaymentRequest::UserCancelled() {
@@ -765,10 +758,8 @@ void PaymentRequest::OnConnectionTerminated() {
 void PaymentRequest::Pay() {
   journey_logger_.SetEventOccurred(JourneyLogger::EVENT_PAY_CLICKED);
   DCHECK(state_->selected_app());
-  if (state_->selected_app()->type() == PaymentApp::Type::SERVICE_WORKER_APP) {
-    static_cast<ServiceWorkerPaymentApp*>(state_->selected_app())
-        ->set_payment_handler_host(payment_handler_host_.Bind());
-  }
+  state_->selected_app()->SetPaymentHandlerHost(
+      payment_handler_host_.AsWeakPtr());
   state_->GeneratePaymentResponse();
 }
 
@@ -776,8 +767,8 @@ void PaymentRequest::HideIfNecessary() {
   display_handle_.reset();
 }
 
-bool PaymentRequest::IsIncognito() const {
-  return delegate_->IsIncognito();
+bool PaymentRequest::IsOffTheRecord() const {
+  return delegate_->IsOffTheRecord();
 }
 
 void PaymentRequest::OnPaymentHandlerOpenWindowCalled() {
@@ -843,6 +834,16 @@ void PaymentRequest::RespondToHasEnrolledInstrumentQuery(
   client_->OnHasEnrolledInstrument(has_enrolled_instrument ? positive
                                                            : negative);
   journey_logger_.SetHasEnrolledInstrumentValue(has_enrolled_instrument);
+}
+
+void PaymentRequest::OnAbortResult(bool aborted) {
+  if (client_.is_bound())
+    client_->OnAbort(aborted);
+
+  if (aborted) {
+    RecordFirstAbortReason(JourneyLogger::ABORT_REASON_ABORTED_BY_MERCHANT);
+    state_->OnAbort();
+  }
 }
 
 }  // namespace payments

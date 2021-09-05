@@ -20,29 +20,30 @@ jumbo_component("clipboard_types") {
     "clipboard_constants.h",
   ]
 
+  if (!is_ios) {
+    sources += [ "clipboard_format_type.h" ]
+  }
+
   if (is_android) {
     sources += [ "clipboard_format_type_android.cc" ]
   }
 
   if (is_mac) {
-    sources += [
-      "clipboard_constants_mac.mm",
-      "clipboard_format_type_mac.mm",
-    ]
+    sources += [ "clipboard_format_type_mac.mm" ]
+  }
+
+  if (is_mac || is_ios) {
+    sources += [ "clipboard_constants_mac.mm" ]
   }
 
   if (is_win) {
     sources += [ "clipboard_format_type_win.cc" ]
   }
 
-  if (!is_ios) {
-    if (use_aura) {
-      if ((use_x11 && is_desktop_linux) || !is_win) {
-        sources += [ "clipboard_format_type_aura.cc" ]
-      }
+  if (use_aura) {
+    if ((use_x11 && is_desktop_linux) || !is_win) {
+      sources += [ "clipboard_format_type_aura.cc" ]
     }
-
-    sources += [ "clipboard_format_type.h" ]
   }
 
   defines = [ "IS_UI_BASE_CLIPBOARD_TYPES_IMPL" ]
@@ -50,11 +51,11 @@ jumbo_component("clipboard_types") {
   deps = [ "//base" ]
 
   libs = []
+  if (is_mac || is_ios) {
+    libs += [ "Foundation.framework" ]
+  }
   if (is_mac) {
-    libs += [
-      "AppKit.framework",
-      "CoreFoundation.framework",
-    ]
+    libs += [ "AppKit.framework" ]
   }
 }
 
@@ -64,6 +65,8 @@ jumbo_component("clipboard") {
   sources = [
     "clipboard.cc",
     "clipboard.h",
+    "clipboard_metrics.cc",
+    "clipboard_metrics.h",
     "clipboard_monitor.cc",
     "clipboard_monitor.h",
     "clipboard_observer.h",
@@ -112,16 +115,17 @@ jumbo_component("clipboard") {
   public_deps = [ ":clipboard_types" ]
 
   if (use_aura) {
-    # Aura clipboard.
-    # Chromecast uses clipboard_aura now.
+    # Linux clipboard implementations.
     if (is_desktop_linux && !is_chromecast) {
+      sources += [ "clipboard_linux.cc" ]
       if (use_ozone) {
         sources += [
           "clipboard_ozone.cc",
           "clipboard_ozone.h",
         ]
         deps += [ "//ui/base" ]
-      } else if (use_x11) {
+      }
+      if (use_x11) {
         sources += [
           "clipboard_x11.cc",
           "clipboard_x11.h",
@@ -136,20 +140,20 @@ jumbo_component("clipboard") {
         ]
       }
     } else if (is_chromeos && ozone_platform_x11) {
-      # linux-chromeos uses aura clipboard by default, but supports ozone x11
-      # with flag --use-system-clipbboard.
+      # linux-chromeos uses non-backed clipboard by default, but supports ozone
+      # x11 with flag --use-system-clipbboard.
       sources += [
-        "clipboard_aura.cc",
-        "clipboard_aura.h",
+        "clipboard_non_backed.cc",
+        "clipboard_non_backed.h",
         "clipboard_ozone.cc",
         "clipboard_ozone.h",
       ]
       deps += [ "//ui/base" ]
     } else if (!is_win) {
-      # This file is used for all non-X11, non-Windows aura Builds.
+      # This file is used for all builds not backed by an underlying platform.
       sources += [
-        "clipboard_aura.cc",
-        "clipboard_aura.h",
+        "clipboard_non_backed.cc",
+        "clipboard_non_backed.h",
       ]
     }
   }
@@ -181,10 +185,10 @@ jumbo_source_set("clipboard_test_support") {
       "test/test_clipboard.cc",
       "test/test_clipboard.h",
     ]
+  }
 
-    if (is_android) {
-      sources += [ "clipboard_android_test_support.cc" ]
-    }
+  if (is_android) {
+    sources += [ "clipboard_android_test_support.cc" ]
   }
 
   public_deps = [
@@ -206,17 +210,17 @@ source_set("clipboard_test") {
   sources = []
   output_name = "ui_base_clipboard_test"
 
-  if (is_mac) {
-    sources += [
-      "clipboard_mac_unittest.mm",
-      "clipboard_util_mac_unittest.mm",
-    ]
-  }
-
   if (!is_ios) {
     sources += [
       "custom_data_helper_unittest.cc",
       "test/test_clipboard_unittest.cc",
+    ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "clipboard_mac_unittest.mm",
+      "clipboard_util_mac_unittest.mm",
     ]
   }
 

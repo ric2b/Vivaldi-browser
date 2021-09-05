@@ -6,8 +6,11 @@
 
 #include <linux/input.h>
 
+#include <cstring>
+
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "ui/events/devices/device_util_linux.h"

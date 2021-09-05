@@ -16,6 +16,7 @@
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
@@ -172,7 +173,7 @@ void ForEachCategoryFilter(const unsigned char* category_group_enabled,
 }
 
 // The fallback arguments filtering function will filter away every argument.
-bool DefaultIsTraceEventArgsWhitelisted(
+bool DefaultIsTraceEventArgsAllowlisted(
     const char* category_group_name,
     const char* event_name,
     base::trace_event::ArgumentNameFilterPredicate* arg_name_filter) {
@@ -993,7 +994,7 @@ void TraceLog::FinishFlush(int generation, bool discard_events) {
       // use the safe default filtering predicate.
       if (argument_filter_predicate_.is_null()) {
         argument_filter_predicate =
-            base::BindRepeating(&DefaultIsTraceEventArgsWhitelisted);
+            base::BindRepeating(&DefaultIsTraceEventArgsAllowlisted);
       } else {
         argument_filter_predicate = argument_filter_predicate_;
       }
@@ -1488,7 +1489,7 @@ void TraceLog::UpdateTraceEventDurationExplicit(
 #if defined(OS_WIN)
   // Generate an ETW event that marks the end of a complete event.
   if (category_group_enabled_local & TraceCategory::ENABLED_FOR_ETW_EXPORT)
-    TraceEventETWExport::AddCompleteEndEvent(name);
+    TraceEventETWExport::AddCompleteEndEvent(category_group_enabled, name);
 #endif  // OS_WIN
 
   if (category_group_enabled_local & TraceCategory::ENABLED_FOR_RECORDING) {

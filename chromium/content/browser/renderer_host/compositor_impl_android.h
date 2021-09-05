@@ -98,6 +98,7 @@ class CONTENT_EXPORT CompositorImpl
                   bool can_be_used_with_surface_control) override;
   void SetBackgroundColor(int color) override;
   void SetWindowBounds(const gfx::Size& size) override;
+  const gfx::Size& GetWindowBounds() override;
   void SetRequiresAlphaChannel(bool flag) override;
   void SetNeedsComposite() override;
   void SetNeedsRedraw() override;
@@ -146,6 +147,13 @@ class CONTENT_EXPORT CompositorImpl
       override;
   void NotifyThroughputTrackerResults(
       cc::CustomTrackerResults results) override {}
+  void SubmitThroughputData(ukm::SourceId source_id,
+                            int aggregated_percent,
+                            int impl_percent,
+                            base::Optional<int> main_percent) override {}
+  void DidObserveFirstScrollDelay(
+      base::TimeDelta first_scroll_delay,
+      base::TimeTicks first_scroll_timestamp) override {}
 
   // LayerTreeHostSingleThreadClient implementation.
   void DidSubmitCompositorFrame() override;

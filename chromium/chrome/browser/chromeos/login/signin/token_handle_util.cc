@@ -24,14 +24,13 @@ const char* const kDefaultHandleStatus = kHandleStatusValid;
 
 constexpr int kMaxRetries = 3;
 
+const char* g_invalid_token_for_testing = nullptr;
+
 }  // namespace
 
 TokenHandleUtil::TokenHandleUtil() {}
 
-TokenHandleUtil::~TokenHandleUtil() {
-  weak_factory_.InvalidateWeakPtrs();
-  gaia_client_.reset();
-}
+TokenHandleUtil::~TokenHandleUtil() {}
 
 // static
 bool TokenHandleUtil::HasToken(const AccountId& account_id) {
@@ -93,16 +92,15 @@ void TokenHandleUtil::CheckToken(
     return;
   }
 
-  if (!gaia_client_.get()) {
-    gaia_client_.reset(
-        new gaia::GaiaOAuthClient(std::move(url_loader_factory)));
+  if (g_invalid_token_for_testing && g_invalid_token_for_testing == token) {
+    callback.Run(account_id, INVALID);
+    return;
   }
 
-  validation_delegates_[token] =
-      std::unique_ptr<TokenDelegate>(new TokenDelegate(
-          weak_factory_.GetWeakPtr(), account_id, token, callback));
-  gaia_client_->GetTokenHandleInfo(token, kMaxRetries,
-                                   validation_delegates_[token].get());
+  // Constructor starts validation.
+  validation_delegates_[token] = std::make_unique<TokenDelegate>(
+      weak_factory_.GetWeakPtr(), account_id, token,
+      std::move(url_loader_factory), callback);
 }
 
 // static
@@ -113,6 +111,11 @@ void TokenHandleUtil::StoreTokenHandle(const AccountId& account_id,
                                           kHandleStatusValid);
 }
 
+// static
+void TokenHandleUtil::SetInvalidTokenForTesting(const char* token) {
+  g_invalid_token_for_testing = token;
+}
+
 void TokenHandleUtil::OnValidationComplete(const std::string& token) {
   validation_delegates_.erase(token);
 }
@@ -121,12 +124,16 @@ TokenHandleUtil::TokenDelegate::TokenDelegate(
     const base::WeakPtr<TokenHandleUtil>& owner,
     const AccountId& account_id,
     const std::string& token,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const TokenValidationCallback& callback)
     : owner_(owner),
       account_id_(account_id),
       token_(token),
       tokeninfo_response_start_time_(base::TimeTicks::Now()),
-      callback_(callback) {}
+      callback_(callback),
+      gaia_client_(std::move(url_loader_factory)) {
+  gaia_client_.GetTokenHandleInfo(token_, kMaxRetries, this);
+}
 
 TokenHandleUtil::TokenDelegate::~TokenDelegate() {}
 

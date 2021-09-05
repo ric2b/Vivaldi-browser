@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">เลื่อนไปทางขวา</translation>
 <translation id="1781173782405573156">แป้นส่งผ่าน</translation>
 <translation id="1787176709638001873">ข้อความแก้ไขรหัสผ่าน</translation>
+<translation id="180203835522132923">ค้นหา + O ตามด้วย W</translation>
 <translation id="1810107444790159527">ช่องรายการ</translation>
 <translation id="1812527064848182527">แนวนอน</translation>
 <translation id="1829244130665387512">ค้นหาในหน้าเว็บ</translation>
@@ -194,7 +195,7 @@
 <translation id="2523609930580546572">บทแนะนำ ChromeVox</translation>
 <translation id="2525706221823668172">แป้นพิม์ลัด Chromebook</translation>
 <translation id="2553108862507765288">ข้อผิดพลาดทางไวยากรณ์</translation>
-<translation id="257674075312929031">กลุ่ม</translation>
+<translation id="257674075312929031">จัดกลุ่ม</translation>
 <translation id="2582407057977008361">ส่วนที่ไม่เกี่ยวข้อง</translation>
 <translation id="2592212930811759050">แตะสองครั้งเพื่อเริ่มแก้ไข</translation>
 <translation id="2598495320872286378">ข้อผิดพลาดด้านไวยากรณ์</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">เลื่อน 2 นิ้วไปทางซ้าย</translation>
 <translation id="2998131015536248178">อักขระก่อนหน้า</translation>
 <translation id="2999559350546931576">ลดระดับเสียง</translation>
+<translation id="3009352964623081324">ค้นหา + O ตามด้วย S ใช้เพื่อติดตั้ง จัดการ และปรับแต่งเสียง</translation>
 <translation id="3014130421870723208">@แก้ไขช่อง 8 จุด</translation>
 <translation id="3030432017085518523">ปุ่มตัวเลือกรายการเมนู</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{อะโพสโทรฟี}other{# อะโพสโทรฟี}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">การแทรก</translation>
 <translation id="4511186779140817916">สีน้ำตาลแบลนช์อัลมอนด์</translation>
 <translation id="451510441928265982">ไม่มีส่วนหัวระดับ 2 ก่อนหน้า</translation>
+<translation id="4515799157838123044">ทำให้สีของเนื้อหาในพื้นหลังจางลง</translation>
 <translation id="4517854969512651305">เพิ่มค่า</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{เครื่องหมายทับ}other{# เครื่องหมายทับ}}</translation>
 <translation id="4537277403911487429">รายการที่คล้ายกันถัดไป</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">ภาค</translation>
 <translation id="6637586476836377253">บันทึก</translation>
 <translation id="6657128831881431364">แถบความคืบหน้า</translation>
+<translation id="6660819301598582123">สุนัขจิ้งจอกที่ปราดเปรียวกระโดดข้ามสุนัขที่เกียจคร้าน</translation>
 <translation id="667999046851023355">เอกสาร</translation>
 <translation id="6688209025607531203">การแจ้งเตือนที่ไม่ใช่แบบโมดัล</translation>
 <translation id="6689672606256159458">สีส้มแซลมอนเข้ม</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">ไม่มีส่วนหัวระดับ 5 ถัดไป</translation>
 <translation id="6955705049214951590">สีชมพูมิสตี้โรส</translation>
 <translation id="696356426651109308">ข้ามไปที่จุดเริ่มต้น</translation>
-<translation id="699159175332639490">Search + O + W</translation>
 <translation id="6994042831499278539">ข้อมูลอ้างอิงอภิธานศัพท์</translation>
 <translation id="6996566555547746822">ช่องตัวเลือกรวมถัดไป</translation>
 <translation id="6997224546856374593">เมื่ออ่านอักษรตัวพิมพ์ใหญ่:</translation>
@@ -808,6 +811,7 @@
 <translation id="743783356331413498">ตัวอย่าง</translation>
 <translation id="7439060726180460871">ไดเรกทอรี</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">เปลี่ยนระดับเสียงสูงต่ำเมื่อพูดประเภทขององค์ประกอบและข้อความในเครื่องหมายคำพูด ข้อความที่ถูกลบ เป็นตัวหนา อยู่ในวงเล็บ หรือเป็นตัวพิมพ์ใหญ่</translation>
 <translation id="7491962110804786152">แท็บ</translation>
 <translation id="7505149250476994901">พูด "ตัวพิมพ์ใหญ่" ต่อจากตัวอักษร</translation>
 <translation id="7518543783849163354">หากต้องการหยุดคำอธิบายของ ChromeVox ชั่วคราว ให้กดปุ่ม Control</translation>

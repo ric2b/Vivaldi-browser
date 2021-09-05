@@ -12,9 +12,12 @@
 
 #include "base/auto_reset.h"
 #include "base/callback.h"
+#include "base/memory/ptr_util.h"
+#include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
+#include "chrome/browser/performance_manager/persistence/site_data/site_data_cache_facade_factory.h"
 #include "chrome/browser/performance_manager/persistence/site_data/unittest_utils.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/performance_manager/performance_manager_impl.h"
@@ -93,6 +96,8 @@ class LenienMockSiteDataCacheImpl : public SiteDataCacheImpl {
 };
 using MockSiteDataCache = ::testing::StrictMock<LenienMockSiteDataCacheImpl>;
 
+}  // namespace
+
 class SiteDataCacheFacadeTest : public testing::TestWithPerformanceManager {
  public:
   SiteDataCacheFacadeTest() = default;
@@ -100,22 +105,16 @@ class SiteDataCacheFacadeTest : public testing::TestWithPerformanceManager {
 
   void SetUp() override {
     testing::TestWithPerformanceManager::SetUp();
-    PerformanceManagerImpl::CallOnGraphImpl(
-        FROM_HERE,
-        base::BindOnce(
-            [](std::unique_ptr<SiteDataCacheFactory> site_data_cache_factory,
-               performance_manager::GraphImpl* graph) {
-              graph->PassToGraph(std::move(site_data_cache_factory));
-            },
-            std::make_unique<SiteDataCacheFactory>()));
+    profile_ = std::make_unique<TestingProfile>();
+    facade_factory_ = base::WrapUnique(new SiteDataCacheFacadeFactory());
     use_in_memory_db_for_testing_ =
         LevelDBSiteDataStore::UseInMemoryDBForTesting();
-    profile_ = std::make_unique<TestingProfile>();
   }
 
   void TearDown() override {
     use_in_memory_db_for_testing_.reset();
     profile_.reset();
+    facade_factory_.reset();
     testing::TestWithPerformanceManager::TearDown();
   }
 
@@ -133,30 +132,33 @@ class SiteDataCacheFacadeTest : public testing::TestWithPerformanceManager {
               std::make_unique<MockSiteDataCache>(browser_context_id);
           mock_cache_raw = mock_cache.get();
 
-          SiteDataCacheFactory::GetInstance()->ReplaceCacheForTesting(
+          SiteDataCacheFactory::GetInstance()->SetCacheForTesting(
               browser_context_id, std::move(mock_cache));
+          SiteDataCacheFactory::GetInstance()->SetCacheInspectorForTesting(
+              browser_context_id, mock_cache_raw);
           std::move(quit_closure).Run();
         }));
     run_loop.Run();
     return mock_cache_raw;
   }
 
+  SiteDataCacheFacadeFactory* facade_factory() { return facade_factory_.get(); }
+
  private:
   std::unique_ptr<TestingProfile> profile_;
+  std::unique_ptr<SiteDataCacheFacadeFactory> facade_factory_;
   std::unique_ptr<base::AutoReset<bool>> use_in_memory_db_for_testing_;
 };
-
-}  // namespace
 
 TEST_F(SiteDataCacheFacadeTest, IsDataCacheRecordingForTesting) {
   bool cache_is_recording = false;
 
-  SiteDataCacheFacade data_cache_facade(profile());
-  data_cache_facade.WaitUntilCacheInitializedForTesting();
+  auto* facade = facade_factory()->GetForProfile(profile());
+  facade->WaitUntilCacheInitializedForTesting();
   {
     base::RunLoop run_loop;
     auto quit_closure = run_loop.QuitClosure();
-    data_cache_facade.IsDataCacheRecordingForTesting(
+    facade->IsDataCacheRecordingForTesting(
         base::BindLambdaForTesting([&](bool is_recording) {
           cache_is_recording = is_recording;
           std::move(quit_closure).Run();
@@ -165,12 +167,12 @@ TEST_F(SiteDataCacheFacadeTest, IsDataCacheRecordingForTesting) {
   }
   EXPECT_TRUE(cache_is_recording);
 
-  SiteDataCacheFacade off_record_data_cache_facade(
-      profile()->GetOffTheRecordProfile());
+  auto* off_record_data_cache_facade =
+      facade_factory()->GetForProfile(profile()->GetPrimaryOTRProfile());
   {
     base::RunLoop run_loop;
     auto quit_closure = run_loop.QuitClosure();
-    off_record_data_cache_facade.IsDataCacheRecordingForTesting(
+    off_record_data_cache_facade->IsDataCacheRecordingForTesting(
         base::BindLambdaForTesting([&](bool is_recording) {
           cache_is_recording = is_recording;
           quit_closure.Run();
@@ -194,13 +196,13 @@ TEST_F(SiteDataCacheFacadeTest, OnURLsDeleted_Partial_OriginNotReferenced) {
       {TestOrigin2().GetURL(), {0, base::Time::Now()}},
   });
 
-  SiteDataCacheFacade data_cache_facade(profile());
-  data_cache_facade.WaitUntilCacheInitializedForTesting();
+  auto* facade = facade_factory()->GetForProfile(profile());
+  facade->WaitUntilCacheInitializedForTesting();
 
   auto* mock_cache_raw = SetUpMockCache();
   mock_cache_raw->SetClearSiteDataForOriginsExpectations(
       {TestOrigin(), TestOrigin2()});
-  data_cache_facade.OnURLsDeleted(nullptr, deletion_info);
+  facade->OnURLsDeleted(nullptr, deletion_info);
   mock_cache_raw->WaitForExpectations();
 }
 
@@ -217,27 +219,26 @@ TEST_F(SiteDataCacheFacadeTest, OnURLsDeleted_Partial_OriginStillReferenced) {
       {TestOrigin2().GetURL(), {3, base::Time::Now()}},
   });
 
-  SiteDataCacheFacade data_cache_facade(profile());
-  data_cache_facade.WaitUntilCacheInitializedForTesting();
+  auto* facade = facade_factory()->GetForProfile(profile());
+  facade->WaitUntilCacheInitializedForTesting();
 
   auto* mock_cache_raw = SetUpMockCache();
   // |TestOrigin2()| shouldn't be removed as there's still some references to it
   // in the history.
   mock_cache_raw->SetClearSiteDataForOriginsExpectations({TestOrigin()});
-  data_cache_facade.OnURLsDeleted(nullptr, deletion_info);
+  facade->OnURLsDeleted(nullptr, deletion_info);
   mock_cache_raw->WaitForExpectations();
 }
 
 // Verify that origins are removed from the data cache (in memory and on disk)
 // when the history is completely cleared.
 TEST_F(SiteDataCacheFacadeTest, OnURLsDeleted_Full) {
-  SiteDataCacheFacade data_cache_facade(profile());
-  data_cache_facade.WaitUntilCacheInitializedForTesting();
+  auto* facade = facade_factory()->GetForProfile(profile());
+  facade->WaitUntilCacheInitializedForTesting();
 
   auto* mock_cache_raw = SetUpMockCache();
   mock_cache_raw->SetClearAllSiteDataExpectations();
-  data_cache_facade.OnURLsDeleted(nullptr,
-                                  history::DeletionInfo::ForAllHistory());
+  facade->OnURLsDeleted(nullptr, history::DeletionInfo::ForAllHistory());
   mock_cache_raw->WaitForExpectations();
 }
 

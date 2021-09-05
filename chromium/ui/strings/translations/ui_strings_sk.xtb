@@ -64,10 +64,12 @@
 <translation id="2522350507219695259">Kalibrácia je dokončená</translation>
 <translation id="252373100621549798">Neznáma obrazovka</translation>
 <translation id="2545651323591713692">Stlmiť</translation>
+<translation id="2570734079541893434">Spravovať nastavenia</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{o 1 h}few{o # h}many{o # h}other{o # h}}</translation>
 <translation id="2583543531130364912">Skalibrujte dotykovú obrazovku</translation>
 <translation id="2666092431469916601">Vrch</translation>
 <translation id="2701330563083355633">Zdieľané zo zariadenia <ph name="DEVICE_NAME" /></translation>
+<translation id="271033894570825754">Nové</translation>
 <translation id="2743387203779672305">Kopírovať do schránky</translation>
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Otvoriť priečinok</translation>
@@ -100,7 +102,7 @@
 <translation id="3740362395218339114"><ph name="QUANTITY" /> GB/s</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
 <translation id="3842239759367498783">Pokračujte v čítaní v mobilnom zariadení <ph name="TITLE" /></translation>
-<translation id="385051799172605136">Naspäť</translation>
+<translation id="385051799172605136">Späť</translation>
 <translation id="3889424535448813030">Šípka doprava</translation>
 <translation id="3897092660631435901">Ponuka</translation>
 <translation id="3909791450649380159">&amp;Vystrihnúť</translation>
@@ -135,6 +137,7 @@
 <translation id="5463830097259460683">Emodži a symboly</translation>
 <translation id="5476505524087279545">zrušiť označenie</translation>
 <translation id="547979256943495781">Polička vpravo</translation>
+<translation id="5528053674512161860">Načítanie stránky zlyhalo, pretože nie je nainštalovaný modul používateľského rozhrania pre vývojára (dev_ui)</translation>
 <translation id="5574202486608032840">Systém <ph name="IDS_SHORT_PRODUCT_OS_NAME" /></translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5613020302032141669">Šípka doľava</translation>
@@ -152,10 +155,12 @@
 <translation id="6040143037577758943">Zavrieť</translation>
 <translation id="6119846243427417423">aktivovať</translation>
 <translation id="6129953537138746214">Medzera</translation>
+<translation id="6134259848159370930">Vyhľadávajte v zariadení, aplikáciách, nastaveniach a na internete.</translation>
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
 <translation id="6156262341071374681">Rozbaliť na všetky aplikácie</translation>
 <translation id="6165508094623778733">Ďalšie informácie</translation>
+<translation id="6166852626429024716">Vyhľadávajte v zariadení, aplikáciách, nastaveniach a na internete…</translation>
 <translation id="6264365405983206840">Vybrať &amp;všetko</translation>
 <translation id="6351032674660237738">NÁVRHY APLIKÁCIÍ</translation>
 <translation id="6364916375976753737">Rolovať doľava</translation>
@@ -192,7 +197,6 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{Zostáva 1 min}few{Zostávajú # min}many{Zostáva # min}other{Zostáva # min}}</translation>
 <translation id="7319740667687257810">Launcher, čiastočné zobrazenie</translation>
-<translation id="7352651011704765696">Vyskytla sa chyba</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{Pred 1 min}few{Pred # min}many{Pred # min}other{Pred # min}}</translation>
 <translation id="7389409599945284130">– <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{Zostáva 1 minúta}few{Zostávajú # minúty}many{Zostáva # minúty}other{Zostáva # minút}}</translation>
@@ -205,6 +209,7 @@
 <translation id="7848989271541991537">Prechod na <ph name="PAGE_NUMBER" />. stránku, <ph name="ROW_NUMBER" />. riadok,<ph name="COLUMN_NUMBER" />. stĺpec.</translation>
 <translation id="7879499977785298635">Neblokovať</translation>
 <translation id="7907591526440419938">Otvoriť súbor</translation>
+<translation id="7952747673138230804">Chrome OS zobrazuje návrhy na preskúmanie nového obsahu. Odosiela štatistiky na zlepšovanie kvality iba vtedy, keď ste vybrali zdieľanie údajov o používaní. <ph name="MANAGE_SETTINGS" /></translation>
 <translation id="7969046989155602842">Príkaz</translation>
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{Viac ako 1 neprečítané upozornenie}few{Viac ako # neprečítané upozornenia}many{More than # unread notifications}other{Viac ako # neprečítaných upozornení}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{o 1 mes.}few{o # mes.}many{o # mes.}other{o # mes.}}</translation>
@@ -231,6 +236,7 @@
 <translation id="8602707065186045623"><ph name="SAVEAS_EXTENSION_TYPE" /> Súbor (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8649597172973390955">Polička sa vždy zobrazuje</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> kB/s</translation>
+<translation id="8685326675965865247">Vyhľadávajte v zariadení, aplikáciách, nastaveniach a na internete. Medzi aplikáciami prechádzajte klávesmi so šípkami.</translation>
 <translation id="8725488761726303204">ďalšie (<ph name="NUMBER" />)</translation>
 <translation id="8730621377337864115">Hotovo</translation>
 <translation id="8772073294905169192">{HOURS,plural, =1{1 h}few{# h}many{# h}other{# h}}</translation>

@@ -267,15 +267,32 @@ class BrowserControlsContainerView extends FrameLayout {
         if (mView == null) return;
         int width = right - left;
         int height = bottom - top;
-        if (height != mLastHeight || width != mLastWidth) {
-            mLastWidth = width;
-            mLastHeight = height;
-            if (mLastWidth > 0 && mLastHeight > 0) {
-                if (mViewResourceAdapter == null) {
-                    createAdapterAndLayer();
+        boolean heightChanged = height != mLastHeight;
+        if (!heightChanged && width == mLastWidth) return;
+
+        mLastWidth = width;
+        mLastHeight = height;
+        if (mLastWidth > 0 && mLastHeight > 0 && mViewResourceAdapter == null) {
+            createAdapterAndLayer();
+        } else if (mViewResourceAdapter != null) {
+            BrowserControlsContainerViewJni.get().setControlsSize(
+                    mNativeBrowserControlsContainerView, mLastWidth, mLastHeight);
+            if (mWebContents != null) mWebContents.notifyBrowserControlsHeightChanged();
+            if (heightChanged) {
+                // When the height changes cc doesn't generate a new frame, which means this code
+                // must process the change now. If cc generated a new frame, it would likely be at
+                // the wrong size.
+                if (mControlsOffset == 0) {
+                    // The controls are completely visible.
+                    onOffsetsChanged(0, height);
                 } else {
-                    BrowserControlsContainerViewJni.get().setControlsSize(
-                            mNativeBrowserControlsContainerView, mLastWidth, mLastHeight);
+                    // The controls are partially (and possibly completely) hidden. Snap to
+                    // completely hidden.
+                    if (mIsTop) {
+                        onOffsetsChanged(-height, height);
+                    } else {
+                        onOffsetsChanged(height, 0);
+                    }
                 }
             }
         }
@@ -333,7 +350,11 @@ class BrowserControlsContainerView extends FrameLayout {
     private void finishScroll(int contentOffsetY) {
         mInScroll = false;
         setControlsOffset(0, contentOffsetY);
-        mContentViewRenderView.postOnAnimation(() -> showControls());
+        if (BrowserControlsContainerViewJni.get().shouldDelayVisibilityChange()) {
+            mContentViewRenderView.postOnAnimation(() -> showControls());
+        } else {
+            showControls();
+        }
     }
 
     private void setControlsOffset(int controlsOffsetY, int contentOffsetY) {
@@ -350,16 +371,20 @@ class BrowserControlsContainerView extends FrameLayout {
         }
         if (mIsTop) {
             BrowserControlsContainerViewJni.get().setTopControlsOffset(
-                    mNativeBrowserControlsContainerView, mControlsOffset, mContentOffset);
+                    mNativeBrowserControlsContainerView, mContentOffset);
         } else {
             BrowserControlsContainerViewJni.get().setBottomControlsOffset(
-                    mNativeBrowserControlsContainerView, mControlsOffset);
+                    mNativeBrowserControlsContainerView);
         }
     }
 
     private void prepareForScroll() {
         mInScroll = true;
-        mContentViewRenderView.postOnAnimation(() -> hideControls());
+        if (BrowserControlsContainerViewJni.get().shouldDelayVisibilityChange()) {
+            mContentViewRenderView.postOnAnimation(() -> hideControls());
+        } else {
+            hideControls();
+        }
     }
 
     private void hideControls() {
@@ -368,6 +393,11 @@ class BrowserControlsContainerView extends FrameLayout {
 
     private void showControls() {
         if (mView != null) mView.setVisibility(View.VISIBLE);
+    }
+
+    @CalledByNative
+    private int getControlsOffset() {
+        return mControlsOffset;
     }
 
     @CalledByNative
@@ -410,11 +440,11 @@ class BrowserControlsContainerView extends FrameLayout {
         void deleteBrowserControlsContainerView(long nativeBrowserControlsContainerView);
         void createControlsLayer(long nativeBrowserControlsContainerView, int id);
         void deleteControlsLayer(long nativeBrowserControlsContainerView);
-        void setTopControlsOffset(
-                long nativeBrowserControlsContainerView, int controlsOffsetY, int contentOffsetY);
-        void setBottomControlsOffset(long nativeBrowserControlsContainerView, int controlsOffsetY);
+        void setTopControlsOffset(long nativeBrowserControlsContainerView, int contentOffsetY);
+        void setBottomControlsOffset(long nativeBrowserControlsContainerView);
         void setControlsSize(long nativeBrowserControlsContainerView, int width, int height);
         void updateControlsResource(long nativeBrowserControlsContainerView);
         void setWebContents(long nativeBrowserControlsContainerView, WebContents webContents);
+        boolean shouldDelayVisibilityChange();
     }
 }

@@ -211,10 +211,7 @@ void StatusAreaWidget::UpdateLayout(bool animate) {
   if (layout_inputs_ == new_layout_inputs)
     return;
 
-  // Do not animate size changes, as they only really occur when tray items are
-  // added and removed. See crbug.com/1067199.
-  if (layout_inputs_ &&
-      layout_inputs_->bounds.size() != new_layout_inputs.bounds.size())
+  if (!new_layout_inputs.should_animate)
     animate = false;
 
   for (TrayBackgroundView* tray_button : tray_buttons_)
@@ -242,12 +239,15 @@ void StatusAreaWidget::UpdateLayout(bool animate) {
 }
 
 void StatusAreaWidget::UpdateTargetBoundsForGesture(int shelf_position) {
-  const gfx::Point shelf_origin =
-      shelf_->shelf_widget()->GetTargetBounds().origin();
   if (shelf_->IsHorizontalAlignment())
-    target_bounds_.set_y(shelf_origin.y());
+    target_bounds_.set_y(shelf_position);
   else
-    target_bounds_.set_x(shelf_origin.x());
+    target_bounds_.set_x(shelf_position);
+}
+
+void StatusAreaWidget::HandleLocaleChange() {
+  for (auto* tray_button : tray_buttons_)
+    tray_button->HandleLocaleChange();
 }
 
 void StatusAreaWidget::CalculateButtonVisibilityForCollapsedState() {
@@ -464,9 +464,25 @@ StatusAreaWidget::LayoutInputs StatusAreaWidget::GetLayoutInputs() const {
     if (tray_buttons_[i]->GetVisible())
       child_visibility_bitmask |= 1 << i;
   }
+
+  bool should_animate = true;
+
+  // Do not animate when tray items are added and removed (See
+  // crbug.com/1067199).
+  if (layout_inputs_) {
+    const bool is_horizontal_alignment = shelf_->IsHorizontalAlignment();
+    const gfx::Rect current_bounds = layout_inputs_->bounds;
+    if ((is_horizontal_alignment &&
+         current_bounds.width() != target_bounds_.width()) ||
+        (!is_horizontal_alignment &&
+         current_bounds.height() != target_bounds_.height())) {
+      should_animate = false;
+    }
+  }
+
   return {target_bounds_, CalculateCollapseState(),
           shelf_->shelf_layout_manager()->GetOpacity(),
-          child_visibility_bitmask};
+          child_visibility_bitmask, should_animate};
 }
 
 }  // namespace ash

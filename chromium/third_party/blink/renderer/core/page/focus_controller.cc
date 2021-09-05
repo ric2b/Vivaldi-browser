@@ -115,7 +115,7 @@ class FocusNavigation : public GarbageCollected<FocusNavigation> {
     return FindOwner(*root_);
   }
 
-  void Trace(Visitor* visitor) {
+  void Trace(Visitor* visitor) const {
     visitor->Trace(root_);
     visitor->Trace(slot_);
   }
@@ -1355,11 +1355,16 @@ void FocusController::RegisterFocusChangedObserver(
 }
 
 void FocusController::NotifyFocusChangedObservers() const {
-  for (const auto& it : focus_changed_observers_)
+  // Since this eventually dispatches an event to the page, the page could add
+  // new observer, which would invalidate our iterators; so iterate over a copy
+  // of the observer list.
+  HeapHashSet<WeakMember<FocusChangedObserver>> observers =
+      focus_changed_observers_;
+  for (const auto& it : observers)
     it->FocusedFrameChanged();
 }
 
-void FocusController::Trace(Visitor* visitor) {
+void FocusController::Trace(Visitor* visitor) const {
   visitor->Trace(page_);
   visitor->Trace(focused_frame_);
   visitor->Trace(focus_changed_observers_);

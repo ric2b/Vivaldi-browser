@@ -1,3 +1,7 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 load('//lib/builders.star', 'cpu', 'goma', 'os')
 load('//lib/try.star', 'try_')
 # Load this using relative path so that the load statement doesn't
@@ -156,25 +160,6 @@ try_.chromium_chromiumos_builder(
 try_.chromium_chromiumos_builder(
     name = 'chromeos-arm-generic-rel',
     tryjob = try_.job(),
-)
-
-try_.chromium_chromiumos_builder(
-    name = 'chromeos-kevin-compile-rel',
-    tryjob = try_.job(
-        location_regexp = [
-            '.+/[+]/chromeos/CHROMEOS_LKGM',
-        ],
-    ),
-)
-
-try_.chromium_chromiumos_builder(
-    name = 'chromeos-kevin-rel',
-    tryjob = try_.job(
-        location_regexp = [
-            '.+/[+]/build/chromeos/.+',
-            '.+/[+]/build/config/chromeos/.*',
-        ],
-    ),
 )
 
 try_.chromium_chromiumos_builder(

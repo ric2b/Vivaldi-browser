@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
+#include "base/logging.h"
 #include "media/base/container_names.h"
 #include "media/base/data_source.h"
 

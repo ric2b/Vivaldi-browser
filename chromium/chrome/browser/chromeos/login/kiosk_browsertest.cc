@@ -23,6 +23,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/speech_monitor.h"
@@ -38,6 +39,9 @@
 #include "chrome/browser/chromeos/login/test/device_state_mixin.h"
 #include "chrome/browser/chromeos/login/test/fake_gaia_mixin.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
+#include "chrome/browser/chromeos/login/test/kiosk_test_helpers.h"
+#include "chrome/browser/chromeos/login/test/local_state_mixin.h"
+#include "chrome/browser/chromeos/login/test/login_manager_mixin.h"
 #include "chrome/browser/chromeos/login/test/network_portal_detector_mixin.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
@@ -52,6 +56,7 @@
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
+#include "chrome/browser/chromeos/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/device_identity/device_oauth2_token_service.h"
 #include "chrome/browser/device_identity/device_oauth2_token_service_factory.h"
 #include "chrome/browser/extensions/browsertest_util.h"
@@ -70,6 +75,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/app_launch_splash_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/kiosk_autolaunch_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/kiosk_enable_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/welcome_screen_handler.h"
 #include "chrome/common/chrome_constants.h"
@@ -285,31 +291,6 @@ void SetPlatformVersion(const std::string& platform_version) {
       "CHROMEOS_RELEASE_VERSION=%s", platform_version.c_str());
   base::SysInfo::SetChromeOSVersionInfoForTest(lsb_release, base::Time::Now());
 }
-
-class KioskSessionInitializedWaiter : public KioskAppManagerObserver {
- public:
-  KioskSessionInitializedWaiter() {
-    scoped_observer_.Add(KioskAppManager::Get());
-  }
-  ~KioskSessionInitializedWaiter() override = default;
-
-  void Wait() {
-    if (KioskAppManager::Get()->app_session())
-      return;
-
-    run_loop_.Run();
-  }
-
-  // KioskAppManagerObserver:
-  void OnKioskSessionInitialized() override { run_loop_.Quit(); }
-
- private:
-  ScopedObserver<KioskAppManagerBase, KioskAppManagerObserver> scoped_observer_{
-      this};
-  base::RunLoop run_loop_;
-
-  DISALLOW_COPY_AND_ASSIGN(KioskSessionInitializedWaiter);
-};
 
 // Helper functions for CanConfigureNetwork mock.
 class ScopedCanConfigureNetwork {
@@ -572,10 +553,7 @@ class KioskTest : public OobeBaseTest {
       command_line->AppendSwitch(switches::kEnableConsumerKiosk);
   }
 
-  bool LaunchApp(const std::string& app_id, bool diagnostic_mode) {
-    // TODO(https://crbug.com/932323): Implement or remove diagnostic mode.
-    if (diagnostic_mode)
-      return false;
+  bool LaunchApp(const std::string& app_id) {
     return ash::LoginScreenTestApi::LaunchApp(app_id);
   }
 
@@ -638,7 +616,7 @@ class KioskTest : public OobeBaseTest {
     PrepareAppLaunch();
 
     network_portal_detector_.SimulateDefaultNetworkState(network_status);
-    EXPECT_TRUE(LaunchApp(test_app_id(), false));
+    EXPECT_TRUE(LaunchApp(test_app_id()));
   }
 
   const extensions::Extension* GetInstalledApp() {
@@ -1077,31 +1055,6 @@ IN_PROC_BROWSER_TEST_F(KioskTest, DISABLED_LaunchAppUserCancel) {
             chromeos::KioskAppLaunchError::Get());
 }
 
-// TODO: https://crbug.com/932323
-IN_PROC_BROWSER_TEST_F(KioskTest, DISABLED_LaunchInDiagnosticMode) {
-  const char kCheckDiagnosticModeOldAPI[] =
-      "$('show-apps-button').confirmDiagnosticMode_";
-
-  PrepareAppLaunch();
-  SimulateNetworkOnline();
-
-  EXPECT_TRUE(LaunchApp(kTestKioskApp, true));
-
-  test::OobeJS().CreateWaiter(kCheckDiagnosticModeOldAPI)->Wait();
-
-  std::string diagnosticMode(kCheckDiagnosticModeOldAPI);
-  test::OobeJS().Evaluate(
-      "(function() {"
-      "var e = new Event('click');" +
-      diagnosticMode +
-      "."
-      "okButton_.dispatchEvent(e);"
-      "})();");
-
-  WaitForAppLaunchSuccess();
-  EXPECT_EQ(extensions::Manifest::EXTERNAL_PREF, GetInstalledAppLocation());
-}
-
 IN_PROC_BROWSER_TEST_F(KioskTest, AutolaunchWarningCancel) {
   EnableConsumerKioskMode();
 
@@ -1281,7 +1234,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, MAYBE_DoNotLaunchWhenUntrusted) {
       CrosSettingsProvider::PERMANENTLY_UNTRUSTED);
 
   // Check that the attempt to start a kiosk app fails with an error.
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   bool ignored = false;
   EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
       GetLoginUI()->GetWebContents(),
@@ -1460,7 +1413,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, NoEnterpriseAutoLaunchWhenUntrusted) {
   // not possible to inject an auto-launch policy before it runs.
   LoginDisplayHost* login_display_host = LoginDisplayHost::default_host();
   ASSERT_TRUE(login_display_host);
-  login_display_host->StartAppLaunch(test_app_id(), false, true);
+  login_display_host->StartKiosk(KioskAppId::ForChromeApp(test_app_id()), true);
 
   // Check that no launch has started.
   EXPECT_FALSE(login_display_host->GetAppLaunchController());
@@ -1484,10 +1437,25 @@ IN_PROC_BROWSER_TEST_F(KioskTest, SpokenFeedback) {
     extensions::browsertest_util::ExecuteScriptInBackgroundPageNoWait(
         AccessibilityManager::Get()->profile(),
         extension_misc::kChromeVoxExtensionId,
-        R"(CommandHandler.onCommand('nextObject');
-          CommandHandler.onCommand('showOptionsPage');
-          if (CommandHandler.isKioskSession_)
-            ChromeVox.tts.speak('done');)");
+        R"(
+          chrome.automation.getDesktop(d => {
+            function waitForHeadingThenTest() {
+              const heading =
+                  d.find({role: chrome.automation.RoleType.HEADING});
+              if (!heading) {
+                setTimeout(waitForHeadingThenTest, 50);
+                return;
+              }
+              ChromeVoxState.instance.navigateToRange(
+                  cursors.Range.fromNode(heading));
+              CommandHandler.onCommand('showOptionsPage');
+              if (CommandHandler.isKioskSession_) {
+                ChromeVox.tts.speak('done');
+              }
+            }
+            waitForHeadingThenTest();
+          });
+        )");
   });
   sm.ExpectSpeech("Test Kiosk App 3 exclamations");
   sm.ExpectSpeech("Heading 1");
@@ -1610,7 +1578,7 @@ class KioskUpdateTest : public KioskTest {
     set_test_crx_file(crx_file);
     PrepareAppLaunch();
     SimulateNetworkOnline();
-    EXPECT_TRUE(LaunchApp(test_app_id(), false));
+    EXPECT_TRUE(LaunchApp(test_app_id()));
     WaitForAppLaunchSuccess();
     EXPECT_EQ(version, GetInstalledAppVersion().GetString());
   }
@@ -1631,7 +1599,7 @@ class KioskUpdateTest : public KioskTest {
     // Launch the primary app.
     StartUIForAppLaunch();
     SimulateNetworkOnline();
-    EXPECT_TRUE(LaunchApp(test_app_id(), false));
+    EXPECT_TRUE(LaunchApp(test_app_id()));
     WaitForAppLaunchWithOptions(false, true);
 
     // Verify the primary app and the secondary apps are all installed.
@@ -1788,7 +1756,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, LaunchOfflineEnabledAppNoNetwork) {
   set_test_app_id(kTestOfflineEnabledKioskApp);
   StartUIForAppLaunch();
   SimulateNetworkOffline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchSuccess();
 
   EXPECT_EQ("1.0.0", GetInstalledAppVersion().GetString());
@@ -1809,7 +1777,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest,
       KioskAppManager::Get()->HasCachedCrx(kTestOfflineEnabledKioskApp));
   StartUIForAppLaunch();
   SimulateNetworkOffline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchSuccess();
 
   EXPECT_EQ("1.0.0", GetInstalledAppVersion().GetString());
@@ -1837,7 +1805,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest,
 
   StartUIForAppLaunch();
   SimulateNetworkOffline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchSuccess();
 
   // v2 app should have been installed.
@@ -1856,7 +1824,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, LaunchOfflineEnabledAppNoUpdate) {
 
   StartUIForAppLaunch();
   SimulateNetworkOnline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchSuccess();
 
   EXPECT_EQ("1.0.0", GetInstalledAppVersion().GetString());
@@ -1878,7 +1846,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest,
 
   StartUIForAppLaunch();
   SimulateNetworkOnline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchSuccess();
 
   EXPECT_EQ("2.0.0", GetInstalledAppVersion().GetString());
@@ -1895,7 +1863,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, PRE_UsbStickUpdateAppNoNetwork) {
   set_test_app_id(kTestOfflineEnabledKioskApp);
   StartUIForAppLaunch();
   SimulateNetworkOffline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchSuccess();
   EXPECT_EQ("1.0.0", GetInstalledAppVersion().GetString());
 
@@ -1923,7 +1891,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, DISABLED_UsbStickUpdateAppNoNetwork) {
   set_test_app_id(kTestOfflineEnabledKioskApp);
   StartUIForAppLaunch();
   SimulateNetworkOffline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchSuccess();
   EXPECT_EQ("2.0.0", GetInstalledAppVersion().GetString());
 }
@@ -2050,7 +2018,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, PermissionChange) {
 
   StartUIForAppLaunch();
   SimulateNetworkOnline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchSuccess();
 
   EXPECT_EQ("2.0.0", GetInstalledAppVersion().GetString());
@@ -2115,7 +2083,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, PRE_IncompliantPlatformDelayInstall) {
 
   StartUIForAppLaunch();
   SimulateNetworkOnline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchSuccess();
 
   EXPECT_EQ("1.0.0", GetInstalledAppVersion().GetString());
@@ -2138,7 +2106,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, IncompliantPlatformDelayInstall) {
   StartUIForAppLaunch();
   SimulateNetworkOnline();
 
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchSuccess();
 
   EXPECT_EQ("2.0.0", GetInstalledAppVersion().GetString());
@@ -2162,7 +2130,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, IncompliantPlatformFirstInstall) {
 
   StartUIForAppLaunch();
   SimulateNetworkOnline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchSuccess();
 
   EXPECT_EQ("2.0.0", GetInstalledAppVersion().GetString());
@@ -2196,7 +2164,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest,
 
   StartUIForAppLaunch();
   SimulateNetworkOnline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchWithOptions(false, true);
 
   // Verify the secondary app kTestSecondaryApp1 is removed.
@@ -2226,7 +2194,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, DISABLED_UpdateMultiAppKioskAddOneApp) {
 
   StartUIForAppLaunch();
   SimulateNetworkOnline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchWithOptions(false, true);
 
   // Verify the secondary app kTestSecondaryApp3 is installed.
@@ -2261,7 +2229,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest,
 
   StartUIForAppLaunch();
   SimulateNetworkOnline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchWithOptions(false, true);
 
   // Verify the secondary app is removed.
@@ -2294,7 +2262,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, LaunchAppWithUpdatedModule) {
 
   StartUIForAppLaunch();
   SimulateNetworkOnline();
-  EXPECT_TRUE(LaunchApp(test_app_id(), false));
+  EXPECT_TRUE(LaunchApp(test_app_id()));
   WaitForAppLaunchWithOptions(false, true);
 
   // Verify the shared module is updated to the new version after primary app
@@ -2416,7 +2384,7 @@ IN_PROC_BROWSER_TEST_F(KioskEnterpriseTest, EnterpriseKioskApp) {
                             "");
 
   PrepareAppLaunch();
-  EXPECT_TRUE(LaunchApp(kTestEnterpriseKioskApp, false));
+  EXPECT_TRUE(LaunchApp(kTestEnterpriseKioskApp));
 
   KioskSessionInitializedWaiter().Wait();
 
@@ -2486,7 +2454,7 @@ IN_PROC_BROWSER_TEST_F(KioskEnterpriseTest, PrivateStore) {
   waiter.WaitForAppData();
 
   PrepareAppLaunch();
-  EXPECT_TRUE(LaunchApp(kTestEnterpriseKioskApp, false));
+  EXPECT_TRUE(LaunchApp(kTestEnterpriseKioskApp));
   WaitForAppLaunchWithOptions(false /* check_launch_data */,
                               true /* terminate_app */);
 
@@ -2586,7 +2554,8 @@ class KioskVirtualKeyboardTest : public KioskTest,
 
 // Verifies that chrome.virtualKeyboard.restrictFeatures and related private
 // APIs work.
-IN_PROC_BROWSER_TEST_F(KioskVirtualKeyboardTest, RestrictFeatures) {
+// TODO(https://crbug.com/1094809): Flaky in debug builds.
+IN_PROC_BROWSER_TEST_F(KioskVirtualKeyboardTest, DISABLED_RestrictFeatures) {
   set_test_app_id(kTestVirtualKeyboardKioskApp);
   set_test_app_version("0.1");
   set_test_crx_file(test_app_id() + ".crx");
@@ -2667,6 +2636,64 @@ IN_PROC_BROWSER_TEST_F(KioskHiddenWebUITest, AutolaunchWarning) {
   // Wait for the wallpaper to load.
   WaitForWallpaper();
   EXPECT_TRUE(wallpaper_loaded());
+}
+
+class KioskAutoLaunchViewsTest : public OobeBaseTest,
+                                 public LocalStateMixin::Delegate {
+ public:
+  KioskAutoLaunchViewsTest() { login_manager_mixin_.AppendRegularUsers(1); }
+
+  KioskAutoLaunchViewsTest(const KioskAutoLaunchViewsTest& other) = delete;
+  KioskAutoLaunchViewsTest& operator=(const KioskAutoLaunchViewsTest& other) =
+      delete;
+
+  ~KioskAutoLaunchViewsTest() override = default;
+
+  void SetUpInProcessBrowserTestFixture() override {
+    OobeBaseTest::SetUpInProcessBrowserTestFixture();
+
+    owner_settings_service_ = std::make_unique<FakeOwnerSettingsService>(
+        scoped_testing_cros_settings_.device_settings(), nullptr);
+
+    // Add a new device local account and set its id for auto login.
+    std::vector<policy::DeviceLocalAccount> accounts;
+    accounts.push_back(policy::DeviceLocalAccount(
+        policy::DeviceLocalAccount::TYPE_KIOSK_APP, kTestEnterpriseAccountId,
+        kTestEnterpriseKioskApp, ""));
+    policy::SetDeviceLocalAccounts(owner_settings_service_.get(), accounts);
+    scoped_testing_cros_settings_.device_settings()->SetString(
+        kAccountsPrefDeviceLocalAccountAutoLoginId, kTestEnterpriseAccountId);
+  }
+
+  // chromeos::LocalStateMixin::Delegate:
+  void SetUpLocalState() override {
+    // Simulate auto login request from the previous session.
+    PrefService* prefs = g_browser_process->local_state();
+    DictionaryPrefUpdate dict_update(prefs,
+                                     KioskAppManager::kKioskDictionaryName);
+    // The AutoLoginState is taken from KioskAppManager::AutoLoginState.
+    dict_update->SetInteger(
+        KioskAppManager::kKeyAutoLoginState,
+        KioskAppManager::AutoLoginState::AUTOLOGIN_REQUESTED);
+  }
+
+  void TearDownOnMainThread() override {
+    owner_settings_service_.reset();
+    OobeBaseTest::TearDownOnMainThread();
+  }
+
+ protected:
+  std::unique_ptr<FakeOwnerSettingsService> owner_settings_service_;
+  chromeos::ScopedTestingCrosSettings scoped_testing_cros_settings_;
+  chromeos::LocalStateMixin local_state_mixin_{&mixin_host_, this};
+  LoginManagerMixin login_manager_mixin_{&mixin_host_};
+  DeviceStateMixin device_state_{
+      &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_CONSUMER_OWNED};
+};
+
+IN_PROC_BROWSER_TEST_F(KioskAutoLaunchViewsTest, ShowAutoLaunchScreen) {
+  OobeScreenWaiter(KioskAutolaunchScreenView::kScreenId).Wait();
+  EXPECT_TRUE(ash::LoginScreenTestApi::IsOobeDialogVisible());
 }
 
 }  // namespace chromeos

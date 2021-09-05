@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -36,19 +37,15 @@ StyleResolverState::StyleResolverState(
     Document& document,
     Element& element,
     PseudoElement* pseudo_element,
+    PseudoElementStyleRequest::RequestType pseudo_request_type,
     AnimatingElementType animating_element_type,
     const ComputedStyle* parent_style,
     const ComputedStyle* layout_parent_style)
     : element_context_(element),
       document_(&document),
-      style_(nullptr),
       parent_style_(parent_style),
       layout_parent_style_(layout_parent_style),
-      is_animation_interpolation_map_ready_(false),
-      is_animating_custom_properties_(false),
-      has_dir_auto_attribute_(false),
-      cascaded_color_value_(nullptr),
-      cascaded_visited_color_value_(nullptr),
+      pseudo_request_type_(pseudo_request_type),
       font_builder_(&document),
       element_style_resources_(GetElement(),
                                document.DevicePixelRatio(),
@@ -77,18 +74,22 @@ StyleResolverState::StyleResolverState(Document& document,
     : StyleResolverState(document,
                          element,
                          nullptr /* pseudo_element */,
+                         PseudoElementStyleRequest::kForRenderer,
                          AnimatingElementType::kElement,
                          parent_style,
                          layout_parent_style) {}
 
-StyleResolverState::StyleResolverState(Document& document,
-                                       Element& element,
-                                       PseudoId pseudo_id,
-                                       const ComputedStyle* parent_style,
-                                       const ComputedStyle* layout_parent_style)
+StyleResolverState::StyleResolverState(
+    Document& document,
+    Element& element,
+    PseudoId pseudo_id,
+    PseudoElementStyleRequest::RequestType pseudo_request_type,
+    const ComputedStyle* parent_style,
+    const ComputedStyle* layout_parent_style)
     : StyleResolverState(document,
                          element,
                          element.GetPseudoElement(pseudo_id),
+                         pseudo_request_type,
                          AnimatingElementType::kPseudoElement,
                          parent_style,
                          layout_parent_style) {}
@@ -156,6 +157,13 @@ void StyleResolverState::CacheUserAgentBorderAndBackground() {
 }
 
 void StyleResolverState::LoadPendingResources() {
+  if (pseudo_request_type_ == PseudoElementStyleRequest::kForComputedStyle ||
+      (ParentStyle() && ParentStyle()->IsEnsuredInDisplayNone()) ||
+      StyleRef().Display() == EDisplay::kNone ||
+      StyleRef().Display() == EDisplay::kContents ||
+      StyleRef().IsEnsuredOutsideFlatTree())
+    return;
+
   element_style_resources_.LoadPendingResources(Style());
 }
 
@@ -211,7 +219,7 @@ CSSParserMode StyleResolverState::GetParserMode() const {
   return GetDocument().InQuirksMode() ? kHTMLQuirksMode : kHTMLStandardMode;
 }
 
-const Element* StyleResolverState::GetAnimatingElement() const {
+Element* StyleResolverState::GetAnimatingElement() const {
   if (animating_element_type_ == AnimatingElementType::kElement)
     return &GetElement();
   DCHECK_EQ(AnimatingElementType::kPseudoElement, animating_element_type_);
@@ -229,6 +237,16 @@ const CSSValue& StyleResolverState::ResolveLightDarkPair(
     return pair->Second();
   }
   return value;
+}
+
+void StyleResolverState::MarkDependency(const CSSProperty& property) {
+  if (!RuntimeEnabledFeatures::CSSMatchedPropertiesCacheDependenciesEnabled())
+    return;
+  if (!HasValidDependencies())
+    return;
+
+  has_incomparable_dependency_ |= !property.IsComputedValueComparable();
+  dependencies_.insert(property.GetCSSPropertyName());
 }
 
 }  // namespace blink

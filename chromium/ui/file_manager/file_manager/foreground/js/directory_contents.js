@@ -247,8 +247,8 @@ Object.freeze(DriveMetadataSearchContentScanner.SearchType);
 class RecentContentScanner extends ContentScanner {
   /**
    * @param {string} query Search query.
-   * @param {string=} opt_sourceRestriction
-   * @param {string=} opt_recentFileType
+   * @param {chrome.fileManagerPrivate.SourceRestriction=} opt_sourceRestriction
+   * @param {chrome.fileManagerPrivate.RecentFileType=} opt_recentFileType
    */
   constructor(query, opt_sourceRestriction, opt_recentFileType) {
     super();
@@ -259,13 +259,13 @@ class RecentContentScanner extends ContentScanner {
     this.query_ = query.toLowerCase();
 
     /**
-     * @private {string}
+     * @private {chrome.fileManagerPrivate.SourceRestriction}
      */
     this.sourceRestriction_ = opt_sourceRestriction ||
         chrome.fileManagerPrivate.SourceRestriction.ANY_SOURCE;
 
     /**
-     * @private {string}
+     * @private {chrome.fileManagerPrivate.RecentFileType}
      */
     this.recentFileType_ =
         opt_recentFileType || chrome.fileManagerPrivate.RecentFileType.ALL;
@@ -364,8 +364,8 @@ class CrostiniMounter extends ContentScanner {
  * When filters are changed, a 'changed' event is fired.
  */
 class FileFilter extends cr.EventTarget {
-  /** @param {!MetadataModel} metadataModel */
-  constructor(metadataModel) {
+  /** @param {!VolumeManager} volumeManager */
+  constructor(volumeManager) {
     super();
 
     /**
@@ -377,11 +377,11 @@ class FileFilter extends cr.EventTarget {
     this.setAllAndroidFoldersVisible(false);
 
     /**
-     * @type {!MetadataModel}
+     * @type {!VolumeManager}
      * @const
      * @private
      */
-    this.metadataModel_ = metadataModel;
+    this.volumeManager_ = volumeManager;
 
     this.hideAndroidDownload();
   }
@@ -405,14 +405,27 @@ class FileFilter extends cr.EventTarget {
   }
 
   /**
-   * Show/Hide hidden files (i.e. files starting with '.').
+   * Show/Hide hidden files (i.e. files starting with '.', or other system files
+   * for Windows files).
    * @param {boolean} visible True if hidden files should be visible to the
    *     user.
    */
   setHiddenFilesVisible(visible) {
     if (!visible) {
       this.addFilter('hidden', entry => {
-        return entry.name.substr(0, 1) !== '.';
+        if (entry.name.startsWith('.')) {
+          return false;
+        }
+        // Only hide WINDOWS_HIDDEN in downloads:/PvmDefault.
+        if (entry.fullPath.startsWith('/PvmDefault/') &&
+            FileFilter.WINDOWS_HIDDEN.includes(entry.name)) {
+          const info = this.volumeManager_.getLocationInfo(entry);
+          if (info &&
+              info.rootType === VolumeManagerCommon.RootType.DOWNLOADS) {
+            return false;
+          }
+        }
+        return true;
       });
     } else {
       this.removeFilter('hidden');
@@ -497,6 +510,13 @@ class FileFilter extends cr.EventTarget {
  */
 FileFilter.DEFAULT_ANDROID_FOLDERS =
     ['Documents', 'Movies', 'Music', 'Pictures'];
+
+/**
+ * Windows files or folders to hide by default.
+ * @const {!Array<string>}
+ */
+FileFilter.WINDOWS_HIDDEN = ['$RECYCLE.BIN'];
+
 
 /**
  * A context of DirectoryContents.

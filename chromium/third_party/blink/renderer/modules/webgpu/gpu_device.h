@@ -61,9 +61,7 @@ class GPUDevice final : public EventTargetWithInlineData,
                      const GPUDeviceDescriptor* descriptor);
   ~GPUDevice() override;
 
-  void Trace(Visitor* visitor) override;
-
-  uint64_t GetClientID() const;
+  void Trace(Visitor* visitor) const override;
 
   // gpu_device.idl
   GPUAdapter* adapter() const;
@@ -128,8 +126,6 @@ class GPUDevice final : public EventTargetWithInlineData,
   std::unique_ptr<
       DawnCallback<base::RepeatingCallback<void(WGPUErrorType, const char*)>>>
       error_callback_;
-
-  uint64_t client_id_;
 
   static constexpr int kMaxAllowedConsoleWarnings = 500;
   int allowed_console_warnings_remaining_ = kMaxAllowedConsoleWarnings;

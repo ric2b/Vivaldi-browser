@@ -28,7 +28,7 @@ deps = {
       '4164a305626786b1912d467003acf4c4995bec7d',
   'crashpad/third_party/edo/edo': {
       'url': Var('chromium_git') + '/external/github.com/google/eDistantObject.git@' +
-      '243fc89ae95b24717d41f3786f6a9abeeef87c92',
+      '97121c64019fa0e8bfbc8254e3ccb5572c500746',
       'condition': 'checkout_ios',
   },
   'crashpad/third_party/googletest/googletest':
@@ -42,7 +42,7 @@ deps = {
       '7bde79cc274d06451bf65ae82c012a5d3e476b5a',
   'crashpad/third_party/mini_chromium/mini_chromium':
       Var('chromium_git') + '/chromium/mini_chromium@' +
-      '8ca5ea356cdb97913d62d379d503567a80d90726',
+      'ae14a14ab4cea36db9c446741581d427a7fc7f89',
   'crashpad/third_party/libfuzzer/src':
       Var('chromium_git') + '/chromium/llvm-project/compiler-rt/lib/fuzzer.git@' +
       'fda403cf93ecb8792cb1d061564d89a6553ca020',

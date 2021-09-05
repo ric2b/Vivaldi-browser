@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.download;
 
-import android.support.test.filters.SmallTest;
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -14,7 +14,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
@@ -59,7 +58,6 @@ public class ChromeDownloadDelegateTest {
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure
     public void testShouldInterceptContextMenuDownload() {
         final Tab tab = mActivityTestRule.getActivity().getActivityTab();
         mActivityTestRule.loadUrl("about:blank");

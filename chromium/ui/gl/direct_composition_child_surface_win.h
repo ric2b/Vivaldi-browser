@@ -38,6 +38,7 @@ class GL_EXPORT DirectCompositionChildSurfaceWin : public GLSurfaceEGL {
               const gfx::ColorSpace& color_space,
               bool has_alpha) override;
   bool SetEnableDCLayers(bool enable) override;
+  static bool IsDirectCompositionSwapChainFailed();
 
   const Microsoft::WRL::ComPtr<IDCompositionSurface>& dcomp_surface() const {
     return dcomp_surface_;

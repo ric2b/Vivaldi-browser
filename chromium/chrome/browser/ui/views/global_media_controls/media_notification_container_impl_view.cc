@@ -162,9 +162,18 @@ bool MediaNotificationContainerImplView::OnMouseDragged(
   if (movement.LengthSquared() >= kMinMovementSquaredToBeDragging)
     is_dragging_ = true;
 
+  // If we are in an overlay notification, we want to drag the overlay
+  // instead.
+  if (dragged_out_) {
+    overlay_->SetBoundsConstrained(overlay_->GetWindowBoundsInScreen() +
+                                   movement);
+    return true;
+  }
+
   gfx::Transform transform;
   transform.Translate(movement);
   swipeable_container_->layer()->SetTransform(transform);
+
   return true;
 }
 
@@ -172,6 +181,9 @@ void MediaNotificationContainerImplView::OnMouseReleased(
     const ui::MouseEvent& event) {
   views::Button::OnMouseReleased(event);
   if (!ShouldHandleMouseEvent(event, /*is_press=*/false))
+    return;
+
+  if (dragged_out_)
     return;
 
   gfx::Vector2d movement = event.location() - initial_drag_location_;
@@ -203,7 +215,12 @@ void MediaNotificationContainerImplView::OnDidChangeFocus(
 }
 
 void MediaNotificationContainerImplView::OnExpanded(bool expanded) {
-  SetPreferredSize(expanded ? kExpandedSize : kNormalSize);
+  gfx::Size new_size = expanded ? kExpandedSize : kNormalSize;
+
+  if (overlay_)
+    overlay_->SetSize(new_size);
+
+  SetPreferredSize(new_size);
   PreferredSizeChanged();
 
   for (auto& observer : observers_)
@@ -217,7 +234,12 @@ void MediaNotificationContainerImplView::OnMediaSessionInfoChanged(
                           media_session::mojom::MediaPlaybackState::kPlaying;
 }
 
-void MediaNotificationContainerImplView::OnMediaSessionMetadataChanged() {
+void MediaNotificationContainerImplView::OnMediaSessionMetadataChanged(
+    const media_session::MediaMetadata& metadata) {
+  title_ = metadata.title;
+  if (overlay_)
+    overlay_->UpdateTitle(title_);
+
   for (auto& observer : observers_)
     observer.OnContainerMetadataChanged();
 }
@@ -305,6 +327,17 @@ void MediaNotificationContainerImplView::PopOut() {
   SetPosition(gfx::Point(0, 0));
 }
 
+void MediaNotificationContainerImplView::OnOverlayNotificationShown(
+    OverlayMediaNotificationView* overlay) {
+  // We can hold |overlay_| indefinitely since |overlay_| owns us.
+  DCHECK(!overlay_);
+  overlay_ = overlay;
+}
+
+const base::string16& MediaNotificationContainerImplView::GetTitle() {
+  return title_;
+}
+
 views::ImageButton*
 MediaNotificationContainerImplView::GetDismissButtonForTesting() {
   return dismiss_button_;
@@ -360,10 +393,6 @@ bool MediaNotificationContainerImplView::ShouldHandleMouseEvent(
   // We only manually handle mouse events for dragging out of the dialog, so if
   // the feature is disabled there's no need to handle the event.
   if (!base::FeatureList::IsEnabled(media::kGlobalMediaControlsOverlayControls))
-    return false;
-
-  // We also don't need to handle if we're already dragged out.
-  if (dragged_out_)
     return false;
 
   // We only handle non-press events if we've handled the associated press

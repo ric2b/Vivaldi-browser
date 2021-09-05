@@ -431,6 +431,8 @@ SkColor GetDefaultColor(NativeTheme::ColorId color_id,
     case NativeTheme::kColorId_NotificationButtonBackground:
       return SkColorSetA(SK_ColorWHITE, 0.9 * 0xff);
 #endif
+    case NativeTheme::kColorId_NotificationDefaultAccentColor:
+      return gfx::kChromeIconGrey;
 
     // Scrollbar
     case NativeTheme::kColorId_OverlayScrollbarThumbBackground:
@@ -573,6 +575,10 @@ SkColor GetDefaultColor(NativeTheme::ColorId color_id,
     case NativeTheme::kColorId_MenuIconColor:
     case NativeTheme::kColorId_DefaultIconColor:
       return gfx::kGoogleGrey700;
+    case NativeTheme::kColorId_DisabledIconColor:
+      return SkColorSetA(
+          base_theme->GetSystemColor(NativeTheme::kColorId_DefaultIconColor),
+          gfx::kDisabledControlAlpha);
 
     // Sync info container
     case NativeTheme::kColorId_SyncInfoContainerPaused:

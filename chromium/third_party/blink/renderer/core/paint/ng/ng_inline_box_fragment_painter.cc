@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/core/style/nine_piece_image.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context_state_saver.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
+#include "third_party/blink/renderer/platform/graphics/paint/scoped_display_item_fragment.h"
 
 namespace blink {
 
@@ -33,23 +34,16 @@ inline bool HasMultiplePaintFragments(const LayoutObject& layout_object) {
   return HasMultipleItems(NGPaintFragment::InlineFragmentsFor(&layout_object));
 }
 
-inline bool MayHaveMultipleFragmentItems(const LayoutObject& layout_object) {
-  // TODO(crbug.com/1061423): NGInlineCursor is currently unable to deal with
-  // objects split into multiple fragmentainers (e.g. columns). Just return true
-  // if it's possible that this object participates in a fragmentation
-  // context. This will give false positives, but that should be harmless, given
-  // the way the return value is used by the caller.
-  if (layout_object.IsInsideFlowThread())
-    return true;
-
-  NGInlineCursor cursor;
-  cursor.MoveTo(layout_object);
-  DCHECK(cursor);
-  if (cursor) {
-    cursor.MoveToNextForSameLayoutObject();
-    return cursor;
-  }
-  return false;
+inline bool MayHaveMultipleFragmentItems(const NGFragmentItem& item,
+                                         const LayoutObject& layout_object) {
+  return !item.IsFirstForNode() || !item.IsLastForNode() ||
+         // TODO(crbug.com/1061423): NGInlineCursor is currently unable to deal
+         // with objects split into multiple fragmentainers (e.g. columns). Just
+         // return true if it's possible that this object participates in a
+         // fragmentation context. This will give false positives, but that
+         // should be harmless, given the way the return value is used by the
+         // caller.
+         UNLIKELY(layout_object.IsInsideFlowThread());
 }
 
 }  // namespace
@@ -64,6 +58,12 @@ const NGBorderEdges NGInlineBoxFragmentPainter::BorderEdges() const {
 
 void NGInlineBoxFragmentPainter::Paint(const PaintInfo& paint_info,
                                        const PhysicalOffset& paint_offset) {
+  base::Optional<ScopedDisplayItemFragment> display_item_fragment;
+  if (inline_box_item_) {
+    display_item_fragment.emplace(paint_info.context,
+                                  inline_box_item_->FragmentId());
+  }
+
   const PhysicalOffset adjusted_paint_offset =
       paint_offset + (inline_box_paint_fragment_
                           ? inline_box_paint_fragment_->Offset()
@@ -121,9 +121,11 @@ void NGInlineBoxFragmentPainterBase::PaintBackgroundBorderShadow(
 
   DCHECK(inline_box_fragment_.GetLayoutObject());
   const LayoutObject& layout_object = *inline_box_fragment_.GetLayoutObject();
+  DCHECK(inline_box_paint_fragment_ || inline_box_item_);
   bool object_may_have_multiple_boxes =
-      inline_box_paint_fragment_ ? HasMultiplePaintFragments(layout_object)
-                                 : MayHaveMultipleFragmentItems(layout_object);
+      inline_box_paint_fragment_
+          ? HasMultiplePaintFragments(layout_object)
+          : MayHaveMultipleFragmentItems(*inline_box_item_, layout_object);
 
   // TODO(eae): Switch to LayoutNG version of BackgroundImageGeometry.
   BackgroundImageGeometry geometry(*static_cast<const LayoutBoxModelObject*>(
@@ -155,6 +157,14 @@ void NGLineBoxFragmentPainter::PaintBackgroundBorderShadow(
   DCHECK_EQ(paint_info.phase, PaintPhase::kForeground);
   DCHECK_EQ(inline_box_fragment_.Type(), NGPhysicalFragment::kFragmentLineBox);
   DCHECK(NeedsPaint(inline_box_fragment_));
+#if DCHECK_IS_ON()
+  if (RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
+    DCHECK(inline_box_item_);
+    // |NGFragmentItem| uses the fragment id when painting the background of
+    // line boxes. Please see |NGFragmentItem::kInitialLineFragmentId|.
+    DCHECK_NE(paint_info.context.GetPaintController().CurrentFragment(), 0u);
+  }
+#endif
 
   if (line_style_ == style_ ||
       line_style_.Visibility() != EVisibility::kVisible)

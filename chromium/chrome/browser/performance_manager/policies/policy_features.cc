@@ -9,7 +9,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 
-#if defined(OS_LINUX)
+#if defined(OS_CHROMEOS)
 #include "base/allocator/buildflags.h"
 #endif
 
@@ -58,15 +58,11 @@ TrimOnMemoryPressureParams TrimOnMemoryPressureParams::GetParams() {
   return params;
 }
 
-#endif  // defined(OS_CHROMEOS)
-
-#if defined(OS_LINUX)
-
 #if BUILDFLAG(USE_TCMALLOC)
 // This flag will allow the browser process to adjust the tcmalloc tunables to
 // balance performance and memory utilization.
 const base::Feature kDynamicTcmallocTuning{"DynamicTcmallocTuning",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 // The time between attempting to update tcmalloc tunables.
 const base::FeatureParam<int> kDynamicTuningTimeSec = {
@@ -78,7 +74,7 @@ const base::FeatureParam<int> kDynamicTuningScaleInvisibleTimeSec = {
     &kDynamicTcmallocTuning, "DynamicTcmallocScaleInvisibleTimeSec", -1};
 #endif  // BUILDFLAG(USE_TCMALLOC)
 
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_CHROMEOS)
 
 #if !defined(OS_ANDROID)
 const base::Feature kPageFreezingFromPerformanceManager{
@@ -87,6 +83,22 @@ const base::Feature kPageFreezingFromPerformanceManager{
 const base::Feature kUrgentDiscardingFromPerformanceManager{
     "UrgentDiscardingFromPerformanceManager",
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+UrgentDiscardingParams::UrgentDiscardingParams() = default;
+UrgentDiscardingParams::UrgentDiscardingParams(
+    const UrgentDiscardingParams& rhs) = default;
+UrgentDiscardingParams::~UrgentDiscardingParams() = default;
+
+constexpr base::FeatureParam<int> UrgentDiscardingParams::kDiscardStrategy;
+
+// static
+UrgentDiscardingParams UrgentDiscardingParams::GetParams() {
+  UrgentDiscardingParams params = {};
+  params.discard_strategy_ =
+      static_cast<UrgentDiscardingParams::DiscardStrategy>(
+          UrgentDiscardingParams::kDiscardStrategy.Get());
+  return params;
+}
 
 const base::Feature kBackgroundTabLoadingFromPerformanceManager{
     "BackgroundTabLoadingFromPerformanceManager",

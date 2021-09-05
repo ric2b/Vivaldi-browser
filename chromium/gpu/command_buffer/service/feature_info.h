@@ -90,7 +90,6 @@ class GPU_GLES2_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     bool ext_discard_framebuffer = false;
     bool angle_depth_texture = false;
     bool is_swiftshader_for_webgl = false;
-    bool is_swiftshader = false;
     bool chromium_texture_filtering_hint = false;
     bool angle_texture_usage = false;
     bool ext_texture_storage = false;
@@ -151,6 +150,7 @@ class GPU_GLES2_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     bool webgl_multi_draw_instanced_base_vertex_base_instance = false;
     bool ext_texture_compression_bptc = false;
     bool ext_texture_compression_rgtc = false;
+    bool oes_draw_buffers_indexed = false;
   };
 
   FeatureInfo();
@@ -213,6 +213,7 @@ class GPU_GLES2_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
   void EnableEXTColorBufferFloat();
   void EnableEXTColorBufferHalfFloat();
   void EnableEXTTextureFilterAnisotropic();
+  void EnableOESDrawBuffersIndexed();
   void EnableOESFboRenderMipmap();
   void EnableOESTextureFloatLinear();
   void EnableOESTextureHalfFloatLinear();

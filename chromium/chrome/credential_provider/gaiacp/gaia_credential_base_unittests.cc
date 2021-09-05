@@ -6,13 +6,18 @@
 
 #include <sddl.h>  // For ConvertSidToStringSid()
 #include <wrl/client.h>
+#include <algorithm>
+#include <vector>
 
+#include "base/base_paths_win.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/json/json_writer.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_path_override.h"
 #include "base/time/time_override.h"
 
 #include "chrome/browser/ui/startup/credential_provider_signin_dialog_win_test_data.h"
@@ -23,6 +28,7 @@
 #include "chrome/credential_provider/gaiacp/mdm_utils.h"
 #include "chrome/credential_provider/gaiacp/password_recovery_manager.h"
 #include "chrome/credential_provider/gaiacp/reg_utils.h"
+#include "chrome/credential_provider/gaiacp/user_policies_manager.h"
 #include "chrome/credential_provider/test/gls_runner_test_base.h"
 #include "chrome/credential_provider/test/test_credential.h"
 #include "google_apis/gaia/gaia_urls.h"
@@ -738,6 +744,96 @@ INSTANTIATE_TEST_SUITE_P(
                        ::testing::Values(L"acme.com,acme2.com,acme3.com",
                                          L"")));
 
+class GcpGaiaCredentialBasePermittedAccountTest
+    : public GcpGaiaCredentialBaseTest,
+      public ::testing::WithParamInterface<
+          std::tuple<const wchar_t*, const wchar_t*>> {
+ public:
+  // Get a pretty-printed string of the list of email domains that we can
+  // display to the end-user.
+  base::string16 GetEmailDomainsPrintableString() {
+    base::string16 email_domains_reg_old = GetGlobalFlagOrDefault(L"ed", L"");
+    base::string16 email_domains_reg_new =
+        GetGlobalFlagOrDefault(L"domains_allowed_to_login", L"");
+
+    base::string16 email_domains_reg = email_domains_reg_old.empty()
+                                           ? email_domains_reg_new
+                                           : email_domains_reg_old;
+    if (email_domains_reg.empty())
+      return email_domains_reg;
+
+    std::vector<base::string16> domains =
+        base::SplitString(base::ToLowerASCII(email_domains_reg),
+                          base::ASCIIToUTF16(kEmailDomainsSeparator),
+                          base::WhitespaceHandling::TRIM_WHITESPACE,
+                          base::SplitResult::SPLIT_WANT_NONEMPTY);
+    base::string16 email_domains_str;
+    for (size_t i = 0; i < domains.size(); ++i) {
+      email_domains_str += domains[i];
+      if (i < domains.size() - 1)
+        email_domains_str += L", ";
+    }
+    return email_domains_str;
+  }
+};
+
+TEST_P(GcpGaiaCredentialBasePermittedAccountTest, PermittedAccounts) {
+  const base::string16 permitted_acounts = std::get<0>(GetParam());
+  const base::string16 restricted_domains = std::get<1>(GetParam());
+
+  ASSERT_EQ(S_OK,
+            SetGlobalFlagForTesting(L"permitted_accounts", permitted_acounts));
+  ASSERT_EQ(S_OK, SetGlobalFlagForTesting(L"domains_allowed_to_login",
+                                          restricted_domains));
+
+  // Create provider and start logon.
+  Microsoft::WRL::ComPtr<ICredentialProviderCredential> cred;
+
+  ASSERT_EQ(S_OK, InitializeProviderAndGetCredential(0, &cred));
+  Microsoft::WRL::ComPtr<ITestCredential> test;
+  ASSERT_EQ(S_OK, cred.As(&test));
+
+  base::string16 email = L"user@test.com";
+  base::string16 email_domain = email.substr(email.find(L"@") + 1);
+
+  ASSERT_EQ(S_OK, test->SetGlsEmailAddress(base::UTF16ToUTF8(email)));
+
+  bool allowed_email = permitted_acounts.empty() ||
+                       permitted_acounts.find(email) != base::string16::npos;
+  bool found_domain =
+      restricted_domains.find(email_domain) != base::string16::npos;
+
+  if (!found_domain)
+    ASSERT_EQ(S_OK, test->SetDefaultExitCode(kUiecInvalidEmailDomain));
+
+  ASSERT_EQ(S_OK, StartLogonProcessAndWait());
+
+  if (allowed_email && found_domain) {
+    ASSERT_EQ(S_OK, FinishLogonProcess(true, true, 0));
+  } else {
+    base::string16 expected_error_msg;
+    if (!found_domain) {
+      expected_error_msg = base::ReplaceStringPlaceholders(
+          GetStringResource(IDS_INVALID_EMAIL_DOMAIN_BASE),
+          {GetEmailDomainsPrintableString()}, nullptr);
+    } else {
+      expected_error_msg = GetStringResource(IDS_EMAIL_MISMATCH_BASE);
+    }
+    // Logon process should fail with the specified error message.
+    ASSERT_EQ(S_OK, FinishLogonProcess(false, false, expected_error_msg));
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    GcpGaiaCredentialBasePermittedAccountTest,
+    ::testing::Combine(
+        ::testing::Values(L"",
+                          L"user@test.com",
+                          L"other@test.com",
+                          L"other@test.com,user@test.com"),
+        ::testing::Values(L"test.com", L"best.com", L"test.com,best.com")));
+
 TEST_F(GcpGaiaCredentialBaseTest, StripEmailTLD) {
   USES_CONVERSION;
   // Create provider and start logon.
@@ -755,6 +851,31 @@ TEST_F(GcpGaiaCredentialBaseTest, StripEmailTLD) {
   ASSERT_EQ(S_OK, StartLogonProcessAndWait());
 
   ASSERT_STREQ(W2COLE(L"foo_imfl"), test->GetFinalUsername());
+  EXPECT_EQ(test->GetFinalEmail(), email);
+}
+
+TEST_F(GcpGaiaCredentialBaseTest, TrimPeriodAtTheEnd) {
+  USES_CONVERSION;
+  // Create provider and start logon.
+  Microsoft::WRL::ComPtr<ICredentialProviderCredential> cred;
+
+  ASSERT_EQ(S_OK, InitializeProviderAndGetCredential(0, &cred));
+
+  Microsoft::WRL::ComPtr<ITestCredential> test;
+  ASSERT_EQ(S_OK, cred.As(&test));
+
+  // The top level domain("info" in this example) is removed and the rest is
+  // truncated to be 20 characters. However, in this example, this will result
+  // with "abcdefghijklmn_abcd." which isn't valid per Microsoft documentation.
+  // The rule says there shouldn't be a '.' at the end. Thus it needs to be
+  // removed.
+  constexpr char email[] = "abcdefghijklmn@abcd.ef.info";
+
+  ASSERT_EQ(S_OK, test->SetGlsEmailAddress(email));
+
+  ASSERT_EQ(S_OK, StartLogonProcessAndWait());
+
+  ASSERT_STREQ(W2COLE(L"abcdefghijklmn_abcd"), test->GetFinalUsername());
   EXPECT_EQ(test->GetFinalEmail(), email);
 }
 
@@ -998,17 +1119,17 @@ TEST_F(GcpGaiaCredentialBaseTest,
   std::vector<base::string16> reauth_sids;
   reauth_sids.push_back((BSTR)first_sid);
 
-  // Move the current time beyond staleness time period.
-  base::Time last_online_login = base::Time::Now();
-  base::string16 last_online_login_millis = base::NumberToString16(
-      last_online_login.ToDeltaSinceWindowsEpoch().InMilliseconds());
+  // Set the current time same as last token valid timestamp.
+  base::Time last_token_valid = base::Time::Now();
+  base::string16 last_token_valid_millis = base::NumberToString16(
+      last_token_valid.ToDeltaSinceWindowsEpoch().InMilliseconds());
   int validity_period_in_days = 10;
   DWORD validity_period_in_days_dword =
       static_cast<DWORD>(validity_period_in_days);
-  ASSERT_EQ(S_OK, SetUserProperty((BSTR)first_sid,
-                                  base::UTF8ToUTF16(std::string(
-                                      kKeyLastSuccessfulOnlineLoginMillis)),
-                                  last_online_login_millis));
+  ASSERT_EQ(S_OK,
+            SetUserProperty((BSTR)first_sid,
+                            base::UTF8ToUTF16(std::string(kKeyLastTokenValid)),
+                            last_token_valid_millis));
   ASSERT_EQ(S_OK, SetGlobalFlagForTesting(
                       base::UTF8ToUTF16(std::string(kKeyValidityPeriodInDays)),
                       validity_period_in_days_dword));
@@ -1019,6 +1140,8 @@ TEST_F(GcpGaiaCredentialBaseTest,
 
   // Create provider and start logon.
   Microsoft::WRL::ComPtr<ICredentialProviderCredential> cred;
+
+  SetDefaultTokenHandleResponse(kDefaultValidTokenHandleResponse);
 
   // Create with valid token handle response and sign in the anonymous
   // credential with the user that should still be valid.
@@ -1036,11 +1159,12 @@ TEST_F(GcpGaiaCredentialBaseTest,
 
   // Internet should be disabled for stale online login verifications to be
   // considered.
+  SetDefaultTokenHandleResponse(kDefaultInvalidTokenHandleResponse);
   fake_internet_checker()->SetHasInternetConnection(
       FakeInternetAvailabilityChecker::kHicForceNo);
   // Advance the time that is more than the offline validity period.
   BaseTimeClockOverrideValue::current_time_ =
-      last_online_login + base::TimeDelta::FromDays(validity_period_in_days) +
+      base::Time::Now() + base::TimeDelta::FromDays(validity_period_in_days) +
       base::TimeDelta::FromMilliseconds(1);
   base::subtle::ScopedTimeClockOverrides time_override(
       &BaseTimeClockOverrideValue::NowOverride, nullptr, nullptr);
@@ -1075,18 +1199,17 @@ TEST_F(GcpGaiaCredentialBaseTest,
   EXPECT_FALSE(fake_associated_user_validator()->IsUserAccessBlockedForTesting(
       OLE2W(first_sid)));
 
-  wchar_t latest_online_login_millis[512];
-  ULONG latest_online_login_size = base::size(latest_online_login_millis);
+  wchar_t latest_token_valid_millis[512];
+  ULONG latest_token_valid_size = base::size(latest_token_valid_millis);
   ASSERT_EQ(S_OK, GetUserProperty(
-                      OLE2W(first_sid),
-                      base::UTF8ToUTF16(kKeyLastSuccessfulOnlineLoginMillis),
-                      latest_online_login_millis, &latest_online_login_size));
-  int64_t latest_online_login_millis_int64;
-  base::StringToInt64(latest_online_login_millis,
-                      &latest_online_login_millis_int64);
+                      OLE2W(first_sid), base::UTF8ToUTF16(kKeyLastTokenValid),
+                      latest_token_valid_millis, &latest_token_valid_size));
+  int64_t latest_token_valid_millis_int64;
+  base::StringToInt64(latest_token_valid_millis,
+                      &latest_token_valid_millis_int64);
 
   long difference =
-      latest_online_login_millis_int64 -
+      latest_token_valid_millis_int64 -
       BaseTimeClockOverrideValue::current_time_.ToDeltaSinceWindowsEpoch()
           .InMilliseconds();
   ASSERT_EQ(0, difference);
@@ -1906,10 +2029,11 @@ TEST_F(GcpGaiaCredentialBaseCloudLocalAccountTest,
 // logged in.
 class GaiaCredentialBaseCloudLocalAccountSuccessTest
     : public GcpGaiaCredentialBaseCloudLocalAccountTest,
-      public ::testing::WithParamInterface<bool> {};
+      public ::testing::WithParamInterface<std::tuple<bool, const wchar_t*>> {};
 
 TEST_P(GaiaCredentialBaseCloudLocalAccountSuccessTest, SerialNumber) {
-  bool set_serial_number = GetParam();
+  bool set_serial_number = std::get<0>(GetParam());
+  const wchar_t* serial_number = std::get<1>(GetParam());
 
   // Add the user as a local user.
   const wchar_t user_name[] = L"local_user";
@@ -1929,7 +2053,6 @@ TEST_P(GaiaCredentialBaseCloudLocalAccountSuccessTest, SerialNumber) {
 
   std::string admin_sdk_response;
   // Set a fake serial number.
-  base::string16 serial_number = L"1234";
   GoogleRegistrationDataForTesting g_registration_data(serial_number);
 
   if (set_serial_number) {
@@ -1938,7 +2061,7 @@ TEST_P(GaiaCredentialBaseCloudLocalAccountSuccessTest, SerialNumber) {
         "{\"customSchemas\": {\"Enhanced_desktop_security\": "
         "{\"Local_Windows_accounts\":"
         "[{ \"value\": \"un:%ls,sn:%ls\"}]}}}",
-        user_name, serial_number.c_str());
+        user_name, serial_number);
   } else {
     // Set valid response from admin sdk.
     admin_sdk_response = base::StringPrintf(
@@ -1985,9 +2108,15 @@ TEST_P(GaiaCredentialBaseCloudLocalAccountSuccessTest, SerialNumber) {
   ASSERT_TRUE(test->IsAuthenticationResultsEmpty());
 }
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         GaiaCredentialBaseCloudLocalAccountSuccessTest,
-                         ::testing::Values(true, false));
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    GaiaCredentialBaseCloudLocalAccountSuccessTest,
+    ::testing::Combine(
+        ::testing::Bool(),
+        ::testing::Values(L"!@#!",        // All non alphanumeric characters
+                          L"serial#123",  // Contains non-alphanumeric chars.
+                          L"serial123!"   // Ends with non alphanumeric chars.
+                          )));
 
 // Existing cloud local account login scenario that was configured incorrectly.
 class GaiaCredentialBaseCDUsernameSuccessTest
@@ -2073,6 +2202,9 @@ TEST_P(GaiaCredentialBaseCDSerialNumberFailureTest, InvalidSerialNumber) {
   ASSERT_EQ(S_OK, hr);
   ASSERT_EQ(0u, error);
 
+  // Set fake serial number.
+  GoogleRegistrationDataForTesting g_registration_data(serial_number);
+
   // Set token result as a valid access token.
   fake_http_url_fetcher_factory()->SetFakeResponse(
       GURL(gaia_urls_->oauth2_token_url().spec().c_str()),
@@ -2109,25 +2241,25 @@ TEST_P(GaiaCredentialBaseCDSerialNumberFailureTest, InvalidSerialNumber) {
 INSTANTIATE_TEST_SUITE_P(
     All,
     GaiaCredentialBaseCDSerialNumberFailureTest,
-    ::testing::Values(L"!@#!",        // All non alphanumeric characters
-                      L"serial#123",  // Contains non-alphanumeric chars.
-                      L"serial123!",  // Ends with non alphanumeric chars.
-                      L""));
+    ::testing::Values(
+        L""  // Except for empty string all other characters are allowed chars.
+        ));
 
 // Tests various sign in scenarios with consumer and non-consumer domains.
 // Parameters are:
-// 1. Is mdm enrollment enabled.
-// 2. The mdm_aca reg key setting:
-//    - 0: Set reg key to 0.
-//    - 1: Set reg key to 1.
-//    - 2: Don't set reg key.
-// 3. Whether the mdm_aca reg key is set to 1 or 0.
-// 4. Whether an existing associated user is already present.
-// 5. Whether the user being created (or existing) uses a consumer account.
+// 1. bool : Is mdm enrollment enabled.
+// 2. int  : The mdm_aca reg key setting:
+//         - 0: Set reg key to 0.
+//         - 1: Set reg key to 1.
+//         - 2: Don't set reg key.
+// 3. bool : Whether an existing associated user is already present.
+// 4. bool : Whether the user being created (or existing) uses a consumer
+//           account.
+// 5. bool : Whether cloud policies are enabled.
 class GcpGaiaCredentialBaseConsumerEmailTest
     : public GcpGaiaCredentialBaseTest,
-      public ::testing::WithParamInterface<std::tuple<bool, int, bool, bool>> {
-};
+      public ::testing::WithParamInterface<
+          std::tuple<bool, int, bool, bool, bool>> {};
 
 TEST_P(GcpGaiaCredentialBaseConsumerEmailTest, ConsumerEmailSignin) {
   USES_CONVERSION;
@@ -2135,13 +2267,22 @@ TEST_P(GcpGaiaCredentialBaseConsumerEmailTest, ConsumerEmailSignin) {
   const int mdm_consumer_accounts_reg_key_setting = std::get<1>(GetParam());
   const bool user_created = std::get<2>(GetParam());
   const bool user_is_consumer = std::get<3>(GetParam());
+  const bool cloud_policies_enabled = std::get<4>(GetParam());
 
   FakeAssociatedUserValidator validator;
   FakeInternetAvailabilityChecker internet_checker;
   GoogleMdmEnrollmentStatusForTesting force_success(true);
+  FakeDevicePoliciesManager fake_device_policies_manager(
+      cloud_policies_enabled);
 
-  if (mdm_enabled)
-    ASSERT_EQ(S_OK, SetGlobalFlagForTesting(kRegEnableDmEnrollment, 1));
+  if (cloud_policies_enabled) {
+    DevicePolicies policies;
+    policies.enable_dm_enrollment = mdm_enabled;
+    fake_device_policies_manager.SetDevicePolicies(policies);
+  } else {
+    ASSERT_EQ(S_OK, SetGlobalFlagForTesting(kRegEnableDmEnrollment,
+                                            mdm_enabled ? 1 : 0));
+  }
 
   const bool mdm_consumer_accounts_reg_key_set =
       mdm_consumer_accounts_reg_key_setting >= 0 &&
@@ -2211,6 +2352,7 @@ INSTANTIATE_TEST_SUITE_P(All,
                          GcpGaiaCredentialBaseConsumerEmailTest,
                          ::testing::Combine(::testing::Bool(),
                                             ::testing::Values(0, 1, 2),
+                                            ::testing::Bool(),
                                             ::testing::Bool(),
                                             ::testing::Bool()));
 
@@ -2733,19 +2875,22 @@ INSTANTIATE_TEST_SUITE_P(All,
 
 // Test Upload device details to GEM service with different failure scenarios.
 // Parameters are:
-// 0. Successfully uploaded device details.
-// 1. Fails the upload device details call due to network timeout.
-// 2. Fails the upload device details call due to invalid response
-//    from the GEM http server.
-// 3  A previously saved device resource ID is present on the device.
+// int - 0. Successfully uploaded device details.
+//       1. Fails the upload device details call due to network timeout.
+//       2. Fails the upload device details call due to invalid response
+//          from the GEM http server.
+//       3. A previously saved device resource ID is present on the device.
+// int - number of previously failed upload device details attempts.
 class GcpGaiaCredentialBaseUploadDeviceDetailsTest
     : public GcpGaiaCredentialBaseTest,
-      public ::testing::WithParamInterface<int> {};
+      public ::testing::WithParamInterface<std::tuple<int, int>> {};
 
 TEST_P(GcpGaiaCredentialBaseUploadDeviceDetailsTest, UploadDeviceDetails) {
-  bool fail_upload_device_details_timeout = (GetParam() == 1);
-  bool fail_upload_device_details_invalid_response = (GetParam() == 2);
-  bool registry_has_device_resource_id = (GetParam() == 3);
+  bool fail_upload_device_details_timeout = (std::get<0>(GetParam()) == 1);
+  bool fail_upload_device_details_invalid_response =
+      (std::get<0>(GetParam()) == 2);
+  bool registry_has_device_resource_id = (std::get<0>(GetParam()) == 3);
+  const DWORD num_previous_failures = std::get<1>(GetParam());
 
   GoogleMdmEnrolledStatusForTesting force_success(true);
   // Set a fake serial number.
@@ -2799,6 +2944,15 @@ TEST_P(GcpGaiaCredentialBaseUploadDeviceDetailsTest, UploadDeviceDetails) {
     EXPECT_TRUE(SUCCEEDED(hr));
   }
 
+  // Set status and num failures from previous attempts.
+  HRESULT hr = SetUserProperty(sid.Copy(), kRegDeviceDetailsUploadStatus,
+                               num_previous_failures ? 0 : 1);
+  EXPECT_TRUE(SUCCEEDED(hr));
+
+  hr = SetUserProperty(sid.Copy(), kRegDeviceDetailsUploadFailures,
+                       num_previous_failures);
+  EXPECT_TRUE(SUCCEEDED(hr));
+
   // Create provider and start logon.
   Microsoft::WRL::ComPtr<ICredentialProviderCredential> cred;
 
@@ -2813,7 +2967,7 @@ TEST_P(GcpGaiaCredentialBaseUploadDeviceDetailsTest, UploadDeviceDetails) {
   // status code. Since the login process doesn't get affected by the status of
   // the upload device details process, the login attempt would always succeed
   // irrespective of the upload status.
-  HRESULT hr = fake_gem_device_details_manager()->GetUploadStatusForTesting();
+  hr = fake_gem_device_details_manager()->GetUploadStatusForTesting();
   bool has_upload_failed = (fail_upload_device_details_timeout ||
                             fail_upload_device_details_invalid_response);
   ASSERT_TRUE(has_upload_failed ? FAILED(hr) : SUCCEEDED(hr));
@@ -2857,8 +3011,18 @@ TEST_P(GcpGaiaCredentialBaseUploadDeviceDetailsTest, UploadDeviceDetails) {
               device_resource_id);
   }
 
+  DWORD device_upload_status = 0;
+  hr = GetUserProperty(sid.Copy(), kRegDeviceDetailsUploadStatus,
+                       &device_upload_status);
+  DWORD device_upload_failures = 0;
+  hr = GetUserProperty(sid.Copy(), kRegDeviceDetailsUploadFailures,
+                       &device_upload_failures);
+
   if (!fail_upload_device_details_timeout &&
       !fail_upload_device_details_invalid_response) {
+    ASSERT_EQ(1UL, device_upload_status);
+    ASSERT_EQ(0UL, device_upload_failures);
+
     wchar_t resource_id[512];
     ULONG resource_id_size = base::size(resource_id);
     hr = GetUserProperty(sid.Copy(), kRegUserDeviceResourceId, resource_id,
@@ -2866,6 +3030,9 @@ TEST_P(GcpGaiaCredentialBaseUploadDeviceDetailsTest, UploadDeviceDetails) {
     ASSERT_TRUE(SUCCEEDED(hr));
     ASSERT_TRUE(resource_id_size > 0);
     ASSERT_EQ(device_resource_id, base::UTF16ToUTF8(resource_id));
+  } else {
+    ASSERT_EQ(0UL, device_upload_status);
+    ASSERT_EQ(num_previous_failures + 1, device_upload_failures);
   }
 
   ASSERT_EQ(S_OK, ReleaseProvider());
@@ -2873,7 +3040,8 @@ TEST_P(GcpGaiaCredentialBaseUploadDeviceDetailsTest, UploadDeviceDetails) {
 
 INSTANTIATE_TEST_SUITE_P(All,
                          GcpGaiaCredentialBaseUploadDeviceDetailsTest,
-                         ::testing::Values(0, 1, 2, 3));
+                         ::testing::Combine(::testing::Values(0, 1, 2, 3),
+                                            ::testing::Values(0, 1, 2)));
 
 class GcpGaiaCredentialBaseFullNameUpdateTest
     : public GcpGaiaCredentialBaseTest,
@@ -3089,6 +3257,116 @@ TEST_P(GcpGaiaCredentialBaseChromeAvailabilityTest, CustomChromeSpecified) {
 INSTANTIATE_TEST_SUITE_P(All,
                          GcpGaiaCredentialBaseChromeAvailabilityTest,
                          ::testing::Values(true, false));
+
+// Test fetching of user cloud policies from the GEM service with different
+// failure scenarios.
+// Parameters are:
+// 1. bool  true:  HTTP call to fetch policies succeeds.
+//          false: Fails the upload call due to invalid response from the GEM
+//                 http server.
+// 2. bool  true:  Policies were fetched recently and don't need refreshing.
+//          false: Policies were never fetched or are very old.
+// 3. bool :       Whether cloud policies feature is enabled.
+class GcpGaiaCredentialBaseFetchCloudPoliciesTest
+    : public GcpGaiaCredentialBaseTest,
+      public ::testing::WithParamInterface<std::tuple<bool, bool, bool>> {};
+
+TEST_P(GcpGaiaCredentialBaseFetchCloudPoliciesTest, FetchAndStore) {
+  bool fail_fetch_policies = std::get<0>(GetParam());
+  bool policy_refreshed_recently = std::get<1>(GetParam());
+  bool cloud_policies_enabled = std::get<2>(GetParam());
+
+  FakeUserPoliciesManager fake_user_policies_manager(cloud_policies_enabled);
+  GoogleMdmEnrolledStatusForTesting force_success(true);
+
+  // Create a fake user associated to a gaia id.
+  CComBSTR sid_str;
+  ASSERT_EQ(S_OK,
+            fake_os_user_manager()->CreateTestOSUser(
+                kDefaultUsername, L"password", L"Full Name", L"comment",
+                base::UTF8ToUTF16(kDefaultGaiaId), base::string16(), &sid_str));
+  base::string16 sid = OLE2W(sid_str);
+
+  if (cloud_policies_enabled) {
+    base::string16 fetch_time_millis = L"0";
+    if (policy_refreshed_recently) {
+      fetch_time_millis = base::NumberToString16(
+          base::Time::Now().ToDeltaSinceWindowsEpoch().InMilliseconds());
+    }
+    ASSERT_EQ(S_OK, SetUserProperty(sid, L"last_policy_refresh_time",
+                                    fetch_time_millis));
+
+    std::string expected_response;
+    if (fail_fetch_policies) {
+      expected_response = "Invalid json response";
+    } else {
+      UserPolicies policies;
+      base::Value policies_value = policies.ToValue();
+      base::JSONWriter::Write(policies_value, &expected_response);
+    }
+
+    fake_http_url_fetcher_factory()->SetFakeResponse(
+        UserPoliciesManager::Get()->GetGcpwServiceUserPoliciesUrl(sid),
+        FakeWinHttpUrlFetcher::Headers(), expected_response);
+  }
+
+  // Change token response to an valid one.
+  SetDefaultTokenHandleResponse(kDefaultValidTokenHandleResponse);
+
+  // Create provider and start logon.
+  Microsoft::WRL::ComPtr<ICredentialProviderCredential> cred;
+
+  ASSERT_EQ(S_OK, InitializeProviderAndGetCredential(0, &cred));
+
+  ASSERT_EQ(S_OK, StartLogonProcessAndWait());
+
+  // Finish logon successfully.
+  ASSERT_EQ(S_OK, FinishLogonProcess(true, true, 0));
+
+  base::TimeDelta time_since_last_fetch =
+      UserPoliciesManager::Get()->GetTimeDeltaSinceLastPolicyFetch(sid);
+
+  if (cloud_policies_enabled && !policy_refreshed_recently) {
+    ASSERT_EQ(1, fake_user_policies_manager.GetNumTimesFetchAndStoreCalled());
+  } else {
+    ASSERT_EQ(0, fake_user_policies_manager.GetNumTimesFetchAndStoreCalled());
+  }
+
+  // Expected number of HTTP calls when not fetching user policies since upload
+  // device details is always called.
+  const size_t base_num_http_requests = 1;
+  const size_t requests_created =
+      fake_http_url_fetcher_factory()->requests_created();
+  if (!cloud_policies_enabled || policy_refreshed_recently) {
+    // No new requests for fetching policies.
+    ASSERT_EQ(base_num_http_requests, requests_created);
+  } else {
+    // Verify the fetch status matches expected value.
+    HRESULT hr = UserPoliciesManager::Get()->GetLastFetchStatusForTesting();
+
+    if (!fail_fetch_policies) {
+      ASSERT_TRUE(SUCCEEDED(hr));
+      // One additional request for fetching policies.
+      ASSERT_EQ(1 + base_num_http_requests, requests_created);
+      ASSERT_TRUE(time_since_last_fetch <
+                  kMaxTimeDeltaSinceLastUserPolicyRefresh);
+    } else {
+      ASSERT_TRUE(FAILED(hr));
+      // Two additional requests since we retry on failure.
+      ASSERT_EQ(2 + base_num_http_requests, requests_created);
+      ASSERT_TRUE(time_since_last_fetch >
+                  kMaxTimeDeltaSinceLastUserPolicyRefresh);
+    }
+  }
+
+  ASSERT_EQ(S_OK, ReleaseProvider());
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         GcpGaiaCredentialBaseFetchCloudPoliciesTest,
+                         ::testing::Combine(::testing::Bool(),
+                                            ::testing::Bool(),
+                                            ::testing::Bool()));
 
 }  // namespace testing
 }  // namespace credential_provider

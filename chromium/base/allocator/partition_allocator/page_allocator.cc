@@ -10,11 +10,12 @@
 
 #include "base/allocator/partition_allocator/address_space_randomization.h"
 #include "base/allocator/partition_allocator/page_allocator_internal.h"
-#include "base/allocator/partition_allocator/spin_lock.h"
+#include "base/allocator/partition_allocator/partition_alloc_check.h"
 #include "base/bits.h"
 #include "base/check_op.h"
 #include "base/no_destructor.h"
 #include "base/numerics/checked_math.h"
+#include "base/synchronization/lock.h"
 #include "build/build_config.h"
 
 #if defined(OS_WIN)
@@ -36,14 +37,14 @@ namespace base {
 namespace {
 
 // We may reserve/release address space on different threads.
-subtle::SpinLock& GetReserveLock() {
-  static NoDestructor<subtle::SpinLock> s_reserveLock;
-  return *s_reserveLock;
+Lock& GetReserveLock() {
+  static NoDestructor<Lock> lock;
+  return *lock;
 }
 
 // We only support a single block of reserved address space.
-void* s_reservation_address = nullptr;
-size_t s_reservation_size = 0;
+void* s_reservation_address GUARDED_BY(GetReserveLock()) = nullptr;
+size_t s_reservation_size GUARDED_BY(GetReserveLock()) = 0;
 
 void* AllocPagesIncludingReserved(void* address,
                                   size_t length,
@@ -78,9 +79,9 @@ void* TrimMapping(void* base,
     pre_slack = alignment - pre_slack;
   }
   size_t post_slack = base_length - pre_slack - trim_length;
-  DCHECK(base_length >= trim_length || pre_slack || post_slack);
-  DCHECK(pre_slack < base_length);
-  DCHECK(post_slack < base_length);
+  PA_DCHECK(base_length >= trim_length || pre_slack || post_slack);
+  PA_DCHECK(pre_slack < base_length);
+  PA_DCHECK(post_slack < base_length);
   return TrimMappingInternal(base, base_length, trim_length, accessibility,
                              commit, pre_slack, post_slack);
 }
@@ -92,10 +93,10 @@ void* SystemAllocPages(void* hint,
                        PageAccessibilityConfiguration accessibility,
                        PageTag page_tag,
                        bool commit) {
-  DCHECK(!(length & kPageAllocationGranularityOffsetMask));
-  DCHECK(!(reinterpret_cast<uintptr_t>(hint) &
-           kPageAllocationGranularityOffsetMask));
-  DCHECK(commit || accessibility == PageInaccessible);
+  PA_DCHECK(!(length & kPageAllocationGranularityOffsetMask));
+  PA_DCHECK(!(reinterpret_cast<uintptr_t>(hint) &
+              kPageAllocationGranularityOffsetMask));
+  PA_DCHECK(commit || accessibility == PageInaccessible);
   return SystemAllocPagesInternal(hint, length, accessibility, page_tag,
                                   commit);
 }
@@ -106,16 +107,16 @@ void* AllocPages(void* address,
                  PageAccessibilityConfiguration accessibility,
                  PageTag page_tag,
                  bool commit) {
-  DCHECK(length >= kPageAllocationGranularity);
-  DCHECK(!(length & kPageAllocationGranularityOffsetMask));
-  DCHECK(align >= kPageAllocationGranularity);
+  PA_DCHECK(length >= kPageAllocationGranularity);
+  PA_DCHECK(!(length & kPageAllocationGranularityOffsetMask));
+  PA_DCHECK(align >= kPageAllocationGranularity);
   // Alignment must be power of 2 for masking math to work.
-  DCHECK(base::bits::IsPowerOfTwo(align));
-  DCHECK(!(reinterpret_cast<uintptr_t>(address) &
-           kPageAllocationGranularityOffsetMask));
+  PA_DCHECK(base::bits::IsPowerOfTwo(align));
+  PA_DCHECK(!(reinterpret_cast<uintptr_t>(address) &
+              kPageAllocationGranularityOffsetMask));
   uintptr_t align_offset_mask = align - 1;
   uintptr_t align_base_mask = ~align_offset_mask;
-  DCHECK(!(reinterpret_cast<uintptr_t>(address) & align_offset_mask));
+  PA_DCHECK(!(reinterpret_cast<uintptr_t>(address) & align_offset_mask));
 
   // If the client passed null as the address, choose a good one.
   if (address == nullptr) {
@@ -165,7 +166,7 @@ void* AllocPages(void* address,
 
   // Make a larger allocation so we can force alignment.
   size_t try_length = length + (align - kPageAllocationGranularity);
-  CHECK(try_length >= length);
+  PA_CHECK(try_length >= length);
   void* ret;
 
   do {
@@ -183,54 +184,54 @@ void* AllocPages(void* address,
 }
 
 void FreePages(void* address, size_t length) {
-  DCHECK(!(reinterpret_cast<uintptr_t>(address) &
-           kPageAllocationGranularityOffsetMask));
-  DCHECK(!(length & kPageAllocationGranularityOffsetMask));
+  PA_DCHECK(!(reinterpret_cast<uintptr_t>(address) &
+              kPageAllocationGranularityOffsetMask));
+  PA_DCHECK(!(length & kPageAllocationGranularityOffsetMask));
   FreePagesInternal(address, length);
 }
 
 bool TrySetSystemPagesAccess(void* address,
                              size_t length,
                              PageAccessibilityConfiguration accessibility) {
-  DCHECK(!(length & kSystemPageOffsetMask));
+  PA_DCHECK(!(length & kSystemPageOffsetMask));
   return TrySetSystemPagesAccessInternal(address, length, accessibility);
 }
 
 void SetSystemPagesAccess(void* address,
                           size_t length,
                           PageAccessibilityConfiguration accessibility) {
-  DCHECK(!(length & kSystemPageOffsetMask));
+  PA_DCHECK(!(length & kSystemPageOffsetMask));
   SetSystemPagesAccessInternal(address, length, accessibility);
 }
 
 void DecommitSystemPages(void* address, size_t length) {
-  DCHECK_EQ(0UL, length & kSystemPageOffsetMask);
+  PA_DCHECK(!(length & kSystemPageOffsetMask));
   DecommitSystemPagesInternal(address, length);
 }
 
 bool RecommitSystemPages(void* address,
                          size_t length,
                          PageAccessibilityConfiguration accessibility) {
-  DCHECK_EQ(0UL, length & kSystemPageOffsetMask);
-  DCHECK_NE(PageInaccessible, accessibility);
+  PA_DCHECK(!(length & kSystemPageOffsetMask));
+  PA_DCHECK(accessibility != PageInaccessible);
   return RecommitSystemPagesInternal(address, length, accessibility);
 }
 
 void DiscardSystemPages(void* address, size_t length) {
-  DCHECK_EQ(0UL, length & kSystemPageOffsetMask);
+  PA_DCHECK(!(length & kSystemPageOffsetMask));
   DiscardSystemPagesInternal(address, length);
 }
 
 bool ReserveAddressSpace(size_t size) {
   // To avoid deadlock, call only SystemAllocPages.
-  subtle::SpinLock::Guard guard(GetReserveLock());
+  AutoLock guard(GetReserveLock());
   if (s_reservation_address == nullptr) {
     void* mem = SystemAllocPages(nullptr, size, PageInaccessible,
                                  PageTag::kChromium, false);
     if (mem != nullptr) {
       // We guarantee this alignment when reserving address space.
-      DCHECK(!(reinterpret_cast<uintptr_t>(mem) &
-               kPageAllocationGranularityOffsetMask));
+      PA_DCHECK(!(reinterpret_cast<uintptr_t>(mem) &
+                  kPageAllocationGranularityOffsetMask));
       s_reservation_address = mem;
       s_reservation_size = size;
       return true;
@@ -241,7 +242,7 @@ bool ReserveAddressSpace(size_t size) {
 
 bool ReleaseReservation() {
   // To avoid deadlock, call only FreePages.
-  subtle::SpinLock::Guard guard(GetReserveLock());
+  AutoLock guard(GetReserveLock());
   if (!s_reservation_address)
     return false;
 
@@ -252,7 +253,7 @@ bool ReleaseReservation() {
 }
 
 bool HasReservationForTesting() {
-  subtle::SpinLock::Guard guard(GetReserveLock());
+  AutoLock guard(GetReserveLock());
   return s_reservation_address != nullptr;
 }
 

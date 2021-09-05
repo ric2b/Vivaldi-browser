@@ -240,7 +240,6 @@ namespace http://www.w3.org/1999/xhtml
     property onpointerup
     property onprogress
     property onratechange
-    property onrendersubtreeactivation
     property onreset
     property onresize
     property onscroll
@@ -319,6 +318,7 @@ namespace http://www.w3.org/1999/xhtml
     property toString
     property toggleAttribute
     property translate
+    property virtualKeyboardPolicy
     property webkitMatchesSelector
     property webkitRequestFullScreen
     property webkitRequestFullscreen
@@ -417,6 +417,7 @@ html element audio
     property playbackRate
     property played
     property preload
+    property preservesPitch
     property readyState
     property remote
     property seekable
@@ -1182,6 +1183,7 @@ html element video
     property playsInline
     property poster
     property preload
+    property preservesPitch
     property readyState
     property remote
     property requestPictureInPicture
@@ -1431,7 +1433,6 @@ namespace http://www.w3.org/2000/svg
     property onpointerup
     property onprogress
     property onratechange
-    property onrendersubtreeactivation
     property onreset
     property onresize
     property onscroll

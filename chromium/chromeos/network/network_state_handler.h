@@ -316,8 +316,10 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
                            DeviceStateList* list) const;
 
   // Requests a network scan. This may trigger updates to the network
-  // list, which will trigger the appropriate observer calls. If |type| is
-  // Cellular, a mobile network scan will be requested if supported.
+  // list, which will trigger the appropriate observer calls.
+  // Note: If |type| is Cellular, a mobile network scan will be requested
+  // if supported. This is disruptive and should only be triggered by an
+  // explicit user action.
   void RequestScan(const NetworkTypePattern& type);
 
   // Requests an update for an existing NetworkState, e.g. after configuring
@@ -401,6 +403,10 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // if the AllowOnlyPolicyNetworksToConnectIfAvailable policy is enabled and
   // there is a managed wifi network available.
   bool OnlyManagedWifiNetworksAllowed() const;
+
+  bool default_network_is_metered() const {
+    return default_network_is_metered_;
+  }
 
   // Constructs and initializes an instance for testing.
   static std::unique_ptr<NetworkStateHandler> InitializeForTest();
@@ -625,6 +631,10 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // Calls |UpdateBlockedByPolicy()| for each wifi network.
   void UpdateBlockedWifiNetworksInternal();
 
+  // Sets properties associated with the default network, currently the path and
+  // Metered.
+  void SetDefaultNetworkValues(const std::string& path, bool metered);
+
   // Shill property handler instance, owned by this class.
   std::unique_ptr<internal::ShillPropertyHandler> shill_property_handler_;
 
@@ -650,7 +660,12 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   ManagedStateList device_list_;
 
   // Keeps track of the default network for notifying observers when it changes.
+  // Do not set this directly, use SetDefaultNetworkValues() instead.
   std::string default_network_path_;
+
+  // Tracks whether there is a connected default network and it is metered.
+  // Do not set this directly, use SetDefaultNetworkValues() instead.
+  bool default_network_is_metered_ = false;
 
   // List of interfaces on which portal check is enabled.
   std::string check_portal_list_;

@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">（隐身）</translation>
 <translation id="1620510694547887537">摄像头</translation>
 <translation id="1627276047960621195">文件描述符</translation>
-<translation id="1635033183663317347">这是您的监护人安装的。</translation>
 <translation id="1682548588986054654">新建隐身窗口</translation>
 <translation id="1698122934742150150">仅限当前的隐身会话</translation>
 <translation id="1706625117072057435">缩放级别</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">扩展程序：<ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> 屏幕共享请求</translation>
 <translation id="3711931198657368127">粘贴并转到 <ph name="URL" /></translation>
-<translation id="3725367690636977613">页</translation>
 <translation id="3727187387656390258">检查弹出窗口</translation>
 <translation id="3744111561329211289">后台同步</translation>
 <translation id="3760460896538743390">检查背景页(&amp;B)</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">代表群组接受</translation>
-<translation id="4091434297613116013">张纸</translation>
 <translation id="4096508467498758490">请停用以开发者模式运行的扩展程序</translation>
 <translation id="4100839878934973028">您计算机上的其他程序添加了一个应用，该应用可能会改变 Vivaldi 的工作方式。</translation>
 <translation id="4109898769411476438">导入之前关闭浏览器</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">显示控件(&amp;C)</translation>
 <translation id="7311079019872751559">未经沙盒屏蔽的插件访问</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">尝试打印时出现错误。请检查您的打印机，然后重试。</translation>
 <translation id="7412226954991670867">GPU 内存</translation>
 <translation id="7421925624202799674">显示网页源代码(&amp;V)</translation>
@@ -433,7 +429,6 @@
 <translation id="8071432093239591881">以图片形式打印</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> 千字节</translation>
 <translation id="8137559199583651773">管理扩展程序</translation>
-<translation id="8180239481735238521">页面</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
     =1{有 1 项下载正在进行中}other{有多项下载正在进行中}}</translation>
 <translation id="8230134520748321204">要保存 <ph name="ORIGIN" /> 的密码吗？</translation>
@@ -466,7 +461,6 @@
 <translation id="8798099450830957504">默认</translation>
 <translation id="8800004011501252845">显示目标打印机</translation>
 <translation id="8808478386290700967">Vivaldi 网上应用店</translation>
-<translation id="8813811964357448561">张纸</translation>
 <translation id="8823514049557262177">复制链接文本(&amp;X)</translation>
 <translation id="8823704566850948458">建议密码…</translation>
 <translation id="8859174528519900719">辅助框架：<ph name="SUBFRAME_SITE" /></translation>

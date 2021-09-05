@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 
@@ -64,7 +65,7 @@ void WaylandDataDeviceBase::RegisterDeferredReadCallback() {
   deferred_read_callback_.reset(wl_display_sync(connection_->display()));
 
   static const wl_callback_listener kListener = {
-      GtkPrimarySelectionDevice::DeferredReadCallback};
+      WaylandDataDeviceBase::DeferredReadCallback};
 
   wl_callback_add_listener(deferred_read_callback_.get(), &kListener, this);
 

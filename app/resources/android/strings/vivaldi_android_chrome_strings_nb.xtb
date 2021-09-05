@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="no">
-<translation id="1169602411434249000">Blokker sporing</translation>
 <translation id="1397811292916898096">Søk med <ph name="PRODUCT_NAME" /></translation>
 <translation id="1598449788754183301">Veksle mellom normale/private faner</translation>
 <translation id="1644574205037202324">Logg</translation>
@@ -19,9 +18,12 @@
 <translation id="4526803704855831732">Private faner</translation>
 <translation id="4883379392681899581">Gå ut av privat modus</translation>
 <translation id="4943872375798546930">Ingen resultater</translation>
+<translation id="49576331685473090">Innholdsblokkering</translation>
+<translation id="4960569554487356883">Slå på tillatelse for Vivaldi i <ph name = "BEGIN_LINK" />Android-innstillinger<ph name = "END_LINK" />.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> lagring</translation>
 <translation id="5233638681132016545">Ny fane</translation>
 <translation id="5495228542153126976">Du er i privat modus</translation>
+<translation id="5553467336321715093">Slå på tillatelser for Vivaldi i <ph name = "BEGIN_LINK" />Android-innstillinger<ph name = "END_LINK" />.</translation>
 <translation id="572328651809341494">Nylige faner</translation>
 <translation id="5840488417521835756">Lær om emner på nettsteder uten å forlate siden. «Trykk for å søke» er en funksjon som bare er tilgjengelig når Google er angitt som standard søkemotor i Vivaldi. Den sender et ord og omkringliggende kontekst til Google Søk og returnerer definisjoner, bilder, søkeresultater og andre detaljer.
 

@@ -35,6 +35,13 @@ public interface AutocompleteDelegate extends UrlBarDelegate {
     void setKeyboardVisibility(boolean shouldShow);
 
     /**
+     * @return Reports whether keyboard (whether software or hardware) is active.
+     * Software keyboard is reported as active whenever it is visible on screen; hardware keyboard
+     * is reported as active when it is connected.
+     */
+    boolean isKeyboardActive();
+
+    /**
      * Requests that the given URL be loaded in the current tab.
      *
      * @param url The URL to be loaded.
@@ -65,4 +72,9 @@ public interface AutocompleteDelegate extends UrlBarDelegate {
      * @return Whether the URL currently has focus.
      */
     boolean isUrlBarFocused();
+
+    /**
+     * @return Whether the omnibox was focused because of tapping on query tiles.
+     */
+    boolean didFocusUrlFromQueryTiles();
 }

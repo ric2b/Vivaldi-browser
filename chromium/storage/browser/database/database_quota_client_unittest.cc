@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -25,14 +26,15 @@
 #include "storage/browser/database/database_util.h"
 #include "storage/common/database/database_identifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace storage {
 
 // Declared to shorten the line lengths.
 static const blink::mojom::StorageType kTemp =
     blink::mojom::StorageType::kTemporary;
-static const blink::mojom::StorageType kPerm =
-    blink::mojom::StorageType::kPersistent;
 
 // Mock tracker class the mocks up those methods of the tracker
 // that are used by the QuotaClient.
@@ -127,74 +129,75 @@ class DatabaseQuotaClientTest : public testing::Test {
       : kOriginA(url::Origin::Create(GURL("http://host"))),
         kOriginB(url::Origin::Create(GURL("http://host:8000"))),
         kOriginOther(url::Origin::Create(GURL("http://other"))),
-        usage_(0),
         mock_tracker_(new MockDatabaseTracker) {}
 
-  int64_t GetOriginUsage(scoped_refptr<QuotaClient> client,
-                         const url::Origin& origin,
-                         blink::mojom::StorageType type) {
-    usage_ = 0;
-    client->GetOriginUsage(
-        origin, type,
-        base::BindOnce(&DatabaseQuotaClientTest::OnGetOriginUsageComplete,
-                       weak_factory_.GetWeakPtr()));
-    task_environment_.RunUntilIdle();
-    return usage_;
+  static int64_t GetOriginUsage(scoped_refptr<QuotaClient> client,
+                                const url::Origin& origin,
+                                blink::mojom::StorageType type) {
+    int result = -1;
+    base::RunLoop loop;
+    client->GetOriginUsage(origin, type,
+                           base::BindLambdaForTesting([&](int64_t usage) {
+                             result = usage;
+                             loop.Quit();
+                           }));
+    loop.Run();
+    EXPECT_GT(result, -1);
+    return result;
   }
 
-  const std::set<url::Origin>& GetOriginsForType(
+  static std::set<url::Origin> GetOriginsForType(
       scoped_refptr<QuotaClient> client,
       blink::mojom::StorageType type) {
-    origins_.clear();
+    std::set<url::Origin> result;
+    base::RunLoop loop;
     client->GetOriginsForType(
-        type, base::BindOnce(&DatabaseQuotaClientTest::OnGetOriginsComplete,
-                             weak_factory_.GetWeakPtr()));
-    task_environment_.RunUntilIdle();
-    return origins_;
+        type,
+        base::BindLambdaForTesting([&](const std::set<url::Origin>& origins) {
+          result = origins;
+          loop.Quit();
+        }));
+    loop.Run();
+    return result;
   }
 
-  const std::set<url::Origin>& GetOriginsForHost(
+  static std::set<url::Origin> GetOriginsForHost(
       scoped_refptr<QuotaClient> client,
       blink::mojom::StorageType type,
       const std::string& host) {
-    origins_.clear();
+    std::set<url::Origin> result;
+    base::RunLoop loop;
     client->GetOriginsForHost(
         type, host,
-        base::BindOnce(&DatabaseQuotaClientTest::OnGetOriginsComplete,
-                       weak_factory_.GetWeakPtr()));
-    task_environment_.RunUntilIdle();
-    return origins_;
+        base::BindLambdaForTesting([&](const std::set<url::Origin>& origins) {
+          result = origins;
+          loop.Quit();
+        }));
+    loop.Run();
+    return result;
   }
 
-  bool DeleteOriginData(scoped_refptr<QuotaClient> client,
-                        blink::mojom::StorageType type,
-                        const url::Origin& origin) {
-    delete_status_ = blink::mojom::QuotaStatusCode::kUnknown;
+  static blink::mojom::QuotaStatusCode DeleteOriginData(
+      scoped_refptr<QuotaClient> client,
+      blink::mojom::StorageType type,
+      const url::Origin& origin) {
+    blink::mojom::QuotaStatusCode result =
+        blink::mojom::QuotaStatusCode::kUnknown;
+    base::RunLoop loop;
     client->DeleteOriginData(
         origin, type,
-        base::BindOnce(&DatabaseQuotaClientTest::OnDeleteOriginDataComplete,
-                       weak_factory_.GetWeakPtr()));
-    task_environment_.RunUntilIdle();
-    return delete_status_ == blink::mojom::QuotaStatusCode::kOk;
+        base::BindLambdaForTesting([&](blink::mojom::QuotaStatusCode code) {
+          result = code;
+          loop.Quit();
+        }));
+    loop.Run();
+    return result;
   }
 
   MockDatabaseTracker* mock_tracker() { return mock_tracker_.get(); }
 
  private:
-  void OnGetOriginUsageComplete(int64_t usage) { usage_ = usage; }
-
-  void OnGetOriginsComplete(const std::set<url::Origin>& origins) {
-    origins_ = origins;
-  }
-
-  void OnDeleteOriginDataComplete(blink::mojom::QuotaStatusCode status) {
-    delete_status_ = status;
-  }
-
   base::test::TaskEnvironment task_environment_;
-  int64_t usage_;
-  std::set<url::Origin> origins_;
-  blink::mojom::QuotaStatusCode delete_status_;
   scoped_refptr<MockDatabaseTracker> mock_tracker_;
   base::WeakPtrFactory<DatabaseQuotaClientTest> weak_factory_{this};
 };
@@ -203,13 +206,10 @@ TEST_F(DatabaseQuotaClientTest, GetOriginUsage) {
   auto client = base::MakeRefCounted<DatabaseQuotaClient>(mock_tracker());
 
   EXPECT_EQ(0, GetOriginUsage(client, kOriginA, kTemp));
-  EXPECT_EQ(0, GetOriginUsage(client, kOriginA, kPerm));
 
   mock_tracker()->AddMockDatabase(kOriginA, "fooDB", 1000);
   EXPECT_EQ(1000, GetOriginUsage(client, kOriginA, kTemp));
-  EXPECT_EQ(0, GetOriginUsage(client, kOriginA, kPerm));
 
-  EXPECT_EQ(0, GetOriginUsage(client, kOriginB, kPerm));
   EXPECT_EQ(0, GetOriginUsage(client, kOriginB, kTemp));
 }
 
@@ -234,7 +234,6 @@ TEST_F(DatabaseQuotaClientTest, GetOriginsForHost) {
   EXPECT_TRUE(origins.find(kOriginA) != origins.end());
   EXPECT_TRUE(origins.find(kOriginB) != origins.end());
 
-  EXPECT_TRUE(GetOriginsForHost(client, kPerm, kOriginA.host()).empty());
   EXPECT_TRUE(GetOriginsForHost(client, kTemp, kOriginOther.host()).empty());
 }
 
@@ -242,30 +241,24 @@ TEST_F(DatabaseQuotaClientTest, GetOriginsForType) {
   auto client = base::MakeRefCounted<DatabaseQuotaClient>(mock_tracker());
 
   EXPECT_TRUE(GetOriginsForType(client, kTemp).empty());
-  EXPECT_TRUE(GetOriginsForType(client, kPerm).empty());
 
   mock_tracker()->AddMockDatabase(kOriginA, "fooDB", 1000);
   std::set<url::Origin> origins = GetOriginsForType(client, kTemp);
   EXPECT_EQ(origins.size(), 1ul);
   EXPECT_TRUE(origins.find(kOriginA) != origins.end());
-
-  EXPECT_TRUE(GetOriginsForType(client, kPerm).empty());
 }
 
 TEST_F(DatabaseQuotaClientTest, DeleteOriginData) {
   auto client = base::MakeRefCounted<DatabaseQuotaClient>(mock_tracker());
 
-  // Perm deletions are short circuited in the Client and
-  // should not reach the DatabaseTracker.
-  EXPECT_TRUE(DeleteOriginData(client, kPerm, kOriginA));
-  EXPECT_EQ(0, mock_tracker()->delete_called_count());
-
   mock_tracker()->set_async_delete(false);
-  EXPECT_TRUE(DeleteOriginData(client, kTemp, kOriginA));
+  EXPECT_EQ(blink::mojom::QuotaStatusCode::kOk,
+            DeleteOriginData(client, kTemp, kOriginA));
   EXPECT_EQ(1, mock_tracker()->delete_called_count());
 
   mock_tracker()->set_async_delete(true);
-  EXPECT_TRUE(DeleteOriginData(client, kTemp, kOriginA));
+  EXPECT_EQ(blink::mojom::QuotaStatusCode::kOk,
+            DeleteOriginData(client, kTemp, kOriginA));
   EXPECT_EQ(2, mock_tracker()->delete_called_count());
 }
 

@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/modules/sensor/sensor_test_utils.h"
+#include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
@@ -46,19 +47,23 @@ SensorTestContext::SensorTestContext() {
   // Necessary for SensorProxy::ShouldSuspendUpdates() to work correctly.
   testing_scope_.GetPage().GetFocusController().SetFocused(true);
 
-  testing_scope_.GetDocument().GetBrowserInterfaceBroker().SetBinderForTesting(
+  testing_scope_.GetFrame().GetBrowserInterfaceBroker().SetBinderForTesting(
       device::mojom::blink::SensorProvider::Name_,
       WTF::BindRepeating(&SensorTestContext::BindSensorProviderRequest,
                          WTF::Unretained(this)));
 }
 
 SensorTestContext::~SensorTestContext() {
-  testing_scope_.GetDocument().GetBrowserInterfaceBroker().SetBinderForTesting(
+  testing_scope_.GetFrame().GetBrowserInterfaceBroker().SetBinderForTesting(
       device::mojom::blink::SensorProvider::Name_, {});
 }
 
 ExecutionContext* SensorTestContext::GetExecutionContext() const {
   return testing_scope_.GetExecutionContext();
+}
+
+ScriptState* SensorTestContext::GetScriptState() const {
+  return testing_scope_.GetScriptState();
 }
 
 void SensorTestContext::BindSensorProviderRequest(

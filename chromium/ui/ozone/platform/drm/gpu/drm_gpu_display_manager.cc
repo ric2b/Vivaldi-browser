@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/logging.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/display/types/gamma_ramp_rgb_entry.h"
@@ -248,6 +249,17 @@ void DrmGpuDisplayManager::SetPrivacyScreen(int64_t display_id, bool enabled) {
   }
 
   display->SetPrivacyScreen(enabled);
+}
+
+void DrmGpuDisplayManager::SetColorSpace(int64_t crtc_id,
+                                         const gfx::ColorSpace& color_space) {
+  for (const auto& display : displays_) {
+    if (display->crtc() == crtc_id) {
+      display->SetColorSpace(color_space);
+      return;
+    }
+  }
+  LOG(ERROR) << __func__ << " there is no display with CRTC ID " << crtc_id;
 }
 
 DrmDisplay* DrmGpuDisplayManager::FindDisplay(int64_t display_id) {

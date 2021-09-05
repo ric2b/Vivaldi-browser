@@ -98,12 +98,10 @@ class NET_EXPORT HostResolver {
     virtual const base::Optional<std::vector<HostPortPair>>&
     GetHostnameResults() const = 0;
 
-    // TLS 1.3 Encrypted Server Name Indication, draft 4 (ESNI,
-    // https://tools.ietf.org/html/draft-ietf-tls-esni-04)
-    // results of the request. Should only be called after
-    // Start() signals completion, either by invoking the callback or by
-    // returning a result other than |ERR_IO_PENDING|.
-    virtual const base::Optional<EsniContent>& GetEsniResults() const = 0;
+    // INTEGRITY results for an initial experiment related to HTTPSSVC. Each
+    // boolean value indicates the intactness of an INTEGRITY record.
+    NET_EXPORT virtual const base::Optional<std::vector<bool>>&
+    GetIntegrityResultsForTesting() const;
 
     // Error info for the request.
     //
@@ -311,15 +309,6 @@ class NET_EXPORT HostResolver {
       const NetworkIsolationKey& network_isolation_key,
       const NetLogWithSource& net_log,
       const base::Optional<ResolveHostParameters>& optional_parameters) = 0;
-
-  // Deprecated version of above method that uses an empty NetworkIsolationKey.
-  //
-  // TODO(mmenke): Once all consumers have been updated to use the other
-  // overload instead, remove this method and make above method pure virtual.
-  virtual std::unique_ptr<ResolveHostRequest> CreateRequest(
-      const HostPortPair& host,
-      const NetLogWithSource& net_log,
-      const base::Optional<ResolveHostParameters>& optional_parameters);
 
   // Creates a request to probe configured DoH servers to find which can be used
   // successfully.

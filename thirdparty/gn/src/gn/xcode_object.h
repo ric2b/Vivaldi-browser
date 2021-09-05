@@ -40,6 +40,7 @@ enum PBXObjectClass {
   PBXGroupClass,
   PBXNativeTargetClass,
   PBXProjectClass,
+  PBXResourcesBuildPhaseClass,
   PBXShellScriptBuildPhaseClass,
   PBXSourcesBuildPhaseClass,
   PBXTargetDependencyClass,
@@ -61,6 +62,7 @@ class PBXGroup;
 class PBXNativeTarget;
 class PBXObject;
 class PBXProject;
+class PBXResourcesBuildPhase;
 class PBXShellScriptBuildPhase;
 class PBXSourcesBuildPhase;
 class PBXTarget;
@@ -126,6 +128,15 @@ class PBXBuildPhase : public PBXObject {
   PBXBuildPhase();
   ~PBXBuildPhase() override;
 
+  void AddBuildFile(std::unique_ptr<PBXBuildFile> build_file);
+
+  // PBXObject implementation.
+  void Visit(PBXObjectVisitor& visitor) override;
+  void Visit(PBXObjectVisitorConst& visitor) const override;
+
+ protected:
+  std::vector<std::unique_ptr<PBXBuildFile>> files_;
+
  private:
   DISALLOW_COPY_AND_ASSIGN(PBXBuildPhase);
 };
@@ -151,7 +162,8 @@ class PBXTarget : public PBXObject {
   std::unique_ptr<XCConfigurationList> configurations_;
   std::vector<std::unique_ptr<PBXBuildPhase>> build_phases_;
   std::vector<std::unique_ptr<PBXTargetDependency>> dependencies_;
-  PBXSourcesBuildPhase* source_build_phase_;
+  PBXSourcesBuildPhase* source_build_phase_ = nullptr;
+  PBXResourcesBuildPhase* resource_build_phase_ = nullptr;
   std::string name_;
 
  private:
@@ -181,7 +193,7 @@ class PBXAggregateTarget : public PBXTarget {
 class PBXBuildFile : public PBXObject {
  public:
   PBXBuildFile(const PBXFileReference* file_reference,
-               const PBXSourcesBuildPhase* build_phase,
+               const PBXBuildPhase* build_phase,
                const CompilerFlags compiler_flag);
   ~PBXBuildFile() override;
 
@@ -191,8 +203,8 @@ class PBXBuildFile : public PBXObject {
   void Print(std::ostream& out, unsigned indent) const override;
 
  private:
-  const PBXFileReference* file_reference_;
-  const PBXSourcesBuildPhase* build_phase_;
+  const PBXFileReference* file_reference_ = nullptr;
+  const PBXBuildPhase* build_phase_ = nullptr;
   const CompilerFlags compiler_flag_;
 
   DISALLOW_COPY_AND_ASSIGN(PBXBuildFile);
@@ -210,8 +222,8 @@ class PBXContainerItemProxy : public PBXObject {
   void Print(std::ostream& out, unsigned indent) const override;
 
  private:
-  const PBXProject* project_;
-  const PBXTarget* target_;
+  const PBXProject* project_ = nullptr;
+  const PBXTarget* target_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(PBXContainerItemProxy);
 };
@@ -228,6 +240,7 @@ class PBXFileReference : public PBXObject {
   // PBXObject implementation.
   PBXObjectClass Class() const override;
   std::string Name() const override;
+  std::string Comment() const override;
   void Print(std::ostream& out, unsigned indent) const override;
 
   const std::string& path() const { return path_; }
@@ -314,6 +327,8 @@ class PBXNativeTarget : public PBXTarget {
                   const PBXFileReference* product_reference);
   ~PBXNativeTarget() override;
 
+  void AddResourceFile(const PBXFileReference* file_reference);
+
   void AddFileForIndexing(const PBXFileReference* file_reference,
                           const CompilerFlags compiler_flag);
 
@@ -322,7 +337,7 @@ class PBXNativeTarget : public PBXTarget {
   void Print(std::ostream& out, unsigned indent) const override;
 
  private:
-  const PBXFileReference* product_reference_;
+  const PBXFileReference* product_reference_ = nullptr;
   std::string product_type_;
   std::string product_name_;
 
@@ -380,11 +395,27 @@ class PBXProject : public PBXObject {
   std::string name_;
   std::string config_name_;
 
-  PBXGroup* sources_;
-  PBXGroup* products_;
-  PBXNativeTarget* target_for_indexing_;
+  PBXGroup* sources_ = nullptr;
+  PBXGroup* products_ = nullptr;
+  PBXNativeTarget* target_for_indexing_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(PBXProject);
+};
+
+// PBXResourcesBuildPhase -----------------------------------------------------
+
+class PBXResourcesBuildPhase : public PBXBuildPhase {
+ public:
+  PBXResourcesBuildPhase();
+  ~PBXResourcesBuildPhase() override;
+
+  // PBXObject implementation.
+  PBXObjectClass Class() const override;
+  std::string Name() const override;
+  void Print(std::ostream& out, unsigned indent) const override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PBXResourcesBuildPhase);
 };
 
 // PBXShellScriptBuildPhase ---------------------------------------------------
@@ -414,18 +445,12 @@ class PBXSourcesBuildPhase : public PBXBuildPhase {
   PBXSourcesBuildPhase();
   ~PBXSourcesBuildPhase() override;
 
-  void AddBuildFile(std::unique_ptr<PBXBuildFile> build_file);
-
   // PBXObject implementation.
   PBXObjectClass Class() const override;
   std::string Name() const override;
-  void Visit(PBXObjectVisitor& visitor) override;
-  void Visit(PBXObjectVisitorConst& visitor) const override;
   void Print(std::ostream& out, unsigned indent) const override;
 
  private:
-  std::vector<std::unique_ptr<PBXBuildFile>> files_;
-
   DISALLOW_COPY_AND_ASSIGN(PBXSourcesBuildPhase);
 };
 
@@ -445,7 +470,7 @@ class PBXTargetDependency : public PBXObject {
   void Print(std::ostream& out, unsigned indent) const override;
 
  private:
-  const PBXTarget* target_;
+  const PBXTarget* target_ = nullptr;
   std::unique_ptr<PBXContainerItemProxy> container_item_proxy_;
 
   DISALLOW_COPY_AND_ASSIGN(PBXTargetDependency);
@@ -489,7 +514,7 @@ class XCConfigurationList : public PBXObject {
 
  private:
   std::vector<std::unique_ptr<XCBuildConfiguration>> configurations_;
-  const PBXObject* owner_reference_;
+  const PBXObject* owner_reference_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(XCConfigurationList);
 };

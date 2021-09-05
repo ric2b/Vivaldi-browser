@@ -62,6 +62,7 @@ ExtensionAppWindowLauncherController::~ExtensionAppWindowLauncherController() {
     DCHECK(widget);  // Extension windows are always backed by Widgets.
     widget->RemoveObserver(this);
   }
+  CHECK(!views::WidgetObserver::IsInObserverList());
 }
 
 AppWindowLauncherItemController*
@@ -230,7 +231,8 @@ void ExtensionAppWindowLauncherController::UnregisterApp(aura::Window* window) {
   ExtensionAppWindowLauncherItemController* controller =
       app_controller_iter->second;
 
-  controller->RemoveWindow(controller->GetAppWindow(window));
+  controller->RemoveWindow(
+      controller->GetAppWindow(window, true /*include_hidden*/));
   if (controller->window_count() == 0) {
     // If this is the last window associated with the app window shelf id,
     // close the shelf item.

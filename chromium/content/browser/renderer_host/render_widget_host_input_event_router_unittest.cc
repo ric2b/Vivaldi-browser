@@ -21,12 +21,12 @@
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/mock_render_widget_host_delegate.h"
-#include "content/test/mock_widget_impl.h"
 #include "content/test/test_render_view_host.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/viz/public/mojom/hit_test/input_target_client.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
 
 namespace content {
 
@@ -204,12 +204,9 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
 
     process_host_root_ =
         std::make_unique<MockRenderProcessHost>(browser_context_.get());
-    mojo::PendingRemote<mojom::Widget> widget_root;
-    widget_impl_root_ = std::make_unique<MockWidgetImpl>(
-        widget_root.InitWithNewPipeAndPassReceiver());
     widget_host_root_ = std::make_unique<RenderWidgetHostImpl>(
         &delegate_, process_host_root_.get(),
-        process_host_root_->GetNextRoutingID(), std::move(widget_root),
+        process_host_root_->GetNextRoutingID(),
         /*hidden=*/false, std::make_unique<FrameTokenMessageQueue>());
     view_root_ =
         std::make_unique<MockRootRenderWidgetHostView>(widget_host_root_.get());
@@ -228,7 +225,6 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
 
   struct ChildViewState {
     std::unique_ptr<MockRenderProcessHost> process_host;
-    std::unique_ptr<MockWidgetImpl> widget_impl;
     std::unique_ptr<RenderWidgetHostImpl> widget_host;
     std::unique_ptr<TestRenderWidgetHostViewChildFrame> view;
     std::unique_ptr<MockFrameConnectorDelegate> frame_connector;
@@ -239,12 +235,9 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
 
     child.process_host =
         std::make_unique<MockRenderProcessHost>(browser_context_.get());
-    mojo::PendingRemote<mojom::Widget> widget_child;
-    child.widget_impl = std::make_unique<MockWidgetImpl>(
-        widget_child.InitWithNewPipeAndPassReceiver());
     child.widget_host = std::make_unique<RenderWidgetHostImpl>(
         &delegate_, child.process_host.get(),
-        child.process_host->GetNextRoutingID(), std::move(widget_child),
+        child.process_host->GetNextRoutingID(),
         /*hidden=*/false, std::make_unique<FrameTokenMessageQueue>());
     child.view = std::make_unique<TestRenderWidgetHostViewChildFrame>(
         child.widget_host.get());
@@ -291,7 +284,6 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
   std::unique_ptr<BrowserContext> browser_context_;
 
   std::unique_ptr<MockRenderProcessHost> process_host_root_;
-  std::unique_ptr<MockWidgetImpl> widget_impl_root_;
   std::unique_ptr<RenderWidgetHostImpl> widget_host_root_;
   std::unique_ptr<MockRootRenderWidgetHostView> view_root_;
 
@@ -610,7 +602,7 @@ TEST_F(RenderWidgetHostInputEventRouterTest,
        CancelScrollBubblingWhenChildDetaches) {
   gfx::Vector2dF delta(0.f, 10.f);
   blink::WebGestureEvent scroll_begin =
-      SyntheticWebGestureEventBuilder::BuildScrollBegin(
+      blink::SyntheticWebGestureEventBuilder::BuildScrollBegin(
           delta.x(), delta.y(), blink::WebGestureDevice::kTouchscreen);
 
   {
@@ -663,7 +655,7 @@ TEST_F(RenderWidgetHostInputEventRouterTest,
        ContinueScrollBubblingWhenIrrelevantChildDetaches) {
   gfx::Vector2dF delta(0.f, 10.f);
   blink::WebGestureEvent scroll_begin =
-      SyntheticWebGestureEventBuilder::BuildScrollBegin(
+      blink::SyntheticWebGestureEventBuilder::BuildScrollBegin(
           delta.x(), delta.y(), blink::WebGestureDevice::kTouchscreen);
 
   ChildViewState outer = MakeChildView(view_root_.get());
@@ -689,7 +681,7 @@ void RenderWidgetHostInputEventRouterTest::TestSendNewGestureWhileBubbling(
     bool should_cancel) {
   gfx::Vector2dF delta(0.f, 10.f);
   blink::WebGestureEvent scroll_begin =
-      SyntheticWebGestureEventBuilder::BuildScrollBegin(
+      blink::SyntheticWebGestureEventBuilder::BuildScrollBegin(
           delta.x(), delta.y(), blink::WebGestureDevice::kTouchscreen);
 
   TestRenderWidgetHostViewChildFrame* cur_target = bubbling_origin;
@@ -800,7 +792,7 @@ TEST_F(RenderWidgetHostInputEventRouterTest,
 TEST_F(RenderWidgetHostInputEventRouterTest, DoNotBubbleMultipleSequences) {
   gfx::Vector2dF delta(0.f, 10.f);
   blink::WebGestureEvent scroll_begin =
-      SyntheticWebGestureEventBuilder::BuildScrollBegin(
+      blink::SyntheticWebGestureEventBuilder::BuildScrollBegin(
           delta.x(), delta.y(), blink::WebGestureDevice::kTouchscreen);
 
   ChildViewState outer1 = MakeChildView(view_root_.get());
@@ -828,7 +820,7 @@ TEST_F(RenderWidgetHostInputEventRouterTest,
        DoNotBubbleIfUnrelatedGestureInTarget) {
   gfx::Vector2dF delta(0.f, 10.f);
   blink::WebGestureEvent scroll_begin =
-      SyntheticWebGestureEventBuilder::BuildScrollBegin(
+      blink::SyntheticWebGestureEventBuilder::BuildScrollBegin(
           delta.x(), delta.y(), blink::WebGestureDevice::kTouchscreen);
 
   ChildViewState child = MakeChildView(view_root_.get());
@@ -874,7 +866,7 @@ TEST_F(RenderWidgetHostInputEventRouterTest,
        NestedDoNotBubbleIfUnrelatedGestureInTarget) {
   gfx::Vector2dF delta(0.f, 10.f);
   blink::WebGestureEvent scroll_begin =
-      SyntheticWebGestureEventBuilder::BuildScrollBegin(
+      blink::SyntheticWebGestureEventBuilder::BuildScrollBegin(
           delta.x(), delta.y(), blink::WebGestureDevice::kTouchscreen);
 
   ChildViewState outer = MakeChildView(view_root_.get());

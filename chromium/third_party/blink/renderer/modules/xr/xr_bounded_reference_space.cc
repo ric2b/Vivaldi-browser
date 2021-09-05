@@ -33,12 +33,17 @@ Member<DOMPointReadOnly> RoundedDOMPoint(const FloatPoint3D& val) {
 }  // anonymous namespace
 
 XRBoundedReferenceSpace::XRBoundedReferenceSpace(XRSession* session)
-    : XRReferenceSpace(session, Type::kTypeBoundedFloor) {}
+    : XRReferenceSpace(
+          session,
+          device::mojom::blink::XRReferenceSpaceType::kBoundedFloor) {}
 
 XRBoundedReferenceSpace::XRBoundedReferenceSpace(
     XRSession* session,
     XRRigidTransform* origin_offset)
-    : XRReferenceSpace(session, origin_offset, Type::kTypeBoundedFloor) {}
+    : XRReferenceSpace(
+          session,
+          origin_offset,
+          device::mojom::blink::XRReferenceSpaceType::kBoundedFloor) {}
 
 XRBoundedReferenceSpace::~XRBoundedReferenceSpace() = default;
 
@@ -102,12 +107,7 @@ HeapVector<Member<DOMPointReadOnly>> XRBoundedReferenceSpace::boundsGeometry() {
   return offset_bounds_geometry_;
 }
 
-base::Optional<XRNativeOriginInformation>
-XRBoundedReferenceSpace::NativeOrigin() const {
-  return XRNativeOriginInformation::Create(this);
-}
-
-void XRBoundedReferenceSpace::Trace(Visitor* visitor) {
+void XRBoundedReferenceSpace::Trace(Visitor* visitor) const {
   visitor->Trace(offset_bounds_geometry_);
   XRReferenceSpace::Trace(visitor);
 }

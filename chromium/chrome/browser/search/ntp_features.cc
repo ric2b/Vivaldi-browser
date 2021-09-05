@@ -26,6 +26,11 @@ const base::Feature kDismissPromos{"DismissNtpPromos",
 const base::Feature kIframeOneGoogleBar{"IframeOneGoogleBar",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
+// If enabled, the iframed OneGooleBar shows the overlays modally with a
+// backdrop.
+const base::Feature kOneGoogleBarModalOverlays{
+    "OneGoogleBarModalOverlays", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Depends on kRealbox being enabled. If enabled, the NTP "realbox" will be
 // themed like the omnibox (same background/text/selected/hover colors).
 const base::Feature kRealboxMatchOmniboxTheme{
@@ -59,12 +64,18 @@ const base::Feature kWebUI{"NtpWebUI", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kWebUIRealbox{"WebUIRealbox",
                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
+// If enabled, the Doodle will be shown on themed and dark mode NTPs.
+const base::Feature kWebUIThemeModeDoodles{"WebUIThemeModeDoodles",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
 bool IsRealboxEnabled() {
   if (!base::FeatureList::IsEnabled(omnibox::kNewSearchFeatures))
     return false;
 
   return base::FeatureList::IsEnabled(kRealbox) ||
          base::FeatureList::IsEnabled(omnibox::kZeroSuggestionsOnNTPRealbox) ||
+         base::FeatureList::IsEnabled(
+             omnibox::kReactiveZeroSuggestionsOnNTPRealbox) ||
          (base::FeatureList::IsEnabled(omnibox::kOnFocusSuggestions) &&
           !OmniboxFieldTrial::GetZeroSuggestVariants(
                metrics::OmniboxEventProto::NTP_REALBOX)

@@ -2,13 +2,13 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ca">
 <translation id="1056898198331236512">Advertiment</translation>
+<translation id="1163931534039071049">&amp;Visualitza l'origen del marc</translation>
 <translation id="1165039591588034296">Error</translation>
 <translation id="1175364870820465910">&amp;Imprimeix...</translation>
 <translation id="1244303850296295656">Error d'extensió</translation>
 <translation id="1546280085599573572">Aquesta extensió ha canviat la pàgina que es mostra quan feu clic al botó d'inici.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1603914832182249871">(Incògnit)</translation>
-<translation id="1635033183663317347">Extensió instal·lada pel tutor.</translation>
 <translation id="1682548588986054654">Nova finestra discreta</translation>
 <translation id="1708338024780164500">(Inactiva)</translation>
 <translation id="1729533290416704613">També controla la pàgina que es mostra quan feu una cerca des de l'omnibox.</translation>
@@ -36,6 +36,7 @@
 <translation id="2941112035454246133">Baixa</translation>
 <translation id="2972581237482394796">&amp;Refés</translation>
 <translation id="3012631534724231212">(iframe)</translation>
+<translation id="3021678814754966447">&amp;Visualitza l'origen del marc</translation>
 <translation id="3080207940057008665">Un altre programa de l'ordinador ha afegit un tema que pot canviar el funcionament de Vivaldi.</translation>
 <translation id="3084548735795614657">Deixeu anar per a instal·lar</translation>
 <translation id="3122464029669770682">CPU</translation>
@@ -108,6 +109,7 @@
 <translation id="6904344821472985372">Revoca l'accés al fitxer</translation>
 <translation id="7175353351958621980">Carregada des de:</translation>
 <translation id="7287143125007575591">Accés denegat.</translation>
+<translation id="7421925624202799674">&amp;Visualitza l'origen de la pàgina</translation>
 <translation id="7427348830195639090">Pàgina en segon pla: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7629827748548208700">Pestanya: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -134,6 +136,7 @@ Deseu el fitxer de clau en una ubicació segura. El necessitareu per crear versi
 <translation id="8261378640211443080">Aquesta extensió no apareix a <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> i és possible que s'hagi afegit sense que ho sapigueu.</translation>
 <translation id="8351419472474436977">Aquesta extensió ha passat a controlar la configuració del servidor intermediari. Això vol dir que pot modificar, desfer o espiar qualsevol acció que feu en línia. Si no esteu segur del motiu d'aquest canvi, és possible que no el vulgueu aplicar.</translation>
 <translation id="8615618338313291042">Aplicació d'incògnit: <ph name="APP_NAME" /></translation>
+<translation id="8664389313780386848">&amp;Visualitza l'origen de la pàgina</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8859174528519900719">Submarc: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8916476537757519021">Submarc d'incògnit: <ph name="SUBFRAME_SITE" /></translation>

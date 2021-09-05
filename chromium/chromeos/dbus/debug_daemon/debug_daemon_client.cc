@@ -21,6 +21,7 @@
 #include "base/files/file_path.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/no_destructor.h"
 #include "base/posix/eintr_wrapper.h"
@@ -527,16 +528,6 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
-  void StopConcierge(ConciergeCallback callback) override {
-    dbus::MethodCall method_call(debugd::kDebugdInterface,
-                                 debugd::kStopVmConcierge);
-    dbus::MessageWriter writer(&method_call);
-    debugdaemon_proxy_->CallMethod(
-        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::BindOnce(&DebugDaemonClientImpl::OnStopConcierge,
-                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
-  }
-
   void StartPluginVmDispatcher(const std::string& owner_id,
                                const std::string& lang,
                                PluginVmDispatcherCallback callback) override {
@@ -874,12 +865,6 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
       reader.PopBool(&result);
     }
     std::move(callback).Run(result);
-  }
-
-  void OnStopConcierge(ConciergeCallback callback, dbus::Response* response) {
-    // Debugd just sends back an empty response, so we just check if
-    // the response exists
-    std::move(callback).Run(response != nullptr);
   }
 
   void OnStartPluginVmDispatcher(PluginVmDispatcherCallback callback,

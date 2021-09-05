@@ -4,12 +4,13 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
+import android.os.Build.VERSION_CODES;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
 import android.view.ViewGroup;
 
+import androidx.test.filters.MediumTest;
+
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -20,7 +21,7 @@ import org.chromium.base.BaseSwitches;
 import org.chromium.base.GarbageCollectionTestUtils;
 import org.chromium.base.SysUtils;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -287,7 +288,11 @@ public class TabSelectionEditorTest {
 
     @Test
     @MediumTest
+    // clang-format off
+    @DisableIf.Build(sdk_is_greater_than = VERSION_CODES.O_MR1, supported_abis_includes = "x86",
+        message = "https://crbug.com/1075548")
     public void testShowTabsWithPreSelectedTabs_10Tabs() {
+        // clang-format on
         prepareBlankTab(11, false);
         int preSelectedTabCount = 10;
         List<Tab> tabs = getTabsInCurrentTabModel();
@@ -329,7 +334,6 @@ public class TabSelectionEditorTest {
         mRobot.resultRobot.verifyTabSelectionEditorIsVisible();
 
         ChromeRenderTestRule.sanitize(mTabSelectionEditorLayout);
-        mRenderTestRule.setPixelDiffThreshold(5);
         mRenderTestRule.render(mTabSelectionEditorLayout, "grid_view");
     }
 
@@ -351,7 +355,6 @@ public class TabSelectionEditorTest {
         mRobot.resultRobot.verifyTabSelectionEditorIsVisible();
 
         ChromeRenderTestRule.sanitize(mTabSelectionEditorLayout);
-        mRenderTestRule.setPixelDiffThreshold(5);
         mRenderTestRule.render(mTabSelectionEditorLayout, "grid_view_one_selected_tab");
     }
 
@@ -373,7 +376,6 @@ public class TabSelectionEditorTest {
         mRobot.resultRobot.verifyTabSelectionEditorIsVisible();
 
         ChromeRenderTestRule.sanitize(mTabSelectionEditorLayout);
-        mRenderTestRule.setPixelDiffThreshold(5);
         mRenderTestRule.render(mTabSelectionEditorLayout, "grid_view_one_pre_selected_tab");
     }
 
@@ -395,7 +397,6 @@ public class TabSelectionEditorTest {
         mRobot.resultRobot.verifyTabSelectionEditorIsVisible();
 
         ChromeRenderTestRule.sanitize(mTabSelectionEditorLayout);
-        mRenderTestRule.setPixelDiffThreshold(5);
         mRenderTestRule.render(mTabSelectionEditorLayout, "grid_view_two_pre_selected_tab");
     }
 
@@ -417,7 +418,6 @@ public class TabSelectionEditorTest {
         mRobot.resultRobot.verifyTabSelectionEditorIsVisible();
 
         ChromeRenderTestRule.sanitize(mTabSelectionEditorLayout);
-        mRenderTestRule.setPixelDiffThreshold(5);
         mRenderTestRule.render(mTabSelectionEditorLayout, "grid_view_all_pre_selected_tab");
     }
 
@@ -459,8 +459,23 @@ public class TabSelectionEditorTest {
 
     @Test
     @MediumTest
+    @CommandLineFlags.Add(BaseSwitches.ENABLE_LOW_END_DEVICE_MODE)
+    @EnableFeatures({ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID})
+    public void testListView_select() throws IOException {
+        prepareBlankTab(2, false);
+        List<Tab> tabs = getTabsInCurrentTabModel();
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> mTabSelectionEditorController.show(tabs));
+
+        mRobot.actionRobot.clickItemAtAdapterPosition(0);
+        mRobot.resultRobot.verifyToolbarActionButtonDisabled().verifyTabSelectionEditorIsVisible();
+        mRobot.actionRobot.clickEndButtonAtAdapterPosition(1);
+        mRobot.resultRobot.verifyToolbarActionButtonEnabled().verifyTabSelectionEditorIsVisible();
+    }
+
+    @Test
+    @MediumTest
     @DisableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID})
-    @DisabledTest(message = "crbug.com/1075816")
     public void testTabSelectionEditorLayoutCanBeGarbageCollected() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mTabSelectionEditorCoordinator.destroy();
@@ -470,7 +485,9 @@ public class TabSelectionEditorTest {
         });
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-        Assert.assertTrue(GarbageCollectionTestUtils.canBeGarbageCollected(mRef));
+
+        // A longer timeout is needed. Achieve that by using the CriteriaHelper.pollUiThread.
+        CriteriaHelper.pollUiThread(() -> GarbageCollectionTestUtils.canBeGarbageCollected(mRef));
     }
 
     private List<Tab> getTabsInCurrentTabModel() {

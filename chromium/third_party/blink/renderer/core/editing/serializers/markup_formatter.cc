@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/core/xmlns_names.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
+#include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
 
 namespace blink {
 
@@ -110,15 +111,11 @@ void MarkupFormatter::AppendCharactersReplacingEntities(
     return;
 
   DCHECK_LE(offset + length, source.length());
-  if (source.Is8Bit()) {
+  WTF::VisitCharacters(source, [&](const auto* chars, unsigned) {
     AppendCharactersReplacingEntitiesInternal(
-        result, source.Characters8() + offset, length, kEntityMaps,
-        base::size(kEntityMaps), entity_mask);
-  } else {
-    AppendCharactersReplacingEntitiesInternal(
-        result, source.Characters16() + offset, length, kEntityMaps,
-        base::size(kEntityMaps), entity_mask);
-  }
+        result, chars + offset, length, kEntityMaps, base::size(kEntityMaps),
+        entity_mask);
+  });
 }
 
 MarkupFormatter::MarkupFormatter(AbsoluteURLs resolve_urls_method,
@@ -383,17 +380,17 @@ EntityMask MarkupFormatter::EntityMaskForText(const Text& text) const {
   if (text.parentElement())
     parent_name = &(text.parentElement())->TagQName();
 
-  if (parent_name &&
-      (*parent_name == html_names::kScriptTag ||
-       *parent_name == html_names::kStyleTag ||
-       *parent_name == html_names::kXmpTag ||
-       *parent_name == html_names::kIFrameTag ||
-       *parent_name == html_names::kPlaintextTag ||
-       *parent_name == html_names::kNoembedTag ||
-       *parent_name == html_names::kNoframesTag ||
-       (*parent_name == html_names::kNoscriptTag &&
-        text.GetDocument().GetFrame() &&
-        text.GetDocument().CanExecuteScripts(kNotAboutToExecuteScript))))
+  if (parent_name && (*parent_name == html_names::kScriptTag ||
+                      *parent_name == html_names::kStyleTag ||
+                      *parent_name == html_names::kXmpTag ||
+                      *parent_name == html_names::kIFrameTag ||
+                      *parent_name == html_names::kPlaintextTag ||
+                      *parent_name == html_names::kNoembedTag ||
+                      *parent_name == html_names::kNoframesTag ||
+                      (*parent_name == html_names::kNoscriptTag &&
+                       text.GetExecutionContext() &&
+                       text.GetExecutionContext()->CanExecuteScripts(
+                           kNotAboutToExecuteScript))))
     return kEntityMaskInCDATA;
   return kEntityMaskInHTMLPCDATA;
 }

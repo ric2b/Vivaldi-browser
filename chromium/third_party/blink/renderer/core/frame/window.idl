@@ -73,8 +73,10 @@
     [Custom, NotEnumerable, CrossOrigin] getter object (DOMString name);
 
     // the user agent
+    // includes https://github.com/whatwg/html/pull/5545 (originIsolationRestricted)
     [Affects=Nothing, LogActivity=GetterOnly] readonly attribute Navigator navigator;
     [LogActivity=GetterOnly, SecureContext=RestrictAppCacheToSecureContexts, RuntimeEnabled=AppCache] readonly attribute ApplicationCache applicationCache;
+    [RuntimeEnabled=OriginIsolationHeader, SecureContext] readonly attribute boolean originIsolationRestricted;
 
     // user prompts
     [Measure, CallWith=ScriptState] void alert();
@@ -98,8 +100,6 @@
     // https://html.spec.whatwg.org/C/#animation-frames
     [MeasureAs=UnprefixedRequestAnimationFrame] long requestAnimationFrame(FrameRequestCallback callback);
     void cancelAnimationFrame(long handle);
-    [RuntimeEnabled=PostAnimationFrame] long requestPostAnimationFrame(FrameRequestCallback callback);
-    [RuntimeEnabled=PostAnimationFrame] void cancelPostAnimationFrame(long handle);
 
     // HTML obsolete features
     // https://html.spec.whatwg.org/C/#Window-partial
@@ -155,6 +155,10 @@
     [Affects=Nothing, HighEntropy, MeasureAs=WindowOuterHeight, Replaceable] readonly attribute long outerHeight;
     [Affects=Nothing, HighEntropy, MeasureAs=WindowDevicePixelRatio, Replaceable] readonly attribute double devicePixelRatio;
 
+    // Window Segments API
+    // https://github.com/webscreens/window-segments
+    [RuntimeEnabled=WindowSegments, Affects=Nothing] FrozenArray<DOMRect> getWindowSegments();
+
     // Selection API
     // https://w3c.github.io/selection-api/#extensions-to-window-interface
     [Affects=Nothing] Selection? getSelection();
@@ -180,9 +184,11 @@
     // TODO(yhirano): Move this to url.idl when LegacyWindowAlias is supported.
     [DisableInNewIDLCompiler] attribute URLConstructor webkitURL;
 
+    // https://dom.spec.whatwg.org/#interface-window-extensions
+    [Replaceable, GetterCallWith=ScriptState, MeasureAs=WindowEvent, NotEnumerable] readonly attribute any event;
+
     // Non-standard APIs
     [MeasureAs=WindowClientInformation, Replaceable] readonly attribute Navigator clientInformation;
-    [Replaceable, MeasureAs=WindowEvent, Custom=Getter, NotEnumerable] readonly attribute Event event;
     [MeasureAs=WindowFind] boolean find(optional DOMString string = "",
                                         optional boolean caseSensitive = false,
                                         optional boolean backwards = false,

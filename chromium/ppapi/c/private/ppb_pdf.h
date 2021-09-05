@@ -116,12 +116,17 @@ struct PP_PrivateAccessibilityCharInfo {
 // This holds the link information provided by the PDF and will be used in
 // accessibility to provide the link information. Needs to stay in sync with
 // C++ versions (PdfAccessibilityLinkInfo and PrivateAccessibilityLinkInfo).
+// This struct contains index state that should be validated using
+// PdfAccessibilityTree::IsDataFromPluginValid() before usage.
 struct PP_PrivateAccessibilityLinkInfo {
   // URL of the link.
   const char* url;
   uint32_t url_length;
   // Index of the link in the page. This will be used to identify the link on
   // which action has to be performed in the page.
+  // |index_in_page| is populated and used in plugin process to handle
+  // accessiility actions from mimehandler process. It's value should be
+  // validated in plugin before usage.
   uint32_t index_in_page;
   // Link can either be part of the page text or not. If the link is part of the
   // page text, then |text_run_index| denotes the text run which contains the
@@ -138,6 +143,8 @@ struct PP_PrivateAccessibilityLinkInfo {
 // This holds the image information provided by the PDF and will be used in
 // accessibility to provide the image information. Needs to stay in sync with
 // C++ versions (PdfAccessibilityImageInfo and PrivateAccessibilityImageInfo).
+// This struct contains index state that should be validated using
+// PdfAccessibilityTree::IsDataFromPluginValid() before usage.
 struct PP_PrivateAccessibilityImageInfo {
   // Alternate text for the image provided by PDF.
   const char* alt_text;
@@ -155,12 +162,17 @@ struct PP_PrivateAccessibilityImageInfo {
 // popup note, the data of which is also captured here.
 // Needs to stay in sync with C++ versions (PdfAccessibilityHighlightInfo and
 // PrivateAccessibilityHighlightInfo).
+// This struct contains index state that should be validated using
+// PdfAccessibilityTree::IsDataFromPluginValid() before usage.
 struct PP_PrivateAccessibilityHighlightInfo {
   // Represents the text of the associated popup note, if present.
   const char* note_text;
   uint32_t note_text_length;
   // Index of the highlight in the page annotation list. Used to identify the
   // annotation on which action needs to be performed.
+  // |index_in_page| is populated and used in plugin process to handle
+  // accessiility actions from mimehandler process. It's value should be
+  // validated in plugin before usage.
   uint32_t index_in_page;
   // Highlights are annotations over existing page text.  |text_run_index|
   // denotes the index of the text run where the highlight starts and
@@ -178,6 +190,8 @@ struct PP_PrivateAccessibilityHighlightInfo {
 // This holds text form field information provided by the PDF and will be used
 // in accessibility to expose it. Needs to stay in sync with C++ versions
 // (PdfAccessibilityTextFieldInfo and PrivateAccessibilityTextFieldInfo).
+// This struct contains index state that should be validated using
+// PdfAccessibilityTree::IsDataFromPluginValid() before usage.
 struct PP_PrivateAccessibilityTextFieldInfo {
   // Represents the name property of text field, if present.
   const char* name;
@@ -194,6 +208,9 @@ struct PP_PrivateAccessibilityTextFieldInfo {
   bool is_password;
   // Index of the text field in the collection of text fields in the page. Used
   // to identify the annotation on which action needs to be performed.
+  // |index_in_page| is populated and used in plugin process to handle
+  // accessiility actions from mimehandler process. It's value should be
+  // validated in plugin before usage.
   uint32_t index_in_page;
   // We anchor the text field to a text run index, this denotes the text run
   // before which the text field should be inserted in the accessibility tree.
@@ -202,10 +219,125 @@ struct PP_PrivateAccessibilityTextFieldInfo {
   struct PP_FloatRect bounds;
 };
 
-// Holds links, images and highlights within a PDF page so that IPC messages
-// passing accessibility objects do not have too many parameters.
-// Needs to stay in sync with C++ versions (PdfAccessibilityPageObjects and
-// PrivateAccessibilityPageObjects).
+// This holds choice form field option information provided by the PDF and
+// will be used in accessibility to expose it. Needs to stay in sync with C++
+// versions (PdfAccessibilityChoiceFieldOptionInfo and
+// PrivateAccessibilityChoiceFieldOptionInfo).
+struct PP_PrivateAccessibilityChoiceFieldOptionInfo {
+  // Represents the name property of choice field option.
+  const char* name;
+  uint32_t name_length;
+  // Represents if a choice field option is selected or not.
+  bool is_selected;
+  // Bounding box of the choice field option.
+  struct PP_FloatRect bounds;
+};
+
+typedef enum {
+  PP_PRIVATECHOICEFIELD_LISTBOX = 0,
+  PP_PRIVATECHOICEFIELD_COMBOBOX = 1,
+  PP_PRIVATECHOICEFIELD_LAST = PP_PRIVATECHOICEFIELD_COMBOBOX
+} PP_PrivateChoiceFieldType;
+
+// This holds choice form field information provided by the PDF and will be used
+// in accessibility to expose it. Needs to stay in sync with C++ versions
+// (PdfAccessibilityChoiceFieldInfo and PrivateAccessibilityChoiceFieldInfo).
+// This struct contains index state that should be validated using
+// PdfAccessibilityTree::IsDataFromPluginValid() before usage.
+struct PP_PrivateAccessibilityChoiceFieldInfo {
+  // Represents the name property of choice field, if present.
+  const char* name;
+  uint32_t name_length;
+  // Represents list of options in choice field, if present.
+  struct PP_PrivateAccessibilityChoiceFieldOptionInfo* options;
+  uint32_t options_length;
+  // Represents type of choice field.
+  PP_PrivateChoiceFieldType type;
+  // Represents if the choice field is non-editable.
+  bool is_read_only;
+  // Represents if the choice field is multi-selectable.
+  bool is_multi_select;
+  // Represents if the choice field includes an editable text box.
+  bool has_editable_text_box;
+  // Index of the choice field in the collection of choice fields in the page.
+  // Used to identify the annotation on which action needs to be performed.
+  // |index_in_page| is populated and used in plugin process to handle
+  // accessiility actions from mimehandler process. It's value should be
+  // validated in plugin before usage.
+  uint32_t index_in_page;
+  // We anchor the choice field to a text run index, this denotes the text run
+  // before which the choice field should be inserted in the accessibility tree.
+  uint32_t text_run_index;
+  // Bounding box of the choice field.
+  struct PP_FloatRect bounds;
+};
+
+typedef enum {
+  PP_PRIVATEBUTTON_PUSHBUTTON = 1,
+  PP_PRIVATEBUTTON_FIRST = PP_PRIVATEBUTTON_PUSHBUTTON,
+  PP_PRIVATEBUTTON_CHECKBOX = 2,
+  PP_PRIVATEBUTTON_RADIOBUTTON = 3,
+  PP_PRIVATEBUTTON_LAST = PP_PRIVATEBUTTON_RADIOBUTTON
+} PP_PrivateButtonType;
+
+// This holds button form field information provided by the PDF and will be
+// used in accessibility to expose it. Needs to stay in sync with C++ versions
+// (PdfAccessibilityButtonInfo and PrivateAccessibilityButtonInfo).
+// This struct contains index states that should be validated using
+// PdfAccessibilityTree::IsDataFromPluginValid() before usage.
+struct PP_PrivateAccessibilityButtonInfo {
+  // Represents the name property of button, if present.
+  const char* name;
+  uint32_t name_length;
+  // Represents the value property of button, if present.
+  const char* value;
+  uint32_t value_length;
+  // Represents the button type.
+  PP_PrivateButtonType type;
+  // Represents if the button is non-editable.
+  bool is_read_only;
+  // Represents if the radio button or check box is checked or not.
+  bool is_checked;
+  // Represents count of controls in the control group. A group of interactive
+  // form annotations is collectively called a form control group. Here, an
+  // interactive form annotation, should be either a radio button or a checkbox.
+  // Value of |control_count| is >= 1.
+  uint32_t control_count;
+  // Represents index of the control in the control group. A group of
+  // interactive form annotations is collectively called a form control group.
+  // Here, an interactive form annotation, should be either a radio button or a
+  // checkbox. Value of |control_index| should always be less than
+  // |control_count|.
+  uint32_t control_index;
+  // Index of the button in the collection of buttons in the page. Used
+  // to identify the annotation on which action needs to be performed.
+  // |index_in_page| is populated and used in plugin process to handle
+  // accessiility actions from mimehandler process. It's value should be
+  // validated in plugin before usage.
+  uint32_t index_in_page;
+  // We anchor the button to a text run index, this denotes the text run
+  // before which the button should be inserted in the accessibility tree.
+  uint32_t text_run_index;
+  // Bounding box of the button.
+  struct PP_FloatRect bounds;
+};
+
+// This holds form fields within a PDF page. Needs to stay in sync with C++
+// versions (PdfAccessibilityFormFieldInfo and
+// PrivateAccessibilityFormFieldInfo).
+struct PP_PrivateAccessibilityFormFieldInfo {
+  struct PP_PrivateAccessibilityTextFieldInfo* text_fields;
+  uint32_t text_field_count;
+  struct PP_PrivateAccessibilityChoiceFieldInfo* choice_fields;
+  uint32_t choice_field_count;
+  struct PP_PrivateAccessibilityButtonInfo* buttons;
+  uint32_t button_count;
+};
+
+// This holds different PDF page objects - links, images, highlights and
+// form fields within a PDF page so that IPC messages passing accessibility
+// objects do not have too many parameters. Needs to stay in sync with C++
+// versions (PdfAccessibilityPageObjects and PrivateAccessibilityPageObjects).
 struct PP_PrivateAccessibilityPageObjects {
   struct PP_PrivateAccessibilityLinkInfo* links;
   uint32_t link_count;
@@ -213,8 +345,7 @@ struct PP_PrivateAccessibilityPageObjects {
   uint32_t image_count;
   struct PP_PrivateAccessibilityHighlightInfo* highlights;
   uint32_t highlight_count;
-  struct PP_PrivateAccessibilityTextFieldInfo* text_fields;
-  uint32_t text_field_count;
+  struct PP_PrivateAccessibilityFormFieldInfo form_fields;
 };
 
 struct PPB_PDF {

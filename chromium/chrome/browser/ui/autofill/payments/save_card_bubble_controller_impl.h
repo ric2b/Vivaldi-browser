@@ -137,7 +137,7 @@ class SaveCardBubbleControllerImpl
   void OnCancelButton() override;
   void OnLegalMessageLinkClicked(const GURL& url) override;
   void OnManageCardsClicked() override;
-  void OnBubbleClosed() override;
+  void OnBubbleClosed(PaymentsBubbleClosedReason closed_reason) override;
   const LegalMessageLines& GetLegalMessageLines() const override;
   bool IsUploadSave() const override;
   BubbleType GetBubbleType() const override;

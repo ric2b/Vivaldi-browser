@@ -33,7 +33,7 @@ const base::Feature kCaptureInlineJavascriptForGoogleAds{
     "CaptureInlineJavascriptForGoogleAds", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kContentComplianceEnabled{
-    "SafeBrowsingContentComplianceEnabled", base::FEATURE_ENABLED_BY_DEFAULT};
+    "SafeBrowsingContentComplianceEnabled", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kDelayedWarnings{"SafeBrowsingDelayedWarnings",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
@@ -41,38 +41,42 @@ const base::Feature kDelayedWarnings{"SafeBrowsingDelayedWarnings",
 const base::Feature kDownloadRequestWithToken{
     "SafeBrowsingDownloadRequestWithToken", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kEnhancedProtection{"SafeBrowsingEnhancedProtection",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kEnhancedProtection {
+  "SafeBrowsingEnhancedProtection",
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 const base::Feature kMalwareScanEnabled{"SafeBrowsingMalwareScanEnabled",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kPasswordProtectionForSavedPasswords{
     "SafeBrowsingPasswordProtectionForSavedPasswords",
-    base::FEATURE_ENABLED_BY_DEFAULT};
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kPasswordProtectionShowDomainsForSavedPasswords{
     "SafeBrowsingPasswordProtectionShowDomainsForSavedPasswords",
-    base::FEATURE_ENABLED_BY_DEFAULT};
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
-const base::Feature kPasswordProtectionForSignedInUsers{
-    "SafeBrowsingPasswordProtectionForSignedInUsers",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-#else
 const base::Feature kPasswordProtectionForSignedInUsers{
     "SafeBrowsingPasswordProtectionForSignedInUsers",
     base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
 
 const base::Feature kPromptAppForDeepScanning{
     "SafeBrowsingPromptAppForDeepScanning", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kRealTimeUrlLookupEnabled{
-    "SafeBrowsingRealTimeUrlLookupEnabled", base::FEATURE_DISABLED_BY_DEFAULT};
+    "SafeBrowsingRealTimeUrlLookupEnabled", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kRealTimeUrlLookupEnabledForAllAndroidDevices{
     "SafeBrowsingRealTimeUrlLookupEnabledForAllAndroidDevices",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kRealTimeUrlLookupEnabledForEnterprise{
+    "SafeBrowsingRealTimeUrlLookupEnabledForEnterprise",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kRealTimeUrlLookupEnabledForEP{
@@ -137,6 +141,7 @@ constexpr struct {
     {&kRealTimeUrlLookupEnabled, true},
     {&kRealTimeUrlLookupEnabledForAllAndroidDevices, true},
     {&kRealTimeUrlLookupEnabledForEP, true},
+    {&kRealTimeUrlLookupEnabledForEnterprise, true},
     {&kRealTimeUrlLookupEnabledForEPWithToken, true},
     {&kRealTimeUrlLookupEnabledWithToken, true},
     {&kRealTimeUrlLookupNonMainframeEnabledForEP, true},

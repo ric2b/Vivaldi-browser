@@ -30,6 +30,7 @@ void ConfigValues::AppendValues(const ConfigValues& append) {
   VectorAppend(&cflags_objcc_, append.cflags_objcc_);
   VectorAppend(&defines_, append.defines_);
   VectorAppend(&frameworks_, append.frameworks_);
+  VectorAppend(&weak_frameworks_, append.weak_frameworks_);
   VectorAppend(&framework_dirs_, append.framework_dirs_);
   VectorAppend(&include_dirs_, append.include_dirs_);
   VectorAppend(&inputs_, append.inputs_);

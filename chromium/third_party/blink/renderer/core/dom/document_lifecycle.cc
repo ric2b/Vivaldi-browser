@@ -30,6 +30,7 @@
 
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 
+#include "base/notreached.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 
@@ -304,7 +305,7 @@ bool DocumentLifecycle::CanRewindTo(LifecycleState next_state) const {
   if (StateTransitionDisallowed())
     return false;
 
-  // This transition is bogus, but we've whitelisted it anyway.
+  // This transition is bogus, but we've allowed it anyway.
   if (g_deprecated_transition_stack &&
       state_ == g_deprecated_transition_stack->From() &&
       next_state == g_deprecated_transition_stack->To())

@@ -61,13 +61,31 @@
 
 namespace blink {
 
+// static
+Frame* Frame::ResolveFrame(const base::UnguessableToken& frame_token) {
+  if (!frame_token)
+    return nullptr;
+
+  // The frame token could refer to either a RemoteFrame or a LocalFrame, so
+  // need to check both.
+  auto* remote = RemoteFrame::FromFrameToken(frame_token);
+  if (remote)
+    return remote;
+
+  auto* local = LocalFrame::FromFrameToken(frame_token);
+  if (local)
+    return local;
+
+  return nullptr;
+}
+
 Frame::~Frame() {
   InstanceCounters::DecrementCounter(InstanceCounters::kFrameCounter);
   DCHECK(!owner_);
   DCHECK(IsDetached());
 }
 
-void Frame::Trace(Visitor* visitor) {
+void Frame::Trace(Visitor* visitor) const {
   visitor->Trace(tree_node_);
   visitor->Trace(page_);
   visitor->Trace(owner_);
@@ -96,7 +114,7 @@ void Frame::Detach(FrameDetachType type) {
   if (!client_)
     return;
 
-  client_->SetOpener(nullptr);
+  SetOpener(nullptr);
   // After this, we must no longer talk to the client since this clears
   // its owning reference back to our owning LocalFrame.
   client_->Detached(type);
@@ -388,6 +406,27 @@ void Frame::ScheduleFormSubmission(FrameScheduler* scheduler,
 
 void Frame::CancelFormSubmission() {
   form_submit_navigation_task_.Cancel();
+}
+
+bool Frame::IsFormSubmissionPending() {
+  return form_submit_navigation_task_.IsActive();
+}
+
+void Frame::FocusPage(LocalFrame* originating_frame) {
+  // We only allow focus to move to the |frame|'s page when the request comes
+  // from a user gesture. (See https://bugs.webkit.org/show_bug.cgi?id=33389.)
+  if (originating_frame &&
+      LocalFrame::HasTransientUserActivation(originating_frame)) {
+    // Ask the broswer process to focus the page.
+    GetPage()->GetChromeClient().FocusPage();
+
+    // Tattle on the frame that called |window.focus()|.
+    originating_frame->GetLocalFrameHostRemote().DidCallFocus();
+  }
+
+  // Always report the attempt to focus the page to the Chrome client for
+  // testing purposes (i.e. see WebViewTest.FocusExistingFrameOnNavigate()).
+  GetPage()->GetChromeClient().DidFocusPage();
 }
 
 STATIC_ASSERT_ENUM(FrameDetachType::kRemove,

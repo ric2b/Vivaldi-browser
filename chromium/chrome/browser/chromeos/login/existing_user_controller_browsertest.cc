@@ -44,6 +44,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/terms_of_service_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/tpm_error_screen_handler.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chromeos/constants/chromeos_switches.h"
@@ -836,8 +837,7 @@ class ExistingUserControllerActiveDirectoryTest
     policies.Set(policy::key::kDisableAuthNegotiateCnameLookup,
                  policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                  policy::POLICY_SOURCE_CLOUD,
-                 std::make_unique<base::Value>(!enable_dns_cname_lookup),
-                 nullptr);
+                 base::Value(!enable_dns_cname_lookup), nullptr);
     base::RunLoop run_loop;
     GetKerberosFilesHandler()->SetFilesChangedForTesting(
         run_loop.QuitClosure());
@@ -1099,14 +1099,12 @@ IN_PROC_BROWSER_TEST_F(ExistingUserControllerAuthFailureTest,
 IN_PROC_BROWSER_TEST_F(ExistingUserControllerAuthFailureTest, TpmError) {
   SetUpStubAuthenticatorAndAttemptLogin(AuthFailure::TPM_ERROR);
 
-  OobeScreenWaiter(OobeScreen::SCREEN_TPM_ERROR).Wait();
+  OobeScreenWaiter(TpmErrorView::kScreenId).Wait();
+  EXPECT_TRUE(ash::LoginScreenTestApi::IsOobeDialogVisible());
 
   EXPECT_EQ(0, FakePowerManagerClient::Get()->num_request_restart_calls());
 
-  test::OobeJS().ExpectVisiblePath({"tpm-error-message"});
-  test::OobeJS().ExpectVisiblePath({"tpm-restart-button"});
-  test::OobeJS().Evaluate(
-      "document.getElementById('tpm-restart-button').click()");
+  test::OobeJS().ClickOnPath({"tpm-error-message", "restartButton"});
 
   EXPECT_EQ(1, FakePowerManagerClient::Get()->num_request_restart_calls());
 }

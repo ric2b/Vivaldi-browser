@@ -8,8 +8,6 @@ jumbo_static_library("core") {
   sources = [
     "autofill_card_validation.cc",
     "autofill_card_validation.h",
-    "autofill_payment_app.cc",
-    "autofill_payment_app.h",
     "basic_card_response.cc",
     "basic_card_response.h",
     "can_make_payment_query.cc",
@@ -28,8 +26,6 @@ jumbo_static_library("core") {
     "payer_data.h",
     "payment_address.cc",
     "payment_address.h",
-    "payment_app.cc",
-    "payment_app.h",
     "payment_currency_amount.cc",
     "payment_currency_amount.h",
     "payment_details.cc",
@@ -46,8 +42,11 @@ jumbo_static_library("core") {
     "payment_method_data.h",
     "payment_prefs.cc",
     "payment_prefs.h",
+    "payment_request_base_delegate.h",
     "payment_request_data_util.cc",
     "payment_request_data_util.h",
+    "payment_request_delegate.cc",
+    "payment_request_delegate.h",
     "payment_shipping_option.cc",
     "payment_shipping_option.h",
     "payments_experimental_features.cc",
@@ -63,8 +62,6 @@ jumbo_static_library("core") {
       "payment_options.cc",
       "payment_options.h",
       "payment_options_provider.h",
-      "payment_request_base_delegate.h",
-      "payment_request_delegate.h",
       "payment_response.cc",
       "payment_response.h",
       "payments_profile_comparator.cc",
@@ -121,8 +118,6 @@ jumbo_static_library("method_strings") {
 jumbo_static_library("test_support") {
   testonly = true
   sources = [
-    "mock_payment_request_delegate.cc",
-    "mock_payment_request_delegate.h",
     "payments_test_util.cc",
     "payments_test_util.h",
     "test_payment_manifest_downloader.cc",
@@ -166,7 +161,6 @@ jumbo_source_set("unit_tests") {
 
   if (!is_android) {
     sources += [
-      "autofill_payment_app_unittest.cc",
       "basic_card_response_unittest.cc",
       "payment_address_unittest.cc",
       "payment_options_unittest.cc",

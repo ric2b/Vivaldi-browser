@@ -9,6 +9,7 @@
 
 #include "base/callback.h"
 #include "base/callback_list.h"
+#include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 
 class Profile;
@@ -41,14 +42,19 @@ class TestWebAppProvider : public WebAppProvider {
   // using the subsystems.
   static TestWebAppProvider* Get(Profile* profile);
 
+  explicit TestWebAppProvider(Profile* profile);
+  ~TestWebAppProvider() override;
+
   // |run_subsystem_startup_tasks| is true by default as browser test clients
   // will generally want to construct their TestWebAppProvider to behave as it
   // would in a production browser.
-  explicit TestWebAppProvider(Profile* profile,
-                              bool run_subsystem_startup_tasks = true);
-  ~TestWebAppProvider() override;
+  //
+  // |run_subsystem_startup_tasks| is false by default for TestWebAppProvider
+  // if it's a part of TestingProfile (see BuildDefault() method above).
+  void SetRunSubsystemStartupTasks(bool run_subsystem_startup_tasks);
 
   void SetRegistrar(std::unique_ptr<AppRegistrar> registrar);
+  void SetRegistryController(std::unique_ptr<AppRegistryController> controller);
   void SetFileHandlerManager(
       std::unique_ptr<FileHandlerManager> file_handler_manager);
   void SetInstallManager(std::unique_ptr<WebAppInstallManager> install_manager);
@@ -71,7 +77,7 @@ class TestWebAppProvider : public WebAppProvider {
   // If true, when Start()ed the TestWebAppProvider will call
   // WebAppProvider::StartImpl() and fire startup tasks like a real
   // WebAppProvider.
-  const bool run_subsystem_startup_tasks_;
+  bool run_subsystem_startup_tasks_ = true;
 };
 
 // Used in BrowserTests to ensure that the WebAppProvider that is create on

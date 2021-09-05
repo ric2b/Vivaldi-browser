@@ -11,8 +11,8 @@
 #include "chrome/browser/ui/ash/tablet_mode_page_behavior.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
-#include "chrome/browser/ui/exclusive_access/fullscreen_controller_test.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view_ash.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -23,6 +23,7 @@
 #include "chrome/browser/ui/views/web_apps/web_app_frame_toolbar_view.h"
 #include "chrome/browser/ui/views/web_apps/web_app_menu_button.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
+#include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test.h"
@@ -210,8 +211,10 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeControllerAshWebAppBrowserTest, Layout) {
 
 // Verify the immersive mode status is as expected in tablet mode (titlebars are
 // autohidden in tablet mode).
+
+// Crashes on Linux Chromium OS ASan LSan Tests.  http://crbug.com/1091606
 IN_PROC_BROWSER_TEST_P(ImmersiveModeControllerAshWebAppBrowserTest,
-                       ImmersiveModeStatusTabletMode) {
+                       DISABLED_ImmersiveModeStatusTabletMode) {
   LaunchAppBrowser();
   ASSERT_FALSE(controller()->IsEnabled());
 
@@ -328,10 +331,8 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeControllerAshWebAppBrowserTest,
   VerifyButtonsInImmersiveMode(frame_view);
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    ImmersiveModeControllerAshWebAppBrowserTest,
-    ::testing::Values(
-        web_app::ControllerType::kHostedAppController,
-        web_app::ControllerType::kUnifiedControllerWithBookmarkApp,
-        web_app::ControllerType::kUnifiedControllerWithWebApp));
+INSTANTIATE_TEST_SUITE_P(All,
+                         ImmersiveModeControllerAshWebAppBrowserTest,
+                         ::testing::Values(web_app::ProviderType::kBookmarkApps,
+                                           web_app::ProviderType::kWebApps),
+                         web_app::ProviderTypeParamToString);

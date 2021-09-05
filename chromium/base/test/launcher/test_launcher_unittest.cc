@@ -11,6 +11,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/process/launch.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/test/launcher/test_launcher.h"
 #include "base/test/launcher/test_launcher_test_utils.h"
 #include "base/test/launcher/unit_test_launcher.h"
@@ -761,6 +762,40 @@ TEST_F(UnitTestLauncherDelegateTester, RunMockTests) {
       iteration_val, "MockUnitTests.CrashTest", "CRASH", 0u));
   EXPECT_TRUE(test_launcher_utils::ValidateTestResult(
       iteration_val, "MockUnitTests.NoRunTest", "NOTRUN", 0u));
+}
+
+// Validate GetTestOutputSnippetTest assigns correct output snippet.
+TEST(TestLauncherTools, GetTestOutputSnippetTest) {
+  const std::string output =
+      "[ RUN      ] TestCase.FirstTest\n"
+      "[       OK ] TestCase.FirstTest (0 ms)\n"
+      "Post first test output\n"
+      "[ RUN      ] TestCase.SecondTest\n"
+      "[  FAILED  ] TestCase.SecondTest (0 ms)\n"
+      "Post second test output";
+  TestResult result;
+
+  // test snippet of a successful test
+  result.full_name = "TestCase.FirstTest";
+  result.status = TestResult::TEST_SUCCESS;
+  EXPECT_EQ(GetTestOutputSnippet(result, output),
+            "[ RUN      ] TestCase.FirstTest\n"
+            "[       OK ] TestCase.FirstTest (0 ms)\n");
+
+  // test snippet of a failure on exit tests should include output
+  // after test concluded, but not subsequent tests output.
+  result.status = TestResult::TEST_FAILURE_ON_EXIT;
+  EXPECT_EQ(GetTestOutputSnippet(result, output),
+            "[ RUN      ] TestCase.FirstTest\n"
+            "[       OK ] TestCase.FirstTest (0 ms)\n"
+            "Post first test output\n");
+
+  // test snippet of a failed test
+  result.full_name = "TestCase.SecondTest";
+  result.status = TestResult::TEST_FAILURE;
+  EXPECT_EQ(GetTestOutputSnippet(result, output),
+            "[ RUN      ] TestCase.SecondTest\n"
+            "[  FAILED  ] TestCase.SecondTest (0 ms)\n");
 }
 
 }  // namespace

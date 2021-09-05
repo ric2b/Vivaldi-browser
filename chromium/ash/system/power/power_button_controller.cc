@@ -5,6 +5,7 @@
 #include "ash/system/power/power_button_controller.h"
 
 #include <limits>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -391,9 +392,8 @@ void PowerButtonController::OnBacklightsForcedOffChanged(bool forced_off) {
   DismissMenu();
 }
 
-void PowerButtonController::OnScreenStateChanged(
-    BacklightsForcedOffSetter::ScreenState screen_state) {
-  if (screen_state != BacklightsForcedOffSetter::ScreenState::ON)
+void PowerButtonController::OnScreenStateChanged(ScreenState screen_state) {
+  if (screen_state != ScreenState::ON)
     DismissMenu();
 }
 
@@ -439,7 +439,7 @@ void PowerButtonController::StartPowerMenuAnimation() {
 
   if (!menu_widget_)
     menu_widget_ = CreateMenuWidget();
-  menu_widget_->SetContentsView(new PowerButtonMenuScreenView(
+  menu_widget_->SetContentsView(std::make_unique<PowerButtonMenuScreenView>(
       power_button_position_, power_button_offset_percentage_,
       base::BindRepeating(&PowerButtonController::SetShowMenuAnimationDone,
                           base::Unretained(this))));

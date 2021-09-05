@@ -389,6 +389,12 @@ HRESULT FakeOSUserManager::ModifyUserAccessWithLogonHours(
   return S_OK;
 }
 
+HRESULT FakeOSUserManager::SetDefaultPasswordChangePolicies(
+    const wchar_t* domain,
+    const wchar_t* username) {
+  return S_OK;
+}
+
 FakeOSUserManager::UserInfo::UserInfo(const wchar_t* domain,
                                       const wchar_t* password,
                                       const wchar_t* fullname,
@@ -535,7 +541,15 @@ bool FakeScopedLsaPolicy::PrivateDataExists(const wchar_t* key) {
   return private_data().count(key) != 0;
 }
 
-HRESULT FakeScopedLsaPolicy::AddAccountRights(PSID sid, const wchar_t* right) {
+HRESULT FakeScopedLsaPolicy::AddAccountRights(
+    PSID sid,
+    const std::vector<base::string16>& rights) {
+  return S_OK;
+}
+
+HRESULT FakeScopedLsaPolicy::RemoveAccountRights(
+    PSID sid,
+    const std::vector<base::string16>& rights) {
   return S_OK;
 }
 
@@ -584,9 +598,8 @@ HRESULT FakeScopedUserProfile::SaveAccountInfo(const base::Value& properties) {
   base::string16 token_handle;
   base::string16 last_successful_online_login_millis;
 
-  HRESULT hr = ExtractAssociationInformation(
-      properties, &sid, &id, &email, &token_handle,
-      &last_successful_online_login_millis);
+  HRESULT hr = ExtractAssociationInformation(properties, &sid, &id, &email,
+                                             &token_handle);
   if (FAILED(hr))
     return hr;
 
@@ -1145,6 +1158,70 @@ HRESULT FakeEventLogsUploadManager::GetUploadStatus() {
 
 uint64_t FakeEventLogsUploadManager::GetNumLogsUploaded() {
   return num_event_logs_uploaded_;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+FakeUserPoliciesManager::FakeUserPoliciesManager(bool cloud_policies_enabled)
+    : original_manager_(*GetInstanceStorage()) {
+  *GetInstanceStorage() = this;
+  SetCloudPoliciesEnabledForTesting(cloud_policies_enabled);
+}
+
+FakeUserPoliciesManager::~FakeUserPoliciesManager() {
+  *GetInstanceStorage() = original_manager_;
+}
+
+HRESULT FakeUserPoliciesManager::FetchAndStoreCloudUserPolicies(
+    const base::string16& sid,
+    const std::string& access_token) {
+  ++num_times_fetch_called_;
+  fetch_status_ =
+      original_manager_->FetchAndStoreCloudUserPolicies(sid, access_token);
+  return fetch_status_;
+}
+
+void FakeUserPoliciesManager::SetUserPolicies(const base::string16& sid,
+                                              const UserPolicies& policies) {
+  user_policies_[sid] = policies;
+}
+
+bool FakeUserPoliciesManager::GetUserPolicies(const base::string16& sid,
+                                              UserPolicies* policies) {
+  if (user_policies_.find(sid) != user_policies_.end()) {
+    *policies = user_policies_[sid];
+    return true;
+  }
+
+  return false;
+}
+
+int FakeUserPoliciesManager::GetNumTimesFetchAndStoreCalled() const {
+  return num_times_fetch_called_;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+FakeDevicePoliciesManager::FakeDevicePoliciesManager(
+    bool cloud_policies_enabled)
+    : original_manager_(*GetInstanceStorage()) {
+  *GetInstanceStorage() = this;
+  UserPoliciesManager::Get()->SetCloudPoliciesEnabledForTesting(
+      cloud_policies_enabled);
+}
+
+FakeDevicePoliciesManager::~FakeDevicePoliciesManager() {
+  *GetInstanceStorage() = original_manager_;
+}
+
+void FakeDevicePoliciesManager::SetDevicePolicies(
+    const DevicePolicies& policies) {
+  device_policies_ = policies;
+}
+
+void FakeDevicePoliciesManager::GetDevicePolicies(
+    DevicePolicies* device_policies) {
+  *device_policies = device_policies_;
 }
 
 }  // namespace credential_provider

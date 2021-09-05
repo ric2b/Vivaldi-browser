@@ -21,7 +21,6 @@ struct Manifest;
 namespace content {
 
 class RenderFrameHost;
-class RenderFrameHostImpl;
 
 // ManifestManagerHost is a helper class that allows callers to get the Manifest
 // associated with the main frame of the observed WebContents. It handles the
@@ -48,9 +47,6 @@ class ManifestManagerHost
       mojo::PendingAssociatedReceiver<blink::mojom::ManifestUrlChangeObserver>
           receiver);
 
-  static ManifestManagerHost* GetOrCreateForCurrentDocument(
-      RenderFrameHostImpl* rfh);
-
  private:
   explicit ManifestManagerHost(RenderFrameHost* render_frame_host);
 
@@ -59,6 +55,8 @@ class ManifestManagerHost
   using CallbackMap = base::IDMap<std::unique_ptr<GetManifestCallback>>;
 
   blink::mojom::ManifestManager& GetManifestManager();
+
+  void DispatchPendingCallbacks();
   void OnConnectionError();
 
   void OnRequestManifestResponse(int request_id,

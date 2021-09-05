@@ -6,9 +6,10 @@ package org.chromium.android_webview.test;
 
 import android.net.Uri;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
-import android.support.test.filters.SmallTest;
 import android.webkit.JavascriptInterface;
+
+import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -1011,7 +1012,7 @@ public class JsJavaInteractionTest {
                 javascriptInterfaceQueue.add(message);
             }
         }, "javaBridge");
-        addDocumentStartJavascriptOnUiThread(
+        addDocumentStartJavaScriptOnUiThread(
                 mAwContents, "javaBridge.send('" + HELLO + "');", new String[] {"*"});
 
         loadUrlFromPath(HELLO_WORLD_HTML);
@@ -1026,7 +1027,7 @@ public class JsJavaInteractionTest {
     @Feature({"AndroidWebView", "JsJavaInteraction"})
     public void testDocumentStartJavaScript_jsObjectShouldBeAvaliable() throws Throwable {
         addWebMessageListenerOnUiThread(mAwContents, JS_OBJECT_NAME, new String[] {"*"}, mListener);
-        addDocumentStartJavascriptOnUiThread(
+        addDocumentStartJavaScriptOnUiThread(
                 mAwContents, JS_OBJECT_NAME + ".postMessage('" + HELLO + "');", new String[] {"*"});
 
         String url = loadUrlFromPath(HELLO_WORLD_HTML);
@@ -1045,7 +1046,7 @@ public class JsJavaInteractionTest {
     @MediumTest
     @Feature({"AndroidWebView", "JsJavaInteraction"})
     public void testDocumentStartJavaScript_runBeforeUserScript() throws Throwable {
-        addDocumentStartJavascriptOnUiThread(mAwContents,
+        addDocumentStartJavaScriptOnUiThread(mAwContents,
                 JS_OBJECT_NAME + ".postMessage('" + HELLO + "1');", new String[] {"*"});
         addWebMessageListenerOnUiThread(mAwContents, JS_OBJECT_NAME, new String[] {"*"}, mListener);
 
@@ -1071,9 +1072,9 @@ public class JsJavaInteractionTest {
     @Feature({"AndroidWebView", "JsJavaInteraction"})
     public void testDocumentStartJavaScript_multipleScripts() throws Throwable {
         addWebMessageListenerOnUiThread(mAwContents, JS_OBJECT_NAME, new String[] {"*"}, mListener);
-        addDocumentStartJavascriptOnUiThread(mAwContents,
+        addDocumentStartJavaScriptOnUiThread(mAwContents,
                 JS_OBJECT_NAME + ".postMessage('" + HELLO + "0');", new String[] {"*"});
-        addDocumentStartJavascriptOnUiThread(mAwContents,
+        addDocumentStartJavaScriptOnUiThread(mAwContents,
                 JS_OBJECT_NAME + ".postMessage('" + HELLO + "1');", new String[] {"*"});
 
         String url = loadUrlFromPath(HELLO_WORLD_HTML);
@@ -1095,12 +1096,12 @@ public class JsJavaInteractionTest {
     @Feature({"AndroidWebView", "JsJavaInteraction"})
     public void testDocumentStartJavaScript_callAgainAfterPageLoad() throws Throwable {
         addWebMessageListenerOnUiThread(mAwContents, JS_OBJECT_NAME, new String[] {"*"}, mListener);
-        addDocumentStartJavascriptOnUiThread(mAwContents,
+        addDocumentStartJavaScriptOnUiThread(mAwContents,
                 JS_OBJECT_NAME + ".postMessage('" + HELLO + "0');", new String[] {"*"});
 
         String url = loadUrlFromPath(HELLO_WORLD_HTML);
 
-        addDocumentStartJavascriptOnUiThread(mAwContents,
+        addDocumentStartJavaScriptOnUiThread(mAwContents,
                 JS_OBJECT_NAME + ".postMessage('" + HELLO + "1');", new String[] {"*"});
         TestWebMessageListener.Data data = mListener.waitForOnPostMessage();
 
@@ -1129,7 +1130,7 @@ public class JsJavaInteractionTest {
             throws Throwable {
         // With a standard origin rule.
         final String testObjectName = "test";
-        addDocumentStartJavascriptOnUiThread(mAwContents, "let " + testObjectName + " = {};",
+        addDocumentStartJavaScriptOnUiThread(mAwContents, "let " + testObjectName + " = {};",
                 new String[] {"https://www.example.com:443"});
 
         Assert.assertTrue(didScriptRunWhenLoading("https://www.example.com", testObjectName));
@@ -1143,7 +1144,7 @@ public class JsJavaInteractionTest {
 
         // Match all the origins.
         final String testObjectName2 = testObjectName + "2";
-        addDocumentStartJavascriptOnUiThread(
+        addDocumentStartJavaScriptOnUiThread(
                 mAwContents, "let " + testObjectName2 + " = {};", new String[] {"*"});
 
         Assert.assertTrue(didScriptRunWhenLoading("https://www.example.com", testObjectName2));
@@ -1164,7 +1165,7 @@ public class JsJavaInteractionTest {
         // Wrong origin rule.
         final String testObjectName5 = testObjectName + "5";
         try {
-            addDocumentStartJavascriptOnUiThread(mAwContents, "let " + testObjectName5 + " = {};",
+            addDocumentStartJavaScriptOnUiThread(mAwContents, "let " + testObjectName5 + " = {};",
                     new String[] {"https://www.example.com/index.html"});
             Assert.fail("You cannot use a full URL for allowedOriginRules.");
         } catch (RuntimeException e) {
@@ -1185,7 +1186,7 @@ public class JsJavaInteractionTest {
                 + "}";
         // Since we are matching both origins, the script will run in both iframe and main frame,
         // but it will send message in only iframe.
-        addDocumentStartJavascriptOnUiThread(mAwContents, script, new String[] {"*"});
+        addDocumentStartJavaScriptOnUiThread(mAwContents, script, new String[] {"*"});
 
         final String frameUrl = mTestServer.getURL(HELLO_WORLD_HTML);
         final String html = createCrossOriginAccessTestPageHtml(frameUrl);
@@ -1218,7 +1219,7 @@ public class JsJavaInteractionTest {
             // Since we are matching both origins, the script will run in both iframe and main
             // frame, but it will send message in only iframe.
             references[i] =
-                    addDocumentStartJavascriptOnUiThread(mAwContents, script, new String[] {"*"});
+                    addDocumentStartJavaScriptOnUiThread(mAwContents, script, new String[] {"*"});
         }
 
         final String url = loadUrlFromPath(HELLO_WORLD_HTML);
@@ -1252,7 +1253,7 @@ public class JsJavaInteractionTest {
 
         final String script = JS_OBJECT_NAME + ".postMessage('" + HELLO + "');";
         ScriptReference reference =
-                addDocumentStartJavascriptOnUiThread(mAwContents, script, new String[] {"*"});
+                addDocumentStartJavaScriptOnUiThread(mAwContents, script, new String[] {"*"});
 
         final String url = loadUrlFromPath(HELLO_WORLD_HTML);
 
@@ -1334,10 +1335,10 @@ public class JsJavaInteractionTest {
                 + "</body></html>";
     }
 
-    private static ScriptReference addDocumentStartJavascriptOnUiThread(
+    private static ScriptReference addDocumentStartJavaScriptOnUiThread(
             final AwContents awContents, final String script, final String[] allowedOriginRules) {
         return TestThreadUtils.runOnUiThreadBlockingNoException(
-                () -> awContents.addDocumentStartJavascript(script, allowedOriginRules));
+                () -> awContents.addDocumentStartJavaScript(script, allowedOriginRules));
     }
 
     private static void addWebMessageListenerOnUiThread(final AwContents awContents,

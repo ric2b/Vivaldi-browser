@@ -1,3 +1,7 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 load('//lib/builders.star', 'cpu', 'goma', 'os')
 load('//lib/try.star', 'try_')
 load('//project.star', 'settings')
@@ -18,6 +22,7 @@ try_.set_defaults(
     name = name,
 ) for name in (
     'tryserver.blink',
+    'tryserver.chromium',
     'tryserver.chromium.android',
     'tryserver.chromium.angle',
     'tryserver.chromium.chromiumos',
@@ -46,6 +51,17 @@ try_.blink_builder(
     ),
 )
 
+try_.chromium_builder(
+    name = 'android-official',
+)
+
+try_.chromium_builder(
+    name = 'fuchsia-official',
+)
+
+try_.chromium_builder(
+    name = 'linux-official',
+)
 
 try_.chromium_android_builder(
     name = 'android-binary-size',
@@ -54,32 +70,14 @@ try_.chromium_android_builder(
     properties = {
       '$build/binary_size': {
         'analyze_targets': [
-          '//android_webview:system_webview_apk_manifest_expectations',
-          '//android_webview:trichrome_webview_apk_manifest_expectations',
-          '//chrome/android:chrome_modern_public_bundle__base_libs_and_assets_expectations',
-          '//chrome/android:monochrome_public_bundle__base_bundle_module_manifest_expectations',
-          '//chrome/android:monochrome_public_bundle__base_libs_and_assets_expectations',
-          '//chrome/android:monochrome_public_bundle_proguard_expectations',
+          '//chrome/android:validate_expectations',
           '//chrome/android:monochrome_public_minimal_apks',
-          '//chrome/android:trichrome_chrome_bundle__base_bundle_module_manifest_expectations',
-          '//chrome/android:trichrome_chrome_bundle__base_libs_and_assets_expectations',
-          '//chrome/android:trichrome_library_apk_libs_and_assets_expectations',
-          '//chrome/android:trichrome_library_apk_manifest_expectations',
           '//tools/binary_size:binary_size_trybot_py',
         ],
         'compile_targets': [
-          'chrome_modern_public_bundle__base_libs_and_assets_expectations',
-          'monochrome_public_bundle__base_bundle_module_manifest_expectations',
-          'monochrome_public_bundle__base_libs_and_assets_expectations',
-          'monochrome_public_bundle_proguard_expectations',
           'monochrome_public_minimal_apks',
           'monochrome_static_initializers',
-          'system_webview_apk_manifest_expectations',
-          'trichrome_chrome_bundle__base_bundle_module_manifest_expectations',
-          'trichrome_chrome_bundle__base_libs_and_assets_expectations',
-          'trichrome_library_apk_libs_and_assets_expectations',
-          'trichrome_library_apk_manifest_expectations',
-          'trichrome_webview_apk_manifest_expectations'
+          'validate_expectations',
         ],
       },
     },
@@ -117,7 +115,18 @@ try_.chromium_android_builder(
 )
 
 try_.chromium_android_builder(
+    name = 'android-marshmallow-x86-rel',
+    goma_jobs = goma.jobs.J150,
+)
+
+try_.chromium_android_builder(
+    name = 'android-nougat-arm64-rel',
+    goma_jobs = goma.jobs.J150,
+)
+
+try_.chromium_android_builder(
     name = 'android-pie-arm64-dbg',
+    goma_jobs = goma.jobs.J300,
     tryjob = try_.job(
         location_regexp = [
             '.+/[+]/chrome/android/features/vr/.+',
@@ -207,25 +216,6 @@ try_.chromium_chromiumos_builder(
 try_.chromium_chromiumos_builder(
     name = 'chromeos-arm-generic-rel',
     tryjob = try_.job(),
-)
-
-try_.chromium_chromiumos_builder(
-    name = 'chromeos-kevin-compile-rel',
-    tryjob = try_.job(
-        location_regexp = [
-            '.+/[+]/chromeos/CHROMEOS_LKGM',
-        ],
-    ),
-)
-
-try_.chromium_chromiumos_builder(
-    name = 'chromeos-kevin-rel',
-    tryjob = try_.job(
-        location_regexp = [
-            '.+/[+]/build/chromeos/.+',
-            '.+/[+]/build/config/chromeos/.*',
-        ],
-    ),
 )
 
 try_.chromium_chromiumos_builder(
@@ -358,9 +348,14 @@ try_.chromium_linux_builder(
     tryjob = try_.job(),
 )
 
+# The fuchsia_arm64 builder will now run tests as well as compiles.
+# The experiment percentage is used to ramp up the test load while
+# monitoring stability and capacity.  crbug.com/1042511
 try_.chromium_linux_builder(
     name = 'fuchsia_arm64',
-    tryjob = try_.job(),
+    tryjob = try_.job(
+      experiment_percentage=50,
+    ),
 )
 
 try_.chromium_linux_builder(
@@ -484,7 +479,7 @@ try_.chromium_mac_ios_builder(
     name = 'ios-simulator',
     executable = 'recipe:chromium_trybot',
     properties = {
-        'xcode_build_version': '11c29',
+        'xcode_build_version': '11e146',
     },
     tryjob = try_.job(),
 )
@@ -632,4 +627,44 @@ try_.gpu_chromium_win_builder(
             '.+/[+]/ui/gl/.+',
         ],
     ),
+)
+
+# Used for listing chrome trybots in chromium's commit-queue.cfg without also
+# adding them to chromium's cr-buildbucket.cfg. Note that the recipe these
+# builders run allow only known roller accounts when triggered via the CQ.
+def chrome_internal_verifier(
+    *,
+    builder):
+  luci.cq_tryjob_verifier(
+      builder = 'chrome:try/' + builder,
+      cq_group = settings.cq_group,
+      includable_only = True,
+      owner_whitelist = [
+          "googlers",
+          "project-chromium-robot-committers",
+      ],
+  )
+
+chrome_internal_verifier(
+    builder = 'mac-chrome-beta',
+)
+
+chrome_internal_verifier(
+    builder = 'mac-chrome-stable',
+)
+
+chrome_internal_verifier(
+    builder = 'win-chrome-beta',
+)
+
+chrome_internal_verifier(
+    builder = 'win-chrome-stable',
+)
+
+chrome_internal_verifier(
+    builder = 'win64-chrome-beta',
+)
+
+chrome_internal_verifier(
+    builder = 'win64-chrome-stable',
 )

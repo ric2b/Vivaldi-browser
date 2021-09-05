@@ -15,9 +15,11 @@
 #include "build/build_config.h"
 #include "content/child/child_process.h"
 #include "content/common/content_switches_internal.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/sandbox_init.h"
+#include "content/public/utility/content_utility_client.h"
 #include "content/utility/utility_thread_impl.h"
 #include "services/service_manager/sandbox/sandbox.h"
 #include "services/tracing/public/cpp/trace_startup.h"
@@ -31,6 +33,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chromeos/services/ime/ime_sandbox_hook.h"
+#include "chromeos/services/tts/tts_sandbox_hook.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -89,6 +92,7 @@ int UtilityMain(const MainFunctionParams& parameters) {
       sandbox_type == service_manager::SandboxType::kNetwork ||
 #if defined(OS_CHROMEOS)
       sandbox_type == service_manager::SandboxType::kIme ||
+      sandbox_type == service_manager::SandboxType::kTts ||
 #endif  // OS_CHROMEOS
       sandbox_type == service_manager::SandboxType::kAudio ||
       sandbox_type == service_manager::SandboxType::kSpeechRecognition) {
@@ -103,6 +107,8 @@ int UtilityMain(const MainFunctionParams& parameters) {
 #if defined(OS_CHROMEOS)
     else if (sandbox_type == service_manager::SandboxType::kIme)
       pre_sandbox_hook = base::BindOnce(&chromeos::ime::ImePreSandboxHook);
+    else if (sandbox_type == service_manager::SandboxType::kTts)
+      pre_sandbox_hook = base::BindOnce(&chromeos::tts::TtsPreSandboxHook);
 #endif  // OS_CHROMEOS
 
     service_manager::Sandbox::Initialize(
@@ -114,6 +120,8 @@ int UtilityMain(const MainFunctionParams& parameters) {
 #endif
 
   ChildProcess utility_process;
+  GetContentClient()->utility()->PostIOThreadCreated(
+      utility_process.io_task_runner());
   base::RunLoop run_loop;
   utility_process.set_main_thread(
       new UtilityThreadImpl(run_loop.QuitClosure()));

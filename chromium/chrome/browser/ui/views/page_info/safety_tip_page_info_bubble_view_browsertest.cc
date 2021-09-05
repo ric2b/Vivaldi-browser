@@ -33,6 +33,7 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/lookalikes/core/features.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
 #include "components/security_interstitials/core/common_string_util.h"
 #include "components/security_state/core/features.h"
@@ -234,7 +235,8 @@ class SafetyTipPageInfoBubbleViewBrowserTest
               {{"topsites", "true"},
                {"editdistance", "true"},
                {"editdistance_siteengagement", "true"},
-               {"targetembedding", "true"}}}},
+               {"targetembedding", "true"}}},
+             {lookalikes::features::kDetectTargetEmbeddingLookalikes, {}}},
             {});
     }
 
@@ -724,34 +726,6 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        TriggersOnEditDistance) {
   // This domain is an edit distance of one from the top 500.
   const GURL kNavigatedUrl = GetURL("goooglé.com");
-  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
-  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
-  EXPECT_EQ(IsUIShowing(), ui_status() == UIStatus::kEnabledWithAllFeatures);
-}
-
-// Tests that when Safety Tips are enabled, lookalike domains with embedded top
-// domain will trigger Safety Tips.
-IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
-                       TriggersOnTargetEmbedding) {
-  // This domain has google.com embedded.
-  const GURL kNavigatedUrl = GetURL("test-google.com-site.com");
-  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
-
-  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
-  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
-  EXPECT_EQ(IsUIShowing(), ui_status() == UIStatus::kEnabledWithAllFeatures);
-}
-
-// Tests that when Safety Tips are enabled, lookalike domains with embedded
-// engaged domain will trigger Safety Tips.
-IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
-                       TriggersOnHighEngagementTargetEmbedding) {
-  // This domain has foo.com embedded.
-  const GURL kNavigatedUrl = GetURL("test-foo.com-site.com");
-  const GURL kEngagedDomain = GetURL("foo.com");
-  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
-  SetEngagementScore(browser(), kEngagedDomain, kHighEngagement);
-
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_EQ(IsUIShowing(), ui_status() == UIStatus::kEnabledWithAllFeatures);

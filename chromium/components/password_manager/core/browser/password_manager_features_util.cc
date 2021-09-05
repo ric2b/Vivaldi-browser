@@ -4,6 +4,9 @@
 
 #include "components/password_manager/core/browser/password_manager_features_util.h"
 
+#include <algorithm>
+
+#include "base/containers/flat_set.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/values.h"
 #include "components/autofill/core/common/gaia_id_hash.h"
@@ -70,6 +73,20 @@ PasswordForm::Store PasswordStoreFromInt(int value) {
 
 const char kAccountStorageOptedInKey[] = "opted_in";
 const char kAccountStorageDefaultStoreKey[] = "default_store";
+
+// Returns the total number of accounts for which an opt-in to the account
+// storage exists. Used for metrics.
+int GetNumberOfOptedInAccounts(const PrefService* pref_service) {
+  const base::DictionaryValue* global_pref =
+      pref_service->GetDictionary(prefs::kAccountStoragePerAccountSettings);
+  int count = 0;
+  for (const std::pair<std::string, std::unique_ptr<base::Value>>& entry :
+       *global_pref) {
+    if (entry.second->FindBoolKey(kAccountStorageOptedInKey).value_or(false))
+      ++count;
+  }
+  return count;
+}
 
 // Helper class for reading account storage settings for a given account.
 class AccountStorageSettingsReader {
@@ -221,6 +238,11 @@ void OptInToAccountStorage(PrefService* pref_service,
   ScopedAccountStorageSettingsUpdate(pref_service,
                                      GaiaIdHash::FromGaiaId(gaia_id))
       .SetOptedIn();
+
+  // Record the total number of (now) opted-in accounts.
+  base::UmaHistogramExactLinear(
+      "PasswordManager.AccountStorage.NumOptedInAccountsAfterOptIn",
+      GetNumberOfOptedInAccounts(pref_service), 10);
 }
 
 void OptOutOfAccountStorageAndClearSettings(
@@ -241,13 +263,25 @@ void OptOutOfAccountStorageAndClearSettings(
     // opt-out UI was triggered.
     return;
   }
+
+  OptOutOfAccountStorageAndClearSettingsForAccount(pref_service, gaia_id);
+}
+
+void OptOutOfAccountStorageAndClearSettingsForAccount(
+    PrefService* pref_service,
+    const std::string& gaia_id) {
   ScopedAccountStorageSettingsUpdate(pref_service,
                                      GaiaIdHash::FromGaiaId(gaia_id))
       .ClearAllSettings();
+
+  // Record the total number of (still) opted-in accounts.
+  base::UmaHistogramExactLinear(
+      "PasswordManager.AccountStorage.NumOptedInAccountsAfterOptOut",
+      GetNumberOfOptedInAccounts(pref_service), 10);
 }
 
-bool ShouldShowPasswordStorePicker(const PrefService* pref_service,
-                                   const syncer::SyncService* sync_service) {
+bool ShouldShowAccountStorageBubbleUi(const PrefService* pref_service,
+                                      const syncer::SyncService* sync_service) {
   return !sync_service->IsSyncFeatureEnabled() &&
          (IsOptedInForAccountStorage(pref_service, sync_service) ||
           IsUserEligibleForAccountStorage(sync_service));
@@ -291,13 +325,48 @@ void SetDefaultPasswordStore(PrefService* pref_service,
     // but is ultimately harmless - just do nothing here.
     return;
   }
+
   ScopedAccountStorageSettingsUpdate(pref_service,
                                      GaiaIdHash::FromGaiaId(gaia_id))
       .SetDefaultStore(default_store);
+
+  base::UmaHistogramEnumeration("PasswordManager.DefaultPasswordStoreSet",
+                                default_store);
+}
+
+void KeepAccountStorageSettingsOnlyForUsers(
+    PrefService* pref_service,
+    const std::vector<std::string>& gaia_ids) {
+  DCHECK(pref_service);
+
+  // Build a set of hashes of all the Gaia IDs.
+  std::vector<std::string> hashes_to_keep_list;
+  for (const std::string& gaia_id : gaia_ids)
+    hashes_to_keep_list.push_back(GaiaIdHash::FromGaiaId(gaia_id).ToBase64());
+  base::flat_set<std::string> hashes_to_keep(std::move(hashes_to_keep_list));
+
+  // Now remove any settings for account that are *not* in the set of hashes.
+  // DictionaryValue doesn't allow removing elements while iterating, so first
+  // collect all the keys to remove, then actually remove them in a second pass.
+  DictionaryPrefUpdate update(pref_service,
+                              prefs::kAccountStoragePerAccountSettings);
+  std::vector<std::string> keys_to_remove;
+  for (auto kv : update->DictItems()) {
+    if (!hashes_to_keep.contains(kv.first))
+      keys_to_remove.push_back(kv.first);
+  }
+  for (const std::string& key_to_remove : keys_to_remove)
+    update->RemoveKey(key_to_remove);
 }
 
 void ClearAccountStorageSettingsForAllUsers(PrefService* pref_service) {
   DCHECK(pref_service);
+
+  // Record the total number of opted-in accounts before clearing them.
+  base::UmaHistogramExactLinear(
+      "PasswordManager.AccountStorage.ClearedOptInForAllAccounts",
+      GetNumberOfOptedInAccounts(pref_service), 10);
+
   pref_service->ClearPref(prefs::kAccountStoragePerAccountSettings);
 }
 

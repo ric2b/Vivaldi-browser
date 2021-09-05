@@ -5,21 +5,20 @@
 #ifndef UI_BASE_CURSOR_OZONE_BITMAP_CURSOR_FACTORY_OZONE_H_
 #define UI_BASE_CURSOR_OZONE_BITMAP_CURSOR_FACTORY_OZONE_H_
 
-#include <map>
+#include <vector>
 
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/cursor/cursor.h"
-#include "ui/base/cursor/mojom/cursor_type.mojom-forward.h"
-#include "ui/base/ui_base_export.h"
+#include "ui/base/cursor/cursor_factory.h"
 #include "ui/gfx/geometry/point.h"
-#include "ui/ozone/public/cursor_factory_ozone.h"
 
 namespace ui {
 
 // A cursor that is an SkBitmap combined with a gfx::Point hotspot.
-class UI_BASE_EXPORT BitmapCursorOzone
+class COMPONENT_EXPORT(UI_BASE_CURSOR) BitmapCursorOzone
     : public base::RefCounted<BitmapCursorOzone> {
  public:
   BitmapCursorOzone(const SkBitmap& bitmap, const gfx::Point& hotspot);
@@ -45,14 +44,15 @@ class UI_BASE_EXPORT BitmapCursorOzone
   DISALLOW_COPY_AND_ASSIGN(BitmapCursorOzone);
 };
 
-// CursorFactoryOzone implementation for bitmapped cursors.
+// CursorFactory implementation for bitmapped cursors.
 //
 // This is a base class for platforms where PlatformCursor is an SkBitmap
 // combined with a gfx::Point for the hotspot.
 //
 // Subclasses need only implement SetBitmapCursor() as everything else is
 // implemented here.
-class UI_BASE_EXPORT BitmapCursorFactoryOzone : public CursorFactoryOzone {
+class COMPONENT_EXPORT(UI_BASE_CURSOR) BitmapCursorFactoryOzone
+    : public CursorFactory {
  public:
   BitmapCursorFactoryOzone();
   ~BitmapCursorFactoryOzone() override;
@@ -62,26 +62,17 @@ class UI_BASE_EXPORT BitmapCursorFactoryOzone : public CursorFactoryOzone {
       PlatformCursor platform_cursor);
 
   // CursorFactoryOzone:
-  PlatformCursor GetDefaultCursor(mojom::CursorType type) override;
+  base::Optional<PlatformCursor> GetDefaultCursor(
+      mojom::CursorType type) override;
   PlatformCursor CreateImageCursor(const SkBitmap& bitmap,
-                                   const gfx::Point& hotspot,
-                                   float bitmap_dpi) override;
+                                   const gfx::Point& hotspot) override;
   PlatformCursor CreateAnimatedCursor(const std::vector<SkBitmap>& bitmaps,
                                       const gfx::Point& hotspot,
-                                      int frame_delay_ms,
-                                      float bitmap_dpi) override;
+                                      int frame_delay_ms) override;
   void RefImageCursor(PlatformCursor cursor) override;
   void UnrefImageCursor(PlatformCursor cursor) override;
 
  private:
-  // Get cached BitmapCursorOzone for a default cursor.
-  scoped_refptr<BitmapCursorOzone> GetDefaultCursorInternal(
-      mojom::CursorType type);
-
-  // Default cursors are cached & owned by the factory.
-  std::map<mojom::CursorType, scoped_refptr<BitmapCursorOzone>>
-      default_cursors_;
-
   DISALLOW_COPY_AND_ASSIGN(BitmapCursorFactoryOzone);
 };
 

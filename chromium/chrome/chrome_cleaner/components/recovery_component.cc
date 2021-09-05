@@ -17,6 +17,7 @@
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/process/kill.h"
@@ -275,7 +276,7 @@ void RecoveryComponent::FetchOnIOThread() {
   }
 
   base::ScopedClosureRunner delete_file(
-      base::BindOnce(base::IgnoreResult(&base::DeleteFile), crx_file, false));
+      base::BindOnce(base::GetDeleteFileCallback(), crx_file));
 
   if (!SaveHttpResponseDataToFile(crx_file, http_response.get())) {
     LOG(WARNING) << "Failed to save downloaded recovery component";

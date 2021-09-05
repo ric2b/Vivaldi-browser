@@ -6,6 +6,7 @@
 <translation id="1044891598689252897">Сайттар кадимкидей иштейт</translation>
 <translation id="1047726139967079566">Бул баракты кыстарып коюу…</translation>
 <translation id="1049743911850919806">Жашыруун</translation>
+<translation id="105093091697134113">Төмөнкү аккаунттар үчүнчү тараптын сайттарында ачыкка чыгып кеткен же жалган сайтка киргизилген  сырсөздөрдү колдонушат. Аккаунттарыңызды коопсуз сактоо үчүн ал сырсөздөрдү дароо өзгөртүңүз.</translation>
 <translation id="1063454504051558093">Башка сырсөздү колдонуу…</translation>
 <translation id="1066060668811609597">Шайкештирүүнү башкаруу</translation>
 <translation id="1076421457278169141">Код скандалды</translation>
@@ -20,6 +21,7 @@
 <translation id="1176932207622159128">Сүрөт сакталбайт</translation>
 <translation id="1180526666083833456">Бардык түзмөктөрдө шайкештирүү жана жекечелештирүү.</translation>
 <translation id="1181037720776840403">Алып салуу</translation>
+<translation id="1185569544548277362">Жаңы: Chrome демейки серепчиңиз боло алат. <ph name="BEGIN_LINK" />Жөндөөлөрдү ачуу<ph name="END_LINK" /></translation>
 <translation id="1207113853726624428">Жаңы издөө</translation>
 <translation id="1209206284964581585">Азырынча жашыруу</translation>
 <translation id="1219674500290482172">Интернетке туташуу мүмкүн болбой жатат.</translation>
@@ -30,9 +32,11 @@
 <translation id="1272079795634619415">Токтотуу</translation>
 <translation id="1283524564873030414">Акыркы 24 саат</translation>
 <translation id="1285320974508926690">Бул сайт эч качан которулбасын</translation>
+<translation id="1321993286294231467">Сүрөттү сактоодо ката кетти.</translation>
 <translation id="1323735185997015385">Жок кылуу</translation>
 <translation id="132683371494960526">Түпкү куржунду өзгөртүү үчүн эки жолу таптап коюңуз.</translation>
 <translation id="1340643665687018190">Менюну жабуу</translation>
+<translation id="1345319103680304157">Бир да сырсөз уурдалган эмес</translation>
 <translation id="1358214951266274152">Көчүрүп алган шилтеме менен өтүңүз</translation>
 <translation id="1360432990279830238">Аккаунттан чыгып, шайкештирүүнү өчүрөсүзбү?</translation>
 <translation id="1375321115329958930">Сакталган сырсөздөр</translation>
@@ -50,6 +54,8 @@
 <translation id="1509486075633541495">Вебсайтка кирүү</translation>
 <translation id="1509960214886564027">Функциялар көпчүлүк сайттарда туура иштебеши мүмкүн.</translation>
 <translation id="152234381334907219">Эч качан сакталбайт</translation>
+<translation id="1523341279170789507">Бардык cookie файлдарына уруксат берүү</translation>
+<translation id="1535268707340844072">Учурдагы жөндөөлөрүңүзгө байланыштуу айрым сайттар туура эмес иштеши мүмкүн. Бардык сайттардын cookie файлдарын башкаруу үчүн <ph name="BEGIN_LINK" />Cookie файлдардын жөндөөлөрүнө<ph name="END_LINK" /> өтүңүз.</translation>
 <translation id="1540800554400757039">1-дарек</translation>
 <translation id="1545749641540134597">QR кодун скандоо</translation>
 <translation id="1552525382687785070">Шайкештирүү функциясын администраторуңуз өчүрүп койгон</translation>
@@ -62,6 +68,7 @@
 <translation id="1644574205037202324">Таржымал</translation>
 <translation id="1650222530560417226">"Таржымалды сактап баштоо" баскычын басып, JavaScript консолунун бардык өтмөктөрүндөгү мындан кийинки таржымалдарды жана каталарды топтоңуз. Таржымалдар ушул барак жабылып же "Таржымалды сактоону токтотуу" баскычы басылмайынча топтолот (жана эстутумда гана сакталат).</translation>
 <translation id="1657011748321897393">Тармакка туташпай тургандыктан, бөлүшө албай калдыңыз.</translation>
+<translation id="1657641691196698092">Бөгөттөлгөн cookie-файлдары</translation>
 <translation id="165877110639533037">Ачык өтмөктөр жок</translation>
 <translation id="1674504678466460478"><ph name="SOURCE_LANGUAGE" /> тилинен <ph name="TARGET_LANGUAGE" /> тилине</translation>
 <translation id="168715261339224929">Кыстармаларды бардык түзмөктөрүңүздө колдонуу үчүн шайкештирүүнү күйгүзүңүз.</translation>
@@ -99,12 +106,10 @@
 <translation id="2139867232736819575">Көчүрүп алган текстти издеңиз</translation>
 <translation id="2149973817440762519">Кыстарманы түзөтүү</translation>
 <translation id="2175927920773552910">QR коду</translation>
-<translation id="2179182049312275900">Шайкештирүүнү каалаган убакта жөндөөлөргө өтүп, күйгүзүп койсоңуз болот.</translation>
 <translation id="2198757192731523470">Издөө, жарнама жана башка Google кызматтарын жекечелештирүү үчүн, Google таржымалыңызды колдонушу мүмкүн.</translation>
 <translation id="2218443599109088993">Кичирейтүү</translation>
 <translation id="2230173723195178503">Веб баракча жүктөлдү</translation>
 <translation id="2239626343334228536">Серептөө дайындары тазаланууда…</translation>
-<translation id="2245545499420671379">Жашыруун режимде үчүнчү тараптын cookie файлдарын бөгөттөө</translation>
 <translation id="2257567812274161158">Шайкештирүү иштебей жатат.</translation>
 <translation id="225943865679747347">Ката коду: <ph name="ERROR_CODE" /></translation>
 <translation id="2267753748892043616">Аккаунт кошуу</translation>
@@ -117,6 +122,9 @@
 <translation id="2359043044084662842">Которуу</translation>
 <translation id="2359808026110333948">Улантуу</translation>
 <translation id="2360196772093551345">Мобилдик версиясы керек</translation>
+<translation id="236977714248711277">Серептөөнү ыңгайлаштыруу, мисалы, аккаунттан чыгарбоо же арабадагы сатып алган нерселериңизди эстеп калуу үчүн сайттар cookie файлдарын колдоно алышат
+
+Сайттар жарнамаларды жекелештирүү үчүн башка сайттардагы серептөө аракеттериңизди көрүү үчүн cookie файлдарын колдоно алышпайт.</translation>
 <translation id="2379896346847637748">Жаңы терезеде ачуу</translation>
 <translation id="2381405137052800939">Негизги параметрлер</translation>
 <translation id="2386793615875593361">1 тандалды</translation>
@@ -129,10 +137,11 @@
 <translation id="2529021024822217800">Баарын ачуу</translation>
 <translation id="2562041823070056534"><ph name="DEVICE_NAME" /> түзмөгүнө жөнөтүлүүдө…</translation>
 <translation id="2570206273416014374">Дарек тилкесиндеги жана издөө кутучасындагы издөөлөрдү жана айрым cookie файлдарын демейки издөө тутумуна жөнөтөт.</translation>
-<translation id="2572712655377361602">Түзмөктүн саясаты боюнча сүрөттөрүңүздү колдонуу мүмкүнчүлүгү бөгөттөлгөн</translation>
 <translation id="2578571896248130439">Веб-баракчаны жөнөтүңүз</translation>
 <translation id="2584132361465095047">Аккаунт кошуу…</translation>
+<translation id="2600682495497606169">Сайттын cookie файлдарын өчүрүү</translation>
 <translation id="2625189173221582860">Сырсөз көчүрүлдү</translation>
+<translation id="2647269890314209800">Колдонулган кукилер</translation>
 <translation id="2648803196158606475">Окулгандарды жок кылуу</translation>
 <translation id="2653659639078652383">Тапшыруу</translation>
 <translation id="2690858294534178585">Камера колдонулууда</translation>
@@ -174,12 +183,16 @@
 <translation id="2989805286512600854">Жаңы өтмөктө ачуу</translation>
 <translation id="3037605927509011580">Атаңдын көрү!</translation>
 <translation id="3112556859945124369">Белгилөө…</translation>
+<translation id="3131206671572504478">Баарын бөгөттөө</translation>
 <translation id="3153862085237805241">Карточканы сактоо</translation>
 <translation id="3157684681743766797">Баарын белгилөө…</translation>
 <translation id="3161291298470460782">Ушуну менен, аккаунтуңуздан чыгарыласыз, шайкештирүү өчүрүлүп, Chrome'догу бардык дайындар бул түзмөктөн тазаланат. Шайкештирилген маалымат Google аккаунтуңузда сакталып турат.</translation>
 <translation id="3175081911749765310">Желе кызмт</translation>
 <translation id="3178650076442119961">Акыркы аракеттер: бүгүн</translation>
 <translation id="3181954750937456830">Коопсуз серептөө (сизди жана түзмөгүңүздү кооптуу сайттардан коргойт)</translation>
+<translation id="3196681740617426482">Серептөөнү ыңгайлаштыруу, мисалы, аккаунттан чыгарбоо же арабадагы сатып алган нерселериңизди эстеп калуу үчүн сайттар cookie файлдарын колдоно алышат.
+
+Жашыруун режимде сайттар жарнамаларды жекелештирүү максатында башка сайттардагы серептөө аракеттериңизди көрүү үчүн cookie файлдарын колдоно алышпайт.</translation>
 <translation id="3207960819495026254">Кыстармаланды</translation>
 <translation id="3224641773458703735">Сырсөздөрдү экспорттоо үчүн, адегенде, түзмөгүңүздөгү өткөрүүчү кодду жөндөп алышыңыз керек.</translation>
 <translation id="3240426699337459095">Шилтеме көчүрүлдү</translation>
@@ -230,6 +243,7 @@
 <translation id="3789841737615482174">Орнотуу</translation>
 <translation id="3803696231112616155">Бул сайтты которууну сунуштоо</translation>
 <translation id="385051799172605136">Артка</translation>
+<translation id="3892144330757387737">Таржымалыңызды ушул жерден табасыз</translation>
 <translation id="3897092660631435901">Меню</translation>
 <translation id="3915450441834151894">Сайт тууралуу маалымат</translation>
 <translation id="3922310737605261887">Көчүрүп алган текстти издеңиз</translation>
@@ -246,13 +260,13 @@
 <translation id="4038354071007134711">Файлды бул түзмөктөгү бир дагы колднмо ача албйт.</translation>
 <translation id="4042870976416480368">Барактан табуу</translation>
 <translation id="4049507953662678203">Тармакка туташып турганыңызды текшерип, кайталап көрүңүз.</translation>
-<translation id="4071530748369333746">Шайкештештирүү жокко чыгарылсынбы?</translation>
 <translation id="4082688844002261427">Издөөнү, жарнамаларды жана башка кызматтарды жекечелештирүү үчүн серептөө таржымалыңыз кандайча пайдаланыларын көзөмөлдөңүз</translation>
 <translation id="408404951701638773">Издөө тилкесине өтүү оңой болуп калды</translation>
 <translation id="411254640334432676">Жүктөлүп алынбай калды.</translation>
 <translation id="4112644173421521737">Издөө</translation>
 <translation id="4121993058175073134">Накта экспорт дайындарын жөнөтүү үчүн, электрондук почта аккаунтуңузду Жөндөөлөр колдонмосунан конфигурациялаңыз.</translation>
 <translation id="4124987746317609294">Убакыт аралыгы</translation>
+<translation id="4152011295694446843">Кыстармаларыңызды ушул жерден табасыз</translation>
 <translation id="4172051516777682613">Ар дайым көрсөтүлсүн</translation>
 <translation id="418156467088430727">Оффлайн версиясын жаңы өтмөктөн көрүү</translation>
 <translation id="4181841719683918333">Тилдер</translation>
@@ -260,6 +274,7 @@
 <translation id="4263576668337963058">Жеткиликтүү барак аракеттерин көрсөтүү</translation>
 <translation id="4272631900155121838">QR кодун скандоо үчүн жөндөөлөрдөн камераны иштетиңиз</translation>
 <translation id="4276041135170112053">Азыр оңдоо.</translation>
+<translation id="4277990410970811858">Коопсуз серептөө</translation>
 <translation id="4281844954008187215">Тейлөө шарттары</translation>
 <translation id="430793432425771671">Баарын шайкештештирүү</translation>
 <translation id="430967081421617822">Бардык мезгил</translation>
@@ -271,8 +286,10 @@
 <translation id="4389019817280890563">Тилди өзгөртүү үчүн таптап коюңуз.</translation>
 <translation id="441868831736628555">Купуялык эскертүүсү</translation>
 <translation id="4454246407045105932">Тил кошуу</translation>
+<translation id="4469418912670346607">Жөндөөнү улантуу</translation>
 <translation id="4476574785019001431">Жөндөөлөр</translation>
 <translation id="4496373720959965247">Өтмөктөрдү кошуп, барактарды которуштуруңуз</translation>
+<translation id="4502566650163919158">Азыр текшерүү</translation>
 <translation id="4508750114462689118">Кирүүгө үндөгөн жарнама жабылсын</translation>
 <translation id="4526249700380860531">Сакталган сырсөздөрдү <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> дарегинен көрүп жана башкарыңыз</translation>
 <translation id="4536418791685807335">Кайра кирип көрүңүз.</translation>
@@ -297,12 +314,15 @@
 
 Бул жөндөөнү өзгөртүү үчүн <ph name="BEGIN_LINK" />шайкештирүүнү баштапкы абалга келтириңиз<ph name="END_LINK" /></translation>
 <translation id="4805759445554688327">Карта номери жараксыз</translation>
+<translation id="4808744395915275922">Жаңыртуулар</translation>
 <translation id="4818522717893377262">Тил кошуу…</translation>
 <translation id="481968316161811770">Кукилер, сайт дайындары</translation>
+<translation id="4826218269716039351">Үчүнчү тараптыкы бөгөттөлгөн</translation>
 <translation id="4833786495304741580">Колдонуу статистикасын жана каталар жөнүндө кабарларды Google'га автоматтык түрдө жөнөтүп турат.</translation>
 <translation id="4840495572919996524">Кыстармаларыңыз, таржымалыңыз, сырсөздөрүңүз жана башкалар мындан ары Google аккаунтуңузга шайкештирилбейт.</translation>
 <translation id="4854345657858711387">Өткөрүүчү кодду коюу</translation>
 <translation id="4860895144060829044">Чалуу</translation>
+<translation id="4872323082491632254">Сырсөздөрдү текшерүү</translation>
 <translation id="4881695831933465202">Ачуу</translation>
 <translation id="4901778704868714008">Сактоо…</translation>
 <translation id="4904877109095351937">Окулган деп белгилөө</translation>
@@ -325,15 +345,19 @@
 <translation id="5150492518600715772">Түзмөгүңүзгө жөнөтүү</translation>
 <translation id="5181140330217080051">Жүктөлүп алынууда</translation>
 <translation id="5186185447130319458">Купуя</translation>
+<translation id="5188482106078495165">Cookie файлдарыңыздын жөндөөсү бардык өтмөктөргө карата колдонулат. Жаңы жөндөөнү ачык өтмөккө карата колдонуу үчүн өтмөктү кайрадан жүктөңүз.</translation>
 <translation id="5190835502935405962">Кыстармалар тилкеси</translation>
 <translation id="5197255632782567636">Интернет</translation>
 <translation id="5228579091201413441">Шайкештирүүнү иштетүү</translation>
 <translation id="5234764350956374838">Этибарга албоо</translation>
 <translation id="5245322853195994030">Шайкештештирүүнү жокко чыгаруу</translation>
 <translation id="5271549068863921519">Сырсөздү сактоо</translation>
+<translation id="5295239312320826323"><ph name="USER_EMAIL" /> аккаунту өчүрүлсүнбү?</translation>
 <translation id="5300589172476337783">Көрсөтүү</translation>
 <translation id="5317780077021120954">Сактоо</translation>
 <translation id="5327248766486351172">Аты:</translation>
+<translation id="5339316356165661760">Шайкештирүүнү күйгүзүү</translation>
+<translation id="5352285283572729470">Бул жөндөө башкарылат</translation>
 <translation id="5388358297987318779">Сүрөттү ачуу</translation>
 <translation id="5407969256130905701">Өзгөрүүлөрдү жоюу</translation>
 <translation id="5409365236829784218">Бул файлды ача ала турган колдонмолор орнотулган эмес.</translation>
@@ -342,6 +366,8 @@
 <translation id="54401264925851789">Баракчанын коопсуздук маалыматы</translation>
 <translation id="5443952882982198570">Насыя карталары</translation>
 <translation id="5457907402803865181">Сырсөздөрдү шайкештирүүдө ката кетти.</translation>
+<translation id="5489208564673669003">Бардык сайттардын cookie файлдарын башкаруу үчүн <ph name="BEGIN_LINK" />Cookie файлдардын жөндөөлөрүнө<ph name="END_LINK" /> өтүңүз.</translation>
+<translation id="5490005495580364134">Бардык cookie файлдарды бөгөттөө (Сунушталбайт)</translation>
 <translation id="5508435575041083207">Аккаунттан чыгып, бул түзмөктөгү маалыматты тазалоо</translation>
 <translation id="5525269841082836315">Купя сөз айкшын тзүү</translation>
 <translation id="5548760955356983418">Handoff аркылуу вебсайтты ушул түзмөктөн серептеп баштап, Mac компьютериңизде улантып кете аласыз. Учурда ачылып турган вебсайт Мас компьютериңиздин Dock тактасында көрүнөт.
@@ -358,9 +384,11 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="567881659373499783">Версия <ph name="PRODUCT_VERSION" /></translation>
 <translation id="5706552126692816153">Акыркы аракеттер: 1 күн мурун</translation>
 <translation id="5711039611392265845">Купуялыкка, коопсуздукка жана дайындарды чогултууга байланыштуу дагы башка жөндөөлөрдү көрүү үчүн, <ph name="BEGIN_LINK" />Шайкештирүү жана Google кызматтары<ph name="END_LINK" /> бөлүмүнө өтүңүз.</translation>
+<translation id="5724941645893276623">Интернетти купуя серептөө үчүн жаңы өтмөк кошуңуз</translation>
 <translation id="5728700505257787410">Кечиресиз, каттоо эсебиңзге кирип жаткнда көйгй келип чыкты.</translation>
 <translation id="5737974891429562743">Аккаунтка кирүү тууралуу маалымат эскирип калды. Шайкештирип баштоо үчүн маалыматты жаңыртыңыз.</translation>
 <translation id="5738887413654608789">Бул айланаңыздагы колдонмолордун негизинде ылайыктуу веб беттерди таап берет.</translation>
+<translation id="5758631781033351321">Окула тургандардын тизмесин ушул жерден табасыз</translation>
 <translation id="5782227691023083829">Которулууда...</translation>
 <translation id="5803566855766646066">Бул жаңы картаны чын эле өчүрөсүзбү?</translation>
 <translation id="5816228676161003208">Бул үнүңүз менен издөөнү тездетүүгө жол ачат.</translation>
@@ -371,6 +399,7 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="5869029295770560994">Жарайт, түшүндүм</translation>
 <translation id="5871497086027727873">1 нерсе жылдырылды</translation>
 <translation id="5897956970858271241">Көчүрүлгөн шилтеме менен өтүңүз</translation>
+<translation id="5899314093904173337">Жакын жердеги адамдар менен бөлүшүү үчүн, алар камера же болбосо QR кодун скандаган колдонмо менен бул QR кодду скандашы керек</translation>
 <translation id="5911030830365207728">Google Котормо</translation>
 <translation id="5913600720976431809">Бул баракты которуу параметрлери</translation>
 <translation id="5938160824633642847">Түзмөгүңүздө орун аз калды. Орун бошотуп, кайталап көрүңүз.</translation>
@@ -417,25 +446,33 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="6362362396625799311">Жашыруун өтмөктөр жок</translation>
 <translation id="6363526231572697780">Колдонуучунун аты жок</translation>
 <translation id="6374469231428023295">Кайталап көрүңүз</translation>
+<translation id="6377118281273296434">Сайттын коопсуздугу</translation>
 <translation id="6380866119319257197">Эгер купуя сөз айкашыңызды унутуп калсаңыз же бул жөндөөнү өзгөрткүңүз келсе, <ph name="BEGIN_LINK" />шайкештирүүнү баштапкы абалга келтириңиз<ph name="END_LINK" /></translation>
 <translation id="6389470377220713856">Картадагы ысым</translation>
 <translation id="6406506848690869874">Шайкештирүү</translation>
+<translation id="6410883413783534063">Бир учурда бир нече барактарга баш багуу үчүн өтмөктөрдү ачыңыз</translation>
 <translation id="6417838470969808600">Сизде <ph name="USER_EMAIL1" /> аккаунтунун кыстармалары, таржымалдары, сырсөздөрү жана башка жөндөөлөрү бар.</translation>
 <translation id="641799622251403418"><ph name="EMAIL" /> менен кирдиңиз.
 
 Дайын-даректериңиз саат <ph name="TIME" /> купуя сөз айкашы менен шифрлеген. Шайкештирип баштоо үчүн аны киргизиңиз.</translation>
 <translation id="6418346271604475326">PDF даярдалууда</translation>
-<translation id="6426067060178468363">Cookie файлдарына уруксат берүү</translation>
 <translation id="6434591244308415567">Ката кетти. Бир аздан кийин кайталап көрүңүз.</translation>
+<translation id="6439338047467462846">Баарына уруксат берүү</translation>
 <translation id="6445051938772793705">Өлкө</translation>
 <translation id="6445981559479772097">Билдирүү жөнөтүлдү.</translation>
 <translation id="6447842834002726250">Кукилер</translation>
 <translation id="6464071786529933911">Жаңы жашруун өтмктө ачуу</translation>
+<translation id="6464397691496239022">Серептөөнү ыңгайлаштыруу, мисалы, аккаунттан чыгарбоо же арабадагы сатып алган нерселериңизди эстеп калуу үчүн сайттар cookie файлдарын колдоно алышат.
+
+Сайттар жарнамаларды жекелештирүү үчүн башка сайттардагы серептөө аракеттериңизди көрүү үчүн cookie файлдарын колдоно алышпайт.</translation>
 <translation id="6476800141292307438">Барак <ph name="LANGUAGE" /> тилине которулууда. Параметрлер экрандын төмөн жагында жеткиликтүү.</translation>
 <translation id="648164694371393720">Аныктыгын текшерүү катасы</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> нерсе өчүрүлдү</translation>
+<translation id="651505212789431520">Шайкештирүү жокко чыгарылсынбы? Шайкештирүүнү каалаган убакта жөндөөлөргө өтүп, күйгүзүп койсоңуз болот.</translation>
 <translation id="6561262006871132942">Чоңойтуу</translation>
+<translation id="6585618849026997638">Маанилүү барактарга кайра кайтып келүү үчүн кыстармаларды кошуп коюңуз</translation>
 <translation id="6610002944194042868">Которуу параметрлери</translation>
+<translation id="6624219055418309072">Жашыруун режимде бөгөттөө</translation>
 <translation id="6628106477656132239">Мөөнөтү аяктай турган күн жараксыз</translation>
 <translation id="6638511529934826365">Текстти чоңойтуп/кичирейтүү…</translation>
 <translation id="6642362222295953972">Учурдагы өтмөккө которулуу</translation>
@@ -457,8 +494,10 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="681368974849482173">Нерсе түзүлдү</translation>
 <translation id="6831043979455480757">Которуу</translation>
 <translation id="6851516051005285358">Толук версия талап кылынат</translation>
+<translation id="6856384753476268833">Уюмуңуз тарабынан башкарылат.</translation>
 <translation id="6858855187367714033">Скандалды</translation>
 <translation id="6859944681507688231">QR кодун же насыя картасын скандоо үчүн жөндөөлөрдөн камераны иштетиңиз.</translation>
+<translation id="6869389390665537774">Баш баккан барактарыңызды көрүп же аларды таржымалдан тазалай аласыз</translation>
 <translation id="6873263987691478642">Бөлүп көрүү режими</translation>
 <translation id="6888009575607455378">Өзгөрүүлөрдү чын эле өчүрөсүзбү?</translation>
 <translation id="6896758677409633944">Көчүрүү</translation>
@@ -477,6 +516,7 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="7006788746334555276">Мазмун жөндөөлөрү</translation>
 <translation id="7015203776128479407">Баштапкы шайкештирүү жөндөөсү аяктаган жок. Шайкештештирүү өчүк.</translation>
 <translation id="7029809446516969842">Сырсөздөр</translation>
+<translation id="7030675613184250187">Барактарды кийин кайра таап же оффлайн режиминде окуу үчүн окула тургандардын тизмесине кошуп койсоңуз болот</translation>
 <translation id="7053983685419859001">Бөгөттөө</translation>
 <translation id="7062545763355031412">Кабыл алып, каттоо эсептерин которуу</translation>
 <translation id="7099761977003084116">Акыркы өтмөктөр</translation>
@@ -485,6 +525,7 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="7133798577887235672">Толук аты-жөнү</translation>
 <translation id="7136892417564438900">Камера жеткиликсиз</translation>
 <translation id="7159472599653637159">Моб. версиясы керек</translation>
+<translation id="7172852049901402487">Сырсөздөрүңүздү коопсуз сактаңыз</translation>
 <translation id="7173114856073700355">Жөндөөлөрдү ачуу</translation>
 <translation id="7189598951263744875">Бөлүшүү…</translation>
 <translation id="7192050974311852563">Таржымалын жыйнап баштоо</translation>
@@ -493,6 +534,7 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="7272437679830969316">Аныктыгыңыз тастыкталган жок. Сырсөз көчүрүлгөн жок.</translation>
 <translation id="7291368939935408496">Сырсөздөр даярдалууда…</translation>
 <translation id="7293171162284876153">Шайкештирүүнү баштоо үчүн, "Chrome дайындарын шайкештирүүнү" күйгүзүңүз.</translation>
+<translation id="7313347584264171202">Жашыруун өтмөктөрүңүздү ушул жерден табасыз</translation>
 <translation id="7336264872878993241"><ph name="PERCENT" /> пайыз жүктөлүп алынды</translation>
 <translation id="7346909386216857016">Жарайт, түшүндүм</translation>
 <translation id="734758817008927353">Картаны сактоо параметрлери</translation>
@@ -500,7 +542,7 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="7383797227493018512">Окуу тизмеси</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> окула элек макала.</translation>
-<translation id="7425346204213733349">Кыстармаларыңызга, таржымалыңызга, сырсөздөрүңүзгө жана башка жөндөөлөргө киргизилген өзгөртүүлөр Google Аккаунтуңуз менен шайкештирилбейт. Ал эми учурдагы дайын-даректериңиз Google Аккаунтуңузде сакталып кала берет.</translation>
+<translation id="7425346204213733349">Кыстармаларыңызга, таржымалыңызга, сырсөздөрүңүзгө жана башка жөндөөлөргө киргизилген өзгөрүүлөр Google Аккаунтуңуз менен шайкештирилбейт. Ал эми учурдагы дайын-даректериңиз Google Аккаунтуңузде сакталып кала берет.</translation>
 <translation id="7454057999980797137">Өлкө/Округ</translation>
 <translation id="7456847797759667638">Жайгашкан жерди ачуу…</translation>
 <translation id="7460314822154045102">Камераны колдонуу</translation>
@@ -516,6 +558,7 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="7600965453749440009"><ph name="LANGUAGE" /> эч качан которулбасын</translation>
 <translation id="7603852183842204213">Калкп чыкм бөгөтт (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7638584964844754484">Туура эмес купуя сөз айкашы</translation>
+<translation id="7649070708921625228">Жардам</translation>
 <translation id="7658239707568436148">Жокко чыгаруу</translation>
 <translation id="766891008101699113">Интернетти купуя серептөө үчүн жаңы өтмөк кошуңуз.</translation>
 <translation id="7671141431838911305">ОРНОТУУ</translation>
@@ -529,25 +572,29 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="7781829728241885113">Кечээ</translation>
 <translation id="778855399387580014">Chrome'дун жаңы өтмөгүндө издеңиз.</translation>
 <translation id="7791543448312431591">Кошуу</translation>
-<translation id="7828557259026017104">Cookie файлдары сиз баш баккан вебсайттар түзгөн файлдар. Сайттар аларды жеке параметрлериңизди эстеп калуу үчүн колдонушат. Үчүнчү тараптын cookie файлдарын башка сайттар түзөт. Ал сайттарга сиз баш баккан веб-баракчада көрсөтүлгөн жарнамалар жана сүрөттөр сыяктуу айрым мазмун таандык.</translation>
+<translation id="7839985698273989086">Оффлайн барак</translation>
 <translation id="7840771868269352570">Тандалган элементтер өчүрүлөт.</translation>
 <translation id="7856733331829174190">Жүктөлүп алынган жок</translation>
 <translation id="7859704718976024901">Серептөө таржымалы</translation>
 <translation id="7887198238286927132">Купуялыгыңызды коргоо максатында, Chrome бул талааны автоматтык түрдө толтурбайт.</translation>
+<translation id="791251013315685175"><ph name="COMPANY" /> тарабынан башкарылат.</translation>
 <translation id="7918293828610777738">Окуу тизмеңиз оффлайн режиминде да иштейт. Окуу тизмеңизге баракты кошуу үчүн <ph name="SHARE_OPENING_ICON" />, андан кийин <ph name="READ_LATER_TEXT" /> баскычын таптап коюңуз.</translation>
 <translation id="7938254975914653459">FaceTime</translation>
 <translation id="7939128259257418052">Сырсөздөрдү экспорттоо…</translation>
 <translation id="7947953824732555851">Кабыл алуу жана кирүү</translation>
 <translation id="794799177247607889">Таржымалын жыйноону токтотуу</translation>
 <translation id="7961015016161918242">Эч качан</translation>
+<translation id="7966516440812255683">Серептөөнү ыңгайлаштыруу, мисалы, аккаунттан чыгарбоо же арабадагы сатып алган нерселериңизди эстеп калуу үчүн сайттар cookie файлдарын колдоно алышат.
+
+Сайттар жарнамаларды жекелештирүү максатында башка сайттардагы серептөө аракеттериңизди көрүү үчүн cookie файлдарын колдоно алышат.</translation>
 <translation id="7971521879845308059">Калк чыкмл бөгт</translation>
 <translation id="7982789257301363584">Тармак</translation>
 <translation id="7993619969781047893">Функциялар айрым сайттарда туура иштебеши мүмкүн</translation>
 <translation id="800361585186029508">URL'дерди Google Chrome'до ачат.</translation>
 <translation id="8007420562015504427">Жашыруун издөө</translation>
-<translation id="8019783059653722575">Бул сүрөттөрдү сактап жана жүктөп берүүгө жол ачат.</translation>
 <translation id="802154636333426148">Жүктөлүп алынбай калды</translation>
 <translation id="8023878949384262191">Бөлүмдү кеңейтет.</translation>
+<translation id="804427445359061970">Башка түзмөктөрдөгү өтмөктөрүңүздү ушул жерден табасыз</translation>
 <translation id="8059533439631660104">Бөлүмдү жыйыштырат.</translation>
 <translation id="806745655614357130">Дайындарды өзүнчө сактоо</translation>
 <translation id="8073670137947914548">Жүктөп алуу аягына чыкты</translation>
@@ -555,9 +602,9 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="8076014560081431679">Сакталган сайт жөндөөлөрү өзгөрүлбөйт, андыктан, сайттарды адаттагыдай карай бересиз. <ph name="BEGIN_LINK" />Көбүрөөк маалымат алуу<ph name="END_LINK" /></translation>
 <translation id="8114753159095730575">Файлды жүктөп алууга болот. Параметрлер экрандын төмөн жагында берилген.</translation>
 <translation id="8131740175452115882">Ырастоо</translation>
-<translation id="8174524257672181687">Бардык cookie файлдарды бөгөттөө (Сунушталбайт)</translation>
 <translation id="8197543752516192074">Баракты которуу</translation>
 <translation id="8205564605687841303">Жокко чыгаруу</translation>
+<translation id="8206354486702514201">Бул жөндөөнү администраторуңуз күчүнө киргизген.</translation>
 <translation id="8225985093977202398">Кештелген сүрөттөр жана файлдар</translation>
 <translation id="8261506727792406068">Жок кылуу</translation>
 <translation id="8281781826761538115">Демейки - <ph name="DEFAULT_LOCALE" /></translation>
@@ -570,6 +617,8 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="8428045167754449968">Шаар/Шаарча</translation>
 <translation id="8428213095426709021">Жөндөөлөр</translation>
 <translation id="8458397775385147834">1 нерсе өчүрүлдү</translation>
+<translation id="8459333855531264009">Коопсуз эмес</translation>
+<translation id="8484911814435057959">Сырсөздөр уурдалган</translation>
 <translation id="8487667956631253959">Күйүк</translation>
 <translation id="8487700953926739672">Оффлайнда жеткиликтүү</translation>
 <translation id="8490978609246021741">Өзгөртүүлөрдү сактоо</translation>
@@ -584,18 +633,22 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="8548878600947630424">Беттен табуу…</translation>
 <translation id="8574235780160508979">Chrome’дун Тейлөө шарттары 31-марттан кийин өзгөргөнү жатат. <ph name="BEGIN_LINK" />Карап чыгыңыз<ph name="END_LINK" /></translation>
 <translation id="8588404856427128947">Өчүк</translation>
+<translation id="8591976964826315682">Жашыруун режимде үчүнчү тараптын cookie файлдарын бөгөттөө</translation>
 <translation id="8605219856220328675">Өтмөктү жабуу.</translation>
 <translation id="8620640915598389714">Түзөтүү</translation>
 <translation id="8636825310635137004">Өтмөктөрүңүздү башка түзмөктөрүңүздөн алуу үчүн шайкештирүүнү күйгүзүңүз.</translation>
 <translation id="8654802032646794042">Жокко чыгаруу</translation>
 <translation id="8668210798914567634">Бул барак Окуу тизмеңизге сакталды.</translation>
 <translation id="8680787084697685621">Аккаунтка кирүү чоо-жайлары эскирип калды.</translation>
+<translation id="8706588385081740091">Сырсөздөр</translation>
 <translation id="8721297211384281569">Куралдар менюсу</translation>
 <translation id="8725066075913043281">Кайра аракет кылып көрүү</translation>
 <translation id="8730621377337864115">Бүттү</translation>
 <translation id="8741995161408053644">Google аккаунтуңуздун серептөө таржымалынын башка түрлөрү <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> дарегинде болушу мүмкүн.</translation>
+<translation id="8750037785291841318">Өтмөктөрүңүздү ушул жерден табасыз</translation>
 <translation id="8756969031206844760">Сырсөз жаңыртылсынбы?</translation>
 <translation id="8775144690796719618">Жараксыз URL</translation>
+<translation id="8803639129939845298">Корголгон</translation>
 <translation id="8820817407110198400">Кыстармалар</translation>
 <translation id="8840513115188359703">Google Каттоо эсебиңизден чыгарылбайсыз.</translation>
 <translation id="8870413625673593573">Жакында жабылган</translation>
@@ -626,7 +679,6 @@ Handoff Жөндөөлөрдүн жалпы бөлүмүндө да иштети
 <translation id="9223358826628549784">Ката тууралуу кабар жөнөтүлдү.</translation>
 <translation id="952704832371081537">Жокко чыгаруу</translation>
 <translation id="988141524645182168">Бшк түзмкт</translation>
-<translation id="989697783705943787">Сайттын коопсуздугу</translation>
 <translation id="989988560359834682">Даректи түзөтүү</translation>
 <translation id="994757059139821576">Макалаларды сунуштоо</translation>
 </translationbundle>

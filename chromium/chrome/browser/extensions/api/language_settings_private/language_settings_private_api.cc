@@ -188,7 +188,8 @@ std::vector<std::string> GetSortedThirdPartyIMEs(
 
 LanguageSettingsPrivateGetLanguageListFunction::
     LanguageSettingsPrivateGetLanguageListFunction()
-    : chrome_details_(this) {}
+    : chrome_details_(this),
+      language_list_(std::make_unique<base::ListValue>()) {}
 
 LanguageSettingsPrivateGetLanguageListFunction::
     ~LanguageSettingsPrivateGetLanguageListFunction() = default;
@@ -212,7 +213,7 @@ LanguageSettingsPrivateGetLanguageListFunction::Run() {
       std::move(spellcheck_languages));
 
   // Build the language list.
-  std::unique_ptr<base::ListValue> language_list(new base::ListValue);
+  language_list_->Clear();
 #if defined(OS_CHROMEOS)
   const std::unordered_set<std::string> allowed_ui_locales(
       GetAllowedLanguages(chrome_details_.GetProfile()->GetPrefs()));
@@ -243,7 +244,7 @@ LanguageSettingsPrivateGetLanguageListFunction::Run() {
     }
 #endif  // defined(OS_CHROMEOS)
 
-    language_list->Append(language.ToValue());
+    language_list_->Append(language.ToValue());
   }
 
 #if defined(OS_CHROMEOS)
@@ -255,12 +256,53 @@ LanguageSettingsPrivateGetLanguageListFunction::Run() {
     language.code = chromeos::extension_ime_util::kArcImeLanguage;
     language.display_name =
         l10n_util::GetStringUTF8(IDS_SETTINGS_LANGUAGES_KEYBOARD_APPS);
-    language_list->Append(language.ToValue());
+    language_list_->Append(language.ToValue());
   }
 #endif  // defined(OS_CHROMEOS)
 
-  return RespondNow(OneArgument(std::move(language_list)));
+#if defined(OS_WIN)
+  if (spellcheck::UseBrowserSpellChecker()) {
+    if (!base::FeatureList::IsEnabled(
+            spellcheck::kWinDelaySpellcheckServiceInit)) {
+      // Platform dictionary support already determined at browser startup.
+      UpdateSupportedPlatformDictionaries();
+    } else {
+      // Asynchronously load the dictionaries to determine platform support.
+      SpellcheckService* service =
+          SpellcheckServiceFactory::GetForContext(browser_context());
+      AddRef();  // Balanced in OnDictionariesInitialized
+      service->InitializeDictionaries(
+          base::BindOnce(&LanguageSettingsPrivateGetLanguageListFunction::
+                             OnDictionariesInitialized,
+                         base::Unretained(this)));
+      return RespondLater();
+    }
+  }
+#endif  // defined(OS_WIN)
+
+  return RespondNow(OneArgument(std::move(language_list_)));
 }
+
+#if defined(OS_WIN)
+void LanguageSettingsPrivateGetLanguageListFunction::
+    OnDictionariesInitialized() {
+  UpdateSupportedPlatformDictionaries();
+  Respond(OneArgument(std::move(language_list_)));
+  // Matches the AddRef in Run().
+  Release();
+}
+
+void LanguageSettingsPrivateGetLanguageListFunction::
+    UpdateSupportedPlatformDictionaries() {
+  SpellcheckService* service =
+      SpellcheckServiceFactory::GetForContext(browser_context());
+  for (auto& language_val : language_list_->GetList()) {
+    if (service->UsesWindowsDictionary(*language_val.FindStringKey("code"))) {
+      language_val.SetBoolKey("supportsSpellcheck", new bool(true));
+    }
+  }
+}
+#endif  // defined(OS_WIN)
 
 LanguageSettingsPrivateEnableLanguageFunction::
     LanguageSettingsPrivateEnableLanguageFunction()
@@ -291,7 +333,6 @@ LanguageSettingsPrivateEnableLanguageFunction::Run() {
   }
 
   translate_prefs->AddToLanguageList(language_code, /*force_blocked=*/false);
-  translate_prefs->ResetRecentTargetLanguage();
 
   return RespondNow(NoArguments());
 }
@@ -325,7 +366,9 @@ LanguageSettingsPrivateDisableLanguageFunction::Run() {
   }
 
   translate_prefs->RemoveFromLanguageList(language_code);
-  translate_prefs->ResetRecentTargetLanguage();
+  if (language_code == translate_prefs->GetRecentTargetLanguage()) {
+    translate_prefs->ResetRecentTargetLanguage();
+  }
 
   return RespondNow(NoArguments());
 }
@@ -355,7 +398,6 @@ LanguageSettingsPrivateSetEnableTranslationForLanguageFunction::Run() {
   } else {
     translate_prefs->BlockLanguage(language_code);
   }
-  translate_prefs->ResetRecentTargetLanguage();
 
   return RespondNow(NoArguments());
 }
@@ -408,7 +450,6 @@ LanguageSettingsPrivateMoveLanguageFunction::Run() {
   const int offset = 1;
   translate_prefs->RearrangeLanguage(language_code, where, offset,
                                      supported_language_codes);
-  translate_prefs->ResetRecentTargetLanguage();
 
   return RespondNow(NoArguments());
 }
@@ -450,8 +491,8 @@ LanguageSettingsPrivateGetSpellcheckWordsFunction::Run() {
   return RespondLater();
 }
 
-void
-LanguageSettingsPrivateGetSpellcheckWordsFunction::OnCustomDictionaryLoaded() {
+void LanguageSettingsPrivateGetSpellcheckWordsFunction::
+    OnCustomDictionaryLoaded() {
   SpellcheckService* service =
       SpellcheckServiceFactory::GetForContext(browser_context());
   service->GetCustomDictionary()->RemoveObserver(this);
@@ -459,9 +500,9 @@ LanguageSettingsPrivateGetSpellcheckWordsFunction::OnCustomDictionaryLoaded() {
   Release();
 }
 
-void
-LanguageSettingsPrivateGetSpellcheckWordsFunction::OnCustomDictionaryChanged(
-    const SpellcheckCustomDictionary::Change& dictionary_change) {
+void LanguageSettingsPrivateGetSpellcheckWordsFunction::
+    OnCustomDictionaryChanged(
+        const SpellcheckCustomDictionary::Change& dictionary_change) {
   NOTREACHED() << "SpellcheckCustomDictionary::Observer: "
                   "OnCustomDictionaryChanged() called before "
                   "OnCustomDictionaryLoaded()";
@@ -536,8 +577,7 @@ LanguageSettingsPrivateRemoveSpellcheckWordFunction::Run() {
 
 LanguageSettingsPrivateGetTranslateTargetLanguageFunction::
     LanguageSettingsPrivateGetTranslateTargetLanguageFunction()
-    : chrome_details_(this) {
-}
+    : chrome_details_(this) {}
 
 LanguageSettingsPrivateGetTranslateTargetLanguageFunction::
     ~LanguageSettingsPrivateGetTranslateTargetLanguageFunction() = default;
@@ -615,8 +655,7 @@ LanguageSettingsPrivateGetInputMethodListsFunction::Run() {
     InputMethodDescriptors ext_ime_descriptors;
     ime_state->GetInputMethodExtensions(&ext_ime_descriptors);
     PopulateInputMethodListFromDescriptors(
-        ext_ime_descriptors,
-        &input_method_lists.third_party_extension_imes);
+        ext_ime_descriptors, &input_method_lists.third_party_extension_imes);
   }
 
   return RespondNow(OneArgument(input_method_lists.ToValue()));

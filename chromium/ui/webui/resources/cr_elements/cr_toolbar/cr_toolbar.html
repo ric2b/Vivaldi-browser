@@ -58,7 +58,6 @@
       }
 
       cr-icon-button {
-        --cr-icon-button-fill-color-focus: var(--cr-toolbar-background-color);
         --cr-icon-button-size: 32px;
         min-width: 32px;
       }
@@ -180,7 +179,8 @@
       <cr-toolbar-search-field id="search" narrow="[[narrow]]"
           label="[[searchPrompt]]" clear-label="[[clearLabel]]"
           spinner-active="[[spinnerActive]]"
-          showing-search="{{showingSearch_}}">
+          showing-search="{{showingSearch_}}"
+          autofocus>
       </cr-toolbar-search-field>
       <iron-media-query query="(max-width: [[narrowThreshold]]px)"
           query-matches="{{narrow}}">

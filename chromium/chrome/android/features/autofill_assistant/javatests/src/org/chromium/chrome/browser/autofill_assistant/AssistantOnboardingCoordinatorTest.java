@@ -4,14 +4,14 @@
 
 package org.chromium.chrome.browser.autofill_assistant;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.action.ViewActions.scrollTo;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.matcher.ViewMatchers.assertThat;
-import static android.support.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.action.ViewActions.scrollTo;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
+import static androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.Matchers.instanceOf;
@@ -23,11 +23,11 @@ import static org.mockito.Mockito.verify;
 
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilViewMatchesCondition;
 
-import android.support.test.filters.MediumTest;
 import android.view.View;
 import android.widget.TextView;
 
 import androidx.annotation.IdRes;
+import androidx.test.filters.MediumTest;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -47,8 +47,8 @@ import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlaySt
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.ArrayList;
@@ -180,13 +180,11 @@ public class AssistantOnboardingCoordinatorTest {
         coordinator.disableAnimationForTesting();
         showOnboardingAndWait(coordinator, mCallback);
 
-        TextView termsView = mBottomSheetController.getBottomSheetViewForTesting().findViewById(
-                R.id.onboarding_subtitle);
+        TextView termsView = mActivity.findViewById(R.id.onboarding_subtitle);
         assertEquals(
                 mActivity.getResources().getText(R.string.autofill_assistant_init_message_short),
                 termsView.getText());
-        TextView titleView = mBottomSheetController.getBottomSheetViewForTesting().findViewById(
-                R.id.onboarding_try_assistant);
+        TextView titleView = mActivity.findViewById(R.id.onboarding_try_assistant);
         assertEquals(
                 mActivity.getResources().getText(R.string.autofill_assistant_init_message_rent_car),
                 titleView.getText());
@@ -205,13 +203,11 @@ public class AssistantOnboardingCoordinatorTest {
         coordinator.disableAnimationForTesting();
         showOnboardingAndWait(coordinator, mCallback);
 
-        TextView termsView = mBottomSheetController.getBottomSheetViewForTesting().findViewById(
-                R.id.onboarding_subtitle);
+        TextView termsView = mActivity.findViewById(R.id.onboarding_subtitle);
         assertEquals(
                 mActivity.getResources().getText(R.string.autofill_assistant_init_message_short),
                 termsView.getText());
-        TextView titleView = mBottomSheetController.getBottomSheetViewForTesting().findViewById(
-                R.id.onboarding_try_assistant);
+        TextView titleView = mActivity.findViewById(R.id.onboarding_try_assistant);
         assertEquals(mActivity.getResources().getText(
                              R.string.autofill_assistant_init_message_buy_movie_tickets),
                 titleView.getText());
@@ -229,13 +225,11 @@ public class AssistantOnboardingCoordinatorTest {
         coordinator.disableAnimationForTesting();
         showOnboardingAndWait(coordinator, mCallback);
 
-        TextView termsView = mBottomSheetController.getBottomSheetViewForTesting().findViewById(
-                R.id.onboarding_subtitle);
+        TextView termsView = mActivity.findViewById(R.id.onboarding_subtitle);
         assertEquals(View.VISIBLE, termsView.getVisibility());
         assertEquals(mActivity.getResources().getText(R.string.autofill_assistant_init_message),
                 termsView.getText());
-        TextView titleView = mBottomSheetController.getBottomSheetViewForTesting().findViewById(
-                R.id.onboarding_try_assistant);
+        TextView titleView = mActivity.findViewById(R.id.onboarding_try_assistant);
         assertEquals(mActivity.getResources().getText(R.string.autofill_assistant_init_title),
                 titleView.getText());
     }

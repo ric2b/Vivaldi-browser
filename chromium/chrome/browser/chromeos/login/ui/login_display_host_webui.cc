@@ -32,6 +32,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/web_app/web_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/base/locale_util.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
@@ -284,13 +285,7 @@ struct ShowLoginWizardSwitchLanguageCallbackData {
 
 // Trigger OnLocaleChanged via ash::LocaleUpdateController.
 void NotifyLocaleChange() {
-  // The first three arguments of OnLocaleChanged are cur_locale, from_locale
-  // and to_locale which are used to notify the user about the locale change.
-  // We pass empty strings to OnLocaleChanged because when it is called in OOBE
-  // the locales are ignored since no notification is displayed.
-  ash::LocaleUpdateController::Get()->OnLocaleChanged(
-      std::string(), std::string(), std::string(),
-      base::DoNothing::Once<ash::LocaleNotificationResult>());
+  ash::LocaleUpdateController::Get()->OnLocaleChanged();
 }
 
 void OnLanguageSwitchedCallback(
@@ -373,6 +368,7 @@ class CloseAfterCommit : public ui::CompositorObserver,
   ~CloseAfterCommit() override {
     widget_->RemoveObserver(this);
     widget_->GetCompositor()->RemoveObserver(this);
+    CHECK(!IsInObserverList());
   }
 
   // ui::CompositorObserver:
@@ -492,6 +488,7 @@ LoginDisplayHostWebUI::~LoginDisplayHostWebUI() {
     (new DriveFirstRunController(ProfileManager::GetActiveUserProfile()))
         ->EnableOfflineMode();
   }
+  CHECK(!views::WidgetObserver::IsInObserverList());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -633,7 +630,7 @@ void LoginDisplayHostWebUI::OnStartUserAdding() {
   existing_user_controller_->Init(
       user_manager::UserManager::Get()->GetUsersAllowedForMultiProfile());
   CHECK(login_display_);
-  GetOobeUI()->ShowSigninScreen(login_display_.get(), login_display_.get());
+  GetOobeUI()->ShowSigninScreen(login_display_.get());
 }
 
 void LoginDisplayHostWebUI::CancelUserAdding() {
@@ -678,7 +675,7 @@ void LoginDisplayHostWebUI::OnStartSignInScreen() {
   existing_user_controller_->Init(user_manager::UserManager::Get()->GetUsers());
 
   CHECK(login_display_);
-  GetOobeUI()->ShowSigninScreen(login_display_.get(), login_display_.get());
+  GetOobeUI()->ShowSigninScreen(login_display_.get());
 
   OnStartSignInScreenCommon();
 
@@ -1013,10 +1010,6 @@ void LoginDisplayHostWebUI::UpdateOobeDialogState(ash::OobeDialogState state) {
   ash::LoginScreen::Get()->GetModel()->NotifyOobeDialogState(state);
 }
 
-const user_manager::UserList LoginDisplayHostWebUI::GetUsers() {
-  return user_manager::UserList();
-}
-
 void LoginDisplayHostWebUI::ShowFeedback() {
   NOTREACHED();
 }
@@ -1106,19 +1099,24 @@ void ShowLoginWizard(OobeScreenId first_screen) {
   bool show_app_launch_splash_screen =
       (first_screen == AppLaunchSplashScreenView::kScreenId);
   if (show_app_launch_splash_screen) {
-    const std::string& auto_launch_app_id =
-        KioskAppManager::Get()->GetAutoLaunchApp();
-    const bool diagnostic_mode = false;
-    const bool auto_launch = true;
     // Manages its own lifetime. See ShutdownDisplayHost().
     auto* display_host = new LoginDisplayHostWebUI();
-    if (!auto_launch_app_id.empty()) {
-      display_host->StartAppLaunch(auto_launch_app_id, diagnostic_mode,
-                                   auto_launch);
-    } else {
-      display_host->StartWebKiosk(
-          WebKioskAppManager::Get()->GetAutoLaunchAccountId());
-    }
+
+    KioskAppId kiosk_app_id;
+    const std::string& chrome_kiosk_app_id =
+        KioskAppManager::Get()->GetAutoLaunchApp();
+    const AccountId& web_kiosk_account_id =
+        WebKioskAppManager::Get()->GetAutoLaunchAccountId();
+    const AccountId& arc_kiosk_account_id =
+        ArcKioskAppManager::Get()->GetAutoLaunchAccountId();
+    if (!chrome_kiosk_app_id.empty())
+      kiosk_app_id = KioskAppId::ForChromeApp(chrome_kiosk_app_id);
+    else if (web_kiosk_account_id.is_valid())
+      kiosk_app_id = KioskAppId::ForWebApp(web_kiosk_account_id);
+    else if (arc_kiosk_account_id.is_valid())
+      kiosk_app_id = KioskAppId::ForArcApp(arc_kiosk_account_id);
+
+    display_host->StartKiosk(kiosk_app_id, /* auto_launch */ true);
     return;
   }
 

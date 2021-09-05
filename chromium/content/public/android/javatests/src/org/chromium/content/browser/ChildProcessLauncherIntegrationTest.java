@@ -8,7 +8,8 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
 import org.junit.Rule;
@@ -47,8 +48,8 @@ public class ChildProcessLauncherIntegrationTest {
 
         @Override
         public ChildProcessConnection createConnection(Context context, ComponentName serviceName,
-                boolean bindToCaller, boolean bindAsExternalService, Bundle serviceBundle,
-                String instanceName) {
+                ComponentName fallbackServiceName, boolean bindToCaller,
+                boolean bindAsExternalService, Bundle serviceBundle, String instanceName) {
             TestChildProcessConnection connection = new TestChildProcessConnection(
                     context, serviceName, bindToCaller, bindAsExternalService, serviceBundle);
             mConnections.add(connection);
@@ -66,8 +67,8 @@ public class ChildProcessLauncherIntegrationTest {
         public TestChildProcessConnection(Context context, ComponentName serviceName,
                 boolean bindToCaller, boolean bindAsExternalService,
                 Bundle childProcessCommonParameters) {
-            super(context, serviceName, bindToCaller, bindAsExternalService,
-                    childProcessCommonParameters, null /* instanceName */);
+            super(context, serviceName, null /* fallbackServiceName */, bindToCaller,
+                    bindAsExternalService, childProcessCommonParameters, null /* instanceName */);
         }
 
         @Override
@@ -234,15 +235,15 @@ public class ChildProcessLauncherIntegrationTest {
 
         @Override
         public ChildProcessConnection createConnection(Context context, ComponentName serviceName,
-                boolean bindToCaller, boolean bindAsExternalService, Bundle serviceBundle,
-                String instanceName) {
+                ComponentName fallbackServiceName, boolean bindToCaller,
+                boolean bindAsExternalService, Bundle serviceBundle, String instanceName) {
             if (mCrashConnection == null) {
                 mCrashConnection = new CrashOnLaunchChildProcessConnection(
                         context, serviceName, bindToCaller, bindAsExternalService, serviceBundle);
                 return mCrashConnection;
             }
-            return super.createConnection(context, serviceName, bindToCaller, bindAsExternalService,
-                    serviceBundle, instanceName);
+            return super.createConnection(context, serviceName, fallbackServiceName, bindToCaller,
+                    bindAsExternalService, serviceBundle, instanceName);
         }
 
         public CrashOnLaunchChildProcessConnection getCrashConnection() {

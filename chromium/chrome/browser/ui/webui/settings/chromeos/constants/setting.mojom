@@ -16,7 +16,7 @@ enum Setting {
   kDisconnectWifiNetwork = 5,
   kPreferWifiNetwork = 6,
   kForgetWifiNetwork = 7,
-  kConfigureWifi = 8,
+  kWifiAddNetwork = 8,
   kWifiAutoConfigureIp = 9,
   kWifiDns = 10,
   kWifiProxy = 11,
@@ -31,7 +31,9 @@ enum Setting {
   kCellularProxy = 20,
   kCellularAutoConnectToNetwork = 21,
   kInstantTetheringOnOff = 22,
-  kDisconnectTetherNetwork = 22,
+  kDisconnectTetherNetwork = 23,
+  kWifiMetered = 24,
+  kCellularMetered = 25,
 
   // Bluetooth section.
   kBluetoothOnOff = 100,
@@ -49,11 +51,12 @@ enum Setting {
   kMessagesSetUp = 205,
   kMessagesOnOff = 206,
   kForgetPhone = 207,
+  kNearbyShareOnOff = 208,
 
   // People section.
   kAddAccount = 300,
   kRemoveAccount = 301,
-  kSyncOnOff = 302,
+  kSplitSyncOnOff = 302,
   kLockScreen = 303,
   kChangeAuthPin = 304,
   kGuestBrowsing = 305,
@@ -67,6 +70,10 @@ enum Setting {
   kAddFingerprint = 313,
   kRemoveFingerprint = 314,
   kSetUpParentalControls = 315,
+  kNonSplitSyncEncryptionOptions = 316,
+  kAutocompleteSearchesAndUrls = 317,
+  kMakeSearchesAndBrowsingBetter = 318,
+  kGoogleDriveSearchSuggestions = 319,
 
   // Device section.
   kTouchpadTapToClick = 400,
@@ -91,16 +98,26 @@ enum Setting {
   kStylusLatestNoteOnLockScreen = 419,
   kDisplayOrientation = 420,
   kDisplayArrangement = 421,
-  kPowerIdleBehavior = 422,
+  kPowerIdleBehaviorWhileCharging = 422,
   kPowerSource = 423,
   kSleepWhenLaptopLidClosed = 424,
   kDisplayResolution = 425,
   kDisplayRefreshRate = 426,
+  kRemoveDlc = 427,
+  kDisplayMirroring = 428,
+  kAllowWindowsToSpanDisplays = 429,
+  kAmbientColors = 430,
+  kTouchscreenCalibration = 431,
+  kNightLightColorTemperature = 432,
+  kPowerIdleBehaviorWhileOnBattery = 433,
+  kDisplayOverscan = 434,
 
   // Personalization section.
   kOpenWallpaper = 500,
   kAmbientModeOnOff = 501,
   kAmbientModeSource = 502,
+  kChangeDeviceAccountImage = 503,
+  kAmbientModeUpdatePhotosContainers = 504,
 
   // Search and Assistant section.
   kPreferredSearchEngine = 600,
@@ -110,6 +127,7 @@ enum Setting {
   kAssistantOkGoogle = 604,
   kAssistantNotifications = 605,
   kAssistantVoiceInput = 606,
+  kTrainAssistantVoiceModel = 607,
 
   // Apps section.
   kManageAndroidPreferences = 700,
@@ -141,6 +159,7 @@ enum Setting {
   kAddLanguage = 1200,
   kShowInputOptionsInShelf = 1201,
   kShowPersonalInformationSuggestions = 1202,
+  kShowEmojiSuggestions = 1203,
 
   // Files section.
   kGoogleDriveConnection = 1300,
@@ -178,6 +197,8 @@ enum Setting {
   kSwitchActionAutoScan = 1524,
   kSwitchActionAutoScanKeyboard = 1525,
   kGetImageDescriptionsFromGoogle = 1526,
+  kLiveCaptions = 1527,
+  kEnableCursorColor = 1528,
 
   // Reset section.
   kPowerwash = 1600,
@@ -185,4 +206,9 @@ enum Setting {
   // About Chrome OS section.
   kChangeChromeChannel = 1700,
   kCopyDetailedBuildInfo = 1701,
+  kCheckForOsUpdate = 1702,
+  kSeeWhatsNew = 1703,
+  kGetHelpWithChromeOs = 1704,
+  kReportAnIssue = 1705,
+  kTermsOfService = 1706,
 };

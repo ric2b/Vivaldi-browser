@@ -8,7 +8,6 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -17,10 +16,10 @@
 #include "content/browser/cache_storage/cache_storage_quota_client.h"
 #include "content/browser/cache_storage/cross_sequence/cross_sequence_cache_storage_manager.h"
 #include "content/browser/cache_storage/legacy/legacy_cache_storage_manager.h"
-#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "storage/browser/blob/blob_storage_context.h"
+#include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "url/origin.h"
@@ -43,15 +42,14 @@ const base::Feature kCacheStorageSequenceFeature{
 
 scoped_refptr<base::SequencedTaskRunner> CreateSchedulerTaskRunner() {
   if (!base::FeatureList::IsEnabled(kCacheStorageSequenceFeature))
-    return base::CreateSingleThreadTaskRunner({BrowserThread::IO});
+    return GetIOThreadTaskRunner({});
   return base::ThreadPool::CreateSequencedTaskRunner(
       {base::TaskPriority::USER_VISIBLE});
 }
 
 }  // namespace
 
-CacheStorageContextImpl::CacheStorageContextImpl(
-    BrowserContext* browser_context)
+CacheStorageContextImpl::CacheStorageContextImpl()
     : task_runner_(CreateSchedulerTaskRunner()),
       observers_(base::MakeRefCounted<ObserverList>()) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -88,8 +86,8 @@ void CacheStorageContextImpl::Init(
   // running with a different target sequence then the quota client code will
   // get a cross-sequence wrapper that is guaranteed to initialize its internal
   // SequenceBound<> object after the real manager is created.
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&CacheStorageContextImpl::CreateQuotaClientsOnIOThread,
                      base::WrapRefCounted(this),
                      std::move(quota_manager_proxy)));
@@ -171,8 +169,8 @@ void CacheStorageContextImpl::SetBlobParametersForCache(
   // We can only bind a mojo interface for BlobStorageContext on the IO thread.
   // TODO(enne): clean this up in the future to not require this bounce and
   // to have this mojo context live on the cache storage sequence.
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(
           &CacheStorageContextImpl::BindBlobStorageMojoContextOnIOThread, this,
           base::RetainedRef(blob_storage_context), std::move(receiver)));
@@ -321,10 +319,14 @@ void CacheStorageContextImpl::CreateQuotaClientsOnIOThread(
     return;
   quota_manager_proxy->RegisterClient(
       base::MakeRefCounted<CacheStorageQuotaClient>(
-          manager, CacheStorageOwner::kCacheAPI));
+          manager, CacheStorageOwner::kCacheAPI),
+      storage::QuotaClientType::kServiceWorkerCache,
+      {blink::mojom::StorageType::kTemporary});
   quota_manager_proxy->RegisterClient(
       base::MakeRefCounted<CacheStorageQuotaClient>(
-          manager, CacheStorageOwner::kBackgroundFetch));
+          manager, CacheStorageOwner::kBackgroundFetch),
+      storage::QuotaClientType::kBackgroundFetch,
+      {blink::mojom::StorageType::kTemporary});
 }
 
 }  // namespace content

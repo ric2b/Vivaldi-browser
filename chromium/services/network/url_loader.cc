@@ -35,6 +35,7 @@
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_file_element_reader.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/static_cookie_policy.h"
 #include "net/ssl/client_cert_store.h"
 #include "net/ssl/ssl_connection_status_flags.h"
@@ -44,12 +45,12 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "services/network/chunked_data_pipe_upload_data_stream.h"
 #include "services/network/data_pipe_element_reader.h"
-#include "services/network/empty_url_loader_client.h"
 #include "services/network/network_usage_accumulator.h"
 #include "services/network/origin_policy/origin_policy_constants.h"
 #include "services/network/origin_policy/origin_policy_manager.h"
 #include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/cross_origin_resource_policy.h"
+#include "services/network/public/cpp/empty_url_loader_client.h"
 #include "services/network/public/cpp/header_util.h"
 #include "services/network/public/cpp/net_adapters.h"
 #include "services/network/public/cpp/network_switches.h"
@@ -316,14 +317,13 @@ class SSLPrivateKeyInternal : public net::SSLPrivateKey {
   DISALLOW_COPY_AND_ASSIGN(SSLPrivateKeyInternal);
 };
 
-bool ShouldNotifyAboutCookie(
-    net::CanonicalCookie::CookieInclusionStatus status) {
+bool ShouldNotifyAboutCookie(net::CookieInclusionStatus status) {
   // Notify about cookies actually used, and those blocked by preferences ---
   // for purposes of cookie UI --- as well those carrying warnings pertaining to
   // SameSite features, in order to issue a deprecation warning for them.
   return status.IsInclude() || status.ShouldWarn() ||
-         status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                       EXCLUDE_USER_PREFERENCES);
+         status.HasExclusionReason(
+             net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
 }
 
 mojom::HttpRawRequestResponseInfoPtr BuildRawRequestResponseInfo(
@@ -416,6 +416,39 @@ const struct {
     {"Via", ConcerningHeaderId::kVia},
 };
 
+void ReportFetchUploadStreamingUMA(const net::URLRequest* request,
+                                   bool allow_http1_for_streaming_upload) {
+  // Same as tools/metrics/histograms/enums.xml's.
+  enum class HttpProtocolScheme {
+    kHTTP1_1 = 0,
+    kHTTP2 = 1,
+    kQUIC = 2,
+    kMaxValue = kQUIC
+  } protocol;
+  const auto connection_info = request->response_info().connection_info;
+  switch (net::HttpResponseInfo::ConnectionInfoToCoarse(connection_info)) {
+    case net::HttpResponseInfo::CONNECTION_INFO_COARSE_HTTP1:
+      protocol = HttpProtocolScheme::kHTTP1_1;
+      break;
+    case net::HttpResponseInfo::CONNECTION_INFO_COARSE_HTTP2:
+      protocol = HttpProtocolScheme::kHTTP2;
+      break;
+    case net::HttpResponseInfo::CONNECTION_INFO_COARSE_QUIC:
+      protocol = HttpProtocolScheme::kQUIC;
+      break;
+    case net::HttpResponseInfo::CONNECTION_INFO_COARSE_OTHER:
+      protocol = HttpProtocolScheme::kHTTP1_1;
+      break;
+  }
+  if (allow_http1_for_streaming_upload) {
+    base::UmaHistogramEnumeration("Net.Fetch.UploadStreamingProtocolAllowH1",
+                                  protocol);
+  } else {
+    base::UmaHistogramEnumeration("Net.Fetch.UploadStreamingProtocolNotAllowH1",
+                                  protocol);
+  }
+}
+
 }  // namespace
 
 URLLoader::URLLoader(
@@ -427,6 +460,7 @@ URLLoader::URLLoader(
     int32_t options,
     const ResourceRequest& request,
     mojo::PendingRemote<mojom::URLLoaderClient> url_loader_client,
+    base::Optional<DataPipeUseTracker> response_body_use_tracker,
     const net::NetworkTrafficAnnotationTag& traffic_annotation,
     const mojom::URLLoaderFactoryParams* factory_params,
     mojom::CrossOriginEmbedderPolicyReporter* coep_reporter,
@@ -456,6 +490,7 @@ URLLoader::URLLoader(
       do_not_prompt_for_login_(request.do_not_prompt_for_login),
       receiver_(this, std::move(url_loader_receiver)),
       url_loader_client_(std::move(url_loader_client)),
+      response_body_use_tracker_(std::move(response_body_use_tracker)),
       writable_handle_watcher_(FROM_HERE,
                                mojo::SimpleWatcher::ArmingPolicy::MANUAL,
                                base::SequencedTaskRunnerHandle::Get()),
@@ -477,7 +512,11 @@ URLLoader::URLLoader(
       origin_policy_manager_(nullptr),
       trust_token_helper_factory_(std::move(trust_token_helper_factory)),
       isolated_world_origin_(request.isolated_world_origin),
-      cookie_observer_(std::move(cookie_observer)) {
+      cookie_observer_(std::move(cookie_observer)),
+      has_fetch_streaming_upload_body_(HasFetchStreamingUploadBody(&request)),
+      allow_http1_for_streaming_upload_(
+          request.request_body &&
+          request.request_body->AllowHTTP1ForStreamingUpload()) {
   DCHECK(delete_callback_);
   DCHECK(factory_params_);
   if (url_loader_header_client &&
@@ -581,13 +620,17 @@ URLLoader::URLLoader(
   // net::LOAD_DO_NOT_* are in the process of being converted to
   // credentials_mode. See https://crbug.com/799935.
   // TODO(crbug.com/943939): Make this work with CredentialsMode::kSameOrigin.
-  if (request.credentials_mode == mojom::CredentialsMode::kOmit) {
+  if (request.credentials_mode == mojom::CredentialsMode::kOmit ||
+      request.credentials_mode ==
+          mojom::CredentialsMode::kOmitBug_775438_Workaround) {
     const auto creds_mask = net::LOAD_DO_NOT_SAVE_COOKIES |
                             net::LOAD_DO_NOT_SEND_COOKIES |
                             net::LOAD_DO_NOT_SEND_AUTH_DATA;
     DCHECK((request.load_flags & creds_mask) == 0 ||
            (request.load_flags & creds_mask) == creds_mask);
     url_request_->set_allow_credentials(false);
+    url_request_->set_send_client_certs(request.credentials_mode ==
+                                        mojom::CredentialsMode::kOmit);
   }
 
   url_request_->SetRequestHeadersCallback(base::BindRepeating(
@@ -990,8 +1033,33 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
   url_loader_client_->OnReceiveRedirect(redirect_info, std::move(response));
 }
 
+// static
+bool URLLoader::HasFetchStreamingUploadBody(const ResourceRequest* request) {
+  // Follows blink::mojom::ResourceType::kXhr.
+  const int kXhr = 13;
+  if (request->resource_type != kXhr)
+    return false;
+  const ResourceRequestBody* request_body = request->request_body.get();
+  if (!request_body)
+    return false;
+  const std::vector<DataElement>* elements = request_body->elements();
+  if (elements->size() == 0u)
+    return false;
+  // https://fetch.spec.whatwg.org/#concept-bodyinit-extract
+  // Body's source is null means the body is not extracted from ReadableStream.
+  // See blink::PopulateResourceRequest() for actual construction.
+  if (elements->size() > 1u)
+    return false;
+  return elements->at(0).type() == mojom::DataElementType::kChunkedDataPipe;
+}
+
 void URLLoader::OnAuthRequired(net::URLRequest* url_request,
                                const net::AuthChallengeInfo& auth_info) {
+  if (has_fetch_streaming_upload_body_) {
+    NotifyCompleted(net::ERR_FAILED);
+    // |this| may have been deleted.
+    return;
+  }
   if (!network_context_client_) {
     OnAuthCredentials(base::nullopt);
     return;
@@ -1074,6 +1142,10 @@ void URLLoader::OnResponseStarted(net::URLRequest* url_request, int net_error) {
   has_received_response_ = true;
 
   ReportFlaggedResponseCookies();
+  if (has_fetch_streaming_upload_body_) {
+    ReportFetchUploadStreamingUMA(url_request_.get(),
+                                  allow_http1_for_streaming_upload_);
+  }
 
   if (net_error != net::OK) {
     NotifyCompleted(net_error);
@@ -1091,6 +1163,9 @@ void URLLoader::OnResponseStarted(net::URLRequest* url_request, int net_error) {
   if (result != MOJO_RESULT_OK) {
     NotifyCompleted(net::ERR_INSUFFICIENT_RESOURCES);
     return;
+  }
+  if (response_body_use_tracker_) {
+    response_body_use_tracker_->Activate();
   }
   DCHECK(response_body_stream_.is_valid());
   DCHECK(consumer_handle_.is_valid());
@@ -1563,6 +1638,7 @@ void URLLoader::NotifyCompleted(int error_code) {
           KeepaliveRequestResult::kErrorBeforeResponseArrival);
     }
   }
+  response_body_use_tracker_ = base::nullopt;
   // Ensure sending the final upload progress message here, since
   // OnResponseCompleted can be called without OnResponseStarted on cancellation
   // or error cases.
@@ -1685,6 +1761,8 @@ void URLLoader::CompletePendingWrite(bool success) {
     // destroyed.
     response_body_stream_ =
         pending_write_->Complete(pending_write_buffer_offset_);
+  } else {
+    response_body_use_tracker_ = base::nullopt;
   }
   total_written_bytes_ += pending_write_buffer_offset_;
   pending_write_ = nullptr;
@@ -1717,10 +1795,13 @@ void URLLoader::SetRawRequestHeadersAndNotify(
 
   if (cookie_observer_) {
     net::CookieStatusList reported_cookies;
-    for (const auto& cookie_and_status : url_request_->maybe_sent_cookies()) {
-      if (ShouldNotifyAboutCookie(cookie_and_status.status)) {
+    for (const auto& cookie_with_access_result :
+         url_request_->maybe_sent_cookies()) {
+      if (ShouldNotifyAboutCookie(
+              cookie_with_access_result.access_result.status)) {
         reported_cookies.push_back(
-            {cookie_and_status.cookie, cookie_and_status.status});
+            {cookie_with_access_result.cookie,
+             cookie_with_access_result.access_result.status});
       }
     }
 
@@ -1873,7 +1954,7 @@ URLLoader::BlockResponseForCorbResult URLLoader::BlockResponseForCorb() {
     // Discard any remaining callbacks or data by rerouting the pipes to
     // EmptyURLLoaderClient.
     receiver_.reset();
-    EmptyURLLoaderClient::DrainURLRequest(
+    EmptyURLLoaderClientWrapper::DrainURLRequest(
         url_loader_client_.BindNewPipeAndPassReceiver(),
         receiver_.BindNewPipeAndPassRemote());
     receiver_.set_disconnect_handler(

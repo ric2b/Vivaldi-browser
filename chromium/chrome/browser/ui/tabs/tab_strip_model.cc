@@ -495,17 +495,7 @@ std::unique_ptr<content::WebContents> TabStripModel::DetachWebContentsImpl(
   base::Optional<int> next_selected_index =
       order_controller_->DetermineNewSelectedIndex(index);
 
-  // Here we update the group model manually instead of calling UngroupTab(), so
-  // that the tab isn't prematurely ungrouped. Ungrouping the tab can change its
-  // position while it's still animating closed, which can result in the wrong
-  // view getting removed.
-  base::Optional<tab_groups::TabGroupId> group = GetTabGroupForTab(index);
-  if (group.has_value()) {
-    TabGroup* tab_group = group_model_->GetTabGroup(group.value());
-    tab_group->RemoveTab();
-    if (tab_group->IsEmpty())
-      group_model_->RemoveTabGroup(group.value());
-  }
+  UngroupTab(index);
 
   std::unique_ptr<WebContentsData> old_data = std::move(contents_data_[index]);
   contents_data_.erase(contents_data_.begin() + index);
@@ -869,6 +859,17 @@ bool TabStripModel::IsTabPinned(int index) const {
   return contents_data_[index]->pinned();
 }
 
+bool TabStripModel::IsTabCollapsed(int index) const {
+  base::Optional<tab_groups::TabGroupId> group = GetTabGroupForTab(index);
+  return group.has_value() && IsGroupCollapsed(group.value());
+}
+
+bool TabStripModel::IsGroupCollapsed(
+    const tab_groups::TabGroupId& group) const {
+  return group_model()->ContainsTabGroup(group) &&
+         group_model()->GetTabGroup(group)->visual_data()->is_collapsed();
+}
+
 bool TabStripModel::IsTabBlocked(int index) const {
   return contents_data_[index]->blocked();
 }
@@ -1060,15 +1061,11 @@ void TabStripModel::SelectLastTab(UserGestureDetails detail) {
 }
 
 void TabStripModel::MoveTabNext() {
-  // TODO: this likely needs to be updated for multi-selection.
-  int new_index = std::min(active_index() + 1, count() - 1);
-  MoveWebContentsAt(active_index(), new_index, true);
+  MoveTabRelative(true);
 }
 
 void TabStripModel::MoveTabPrevious() {
-  // TODO: this likely needs to be updated for multi-selection.
-  int new_index = std::max(active_index() - 1, 0);
-  MoveWebContentsAt(active_index(), new_index, true);
+  MoveTabRelative(false);
 }
 
 tab_groups::TabGroupId TabStripModel::AddToNewGroup(
@@ -1541,6 +1538,30 @@ int TabStripModel::GetIndexOfNextWebContentsOpenedBy(const WebContents* opener,
   return kNoTab;
 }
 
+base::Optional<int> TabStripModel::GetNextExpandedActiveTab(
+    int start_index,
+    base::Optional<tab_groups::TabGroupId> collapsing_group) const {
+  // Check tabs from the start_index first.
+  for (int i = start_index + 1; i < count(); ++i) {
+    base::Optional<tab_groups::TabGroupId> current_group = GetTabGroupForTab(i);
+    if (!current_group.has_value() ||
+        (!IsGroupCollapsed(current_group.value()) &&
+         current_group != collapsing_group)) {
+      return i;
+    }
+  }
+  // Then check tabs before start_index, iterating backwards.
+  for (int i = start_index - 1; i >= 0; --i) {
+    base::Optional<tab_groups::TabGroupId> current_group = GetTabGroupForTab(i);
+    if (!current_group.has_value() ||
+        (!IsGroupCollapsed(current_group.value()) &&
+         current_group != collapsing_group)) {
+      return i;
+    }
+  }
+  return base::nullopt;
+}
+
 void TabStripModel::ForgetAllOpeners() {
   for (const auto& data : contents_data_)
     data->set_opener(nullptr);
@@ -1823,8 +1844,6 @@ TabStripSelectionChange TabStripModel::SetSelection(
                 !input_event_timestamp.is_null() ? input_event_timestamp : now,
                 resource_coordinator::ResourceCoordinatorTabHelper::IsLoaded(
                     selection.new_contents),
-                resource_coordinator::ResourceCoordinatorTabHelper::IsFrozen(
-                    selection.new_contents),
                 /*show_reason_tab_switching=*/true,
                 /*show_reason_unoccluded=*/false,
                 /*show_reason_bfcache_restore=*/false);
@@ -1846,10 +1865,56 @@ void TabStripModel::SelectRelativeTab(bool next, UserGestureDetails detail) {
   if (contents_data_.empty())
     return;
 
-  int index = active_index();
-  int delta = next ? 1 : -1;
-  index = (index + count() + delta) % count();
+  const int start_index = active_index();
+  base::Optional<tab_groups::TabGroupId> start_group =
+      GetTabGroupForTab(start_index);
+
+  // Ensure the active tab is not in a collapsed group so the while loop can
+  // fallback on activating the active tab.
+  DCHECK(!start_group.has_value() || !IsGroupCollapsed(start_group.value()));
+  const int delta = next ? 1 : -1;
+  int index = (start_index + count() + delta) % count();
+  base::Optional<tab_groups::TabGroupId> group = GetTabGroupForTab(index);
+  while (group.has_value() && IsGroupCollapsed(group.value())) {
+    index = (index + count() + delta) % count();
+    group = GetTabGroupForTab(index);
+  }
   ActivateTabAt(index, detail);
+}
+
+void TabStripModel::MoveTabRelative(bool forward) {
+  const int offset = forward ? 1 : -1;
+
+  // TODO: this needs to be updated for multi-selection.
+  const int current_index = active_index();
+  base::Optional<tab_groups::TabGroupId> current_group =
+      GetTabGroupForTab(current_index);
+
+  int target_index = std::max(std::min(current_index + offset, count() - 1), 0);
+  base::Optional<tab_groups::TabGroupId> target_group =
+      GetTabGroupForTab(target_index);
+
+  // If the tab is at a group boundary and the group is expanded, instead of
+  // actually moving the tab just change its group membership.
+  if (current_group != target_group) {
+    if (current_group.has_value()) {
+      UngroupTab(current_index);
+      return;
+    } else if (target_group.has_value()) {
+      // If the tab is at a group boundary and the group is collapsed, treat the
+      // collapsed group as a tab and find the next available slot for the tab
+      // to move to.
+      const TabGroup* group = group_model_->GetTabGroup(target_group.value());
+      if (group->visual_data()->is_collapsed()) {
+        const std::vector<int> tabs_in_group = group->ListTabs();
+        target_index = forward ? tabs_in_group.back() : tabs_in_group.front();
+      } else {
+        GroupTab(current_index, target_group.value());
+        return;
+      }
+    }
+  }
+  MoveWebContentsAt(current_index, target_index, true);
 }
 
 void TabStripModel::MoveWebContentsAtImpl(int index,

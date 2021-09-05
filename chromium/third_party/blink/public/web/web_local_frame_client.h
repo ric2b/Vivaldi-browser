@@ -37,6 +37,7 @@
 #include "base/i18n/rtl.h"
 #include "base/optional.h"
 #include "base/unguessable_token.h"
+#include "media/base/speech_recognition_client.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
@@ -155,6 +156,13 @@ class BLINK_EXPORT WebLocalFrameClient {
     return nullptr;
   }
 
+  // May return null.
+  virtual std::unique_ptr<media::SpeechRecognitionClient>
+  CreateSpeechRecognitionClient(
+      media::SpeechRecognitionClient::OnReadyCallback callback) {
+    return nullptr;
+  }
+
   // Returns a new WebWorkerFetchContext for a dedicated worker (in the
   // non-PlzDedicatedWorker case) or worklet.
   virtual scoped_refptr<WebWorkerFetchContext> CreateWorkerFetchContext() {
@@ -229,10 +237,6 @@ class BLINK_EXPORT WebLocalFrameClient {
   // from outside of the browsing instance.
   virtual WebFrame* FindFrame(const WebString& name) { return nullptr; }
 
-  // This frame has set its opener to another frame, or disowned the opener
-  // if opener is null. See http://html.spec.whatwg.org/#dom-opener.
-  virtual void DidChangeOpener(WebFrame*) {}
-
   // Specifies the reason for the detachment.
   enum class DetachType { kRemove, kSwap };
 
@@ -244,11 +248,6 @@ class BLINK_EXPORT WebLocalFrameClient {
 
   // This frame's name has changed.
   virtual void DidChangeName(const WebString& name) {}
-
-  // The sandbox flags or container policy have changed for a child frame of
-  // this frame.
-  virtual void DidChangeFramePolicy(WebFrame* child_frame, const FramePolicy&) {
-  }
 
   // Called when a Feature-Policy or Document-Policy or Content-Security-Policy
   // HTTP header (for sandbox flags) is encountered while loading the frame's
@@ -430,15 +429,6 @@ class BLINK_EXPORT WebLocalFrameClient {
   virtual void DidChangeSelection(bool is_selection_empty) {}
   virtual void DidChangeContents() {}
 
-  // This method is called in response to handleInputEvent() when the
-  // default action for the current keyboard event is not suppressed by the
-  // page, to give the embedder a chance to handle the keyboard event
-  // specially.
-  //
-  // Returns true if the keyboard event was handled by the embedder,
-  // indicating that the default action should be suppressed.
-  virtual bool HandleCurrentKeyboardEvent() { return false; }
-
   // UI ------------------------------------------------------------------
 
   // Shows a context menu with commands relevant to a specific element on
@@ -489,6 +479,14 @@ class BLINK_EXPORT WebLocalFrameClient {
 
   // An Input Event observed.
   virtual void DidObserveInputDelay(base::TimeDelta input_delay) {}
+
+  // The first scroll delay, which measures the time between the user's first
+  // scrolling and the resultant display update, has been observed.
+  // The first scroll timestamp is when the first scroll event was created which
+  // is the hardware timestamp provided by the host OS.
+  virtual void DidObserveFirstScrollDelay(
+      base::TimeDelta first_scroll_delay,
+      base::TimeTicks first_scroll_timestamp) {}
 
   // A cpu task or tasks completed.  Triggered when at least 100ms of wall time
   // was spent in tasks on the frame.
@@ -676,6 +674,14 @@ class BLINK_EXPORT WebLocalFrameClient {
   virtual bool GetCaretBoundsFromFocusedPlugin(gfx::Rect& rect) {
     return false;
   }
+
+  // Called by WebFrameWidgetBase, it submits throughput data to the browser
+  // process. The browser process aggregates the data and eventually reports to
+  // the UKM.
+  virtual void SubmitThroughputData(ukm::SourceId source_id,
+                                    int aggregated_percent,
+                                    int impl_percent,
+                                    base::Optional<int> main_percent) {}
 };
 
 }  // namespace blink

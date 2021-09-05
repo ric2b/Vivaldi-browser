@@ -44,6 +44,7 @@ const SubstitutionTypes GeneralSubstitutions = {
 
     &SubstitutionBundleProductType,
     &SubstitutionBundlePartialInfoPlist,
+    &SubstitutionXcassetsCompilerFlags,
 
     &SubstitutionRspFileName,
 };
@@ -100,6 +101,8 @@ const Substitution SubstitutionBundleProductType = {"{{bundle_product_type}}",
                                                     "product_type"};
 const Substitution SubstitutionBundlePartialInfoPlist = {
     "{{bundle_partial_info_plist}}", "partial_info_plist"};
+const Substitution SubstitutionXcassetsCompilerFlags = {
+    "{{xcasset_compiler_flags}}", "xcasset_compiler_flags"};
 
 // Used only for the args of actions.
 const Substitution SubstitutionRspFileName = {"{{response_file_name}}",
@@ -176,7 +179,8 @@ bool IsValidCopySubstitution(const Substitution* type) {
 bool IsValidCompileXCassetsSubstitution(const Substitution* type) {
   return IsValidToolSubstitution(type) || type == &CSubstitutionLinkerInputs ||
          type == &SubstitutionBundleProductType ||
-         type == &SubstitutionBundlePartialInfoPlist;
+         type == &SubstitutionBundlePartialInfoPlist ||
+         type == &SubstitutionXcassetsCompilerFlags;
 }
 
 bool EnsureValidSubstitutions(const std::vector<const Substitution*>& types,

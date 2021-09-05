@@ -188,7 +188,7 @@ WebFrameWidgetImpl::WebFrameWidgetImpl(
 
 WebFrameWidgetImpl::~WebFrameWidgetImpl() = default;
 
-void WebFrameWidgetImpl::Trace(Visitor* visitor) {
+void WebFrameWidgetImpl::Trace(Visitor* visitor) const {
   visitor->Trace(mouse_capture_element_);
   WebFrameWidgetBase::Trace(visitor);
 }
@@ -565,7 +565,7 @@ void WebFrameWidgetImpl::MouseCaptureLost() {
   mouse_capture_element_ = nullptr;
 }
 
-void WebFrameWidgetImpl::SetFocus(bool enable) {
+void WebFrameWidgetImpl::FocusChanged(bool enable) {
   if (enable)
     GetPage()->GetFocusController().SetActive(true);
   GetPage()->GetFocusController().SetFocused(enable);
@@ -611,6 +611,7 @@ void WebFrameWidgetImpl::SetFocus(bool enable) {
       ime_accept_events_ = false;
     }
   }
+  Client()->FocusChanged(enable);
 }
 
 bool WebFrameWidgetImpl::SelectionBounds(WebRect& anchor_web,
@@ -839,7 +840,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleGestureEvent(
             pos_in_local_frame_root, block_bounds);
       }
       event_result = WebInputEventResult::kHandledSystem;
-      Client()->DidHandleGestureEvent(event, event_cancelled);
+      DidHandleGestureEvent(event, event_cancelled);
       return event_result;
     case WebInputEvent::Type::kGestureTwoFingerTap:
     case WebInputEvent::Type::kGestureLongPress:
@@ -853,7 +854,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleGestureEvent(
   LocalFrame* frame = LocalRootImpl()->GetFrame();
   WebGestureEvent scaled_event = TransformWebGestureEvent(frame->View(), event);
   event_result = frame->GetEventHandler().HandleGestureEvent(scaled_event);
-  Client()->DidHandleGestureEvent(event, event_cancelled);
+  DidHandleGestureEvent(event, event_cancelled);
   return event_result;
 }
 

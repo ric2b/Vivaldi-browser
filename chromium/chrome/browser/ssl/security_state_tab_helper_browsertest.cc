@@ -46,9 +46,6 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/policy/core/common/policy_map.h"
-#include "components/policy/core/common/policy_types.h"
-#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/password_protection/metrics_util.h"
 #include "components/safe_browsing/core/features.h"
@@ -58,7 +55,6 @@
 #include "components/security_state/content/ssl_status_input_event_data.h"
 #include "components/security_state/core/features.h"
 #include "components/security_state/core/security_state.h"
-#include "components/security_state/core/security_state_pref_names.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -312,7 +308,7 @@ void CheckBrokenSecurityStyle(const SecurityStyleTestObserver& observer,
                                    ->GetSSL()
                                    .certificate.get();
   EXPECT_TRUE(cert->EqualsExcludingChain(expected_cert));
-  EXPECT_TRUE(!!expired_explanation.insecure_explanations[0].certificate);
+  EXPECT_TRUE(expired_explanation.insecure_explanations[0].certificate);
 }
 
 // Checks that the given |explanation| contains an appropriate
@@ -336,7 +332,7 @@ void CheckSecureCertificateExplanation(
                                    ->GetSSL()
                                    .certificate.get();
   EXPECT_TRUE(cert->EqualsExcludingChain(expected_cert));
-  EXPECT_TRUE(!!explanation.certificate);
+  EXPECT_TRUE(explanation.certificate);
 }
 
 // Checks that the given |explanation| contains an appropriate
@@ -417,7 +413,7 @@ void CheckSecurityInfoForSecure(
   EXPECT_EQ(expect_cert_error,
             net::IsCertStatusError(visible_security_state->cert_status));
   EXPECT_TRUE(visible_security_state->connection_info_initialized);
-  EXPECT_TRUE(!!visible_security_state->certificate);
+  EXPECT_TRUE(visible_security_state->certificate);
 }
 
 // Check that the current security state reflects a non-committed navigation.
@@ -437,7 +433,7 @@ void CheckSecurityInfoForNonCommitted(content::WebContents* contents) {
       security_state::IsSchemeCryptographic(visible_security_state->url));
   EXPECT_FALSE(net::IsCertStatusError(visible_security_state->cert_status));
   EXPECT_FALSE(visible_security_state->connection_info_initialized);
-  EXPECT_FALSE(!!visible_security_state->certificate);
+  EXPECT_FALSE(visible_security_state->certificate);
 }
 
 void ProceedThroughInterstitial(content::WebContents* tab) {
@@ -635,7 +631,7 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, HttpPage) {
   // We expect that the security info fields for this committed navigation will
   // be initialized to reflect the unencrypted connection.
   EXPECT_TRUE(visible_security_state->connection_info_initialized);
-  EXPECT_FALSE(!!visible_security_state->certificate);
+  EXPECT_FALSE(visible_security_state->certificate);
   EXPECT_EQ(0, visible_security_state->connection_status);
 }
 
@@ -1809,9 +1805,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithHttpDangerous,
 
 // Visit a valid HTTPS page, then a broken HTTPS page, and then go back,
 // and test that the observed security style matches.
-// TODO(https://crbug.com/638576) disabled due to flakiness.
 IN_PROC_BROWSER_TEST_F(DidChangeVisibleSecurityStateTest,
-                       DISABLED_DidChangeVisibleSecurityStateObserverGoBack) {
+                       DidChangeVisibleSecurityStateObserverGoBack) {
   ASSERT_TRUE(https_server_.Start());
 
   net::EmbeddedTestServer https_test_server_expired(
@@ -2382,62 +2377,6 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, SafetyTipFormHistogram) {
                   : security_state::SafetyTipStatus::kNone,
         1);
   }
-}
-
-// Tests for the temporary strict mixed content treatment opt out enterprise
-// policy.
-class MixedContentStrictTreatmentOptOutPolicyTest : public policy::PolicyTest {
- public:
-  MixedContentStrictTreatmentOptOutPolicyTest() {
-    feature_list_.InitWithFeatures(
-        {security_state::features::kPassiveMixedContentWarning,
-         blink::features::kMixedContentAutoupgrade},
-        {});
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(MixedContentStrictTreatmentOptOutPolicyTest,
-                       MixedContentStrictTreatmentDisabledSecurityState) {
-  // Check pref is set to true by default.
-  EXPECT_TRUE(browser()->profile()->GetPrefs()->GetBoolean(
-      security_state::prefs::kStricterMixedContentTreatmentEnabled));
-  // Set policy to disable mixed content treatment changes.
-  policy::PolicyMap policies;
-  policies.Set(policy::key::kStricterMixedContentTreatmentEnabled,
-               policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-               policy::POLICY_SOURCE_CLOUD,
-               std::make_unique<base::Value>(false), nullptr);
-  UpdateProviderPolicy(policies);
-  // Pref should now be set to false.
-  EXPECT_FALSE(browser()->profile()->GetPrefs()->GetBoolean(
-      security_state::prefs::kStricterMixedContentTreatmentEnabled));
-  // Start HTTP server.
-  ASSERT_TRUE(embedded_test_server()->Start());
-  // Start HTTPS server.
-  net::EmbeddedTestServer https_server_ok(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_server_ok.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
-  https_server_ok.ServeFilesFromSourceDirectory("chrome/test/data");
-  ASSERT_TRUE(https_server_ok.Start());
-  // Navigate to an HTTPS page that displays mixed content.
-  net::HostPortPair replacement_pair = https_server_ok.host_port_pair();
-  base::StringPairs replacement_text;
-  replacement_text.push_back(
-      make_pair("REPLACE_WITH_HOST_AND_PORT", replacement_pair.ToString()));
-  std::string replacement_path = net::test_server::GetFilePathWithReplacements(
-      "/ssl/page_displays_insecure_content.html", replacement_text);
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_ok.GetURL(replacement_path));
-  // Check security state is NONE, if the request was autoupgraded this will
-  // instead be SECURE, and if the warning was shown it will be WARNING.
-  SecurityStateTabHelper* helper = SecurityStateTabHelper::FromWebContents(
-      browser()->tab_strip_model()->GetActiveWebContents());
-  ASSERT_TRUE(helper);
-  std::unique_ptr<security_state::VisibleSecurityState> visible_security_state =
-      helper->GetVisibleSecurityState();
-  EXPECT_EQ(security_state::NONE, helper->GetSecurityLevel());
 }
 
 class SignedExchangeSecurityStateTest

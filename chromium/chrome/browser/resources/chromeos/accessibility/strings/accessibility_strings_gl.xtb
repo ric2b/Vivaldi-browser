@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Desprazarse á dereita</translation>
 <translation id="1781173782405573156">Tecla de acceso directo</translation>
 <translation id="1787176709638001873">Texto de edición de contrasinal</translation>
+<translation id="180203835522132923">Buscar + O e despois W</translation>
 <translation id="1810107444790159527">Caixa de lista</translation>
 <translation id="1812527064848182527">horizontal</translation>
 <translation id="1829244130665387512">Buscar na páxina</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Pasa dous dedos cara á esquerda</translation>
 <translation id="2998131015536248178">Carácter anterior</translation>
 <translation id="2999559350546931576">Reducir ton</translation>
+<translation id="3009352964623081324">Buscar + O e despois S. Utilízao para instalar, xestionar e personalizar as voces.</translation>
 <translation id="3014130421870723208">@ed 8pun</translation>
 <translation id="3030432017085518523">Botón de opción do elemento do menú</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apóstrofo}other{# apóstrofos}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Inserción</translation>
 <translation id="4511186779140817916">Améndoa pálido</translation>
 <translation id="451510441928265982">Non hai ningunha cabeceira anterior de nivel 2</translation>
+<translation id="4515799157838123044">Sombrear contido do fondo</translation>
 <translation id="4517854969512651305">Aumentar o valor</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{barra}other{# barras}}</translation>
 <translation id="4537277403911487429">Seguinte elemento similar</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Parte</translation>
 <translation id="6637586476836377253">rexistro</translation>
 <translation id="6657128831881431364">Barra de progreso</translation>
+<translation id="6660819301598582123">Necesitamos unha tipografía chuliña de cor kiwi que lle zorregue unha labazada visual á xente.</translation>
 <translation id="667999046851023355">Documento</translation>
 <translation id="6688209025607531203">Unha alerta non modal</translation>
 <translation id="6689672606256159458">Salmón escuro</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">Non hai ningunha cabeceira posterior de nivel 5</translation>
 <translation id="6955705049214951590">Rosa neboento</translation>
 <translation id="696356426651109308">Saltar ao inicio</translation>
-<translation id="699159175332639490">Buscar + O + W</translation>
 <translation id="6994042831499278539">Referencia do glosario</translation>
 <translation id="6996566555547746822">Seguinte caixa de combinación</translation>
 <translation id="6997224546856374593">Ao ler letras maiúsculas:</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">Exemplo</translation>
 <translation id="7439060726180460871">Directorio</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Cambiar de ton ao pronunciar tipos de elementos e texto entre comiñas, eliminado, en letra grosa, entre parénteses ou en maiúsculas.</translation>
 <translation id="7491962110804786152">pestana</translation>
 <translation id="7505149250476994901">Di "maiúsculo" despois da letra</translation>
 <translation id="7518543783849163354">Para que ChromeVox deixe de falar temporalmente, preme a tecla Control.</translation>

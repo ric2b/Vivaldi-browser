@@ -125,12 +125,6 @@ Polymer({
     },
   },
 
-  /** @private */
-  enableWebXrContentSetting_: {
-    type: Boolean,
-    value: () => loadTimeData.getBoolean('enableWebXrContentSetting'),
-  },
-
   /** @private {string} */
   fetchingForHost_: '',
 
@@ -168,7 +162,7 @@ Polymer({
    * @protected
    */
   currentRouteChanged(route) {
-    if (route != routes.SITE_SETTINGS_SITE_DETAILS) {
+    if (route !== routes.SITE_SETTINGS_SITE_DETAILS) {
       return;
     }
     const site = Router.getInstance().getQueryParameters().get('site');
@@ -198,8 +192,8 @@ Polymer({
    * @private
    */
   onPermissionChanged_(category, origin, embeddingOrigin) {
-    if (this.origin_ === undefined || this.origin_ == '' ||
-        origin === undefined || origin == '') {
+    if (this.origin_ === undefined || this.origin_ === '' ||
+        origin === undefined || origin === '') {
       return;
     }
     if (!this.getCategoryList().includes(category)) {
@@ -338,7 +332,7 @@ Polymer({
    * @private
    */
   hasUsage_(storage, cookies) {
-    return storage != '' || cookies != '';
+    return storage !== '' || cookies !== '';
   },
 
   /**
@@ -348,7 +342,7 @@ Polymer({
    * @private
    */
   hasDataAndCookies_(storage, cookies) {
-    return storage != '' && cookies != '';
+    return storage !== '' && cookies !== '';
   },
 
   /** @private */

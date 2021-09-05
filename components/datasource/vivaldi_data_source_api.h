@@ -64,8 +64,6 @@ class VivaldiDataSourcesAPI
   static scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
       const base::FilePath& file_path);
 
-  static bool IsBookmarkCapureUrl(const std::string& url);
-
   static void ScheduleRemovalOfUnusedUrlData(
       content::BrowserContext* browser_context, base::TimeDelta when);
 
@@ -115,16 +113,6 @@ class VivaldiDataSourcesAPI
   static scoped_refptr<base::RefCountedMemory> ReadFileOnFileThread(
       const base::FilePath& file_path);
 
-  static bool ParseDataUrl(base::StringPiece url,
-                           UrlKind* url_kind,
-                           std::string* id);
-
-  static std::string MakeDataUrl(UrlKind url_kind, base::StringPiece id);
-
-  // Check if path mapping id is really old-format thumbanil, not a path
-  // mapping.
-  static bool isOldFormatThumbnailId(base::StringPiece id);
-
   void UpdateMappingOnFileThread(int64_t bookmark_id,
                                  int preference_index,
                                  base::FilePath file_path,
@@ -139,18 +127,9 @@ class VivaldiDataSourcesAPI
   void CollectUsedUrlsOnUIThread();
   void RemoveUnusedUrlDataOnFileThread(UsedIds used_ids);
 
-  void SetCache(UrlKind url_kind,
-                std::string id,
-                scoped_refptr<base::RefCountedMemory> data);
-  void ClearCache(UrlKind url_kind, std::string id);
   void GetDataForIdOnFileThread(
       UrlKind url_kind,
       std::string id,
-      content::URLDataSource::GotDataCallback callback);
-  void FinishGetDataForIdOnUIThread(
-      UrlKind url_kind,
-      std::string id,
-      scoped_refptr<base::RefCountedMemory> data,
       content::URLDataSource::GotDataCallback callback);
 
   void AddImageDataForBookmarkOnFileThread(
@@ -173,7 +152,7 @@ class VivaldiDataSourcesAPI
   base::FilePath GetThumbnailPath(base::StringPiece thumbnail_id);
 
   void AddNewbornIdOnFileThread(UrlKind url_kind, const std::string& id);
-  void RemoveNewbornIdOnFileThread(UrlKind url_kind, const std::string& id);
+  void ForgetNewbornIdOnFileThread(UrlKind url_kind, const std::string& id);
 
   // This must be accessed only on UI thread. It is reset to null on shutdown.
   Profile* profile_;
@@ -192,9 +171,6 @@ class VivaldiDataSourcesAPI
   // bookmark nodes or preferences. This prevents their removal in
   // RemoveUnusedUrlData. This must be accessed only from sequence_task_runner_.
   std::vector<std::string> file_thread_newborn_ids_[kUrlKindCount];
-
-  std::map<std::string, scoped_refptr<base::RefCountedMemory>>
-      data_cache_[kUrlKindCount];
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiDataSourcesAPI);
 };

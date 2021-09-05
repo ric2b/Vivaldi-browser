@@ -17,7 +17,6 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/core/browser/autofill_manager.h"
@@ -645,7 +644,9 @@ void WebController::FindElement(const Selector& selector,
                                 bool strict_mode,
                                 ElementFinder::Callback callback) {
   auto finder = std::make_unique<ElementFinder>(
-      web_contents_, devtools_client_.get(), selector, strict_mode);
+      web_contents_, devtools_client_.get(), selector,
+      strict_mode ? ElementFinder::ResultType::kExactlyOneMatch
+                  : ElementFinder::ResultType::kAnyMatch);
   auto* ptr = finder.get();
   pending_workers_.emplace_back(std::move(finder));
   ptr->Start(base::BindOnce(&WebController::OnFindElementResult,
@@ -774,12 +775,16 @@ void WebController::OnFindElementForFillingForm(
         FillAutofillErrorStatus(UnexpectedErrorStatus(__FILE__, __LINE__)));
     return;
   }
-  DCHECK(!selector.empty());
-  // TODO(crbug.com/806868): Figure out whether there are cases where we need
-  // more than one selector, and come up with a solution that can figure out the
-  // right number of selectors to include.
+
+  base::Optional<std::string> css_selector =
+      selector.ExtractSingleCssSelectorForAutofill();
+  if (!css_selector) {
+    std::move(callback).Run(ClientStatus(INVALID_SELECTOR));
+    return;
+  }
+
   driver->GetAutofillAgent()->GetElementFormAndFieldData(
-      std::vector<std::string>(1, selector.selectors.back()),
+      {*css_selector},
       base::BindOnce(&WebController::OnGetFormAndFieldDataForFillingForm,
                      weak_ptr_factory_.GetWeakPtr(),
                      std::move(data_to_autofill), std::move(callback),
@@ -858,9 +863,16 @@ void WebController::OnFindElementToRetrieveFormAndFieldData(
         autofill::FormData(), autofill::FormFieldData());
     return;
   }
-  DCHECK(!selector.empty());
+  base::Optional<std::string> css_selector =
+      selector.ExtractSingleCssSelectorForAutofill();
+  if (!css_selector) {
+    std::move(callback).Run(ClientStatus(INVALID_SELECTOR),
+                            autofill::FormData(), autofill::FormFieldData());
+    return;
+  }
+
   driver->GetAutofillAgent()->GetElementFormAndFieldData(
-      std::vector<std::string>(1, selector.selectors.back()),
+      {*css_selector},
       base::BindOnce(&WebController::OnGetFormAndFieldDataForRetrieving,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -1189,8 +1201,8 @@ void WebController::DispatchKeyboardTextDownEvent(
   }
 
   if (delay && delay_in_millisecond > 0) {
-    base::PostDelayedTask(
-        FROM_HERE, {content::BrowserThread::UI},
+    content::GetUIThreadTaskRunner({})->PostDelayedTask(
+        FROM_HERE,
         base::BindOnce(
             &WebController::DispatchKeyboardTextDownEvent,
             weak_ptr_factory_.GetWeakPtr(), node_frame_id, codepoints, index,
@@ -1642,8 +1654,8 @@ void WebController::OnWaitForDocumentToBecomeInteractive(
     return;
   }
 
-  base::PostDelayedTask(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostDelayedTask(
+      FROM_HERE,
       base::BindOnce(&WebController::WaitForDocumentToBecomeInteractive,
                      weak_ptr_factory_.GetWeakPtr(), --remaining_rounds,
                      object_id, node_frame_id, std::move(callback)),

@@ -37,7 +37,10 @@ grit("resources") {
     "//url/mojom:url_mojom_origin_js",
   ]
   if (is_chromeos) {
-    deps += [ "//chromeos/services/ime/public/mojom:mojom_js" ]
+    deps += [
+      "//chromeos/services/ime/public/mojom:mojom_js",
+      "//chromeos/services/tts/public/mojom:mojom_js",
+    ]
   }
 }
 
@@ -57,6 +60,12 @@ static_library("renderer") {
     "chrome_render_thread_observer.h",
     "custom_menu_commands.h",
     "instant_restricted_id_cache.h",
+    "lite_video/lite_video_hint_agent.cc",
+    "lite_video/lite_video_hint_agent.h",
+    "lite_video/lite_video_url_loader_throttle.cc",
+    "lite_video/lite_video_url_loader_throttle.h",
+    "lite_video/lite_video_util.cc",
+    "lite_video/lite_video_util.h",
     "loadtimes_extension_bindings.cc",
     "loadtimes_extension_bindings.h",
     "media/chrome_key_systems.cc",
@@ -251,8 +260,6 @@ static_library("renderer") {
     ]
     if (safe_browsing_mode == 1) {
       sources += [
-        "safe_browsing/feature_extractor_clock.cc",
-        "safe_browsing/feature_extractor_clock.h",
         "safe_browsing/features.cc",
         "safe_browsing/features.h",
         "safe_browsing/murmurhash3_util.cc",
@@ -311,26 +318,6 @@ static_library("renderer") {
       "extensions/sync_file_system_custom_bindings.h",
       "extensions/tabs_hooks_delegate.cc",
       "extensions/tabs_hooks_delegate.h",
-      "media/cast_ipc_dispatcher.cc",
-      "media/cast_ipc_dispatcher.h",
-      "media/cast_receiver_audio_valve.cc",
-      "media/cast_receiver_audio_valve.h",
-      "media/cast_receiver_session.cc",
-      "media/cast_receiver_session.h",
-      "media/cast_receiver_session_delegate.cc",
-      "media/cast_receiver_session_delegate.h",
-      "media/cast_rtp_stream.cc",
-      "media/cast_rtp_stream.h",
-      "media/cast_session.cc",
-      "media/cast_session.h",
-      "media/cast_session_delegate.cc",
-      "media/cast_session_delegate.h",
-      "media/cast_threads.cc",
-      "media/cast_threads.h",
-      "media/cast_transport_ipc.cc",
-      "media/cast_transport_ipc.h",
-      "media/cast_udp_transport.cc",
-      "media/cast_udp_transport.h",
     ]
     deps += [
       # TODO(hclam): See crbug.com/298380 for details.
@@ -345,12 +332,6 @@ static_library("renderer") {
       "//services/network/public/cpp",
     ]
     public_deps += [ "//ipc" ]
-  }
-  if (enable_extensions) {
-    sources += [
-      "extensions/cast_streaming_native_handler.cc",
-      "extensions/cast_streaming_native_handler.h",
-    ]
   }
   if (enable_spellcheck) {
     deps += [ "//components/spellcheck/renderer:renderer" ]
@@ -432,7 +413,7 @@ static_library("renderer") {
     ]
   }
 
-  if (is_linux) {
+  if (is_chromeos) {
     sources += [
       "performance_manager/mechanisms/tcmalloc_tunables_impl.cc",
       "performance_manager/mechanisms/tcmalloc_tunables_impl.h",
@@ -449,8 +430,6 @@ static_library("test_support") {
   sources = [
     "chrome_mock_render_thread.cc",
     "chrome_mock_render_thread.h",
-    "safe_browsing/mock_feature_extractor_clock.cc",
-    "safe_browsing/mock_feature_extractor_clock.h",
     "safe_browsing/test_utils.cc",
     "safe_browsing/test_utils.h",
   ]
@@ -463,11 +442,4 @@ static_library("test_support") {
     "//testing/gmock",
     "//testing/gtest",
   ]
-
-  if (is_android) {
-    sources -= [
-      "safe_browsing/mock_feature_extractor_clock.cc",
-      "safe_browsing/mock_feature_extractor_clock.h",
-    ]
-  }
 }

@@ -4,6 +4,8 @@
 
 #include "cc/metrics/video_playback_roughness_reporter.h"
 
+#include <algorithm>
+
 #include "base/bind_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/viz/common/quads/compositor_frame_metadata.h"
@@ -28,6 +30,7 @@ constexpr int VideoPlaybackRoughnessReporter::kMaxWindowSize;
 constexpr int VideoPlaybackRoughnessReporter::kMaxWindowsBeforeSubmit;
 constexpr int VideoPlaybackRoughnessReporter::kMinWindowsBeforeSubmit;
 constexpr int VideoPlaybackRoughnessReporter::kPercentileToSubmit;
+constexpr double VideoPlaybackRoughnessReporter::kDesiredWindowDuration;
 
 VideoPlaybackRoughnessReporter::VideoPlaybackRoughnessReporter(
     PlaybackRoughnessReportingCallback reporting_cb)
@@ -37,8 +40,7 @@ VideoPlaybackRoughnessReporter::~VideoPlaybackRoughnessReporter() = default;
 
 double VideoPlaybackRoughnessReporter::ConsecutiveFramesWindow::roughness()
     const {
-  return root_mean_square_error.InMicrosecondsF() /
-         intended_duration.InMicrosecondsF();
+  return root_mean_square_error.InMillisecondsF();
 }
 
 VideoPlaybackRoughnessReporter::FrameInfo::FrameInfo() = default;
@@ -56,17 +58,10 @@ void VideoPlaybackRoughnessReporter::FrameSubmitted(
 
   FrameInfo info;
   info.token = token;
-  info.decode_time.emplace();
-  if (!frame.metadata()->GetTimeTicks(
-          media::VideoFrameMetadata::DECODE_END_TIME,
-          &info.decode_time.value())) {
-    info.decode_time.reset();
-  }
+  info.decode_time = frame.metadata()->decode_end_time;
 
-  info.intended_duration.emplace();
-  if (frame.metadata()->GetTimeDelta(
-          media::VideoFrameMetadata::WALLCLOCK_FRAME_DURATION,
-          &info.intended_duration.value())) {
+  info.intended_duration = frame.metadata()->wallclock_frame_duration;
+  if (info.intended_duration) {
     if (render_interval > info.intended_duration.value()) {
       // In videos with FPS higher than display refresh rate we acknowledge
       // the fact that some frames will be dropped upstream and frame's intended
@@ -74,27 +69,28 @@ void VideoPlaybackRoughnessReporter::FrameSubmitted(
       info.intended_duration = render_interval;
     }
 
-    // Adjust frame window size to fit about 0.5 seconds of playback
-    double win_size =
-        std::round(0.5 / info.intended_duration.value().InSecondsF());
+    // Adjust frame window size to fit about 1 second of playback
+    double win_size = std::round(kDesiredWindowDuration /
+                                 info.intended_duration.value().InSecondsF());
     frames_window_size_ = std::max(kMinWindowSize, static_cast<int>(win_size));
     frames_window_size_ = std::min(frames_window_size_, kMaxWindowSize);
-  } else {
-    info.intended_duration.reset();
   }
+
   frames_.push_back(info);
 }
 
 void VideoPlaybackRoughnessReporter::FramePresented(TokenType token,
-                                                    base::TimeTicks timestamp) {
+                                                    base::TimeTicks timestamp,
+                                                    bool reliable_timestamp) {
   for (auto it = frames_.rbegin(); it != frames_.rend(); it++) {
     FrameInfo& info = *it;
     if (token == it->token) {
-      info.presentation_time = timestamp;
       if (info.decode_time.has_value()) {
         auto time_since_decode = timestamp - info.decode_time.value();
         UMA_HISTOGRAM_TIMES("Media.VideoFrameSubmitter", time_since_decode);
       }
+      if (reliable_timestamp)
+        info.presentation_time = timestamp;
       break;
     }
     if (viz::FrameTokenGT(token, it->token))

@@ -22,6 +22,7 @@ goog.require('LibLouis.FormType');
 
 goog.scope(function() {
 const AutomationEvent = chrome.automation.AutomationEvent;
+const AutomationIntent = chrome.automation.AutomationIntent;
 const AutomationNode = chrome.automation.AutomationNode;
 const Cursor = cursors.Cursor;
 const Dir = constants.Dir;
@@ -91,7 +92,7 @@ editing.TextEditHandler = class {
       return;
     }
 
-    this.editableText_.onUpdate(evt.eventFrom);
+    this.editableText_.onUpdate(evt.eventFrom, evt.intents);
   }
 
   /**
@@ -168,8 +169,9 @@ const AutomationEditableText = class extends ChromeVoxEditableTextBase {
   /**
    * Called when the text field has been updated.
    * @param {string|undefined} eventFrom
+   * @param {!Array<AutomationIntent>} intents
    */
-  onUpdate(eventFrom) {
+  onUpdate(eventFrom, intents) {
     const oldValue = this.value;
     const oldStart = this.start;
     const oldEnd = this.end;
@@ -380,7 +382,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
   }
 
   /** @override */
-  onUpdate(eventFrom) {
+  onUpdate(eventFrom, intents) {
     const root = this.node_.root;
     if (!root.selectionStartObject || !root.selectionEndObject ||
         root.selectionStartOffset === undefined ||
@@ -416,6 +418,26 @@ const AutomationRichEditableText = class extends AutomationEditableText {
     const prev = this.line_;
     this.line_ = cur;
 
+    this.handleSpeech_(
+        cur, prev, startLine, endLine, prevStartLine, prevEndLine,
+        baseLineOnStart, intents);
+    this.brailleCurrentRichLine_();
+  }
+
+  /**
+   * @param {!editing.EditableLine} cur
+   * @param {!editing.EditableLine} prev
+   * @param {!editing.EditableLine} startLine
+   * @param {!editing.EditableLine} endLine
+   * @param {!editing.EditableLine} prevStartLine
+   * @param {!editing.EditableLine} prevEndLine
+   * @param {boolean} baseLineOnStart
+   * @param {!Array<AutomationIntent>} intents
+   * @private
+   */
+  handleSpeech_(
+      cur, prev, startLine, endLine, prevStartLine, prevEndLine,
+      baseLineOnStart, intents) {
     // During continuous read, skip speech (which gets handled in
     // CommandHandler). We use the speech end callback to trigger additional
     // speech.
@@ -423,8 +445,13 @@ const AutomationRichEditableText = class extends AutomationEditableText {
     if (ChromeVoxState.isReadingContinuously ||
         AutomationPredicate.shouldOnlyOutputSelectionChangeInBraille(
             this.node_)) {
-      this.brailleCurrentRichLine_();
       this.updateIntraLineState_(cur);
+      return;
+    }
+
+    // Before entering into our state machine below, use selected intents to
+    // decipher ambiguous cases.
+    if (this.maybeSpeakUsingIntents_(intents, cur, prev)) {
       return;
     }
 
@@ -464,24 +491,12 @@ const AutomationRichEditableText = class extends AutomationEditableText {
                 new Range(prev.start_, prev.end_), Output.EventType.NAVIGATE)
             .go();
       }
-      this.brailleCurrentRichLine_();
 
       // Be careful to update state in EditableTextBase since we don't
       // explicitly call through to it here.
       this.updateIntraLineState_(cur);
 
-      // Finally, queue up any text markers/styles at bounds.
-      const container = cur.startContainer_;
-      if (!container) {
-        return;
-      }
-
-      this.speakTextMarker_(
-          container, cur.localStartOffset, cur.localEndOffset);
-
-      if (localStorage['announceRichTextAttributes'] == 'true') {
-        this.speakTextStyle_(container);
-      }
+      this.speakAllMarkers_(cur);
       return;
     }
 
@@ -507,13 +522,10 @@ const AutomationRichEditableText = class extends AutomationEditableText {
           new TextChangeEvent(
               cur.startContainerValue_, cur.localContainerStartOffset_,
               cur.localContainerEndOffset_, true));
-
-      // Braille here simply displays the current line.
-      this.brailleCurrentRichLine_();
     } else if (cur.text == '') {
       // This line has no text content. Describe the DOM selection.
       new Output()
-          .withRichSpeechAndBraille(
+          .withRichSpeech(
               new Range(cur.start_, cur.end_),
               new Range(prev.start_, prev.end_), Output.EventType.NAVIGATE)
           .go();
@@ -577,7 +589,6 @@ const AutomationRichEditableText = class extends AutomationEditableText {
 
       ChromeVox.tts.speak(text, QueueMode.CATEGORY_FLUSH);
       ChromeVox.tts.speak(Msgs.getMsg(suffixMsg), QueueMode.QUEUE);
-      this.brailleCurrentRichLine_();
     } else if (!cur.hasCollapsedSelection()) {
       // Without any other information, try describing the selection. This state
       // catches things like select all.
@@ -586,8 +597,6 @@ const AutomationRichEditableText = class extends AutomationEditableText {
           cur.localEndOffset);
       ChromeVox.tts.speak(text, QueueMode.CATEGORY_FLUSH);
       ChromeVox.tts.speak(Msgs.getMsg('selected'), QueueMode.QUEUE);
-      this.brailleCurrentRichLine_();
-
     } else {
       // A catch-all for any other transitions.
 
@@ -596,7 +605,6 @@ const AutomationRichEditableText = class extends AutomationEditableText {
       // above). This is also the code path for describing paste. It also covers
       // jump commands which are non-overlapping selections from prev to cur.
       this.speakCurrentRichLine_(prev);
-      this.brailleCurrentRichLine_();
     }
     this.updateIntraLineState_(cur);
   }
@@ -826,8 +834,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
 
     // Provide context for the current selection.
     const context = cur.startContainer_;
-
-    if (context) {
+    if (context && context.role != RoleType.TEXT_FIELD) {
       const output = new Output().suppress('name').withBraille(
           Range.fromNode(context), Range.fromNode(this.node_),
           Output.EventType.NAVIGATE);
@@ -907,6 +914,66 @@ const AutomationRichEditableText = class extends AutomationEditableText {
     this.value = text;
     this.start = cur.startOffset;
     this.end = cur.endOffset;
+  }
+
+  /**
+   * @param {!Array<AutomationIntent>} intents
+   * @param {!editing.EditableLine} cur
+   * @param {!editing.EditableLine} prev
+   * @private
+   */
+  maybeSpeakUsingIntents_(intents, cur, prev) {
+    if (intents.length == 0) {
+      return false;
+    }
+
+    // Only consider selection moves.
+    const intent = intents.find(
+        i => i.command == chrome.automation.EventCommandType.MOVE_SELECTION);
+    if (!intent) {
+      return false;
+    }
+
+    if (intent.textBoundary ==
+        chrome.automation.EventTextBoundaryType.CHARACTER) {
+      this.updateIntraLineState_(cur);
+
+      // Read character to the right of the cursor. It is assumed to be a new
+      // line if empty.
+      const text =
+          cur.text.substring(cur.startOffset, cur.startOffset + 1) || '\n';
+      ChromeVox.tts.speak(text, QueueMode.CATEGORY_FLUSH);
+      this.speakAllMarkers_(cur);
+      return true;
+    }
+
+    if (intent.textBoundary ==
+            chrome.automation.EventTextBoundaryType.LINE_START ||
+        intent.textBoundary ==
+            chrome.automation.EventTextBoundaryType.LINE_END) {
+      this.updateIntraLineState_(cur);
+      this.speakCurrentRichLine_(prev);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * @param {!editing.EditableLine} cur
+   * @private
+   */
+  speakAllMarkers_(cur) {
+    const container = cur.startContainer_;
+    if (!container) {
+      return;
+    }
+
+    this.speakTextMarker_(container, cur.localStartOffset, cur.localEndOffset);
+
+    if (localStorage['announceRichTextAttributes'] == 'true') {
+      this.speakTextStyle_(container);
+    }
   }
 };
 

@@ -33,6 +33,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
+#include "base/trace_event/trace_arguments.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/iat_patch_function.h"
 #include "base/win/scoped_handle.h"
@@ -44,6 +45,7 @@
 #include "sandbox/win/src/sandbox.h"
 #include "sandbox/win/src/sandbox_nt_util.h"
 #include "sandbox/win/src/sandbox_policy_base.h"
+#include "sandbox/win/src/sandbox_policy_diagnostic.h"
 #include "sandbox/win/src/win_utils.h"
 #include "services/service_manager/sandbox/features.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
@@ -149,6 +151,26 @@ const wchar_t* const kTroublesomeDlls[] = {
 // This is for finch. See also crbug.com/464430 for details.
 const base::Feature kEnableCsrssLockdownFeature{
     "EnableCsrssLockdown", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Helps emit trace events for sandbox policy. This mediates memory between
+// chrome.exe and chrome.dll.
+class PolicyTraceHelper : public base::trace_event::ConvertableToTraceFormat {
+ public:
+  PolicyTraceHelper(sandbox::TargetPolicy* policy) {
+    // |info| must live until JsonString() output is copied.
+    std::unique_ptr<sandbox::PolicyInfo> info = policy->GetPolicyInfo();
+    json_string_ = std::string(info->JsonString());
+  }
+  ~PolicyTraceHelper() override = default;
+
+  // ConvertableToTraceFormat.
+  void AppendAsTraceFormat(std::string* out) const override {
+    out->append(json_string_);
+  }
+
+ private:
+  std::string json_string_;
+};  // PolicyTraceHelper
 
 #if !defined(NACL_WIN64)
 // Adds the policy rules for the path and path\ with the semantic |access|.
@@ -599,14 +621,15 @@ base::string16 GetAppContainerProfileName(
          sandbox_type == SandboxType::kXrCompositing);
   auto sha1 = base::SHA1HashString(appcontainer_id);
   std::string sandbox_base_name = (sandbox_type == SandboxType::kXrCompositing)
-                                      ? std::string("chrome.sandbox.xrdevice")
-                                      : std::string("chrome.sandbox.gpu");
+                                      ? std::string("cr.sb.xr")
+                                      : std::string("cr.sb.gpu");
   std::string profile_name = base::StrCat(
       {sandbox_base_name, base::HexEncode(sha1.data(), sha1.size())});
   // CreateAppContainerProfile requires that the profile name is at most 64
-  // characters.  The size of sha1 is a constant 40, so validate that the base
-  // names are sufficiently short that the total length is valid.
-  DCHECK_LE(profile_name.length(), 64U);
+  // characters but 50 on WCOS systems.  The size of sha1 is a constant 40,
+  // so validate that the base names are sufficiently short that the total
+  // length is valid on all systems.
+  DCHECK_LE(profile_name.length(), 50U);
   return base::UTF8ToWide(profile_name);
 }
 
@@ -845,6 +868,7 @@ bool SandboxWin::InitTargetServices(sandbox::TargetServices* target_services) {
   return sandbox::SBOX_ALL_OK == result;
 }
 
+// static
 sandbox::ResultCode SandboxWin::StartSandboxedProcess(
     base::CommandLine* cmd_line,
     const std::string& process_type,
@@ -929,7 +953,8 @@ sandbox::ResultCode SandboxWin::StartSandboxedProcess(
   if (!cmd_line->HasSwitch(switches::kAllowThirdPartyModules))
     mitigations |= sandbox::MITIGATION_FORCE_MS_SIGNED_BINS;
   if (sandbox_type == SandboxType::kNetwork ||
-      sandbox_type == SandboxType::kAudio) {
+      sandbox_type == SandboxType::kAudio ||
+      sandbox_type == SandboxType::kIconReader) {
     mitigations |= sandbox::MITIGATION_DYNAMIC_CODE_DISABLE;
   }
   // TODO(wfh): Relax strict handle checks for network process until root cause
@@ -1017,19 +1042,16 @@ sandbox::ResultCode SandboxWin::StartSandboxedProcess(
       cmd_line->GetCommandLineString().c_str(), policy, &last_warning,
       &last_error, &temp_process_info);
 
-  // TODO(1059129) Remove logging and underlying plumbing on expiry.
-  // This must be logged after spawning the process as the policy
-  // memory is not committed until the target process is attached to
-  // the sandbox policy. Max is kPolMemSize from sandbox_policy_base.cc.
-  if (result == sandbox::SBOX_ALL_OK) {
-    UMA_HISTOGRAM_CUSTOM_COUNTS("Process.Sandbox.PolicyGlobalSizeOnSuccess",
-                                policy->GetPolicyGlobalSize(), 16, 14 * 4096,
-                                50);
-  }
-
   base::win::ScopedProcessInformation target(temp_process_info);
 
   TRACE_EVENT_END0("startup", "StartProcessWithAccess::LAUNCHPROCESS");
+
+  // Trace policy as processes are started. Useful for both failure and success.
+  TRACE_EVENT_INSTANT2(TRACE_DISABLED_BY_DEFAULT("sandbox"), "processLaunch",
+                       TRACE_EVENT_SCOPE_PROCESS, "sandboxType",
+                       GetSandboxTypeInEnglish(delegate->GetSandboxType()),
+                       "policy",
+                       std::make_unique<PolicyTraceHelper>(policy.get()));
 
   if (sandbox::SBOX_ALL_OK != result) {
     base::UmaHistogramSparse("Process.Sandbox.Launch.Error", last_error);
@@ -1057,6 +1079,7 @@ sandbox::ResultCode SandboxWin::StartSandboxedProcess(
   return sandbox::SBOX_ALL_OK;
 }
 
+// static
 sandbox::ResultCode SandboxWin::GetPolicyDiagnostics(
     base::OnceCallback<void(base::Value)> response) {
   CHECK(g_broker_services);
@@ -1070,6 +1093,46 @@ void BlocklistAddOneDllForTesting(const wchar_t* module_name,
                                   bool check_in_browser,
                                   sandbox::TargetPolicy* policy) {
   BlocklistAddOneDll(module_name, check_in_browser, policy);
+}
+
+// static
+std::string SandboxWin::GetSandboxTypeInEnglish(SandboxType sandbox_type) {
+  switch (sandbox_type) {
+    case SandboxType::kNoSandbox:
+      return "Unsandboxed";
+    case SandboxType::kNoSandboxAndElevatedPrivileges:
+      return "Unsandboxed (Elevated)";
+    case SandboxType::kXrCompositing:
+      return "XR Compositing";
+    case SandboxType::kRenderer:
+      return "Renderer";
+    case SandboxType::kUtility:
+      return "Utility";
+    case SandboxType::kGpu:
+      return "GPU";
+    case SandboxType::kPpapi:
+      return "PPAPI";
+    case SandboxType::kNetwork:
+      return "Network";
+    case SandboxType::kCdm:
+      return "CDM";
+    case SandboxType::kPrintCompositor:
+      return "Print Compositor";
+    case SandboxType::kAudio:
+      return "Audio";
+    case SandboxType::kSpeechRecognition:
+      return "Speech Recognition";
+    case SandboxType::kProxyResolver:
+      return "Proxy Resolver";
+    case SandboxType::kPdfConversion:
+      return "PDF Conversion";
+    case SandboxType::kSharingService:
+      return "Sharing";
+    case SandboxType::kVideoCapture:
+      return "Video Capture";
+    case SandboxType::kIconReader:
+      return "Icon Reader";
+  }
 }
 
 }  // namespace service_manager

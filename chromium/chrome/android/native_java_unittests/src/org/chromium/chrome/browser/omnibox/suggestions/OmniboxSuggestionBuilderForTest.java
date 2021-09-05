@@ -39,6 +39,7 @@ public class OmniboxSuggestionBuilderForTest {
     private int mGroupId;
     private List<QueryTile> mQueryTiles;
     private byte[] mClipboardImageData;
+    private boolean mHasTabMatch;
 
     /**
      * Create a suggestion builder for a search suggestion.
@@ -81,7 +82,8 @@ public class OmniboxSuggestionBuilderForTest {
         return new OmniboxSuggestion(mType, mIsSearchType, mRelevance, mTransition, mDisplayText,
                 mDisplayTextClassifications, mDescription, mDescriptionClassifications, mAnswer,
                 mFillIntoEdit, mUrl, mImageUrl, mImageDominantColor, mIsStarred, mIsDeletable,
-                mPostContentType, mPostData, mGroupId, mQueryTiles, mClipboardImageData);
+                mPostContentType, mPostData, mGroupId, mQueryTiles, mClipboardImageData,
+                mHasTabMatch);
     }
 
     /**
@@ -189,6 +191,33 @@ public class OmniboxSuggestionBuilderForTest {
      */
     public OmniboxSuggestionBuilderForTest setClipboardImageData(byte[] clipboardImageData) {
         mClipboardImageData = clipboardImageData;
+        return this;
+    }
+
+    /**
+     * @param hasTabMatch Whether built suggestion has tab match.
+     * @return Omnibox suggestion builder.
+     */
+    public OmniboxSuggestionBuilderForTest setHasTabMatch(boolean hasTabMatch) {
+        mHasTabMatch = hasTabMatch;
+        return this;
+    }
+
+    /**
+     * @param relevance Relevance score for newly constructed suggestion.
+     * @return Omnibox suggestion builder.
+     */
+    public OmniboxSuggestionBuilderForTest setRelevance(int relevance) {
+        mRelevance = relevance;
+        return this;
+    }
+
+    /**
+     * @param type Suggestion type.
+     * @return Omnibox suggestion builder.
+     */
+    public OmniboxSuggestionBuilderForTest setType(@OmniboxSuggestionType int type) {
+        mType = type;
         return this;
     }
 }

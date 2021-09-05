@@ -14,6 +14,7 @@
 #include "gn/scope_per_file_provider.h"
 #include "gn/tokenizer.h"
 #include "gn/trace.h"
+#include "gn/vector_utils.h"
 
 namespace {
 
@@ -263,13 +264,13 @@ int InputFileManager::GetInputFileCount() const {
   return static_cast<int>(input_files_.size());
 }
 
-void InputFileManager::GetAllPhysicalInputFileNames(
-    std::vector<base::FilePath>* result) const {
+void InputFileManager::AddAllPhysicalInputFileNamesToVectorSetSorter(
+    VectorSetSorter<base::FilePath>* sorter) const {
   std::lock_guard<std::mutex> lock(lock_);
-  result->reserve(input_files_.size());
+
   for (const auto& file : input_files_) {
     if (!file.second->file.physical_name().empty())
-      result->push_back(file.second->file.physical_name());
+      sorter->Add(file.second->file.physical_name());
   }
 }
 

@@ -116,6 +116,7 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   void SetRate(double rate) override;
   void SetVolume(double volume) override;
   void SetLatencyHint(double seconds) override;
+  void SetPreservesPitch(bool preserves_pitch) override;
   void OnRequestPictureInPicture() override;
   void OnPictureInPictureAvailabilityChanged(bool available) override;
   void SetSinkId(const WebString& sink_id,
@@ -284,7 +285,7 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   void SetGpuMemoryBufferVideoForTesting(
       media::GpuMemoryBufferVideoFramePool* gpu_memory_buffer_pool);
 
-  // Callback used to fulfill video.requestAnimationFrame() requests.
+  // Callback used to fulfill video.requestVideoFrameCallback() requests.
   void OnNewFramePresentedCallback();
 
   // Callback used to detect and propagate a render error.

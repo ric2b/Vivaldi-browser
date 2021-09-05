@@ -148,6 +148,10 @@ class SyncedBookmarkTracker {
 
   ~SyncedBookmarkTracker();
 
+  // This method is used to denote that all bookmarks are reuploaded and there
+  // is no need to reupload them again after next browser startup.
+  void SetBookmarksFullTitleReuploaded();
+
   // Returns null if no entity is found.
   const Entity* GetEntityForSyncId(const std::string& sync_id) const;
 
@@ -279,6 +283,15 @@ class SyncedBookmarkTracker {
   void CheckAllNodesTracked(
       const bookmarks::BookmarkModel* bookmark_model) const;
 
+  // This method is used to mark all entities except permanent nodes as
+  // unsynced. This will cause reuploading of all bookmarks. The reupload
+  // will be initiated only when the |bookmarks_full_title_reuploaded| field in
+  // BookmarksMetadata is false. This field is used to prevent reuploading after
+  // each browser restart. Returns true if the reupload was initiated.
+  // TODO(crbug.com/1066962): remove this code when most of bookmarks are
+  // reuploaded.
+  bool ReuploadBookmarksOnLoadIfNeeded();
+
  private:
   // Enumeration of possible reasons why persisted metadata are considered
   // corrupted and don't match the bookmark model. Used in UMA metrics. Do not
@@ -321,16 +334,6 @@ class SyncedBookmarkTracker {
   // creation/update is before child creation/update. Returns the ordered list.
   std::vector<const Entity*> ReorderUnsyncedEntitiesExceptDeletions(
       const std::vector<const Entity*>& entities) const;
-
-  // This method is used to mark all entities except permanent nodes as
-  // unsynced. This will cause reuploading of all bookmarks. This reupload
-  // should be initiated only when the |bookmarks_full_title_reuploaded| field
-  // in BookmarksMetadata is false. This field is used to prevent reuploading
-  // after each browser restart. It is set to true in
-  // BuildBookmarkModelMetadata.
-  // TODO(crbug.com/1066962): remove this code when most of bookmarks are
-  // reuploaded.
-  void ReuploadBookmarksOnLoadIfNeeded();
 
   // Recursive method that starting from |node| appends all corresponding
   // entities with updates in top-down order to |ordered_entities|.

@@ -7,8 +7,9 @@ package org.chromium.chrome.browser.media.ui;
 import android.annotation.TargetApi;
 import android.os.Build;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
 import android.support.test.rule.UiThreadTestRule;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -110,6 +111,16 @@ public class PictureInPictureControllerTest {
     public void testExitPipOnNavigation() throws Throwable {
         testExitOn(() -> JavaScriptUtils.executeJavaScript(getWebContents(),
                 "window.location.href = 'https://www.example.com/';"));
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({"enable-features=Portals"})
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    public void testExitPipOnPortalActivation() throws Throwable {
+        testExitOn(()
+                           -> JavaScriptUtils.executeJavaScript(getWebContents(),
+                                   "document.querySelector('portal').activate();"));
     }
 
     /** Tests that PiP is left when the video leaves fullscreen. */

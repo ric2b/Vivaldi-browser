@@ -9,8 +9,8 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -30,7 +30,6 @@
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/common/content_navigation_policy.h"
 #include "content/common/frame_messages.h"
-#include "content/common/input/synthetic_web_input_event_builders.h"
 #include "content/common/page_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -68,6 +67,7 @@
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
@@ -210,10 +210,9 @@ class FakeFullscreenDelegate : public WebContentsDelegate {
   ~FakeFullscreenDelegate() override {}
 
   void EnterFullscreenModeForTab(
-      WebContents* web_contents,
-      const GURL& origin,
+      RenderFrameHost* requesting_frame,
       const blink::mojom::FullscreenOptions& options) override {
-    fullscreened_contents_ = web_contents;
+    fullscreened_contents_ = WebContents::FromRenderFrameHost(requesting_frame);
   }
 
   void ExitFullscreenModeForTab(WebContents* web_contents) override {
@@ -284,6 +283,15 @@ TEST_F(WebContentsImplTest, UpdateTitleBeforeFirstNavigation) {
   const base::string16 title = base::ASCIIToUTF16("Initial Entry Title");
   contents()->UpdateTitle(main_test_rfh(), title, base::i18n::LEFT_TO_RIGHT);
   EXPECT_EQ(title, contents()->GetTitle());
+}
+
+TEST_F(WebContentsImplTest, SetMainFrameMimeType) {
+  ASSERT_TRUE(controller().IsInitialNavigation());
+  std::string mime = "text/html";
+  RenderViewHostImpl* rvh =
+      static_cast<RenderViewHostImpl*>(main_test_rfh()->GetRenderViewHost());
+  rvh->SetContentsMimeType(mime);
+  EXPECT_EQ(mime, contents()->GetContentsMimeType());
 }
 
 TEST_F(WebContentsImplTest, DontUseTitleFromPendingEntry) {
@@ -837,12 +845,12 @@ TEST_F(WebContentsImplTest, FindOpenerRVHWhenPending) {
   // If swapped out is forbidden, a new proxy should be created for the opener
   // in |instance|, and we should ensure that its routing ID is returned here.
   // Otherwise, we should find the pending RFH and not create a new proxy.
-  int opener_frame_routing_id =
-      popup->GetRenderManager()->GetOpenerRoutingID(instance);
+  auto opener_frame_token =
+      popup->GetRenderManager()->GetOpenerFrameToken(instance);
   RenderFrameProxyHost* proxy =
       contents()->GetRenderManager()->GetRenderFrameProxyHost(instance);
   EXPECT_TRUE(proxy);
-  EXPECT_EQ(proxy->GetRoutingID(), opener_frame_routing_id);
+  EXPECT_EQ(proxy->GetFrameToken(), opener_frame_token);
 
   // Ensure that committing the navigation removes the proxy.
   navigation->Commit();
@@ -1746,8 +1754,9 @@ TEST_F(WebContentsImplTest, HandleWheelEvent) {
 
   int modifiers = 0;
   // Verify that normal mouse wheel events do nothing to change the zoom level.
-  blink::WebMouseWheelEvent event = SyntheticWebMouseWheelEventBuilder::Build(
-      0, 0, 0, 1, modifiers, ui::ScrollGranularity::kScrollByPixel);
+  blink::WebMouseWheelEvent event =
+      blink::SyntheticWebMouseWheelEventBuilder::Build(
+          0, 0, 0, 1, modifiers, ui::ScrollGranularity::kScrollByPixel);
   EXPECT_FALSE(contents()->HandleWheelEvent(event));
   EXPECT_EQ(0, delegate->GetAndResetContentsZoomChangedCallCount());
 
@@ -1755,7 +1764,7 @@ TEST_F(WebContentsImplTest, HandleWheelEvent) {
   // decreased. Except on MacOS where we never want to adjust zoom
   // with mousewheel.
   modifiers = WebInputEvent::kControlKey;
-  event = SyntheticWebMouseWheelEventBuilder::Build(
+  event = blink::SyntheticWebMouseWheelEventBuilder::Build(
       0, 0, 0, 1, modifiers, ui::ScrollGranularity::kScrollByPixel);
   bool handled = contents()->HandleWheelEvent(event);
 #if defined(USE_AURA)
@@ -1769,7 +1778,7 @@ TEST_F(WebContentsImplTest, HandleWheelEvent) {
 
   modifiers = WebInputEvent::kControlKey | WebInputEvent::kShiftKey |
               WebInputEvent::kAltKey;
-  event = SyntheticWebMouseWheelEventBuilder::Build(
+  event = blink::SyntheticWebMouseWheelEventBuilder::Build(
       0, 0, 2, -5, modifiers, ui::ScrollGranularity::kScrollByPixel);
   handled = contents()->HandleWheelEvent(event);
 #if defined(USE_AURA)
@@ -1782,7 +1791,7 @@ TEST_F(WebContentsImplTest, HandleWheelEvent) {
 #endif
 
   // Unless there is no vertical movement.
-  event = SyntheticWebMouseWheelEventBuilder::Build(
+  event = blink::SyntheticWebMouseWheelEventBuilder::Build(
       0, 0, 2, 0, modifiers, ui::ScrollGranularity::kScrollByPixel);
   EXPECT_FALSE(contents()->HandleWheelEvent(event));
   EXPECT_EQ(0, delegate->GetAndResetContentsZoomChangedCallCount());
@@ -1791,7 +1800,7 @@ TEST_F(WebContentsImplTest, HandleWheelEvent) {
   // zoom being adjusted, to avoid accidental adjustments caused by
   // two-finger-scrolling on a touchpad.
   modifiers = WebInputEvent::kControlKey;
-  event = SyntheticWebMouseWheelEventBuilder::Build(
+  event = blink::SyntheticWebMouseWheelEventBuilder::Build(
       0, 0, 0, 5, modifiers, ui::ScrollGranularity::kScrollByPrecisePixel);
   EXPECT_FALSE(contents()->HandleWheelEvent(event));
   EXPECT_EQ(0, delegate->GetAndResetContentsZoomChangedCallCount());
@@ -2035,6 +2044,9 @@ TEST_F(WebContentsImplTestWithSiteIsolation, StartStopEventsBalance) {
   EXPECT_TRUE(observer.is_loading());
   EXPECT_TRUE(observer.did_receive_response());
 
+  // After navigation, the RenderFrameHost may change.
+  subframe = static_cast<TestRenderFrameHost*>(
+      contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   // Navigate the frame again, this time using LoadURLWithParams. This causes
   // RenderFrameHost to call into WebContents::DidStartLoading, which starts
   // the spinner.

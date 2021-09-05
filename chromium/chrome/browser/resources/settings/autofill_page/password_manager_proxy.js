@@ -50,6 +50,19 @@ export class PasswordManagerProxy {
   removeSavedPassword(id) {}
 
   /**
+   * Should remove the saved passwords and notify that the list has changed.
+   * @param {!Array<number>} ids The ids for the password entries being removed.
+   *     Any id not in the list is ignored.
+   */
+  removeSavedPasswords(ids) {}
+
+  /**
+   * Moves a password from the device to the account
+   * @param {number} id The id for the password entry being moved.
+   */
+  movePasswordToAccount(id) {}
+
+  /**
    * Add an observer to the list of password exceptions.
    * @param {function(!Array<!PasswordManagerProxy.ExceptionEntry>):void}
    *     listener
@@ -78,6 +91,13 @@ export class PasswordManagerProxy {
    *     No-op if |id| is not in the list.
    */
   removeException(id) {}
+
+  /**
+   * Should remove the password exceptions and notify that the list has changed.
+   * @param {!Array<number>} ids The ids for the exception url entries being
+   * removed. Any |id| not in the list is ignored.
+   */
+  removeExceptions(ids) {}
 
   /**
    * Should undo the last saved password or exception removal and notify that
@@ -252,13 +272,11 @@ export class PasswordManagerProxy {
 /** @typedef {chrome.passwordsPrivate.PasswordUiEntry} */
 PasswordManagerProxy.PasswordUiEntry;
 
+/** @typedef {chrome.passwordsPrivate.UrlCollection} */
+PasswordManagerProxy.UrlCollection;
+
 /** @typedef {chrome.passwordsPrivate.ExceptionEntry} */
 PasswordManagerProxy.ExceptionEntry;
-
-/**
- * @typedef {{ entry: !PasswordManagerProxy.PasswordUiEntry, password: string }}
- */
-PasswordManagerProxy.UiEntryWithPassword;
 
 /** @typedef {chrome.passwordsPrivate.PasswordExportProgress} */
 PasswordManagerProxy.PasswordExportProgress;
@@ -350,6 +368,16 @@ export class PasswordManagerImpl {
   }
 
   /** @override */
+  removeSavedPasswords(ids) {
+    chrome.passwordsPrivate.removeSavedPasswords(ids);
+  }
+
+  /** @override */
+  movePasswordToAccount(id) {
+    chrome.passwordsPrivate.movePasswordToAccount(id);
+  }
+
+  /** @override */
   addExceptionListChangedListener(listener) {
     chrome.passwordsPrivate.onPasswordExceptionsListChanged.addListener(
         listener);
@@ -369,6 +397,11 @@ export class PasswordManagerImpl {
   /** @override */
   removeException(id) {
     chrome.passwordsPrivate.removePasswordException(id);
+  }
+
+  /** @override */
+  removeExceptions(ids) {
+    chrome.passwordsPrivate.removePasswordExceptions(ids);
   }
 
   /** @override */

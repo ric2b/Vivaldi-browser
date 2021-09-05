@@ -5,6 +5,7 @@
 #ifndef SYNC_NOTES_NOTE_MODEL_MERGER_H_
 #define SYNC_NOTES_NOTE_MODEL_MERGER_H_
 
+#include <list>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -50,7 +51,7 @@ class NoteModelMerger {
   class RemoteTreeNode final {
    private:
     using UpdatesPerParentId =
-        std::unordered_map<std::string, syncer::UpdateResponseDataList>;
+        std::unordered_map<std::string, std::list<syncer::UpdateResponseData>>;
 
    public:
     // Constructs a tree given |update| as root and recursively all descendants

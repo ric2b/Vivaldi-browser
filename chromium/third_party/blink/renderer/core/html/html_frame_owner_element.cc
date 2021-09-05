@@ -279,13 +279,13 @@ void HTMLFrameOwnerElement::SetSandboxFlags(
   frame_policy_.sandbox_flags = flags;
   // Recalculate the container policy in case the allow-same-origin flag has
   // changed.
-  frame_policy_.container_policy = ConstructContainerPolicy(nullptr);
+  frame_policy_.container_policy = ConstructContainerPolicy();
 
   // Don't notify about updates if ContentFrame() is null, for example when
   // the subframe hasn't been created yet.
   if (ContentFrame()) {
-    GetDocument().GetFrame()->Client()->DidChangeFramePolicy(ContentFrame(),
-                                                             frame_policy_);
+    GetDocument().GetFrame()->GetLocalFrameHostRemote().DidChangeFramePolicy(
+        ContentFrame()->GetFrameToken(), frame_policy_);
   }
 }
 
@@ -294,8 +294,8 @@ void HTMLFrameOwnerElement::SetDisallowDocumentAccesss(bool disallowed) {
   // Don't notify about updates if ContentFrame() is null, for example when
   // the subframe hasn't been created yet.
   if (ContentFrame()) {
-    GetDocument().GetFrame()->Client()->DidChangeFramePolicy(ContentFrame(),
-                                                             frame_policy_);
+    GetDocument().GetFrame()->GetLocalFrameHostRemote().DidChangeFramePolicy(
+        ContentFrame()->GetFrameToken(), frame_policy_);
   }
 }
 
@@ -311,18 +311,18 @@ void HTMLFrameOwnerElement::DisposePluginSoon(WebPluginContainerImpl* plugin) {
     plugin->Dispose();
 }
 
-void HTMLFrameOwnerElement::UpdateContainerPolicy(Vector<String>* messages) {
-  frame_policy_.container_policy = ConstructContainerPolicy(messages);
+void HTMLFrameOwnerElement::UpdateContainerPolicy() {
+  frame_policy_.container_policy = ConstructContainerPolicy();
   // Don't notify about updates if ContentFrame() is null, for example when
   // the subframe hasn't been created yet.
   if (ContentFrame()) {
-    GetDocument().GetFrame()->Client()->DidChangeFramePolicy(ContentFrame(),
-                                                             frame_policy_);
+    GetDocument().GetFrame()->GetLocalFrameHostRemote().DidChangeFramePolicy(
+        ContentFrame()->GetFrameToken(), frame_policy_);
   }
 }
 
 void HTMLFrameOwnerElement::UpdateRequiredPolicy() {
-  const auto* frame = GetDocument().GetFrame();
+  auto* frame = GetDocument().GetFrame();
   DocumentPolicy::FeatureState new_required_policy =
       frame
           ? DocumentPolicy::MergeFeatureState(
@@ -334,13 +334,14 @@ void HTMLFrameOwnerElement::UpdateRequiredPolicy() {
   frame_policy_.required_document_policy.clear();
   for (auto i = new_required_policy.begin(), last = new_required_policy.end();
        i != last;) {
-    if (!DisabledByOriginTrial(i->first, &GetDocument()))
+    if (!DisabledByOriginTrial(i->first, GetExecutionContext()))
       frame_policy_.required_document_policy.insert(*i);
     ++i;
   }
 
   if (ContentFrame()) {
-    frame->Client()->DidChangeFramePolicy(ContentFrame(), frame_policy_);
+    frame->GetLocalFrameHostRemote().DidChangeFramePolicy(
+        ContentFrame()->GetFrameToken(), frame_policy_);
   }
 }
 
@@ -473,13 +474,10 @@ bool HTMLFrameOwnerElement::LoadOrRedirectSubframe(
   // Update the |should_lazy_load_children_| value according to the "loading"
   // attribute immediately, so that it still gets respected even if the "src"
   // attribute gets parsed in ParseAttribute() before the "loading" attribute
-  // does. Note that when the *feature policy* for "lazyload" is disabled, the
-  // attribute value loading="eager" is ignored (i.e., interpreted as
-  // "auto" instead).
+  // does.
   if (should_lazy_load_children_ &&
       EqualIgnoringASCIICase(FastGetAttribute(html_names::kLoadingAttr),
-                             "eager") &&
-      !GetDocument().IsLazyLoadPolicyEnforced()) {
+                             "eager")) {
     should_lazy_load_children_ = false;
   }
 
@@ -511,7 +509,7 @@ bool HTMLFrameOwnerElement::LoadOrRedirectSubframe(
     return false;
 
   if (GetDocument().GetFrame()->GetPage()->SubframeCount() >=
-      Page::kMaxNumberOfFrames)
+      Page::MaxNumberOfFrames())
     return false;
 
   LocalFrame* child_frame =
@@ -535,13 +533,8 @@ bool HTMLFrameOwnerElement::LoadOrRedirectSubframe(
   if (IsPlugin())
     request.SetSkipServiceWorker(true);
 
-  // When the feature policy "loading-frame-default-eager" is disabled in
-  // the document, loading attribute value "auto" (or unset/invalid values) will
-  // also be interpreted as "lazy".
   const auto& loading_attr = FastGetAttribute(html_names::kLoadingAttr);
-  bool loading_lazy_set = EqualIgnoringASCIICase(loading_attr, "lazy") ||
-                          (IsLoadingFrameDefaultEagerEnforced() &&
-                           !EqualIgnoringASCIICase(loading_attr, "eager"));
+  bool loading_lazy_set = EqualIgnoringASCIICase(loading_attr, "lazy");
 
   if (!lazy_load_frame_observer_ &&
       IsFrameLazyLoadable(GetDocument(), url, loading_lazy_set,
@@ -585,11 +578,7 @@ bool HTMLFrameOwnerElement::ShouldLazyLoadChildren() const {
 void HTMLFrameOwnerElement::ParseAttribute(
     const AttributeModificationParams& params) {
   if (params.name == html_names::kLoadingAttr) {
-    // Note that when the *feature policy* for "lazyload" is disabled, the
-    // attribute value loading="eager" is ignored (i.e., interpreted as
-    // "auto" instead).
-    if (EqualIgnoringASCIICase(params.new_value, "eager") &&
-        !GetDocument().IsLazyLoadPolicyEnforced()) {
+    if (EqualIgnoringASCIICase(params.new_value, "eager")) {
       UseCounter::Count(GetDocument(),
                         WebFeature::kLazyLoadFrameLoadingAttributeEager);
       should_lazy_load_children_ = false;
@@ -606,32 +595,30 @@ void HTMLFrameOwnerElement::ParseAttribute(
   }
 }
 
-void HTMLFrameOwnerElement::FrameCrossOriginToParentFrameChanged() {
-  if (base::FeatureList::IsEnabled(
-          blink::features::kCompositeCrossOriginIframes)) {
-    SetNeedsCompositingUpdate();
-  }
-}
-
 void HTMLFrameOwnerElement::SetEmbeddingToken(
     const base::UnguessableToken& embedding_token) {
-  DCHECK(content_frame_);
-  DCHECK(content_frame_->IsRemoteFrame());
+  DCHECK(ContentFrame());
   embedding_token_ = embedding_token;
 }
 
-void HTMLFrameOwnerElement::Trace(Visitor* visitor) {
+const base::Optional<base::UnguessableToken>&
+HTMLFrameOwnerElement::GetEmbeddingToken() const {
+  return embedding_token_;
+}
+
+bool HTMLFrameOwnerElement::IsAdRelated() const {
+  if (!content_frame_)
+    return false;
+
+  return content_frame_->IsAdSubframe();
+}
+
+void HTMLFrameOwnerElement::Trace(Visitor* visitor) const {
   visitor->Trace(content_frame_);
   visitor->Trace(embedded_content_view_);
   visitor->Trace(lazy_load_frame_observer_);
   HTMLElement::Trace(visitor);
   FrameOwner::Trace(visitor);
-}
-
-bool HTMLFrameOwnerElement::IsLoadingFrameDefaultEagerEnforced() const {
-  return RuntimeEnabledFeatures::ExperimentalProductivityFeaturesEnabled() &&
-         !GetDocument().IsFeatureEnabled(
-             mojom::blink::FeaturePolicyFeature::kLoadingFrameDefaultEager);
 }
 
 }  // namespace blink

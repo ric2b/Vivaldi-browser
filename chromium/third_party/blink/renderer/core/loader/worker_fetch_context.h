@@ -61,7 +61,7 @@ class WorkerFetchContext final : public BaseFetchContext {
       override;
   bool ShouldBlockFetchByMixedContentCheck(
       mojom::blink::RequestContextType request_context,
-      ResourceRequest::RedirectStatus redirect_status,
+      const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
       const KURL& url,
       ReportingDisposition reporting_disposition,
       const base::Optional<String>& devtools_id) const override;
@@ -82,7 +82,8 @@ class WorkerFetchContext final : public BaseFetchContext {
   void PopulateResourceRequest(ResourceType,
                                const ClientHintsPreferences&,
                                const FetchParameters::ResourceWidth&,
-                               ResourceRequest&) override;
+                               ResourceRequest&,
+                               const FetchInitiatorInfo&) override;
   mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
   TakePendingWorkerTimingReceiver(int request_id) override;
 
@@ -94,7 +95,7 @@ class WorkerFetchContext final : public BaseFetchContext {
   bool AllowRunningInsecureContent(bool enabled_per_settings,
                                    const KURL& url) const;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  private:
   void SetFirstPartyCookie(ResourceRequest&);

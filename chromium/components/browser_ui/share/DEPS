@@ -1,0 +1,7 @@
+include_rules = [
+  "+chrome/android/java/src/org/chromium/chrome/browser/FileProviderHelper.java",
+  "+components/dom_distiller/core/android",
+  "+content/public/android",
+  "+content/public/test/android/javatests",
+  "+ui/android",
+]

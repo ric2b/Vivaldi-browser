@@ -42,6 +42,7 @@
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/quota/quota_temporary_storage_evictor.h"
 #include "storage/browser/quota/usage_tracker.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom-shared.h"
 
 using blink::mojom::StorageType;
 
@@ -289,8 +290,6 @@ class QuotaManager::UsageAndQuotaInfoGatherer : public QuotaTask {
     if (host_quota > temp_pool_free_space) {
       if (is_unlimited_) {
         host_quota = available_space_ + host_usage_;
-      } else if (!base::FeatureList::IsEnabled(features::kStaticHostQuota)) {
-        host_quota = temp_pool_free_space + host_usage_;
       }
     }
 
@@ -548,24 +547,29 @@ class QuotaManager::OriginDataDeleter : public QuotaTask {
 
  protected:
   void Run() override {
-    error_count_ = 0;
-    remaining_clients_ = manager()->clients_.size();
-    for (const auto& client : manager()->clients_) {
-      if (quota_client_types_.contains(client->type())) {
+    DCHECK(manager()->client_types_.contains(type_));
+    remaining_clients_ = manager()->client_types_[type_].size();
+
+    for (const auto& client_and_type : manager()->client_types_[type_]) {
+      QuotaClient* client = client_and_type.first;
+      QuotaClientType client_type = client_and_type.second;
+      if (quota_client_types_.contains(client_type)) {
         static int tracing_id = 0;
         TRACE_EVENT_ASYNC_BEGIN2(
             "browsing_data", "QuotaManager::OriginDataDeleter", ++tracing_id,
-            "client_type", client->type(), "origin", origin_.Serialize());
+            "client_type", client_type, "origin", origin_.Serialize());
         client->DeleteOriginData(
             origin_, type_,
             base::BindOnce(&OriginDataDeleter::DidDeleteOriginData,
                            weak_factory_.GetWeakPtr(), tracing_id));
       } else {
         ++skipped_clients_;
-        if (--remaining_clients_ == 0)
-          CallCompleted();
+        --remaining_clients_;
       }
     }
+
+    if (remaining_clients_ == 0)
+      CallCompleted();
   }
 
   void Completed() override {
@@ -635,10 +639,11 @@ class QuotaManager::HostDataDeleter : public QuotaTask {
 
  protected:
   void Run() override {
-    error_count_ = 0;
-    remaining_clients_ = manager()->clients_.size();
-    for (const auto& client : manager()->clients_) {
-      client->GetOriginsForHost(
+    DCHECK(manager()->client_types_.contains(type_));
+    remaining_clients_ = manager()->client_types_[type_].size();
+
+    for (const auto& client_and_type : manager()->client_types_[type_]) {
+      client_and_type.first->GetOriginsForHost(
           type_, host_,
           base::BindOnce(&HostDataDeleter::DidGetOriginsForHost,
                          weak_factory_.GetWeakPtr()));
@@ -722,19 +727,24 @@ class QuotaManager::StorageCleanupHelper : public QuotaTask {
       : QuotaTask(manager),
         type_(type),
         quota_client_types_(std::move(quota_client_types)),
-        callback_(std::move(callback)) {}
+        callback_(std::move(callback)) {
+    DCHECK(manager->client_types_.contains(type_));
+  }
 
  protected:
   void Run() override {
+    DCHECK(manager()->client_types_.contains(type_));
     base::RepeatingClosure barrier = base::BarrierClosure(
-        manager()->clients_.size(),
+        manager()->client_types_[type_].size(),
         base::BindOnce(&StorageCleanupHelper::CallCompleted,
                        weak_factory_.GetWeakPtr()));
 
     // This may synchronously trigger |callback_| at the end of the for loop,
     // make sure we do nothing after this block.
-    for (const auto& client : manager()->clients_) {
-      if (quota_client_types_.contains(client->type())) {
+    for (const auto& client_and_type : manager()->client_types_[type_]) {
+      QuotaClient* client = client_and_type.first;
+      QuotaClientType client_type = client_and_type.second;
+      if (quota_client_types_.contains(client_type)) {
         client->PerformStorageCleanup(type_, barrier);
       } else {
         barrier.Run();
@@ -1068,7 +1078,9 @@ void QuotaManager::DeleteHostData(const std::string& host,
                                   StatusCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   LazyInitialize();
-  if (host.empty() || clients_.empty()) {
+
+  DCHECK(client_types_.contains(type));
+  if (host.empty() || client_types_[type].empty()) {
     std::move(callback).Run(blink::mojom::QuotaStatusCode::kOk);
     return;
   }
@@ -1213,18 +1225,18 @@ bool QuotaManager::ResetUsageTracker(StorageType type) {
   DCHECK(GetUsageTracker(type));
   if (GetUsageTracker(type)->IsWorking())
     return false;
+
+  auto usage_tracker = std::make_unique<UsageTracker>(
+      client_types_[type], type, special_storage_policy_.get());
   switch (type) {
     case StorageType::kTemporary:
-      temporary_usage_tracker_.reset(new UsageTracker(
-          clients_, StorageType::kTemporary, special_storage_policy_.get()));
+      temporary_usage_tracker_ = std::move(usage_tracker);
       return true;
     case StorageType::kPersistent:
-      persistent_usage_tracker_.reset(new UsageTracker(
-          clients_, StorageType::kPersistent, special_storage_policy_.get()));
+      persistent_usage_tracker_ = std::move(usage_tracker);
       return true;
     case StorageType::kSyncable:
-      syncable_usage_tracker_.reset(new UsageTracker(
-          clients_, StorageType::kSyncable, special_storage_policy_.get()));
+      syncable_usage_tracker_ = std::move(usage_tracker);
       return true;
     default:
       NOTREACHED();
@@ -1234,8 +1246,12 @@ bool QuotaManager::ResetUsageTracker(StorageType type) {
 
 QuotaManager::~QuotaManager() {
   proxy_->manager_ = nullptr;
-  for (const auto& client : clients_)
+
+  // Iterating over |clients_for_ownership_| is correct here because we want to
+  // call OnQuotaManagerDestroyed() once per QuotaClient.
+  for (const auto& client : clients_for_ownership_)
     client->OnQuotaManagerDestroyed();
+
   if (database_)
     db_runner_->DeleteSoon(FROM_HERE, database_.release());
 }
@@ -1253,16 +1269,20 @@ void QuotaManager::LazyInitialize() {
     return;
   }
 
-  // Use an empty path to open an in-memory only databse for incognito.
-  database_.reset(new QuotaDatabase(is_incognito_ ? base::FilePath() :
-      profile_path_.AppendASCII(kDatabaseName)));
+  // Use an empty path to open an in-memory only database for incognito.
+  database_ = std::make_unique<QuotaDatabase>(
+      is_incognito_ ? base::FilePath()
+                    : profile_path_.AppendASCII(kDatabaseName));
 
-  temporary_usage_tracker_.reset(new UsageTracker(
-      clients_, StorageType::kTemporary, special_storage_policy_.get()));
-  persistent_usage_tracker_.reset(new UsageTracker(
-      clients_, StorageType::kPersistent, special_storage_policy_.get()));
-  syncable_usage_tracker_.reset(new UsageTracker(
-      clients_, StorageType::kSyncable, special_storage_policy_.get()));
+  temporary_usage_tracker_ = std::make_unique<UsageTracker>(
+      client_types_[StorageType::kTemporary], StorageType::kTemporary,
+      special_storage_policy_.get());
+  persistent_usage_tracker_ = std::make_unique<UsageTracker>(
+      client_types_[StorageType::kPersistent], StorageType::kPersistent,
+      special_storage_policy_.get());
+  syncable_usage_tracker_ = std::make_unique<UsageTracker>(
+      client_types_[StorageType::kSyncable], StorageType::kSyncable,
+      special_storage_policy_.get());
 
   if (!is_incognito_) {
     histogram_timer_.Start(
@@ -1309,10 +1329,18 @@ void QuotaManager::DidBootstrapDatabase(
   GetLRUOrigin(StorageType::kTemporary, std::move(did_get_origin_callback));
 }
 
-void QuotaManager::RegisterClient(scoped_refptr<QuotaClient> client) {
+void QuotaManager::RegisterClient(
+    scoped_refptr<QuotaClient> client,
+    QuotaClientType client_type,
+    const std::vector<blink::mojom::StorageType>& storage_types) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!database_.get());
-  clients_.push_back(std::move(client));
+  DCHECK(!database_.get())
+      << "All clients must be registered before the database is initialized";
+  DCHECK(client.get());
+
+  for (blink::mojom::StorageType storage_type : storage_types)
+    client_types_[storage_type].insert({client.get(), client_type});
+  clients_for_ownership_.push_back(std::move(client));
 }
 
 UsageTracker* QuotaManager::GetUsageTracker(StorageType type) const {
@@ -1409,8 +1437,8 @@ void QuotaManager::StartEviction() {
   DCHECK(!temporary_storage_evictor_.get());
   if (eviction_disabled_)
     return;
-  temporary_storage_evictor_.reset(new QuotaTemporaryStorageEvictor(
-      this, kEvictionIntervalInMilliSeconds));
+  temporary_storage_evictor_ = std::make_unique<QuotaTemporaryStorageEvictor>(
+      this, kEvictionIntervalInMilliSeconds);
   temporary_storage_evictor_->Start();
 }
 
@@ -1450,11 +1478,6 @@ void QuotaManager::DeleteOriginDataInternal(const url::Origin& origin,
                                             StatusCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   LazyInitialize();
-
-  if (clients_.empty()) {
-    std::move(callback).Run(blink::mojom::QuotaStatusCode::kOk);
-    return;
-  }
 
   OriginDataDeleter* deleter =
       new OriginDataDeleter(this, origin, type, std::move(quota_client_types),

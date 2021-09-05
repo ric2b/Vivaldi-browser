@@ -41,6 +41,13 @@ message SignedData {
   optional int32 extra_data_bytes = 3;
 }
 
+// Request from device to server to check user account type for enrollment.
+message CheckUserAccountRequest {
+  // Email address of a user.
+  // The user may not exist in GAIA.
+  optional string user_email = 1;
+}
+
 // Request from device to server to register a device, user or browser.
 message DeviceRegisterRequest {
   reserved 5, 10;
@@ -197,6 +204,28 @@ message DeviceRegisterIdentification {
   optional string attested_device_id = 1;
 }
 
+// Response from server to device
+message CheckUserAccountResponse {
+  // Enum listing the possible user account status.
+  enum UserAccountType {
+    UNKNOWN_USER_ACCOUNT_TYPE = 0;
+
+    // There is no GAIA user exist mapping to the specific user email.
+    NOT_EXIST = 1;
+
+    // The GAIA user mapping to the specific user email is not a dasher user.
+    CONSUMER = 2;
+    // The GAIA user is a dasher user. See http://go/is-dasher-user
+    DASHER = 3;
+  }
+
+  // The domain abstracted from the specific email has been verified by dasher.
+  optional bool domain_verified = 1;
+
+  // The account type mapping from the specific user email.
+  optional UserAccountType user_account_type = 2;
+}
+
 // Response from server to device register request.
 message DeviceRegisterResponse {
   // Device management token for this registration.  This token MUST be
@@ -239,6 +268,10 @@ message DeviceRegisterResponse {
   // registering for policy is affiliated on the device.
   // Only sent if DeviceRegisterRequest.Type == USER
   repeated string user_affiliation_ids = 5;
+
+  // The unique directory api ID of the device which was generated on the
+  // server-side.
+  optional string directory_api_id = 6;
 }
 
 // Request from device to server to unregister device.
@@ -983,6 +1016,17 @@ message DiskInfo {
   optional string health = 6;
   // volume_id for volumes on this disk.
   repeated string volumes = 7;
+  // Read/write statistics for this disk.
+  optional uint64 bytes_read_since_last_boot = 8;
+  optional uint64 bytes_written_since_last_boot = 9;
+  optional uint64 read_time_seconds_since_last_boot = 10;
+  optional uint64 write_time_seconds_since_last_boot = 11;
+  // Counts the time the disk and queue were busy, so unlike the fields above,
+  // parallel requests are not counted multiple times.
+  optional uint64 io_time_seconds_since_last_boot = 12;
+  // Time spent discarding since last boot. Discarding is writing to clear
+  // blocks which are no longer in use. Supported on kernels 4.18+.
+  optional uint64 discard_time_seconds_since_last_boot = 13;
 }
 
 // Status of the storage subsystem.
@@ -1044,6 +1088,8 @@ message CpuInfo {
   enum Architecture {
     ARCHITECTURE_UNSPECIFIED = 0;
     X86_64 = 1;
+    AARCH64 = 2;
+    ARMV7L = 3;
   }
   optional Architecture architecture = 2;
 
@@ -1151,6 +1197,19 @@ message BacklightInfo {
 message FanInfo {
   // Fan speed in RPM.
   optional uint32 speed_rpm = 1;
+}
+
+// Information about a device's Bluetooth adapter, which is used to detect and
+// connect to Bluetooth devices.
+message BluetoothAdapterInfo {
+  // The name of the adapter.
+  optional string name = 1;
+  // The MAC address of the adapter.
+  optional string address = 2;
+  // Indicates whether the adapter is on or off.
+  optional bool powered = 3;
+  // The number of devices connected to this adapter.
+  optional uint32 num_connected_devices = 4;
 }
 
 // Report device level status.
@@ -1268,6 +1327,9 @@ message DeviceStatusReportRequest {
 
   // Overall information about the device's CPUs.
   optional GlobalCpuInfo global_cpu_info = 39;
+
+  // Information about the device's Bluetooth adapters.
+  repeated BluetoothAdapterInfo bluetooth_adapter_info = 40;
 }
 
 message OsUpdateStatus {
@@ -1357,8 +1419,14 @@ message AppInfo {
 
   // Version of the application, if applicable.
   optional string version = 7;
+
+  // A list of time periods when the app was active. These times are aggregated
+  // per day, are pruned on the device after reporting successfully, and are
+  // stored only for 30 days in the past.
+  repeated TimePeriod active_time_periods = 8;
 }
 
+// LINT.IfChange
 // Provides Android application permission.
 message AndroidAppPermission {
   // Name of application permission.
@@ -1409,6 +1477,7 @@ message AndroidAppInfo {
   // Permissions of the Android application.
   repeated AndroidAppPermission permissions = 7;
 }
+// LINT.ThenChange(//depot/google3/java/com/google/chrome/cros/spanner/devicemanagement/schema/chrome_os.proto)
 
 // Chrome user profile level status.
 // Deprecated : Use ChromeUserProfileInfo instead.
@@ -1766,7 +1835,7 @@ message PolicyValueValidationIssue {
     // updated on the device.
     VALUE_VALIDATION_ISSUE_SEVERITY_ERROR = 2;
   }  // LINT.ThenChange(
-  // //depot/google3/chrome/cros/reporting/proto/chrome_os_policy_validation_report.proto)
+  // //depot/google3/chrome/cros/reporting/api/proto/policy_validation_report.proto)
 
   // Severity of this policy value validation result.
   optional ValueValidationIssueSeverity severity = 2;
@@ -1857,7 +1926,7 @@ message PolicyValidationReportRequest {
     // Client behavior: Policy blob rejected.
     VALIDATION_RESULT_TYPE_VALUE_ERROR = 15;
   }  // LINT.ThenChange(
-  // //depot/google3/chrome/cros/reporting/proto/chrome_os_policy_validation_report.proto)
+  // //depot/google3/chrome/cros/reporting/api/proto/policy_validation_report.proto)
 
   // The validation result.
   optional ValidationResultType validation_result_type = 3;
@@ -2070,12 +2139,12 @@ message DeviceStateKeyUpdateRequest {
 // request is not authenticated, the only protection against state extraction
 // from server is the unpredictability of the server-backed state ID. Thus, the
 // response should not contain any sensitive data. If the server doesn't know
-// the requested identifier, it just return a message with restore_mode set to
+// the requested identifier, it just returns a message with restore_mode set to
 // RESTORE_MODE_NONE.
 message DeviceStateRetrievalResponse {
   // Restorative action to take after device reset.
   enum RestoreMode {
-    // No state restoration.
+    // No secondary state restoration.
     RESTORE_MODE_NONE = 0;
     // Enterprise enrollment requested, but user may skip.
     RESTORE_MODE_REENROLLMENT_REQUESTED = 1;
@@ -2096,6 +2165,9 @@ message DeviceStateRetrievalResponse {
   // State that is relevant only when the |restore_mode| is
   // |RESTORE_MODE_DISABLED|.
   optional DisabledState disabled_state = 3;
+
+  // Initial device state if |restore_mode| is |RESTORE_MODE_NONE|.
+  optional DeviceInitialEnrollmentStateResponse initial_state_response = 4;
 }
 
 // Request from device to server to retrieve the enrollment mode and domain for
@@ -2122,6 +2194,9 @@ message DeviceInitialEnrollmentStateResponse {
     // Zero-Touch (attestation-based) enrollment is enforced and cannot be
     // skipped.
     INITIAL_ENROLLMENT_MODE_ZERO_TOUCH_ENFORCED = 2;
+    // The device has been disabled by its owner. The device will show a warning
+    // screen and prevent the user from proceeding further.
+    INITIAL_ENROLLMENT_MODE_DISABLED = 3;
   }
 
   // The server-indicated initial enrollment mode.
@@ -2133,6 +2208,10 @@ message DeviceInitialEnrollmentStateResponse {
 
   // Whether the device comes packaged with a license or not.
   optional bool is_license_packaged_with_device = 3;
+
+  // State that is relevant only when the |initial_enrollment_mode| is
+  // |INITIAL_ENROLLMENT_MODE_DISABLED|.
+  optional DisabledState disabled_state = 4;
 }
 
 // Sent by the client to the server to pair the Host device with the Controller
@@ -2752,7 +2831,7 @@ message AppInstallReportLogEvent {
   optional int64 android_id = 9;
 }
 
-// Log bucket for an app.
+// Log bucket for an extension.
 message ExtensionInstallReport {
   // Extension id for the extension.
   optional string extension_id = 1;
@@ -2765,7 +2844,7 @@ message ExtensionInstallReport {
   repeated ExtensionInstallReportLogEvent logs = 3;
 }
 
-// Log bucket for an app.
+// Log bucket for an ARC++ app.
 message AppInstallReport {
   // Package name of the app.
   optional string package = 1;
@@ -2778,10 +2857,16 @@ message AppInstallReport {
   repeated AppInstallReportLogEvent logs = 3;
 }
 
-// Push-install logs for all apps.
+// Push-install logs for all ARC++ apps.
 message AppInstallReportRequest {
   // Log buckets for each app.
   repeated AppInstallReport app_install_reports = 1;
+}
+
+// Installation logs for all extensions.
+message ExtensionInstallReportRequest {
+  // Log buckets for each extension.
+  repeated ExtensionInstallReport extension_install_reports = 1;
 }
 
 // Response from server after receiving a report on the status of app
@@ -2932,7 +3017,10 @@ message ChildStatusReportRequest {
   // It might not be sent in every report.
   repeated AppActivity app_activity = 8;
 
-  // Next id: 9.
+  // A list of applications which are hidden from the user.
+  repeated App hidden_app = 9;
+
+  // Next id: 10.
 }
 
 // Response from DMServer to update user devices' status.
@@ -3267,7 +3355,19 @@ message DeviceManagementRequest {
   optional ClientCertificateProvisioningRequest
       client_certificate_provisioning_request = 34;
 
-  // Next id: 35.
+  // A report on the status of extension install process.
+  optional ExtensionInstallReportRequest extension_install_report_request = 35;
+
+  // Request to check user account for smart enrollment.
+  optional CheckUserAccountRequest check_user_account_request = 36;
+
+  // This message is temporarily commented out due to build errors, to be
+  // resolved in crrev.com/c/2245131.
+  // Request from device to check the state stored in PSM. Currently, it is used
+  // for ZT/LP device initial enrollment state check.
+  // optional PrivateSetMembershipRequest private_set_membership_request = 37;
+
+  // Next id: 38.
 }
 
 // Response from server to device.
@@ -3397,5 +3497,20 @@ message DeviceManagementResponse {
   optional ClientCertificateProvisioningResponse
       client_certificate_provisioning_response = 33;
 
-  // Next id: 34.
+  // Response to a checking user account type for smart enrollment.
+  optional CheckUserAccountResponse check_user_account_response = 34;
+
+  // This message is temporarily commented out due to build errors, to be
+  // resolved in crrev.com/c/2245131.
+  // Response to a client private set membership request.
+  // optional PrivateSetMembershipResponse private_set_membership_response = 35;
+
+  // Next id: 36.
+}
+
+// Device State Information stored in the server is retrieval at
+// enrollment process. Learn more at go/cros-enterprise-psm
+message DeviceStateRetrievalInfo {
+  // Whether the device should retrieve initial state or not.
+  optional bool has_initial_state = 1;
 }

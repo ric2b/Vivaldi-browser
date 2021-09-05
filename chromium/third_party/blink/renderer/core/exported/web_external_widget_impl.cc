@@ -6,6 +6,7 @@
 
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/ukm_manager.h"
+#include "third_party/blink/public/mojom/input/input_handler.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/web_render_widget_scheduling_state.h"
 #include "third_party/blink/renderer/platform/widget/widget_base.h"
 
@@ -97,6 +98,65 @@ void WebExternalWidgetImpl::SetCursor(const ui::Cursor& cursor) {
   widget_base_->SetCursor(cursor);
 }
 
+bool WebExternalWidgetImpl::HandlingInputEvent() {
+  return widget_base_->input_handler().handling_input_event();
+}
+
+void WebExternalWidgetImpl::SetHandlingInputEvent(bool handling) {
+  widget_base_->input_handler().set_handling_input_event(handling);
+}
+
+void WebExternalWidgetImpl::ProcessInputEventSynchronously(
+    const WebCoalescedInputEvent& event,
+    HandledEventCallback callback) {
+  widget_base_->input_handler().HandleInputEvent(event, std::move(callback));
+}
+
+void WebExternalWidgetImpl::UpdateTextInputState() {
+  widget_base_->UpdateTextInputState();
+}
+
+void WebExternalWidgetImpl::UpdateCompositionInfo() {
+  widget_base_->UpdateCompositionInfo(/*immediate_request=*/false);
+}
+
+void WebExternalWidgetImpl::UpdateSelectionBounds() {
+  widget_base_->UpdateSelectionBounds();
+}
+
+void WebExternalWidgetImpl::ShowVirtualKeyboard() {
+  widget_base_->ShowVirtualKeyboard();
+}
+
+void WebExternalWidgetImpl::ForceTextInputStateUpdate() {
+  widget_base_->ForceTextInputStateUpdate();
+}
+
+void WebExternalWidgetImpl::RequestCompositionUpdates(bool immediate_request,
+                                                      bool monitor_updates) {
+  widget_base_->RequestCompositionUpdates(immediate_request, monitor_updates);
+}
+
+void WebExternalWidgetImpl::SetFocus(bool focus) {
+  widget_base_->SetFocus(focus);
+}
+
+bool WebExternalWidgetImpl::HasFocus() {
+  return widget_base_->has_focus();
+}
+
+void WebExternalWidgetImpl::DidOverscrollForTesting(
+    const gfx::Vector2dF& overscroll_delta,
+    const gfx::Vector2dF& accumulated_overscroll,
+    const gfx::PointF& position,
+    const gfx::Vector2dF& velocity) {
+  cc::OverscrollBehavior overscroll_behavior =
+      widget_base_->LayerTreeHost()->overscroll_behavior();
+  widget_base_->input_handler().DidOverscrollFromBlink(
+      overscroll_delta, accumulated_overscroll, position, velocity,
+      overscroll_behavior);
+}
+
 void WebExternalWidgetImpl::SetRootLayer(scoped_refptr<cc::Layer> layer) {
   widget_base_->LayerTreeHost()->SetNonBlinkManagedRootLayer(layer);
 }
@@ -113,6 +173,52 @@ void WebExternalWidgetImpl::RecordTimeToFirstActivePaint(
 
 void WebExternalWidgetImpl::DidCommitAndDrawCompositorFrame() {
   client_->DidCommitAndDrawCompositorFrame();
+}
+
+bool WebExternalWidgetImpl::WillHandleGestureEvent(
+    const WebGestureEvent& event) {
+  return client_->WillHandleGestureEvent(event);
+}
+
+bool WebExternalWidgetImpl::WillHandleMouseEvent(const WebMouseEvent& event) {
+  return false;
+}
+
+void WebExternalWidgetImpl::ObserveGestureEventAndResult(
+    const WebGestureEvent& gesture_event,
+    const gfx::Vector2dF& unused_delta,
+    const cc::OverscrollBehavior& overscroll_behavior,
+    bool event_processed) {
+  client_->DidHandleGestureScrollEvent(gesture_event, unused_delta,
+                                       overscroll_behavior, event_processed);
+}
+
+bool WebExternalWidgetImpl::SupportsBufferedTouchEvents() {
+  return client_->SupportsBufferedTouchEvents();
+}
+
+void WebExternalWidgetImpl::QueueSyntheticEvent(
+    std::unique_ptr<blink::WebCoalescedInputEvent>) {}
+
+void WebExternalWidgetImpl::GetWidgetInputHandler(
+    mojo::PendingReceiver<mojom::blink::WidgetInputHandler> request,
+    mojo::PendingRemote<mojom::blink::WidgetInputHandlerHost> host) {
+  client_->GetWidgetInputHandler(std::move(request), std::move(host));
+}
+
+bool WebExternalWidgetImpl::HasCurrentImeGuard(
+    bool request_to_show_virtual_keyboard) {
+  return client_->HasCurrentImeGuard(request_to_show_virtual_keyboard);
+}
+
+void WebExternalWidgetImpl::SendCompositionRangeChanged(
+    const gfx::Range& range,
+    const std::vector<gfx::Rect>& character_bounds) {
+  client_->SendCompositionRangeChanged(range, character_bounds);
+}
+
+void WebExternalWidgetImpl::FocusChanged(bool enabled) {
+  client_->FocusChanged(enabled);
 }
 
 }  // namespace blink

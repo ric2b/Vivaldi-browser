@@ -83,6 +83,7 @@
   X("GAMEPAD")                                                           \
   X("gpu")                                                               \
   X("gpu.capture")                                                       \
+  X("gpu.memory")                                                        \
   X("headless")                                                          \
   X("hwoverlays")                                                        \
   X("identity")                                                          \
@@ -149,9 +150,11 @@
   X("test_gpu")                                                          \
   X("test_tracing")                                                      \
   X("toplevel")                                                          \
+  X("toplevel.flow")                                                     \
   X("ui")                                                                \
   X("v8")                                                                \
   X("v8.execute")                                                        \
+  X("v8.wasm")                                                           \
   X("ValueStoreFrontend::Backend")                                       \
   X("views")                                                             \
   X("views.frame")                                                       \
@@ -215,6 +218,7 @@
   X(TRACE_DISABLED_BY_DEFAULT("power"))                                  \
   X(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"))                     \
   X(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler.debug"))               \
+  X(TRACE_DISABLED_BY_DEFAULT("sandbox"))                                \
   X(TRACE_DISABLED_BY_DEFAULT("sequence_manager"))                       \
   X(TRACE_DISABLED_BY_DEFAULT("sequence_manager.debug"))                 \
   X(TRACE_DISABLED_BY_DEFAULT("sequence_manager.verbose_snapshots"))     \
@@ -224,12 +228,10 @@
   X(TRACE_DISABLED_BY_DEFAULT("SyncFileSystem"))                         \
   X(TRACE_DISABLED_BY_DEFAULT("system_stats"))                           \
   X(TRACE_DISABLED_BY_DEFAULT("thread_pool_diagnostics"))                \
-  X(TRACE_DISABLED_BY_DEFAULT("toplevel.flow"))                          \
   X(TRACE_DISABLED_BY_DEFAULT("toplevel.ipc"))                           \
   X(TRACE_DISABLED_BY_DEFAULT("user_action_samples"))                    \
   X(TRACE_DISABLED_BY_DEFAULT("v8.compile"))                             \
   X(TRACE_DISABLED_BY_DEFAULT("v8.cpu_profiler"))                        \
-  X(TRACE_DISABLED_BY_DEFAULT("v8.cpu_profiler.hires"))                  \
   X(TRACE_DISABLED_BY_DEFAULT("v8.gc"))                                  \
   X(TRACE_DISABLED_BY_DEFAULT("v8.gc_stats"))                            \
   X(TRACE_DISABLED_BY_DEFAULT("v8.ic_stats"))                            \
@@ -237,7 +239,7 @@
   X(TRACE_DISABLED_BY_DEFAULT("v8.runtime_stats"))                       \
   X(TRACE_DISABLED_BY_DEFAULT("v8.runtime_stats_sampling"))              \
   X(TRACE_DISABLED_BY_DEFAULT("v8.turbofan"))                            \
-  X(TRACE_DISABLED_BY_DEFAULT("v8.wasm"))                                \
+  X(TRACE_DISABLED_BY_DEFAULT("v8.wasm.detailed"))                       \
   X(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"))                \
   X(TRACE_DISABLED_BY_DEFAULT("viz.debug.overlay_planes"))               \
   X(TRACE_DISABLED_BY_DEFAULT("viz.hit_testing_flow"))                   \
@@ -247,6 +249,7 @@
   X(TRACE_DISABLED_BY_DEFAULT("viz.surface_lifetime"))                   \
   X(TRACE_DISABLED_BY_DEFAULT("viz.triangles"))                          \
   X(TRACE_DISABLED_BY_DEFAULT("webaudio.audionode"))                     \
+  X(TRACE_DISABLED_BY_DEFAULT("webrtc"))                                 \
   X(TRACE_DISABLED_BY_DEFAULT("worker.scheduler"))
 
 #define INTERNAL_TRACE_INIT_CATEGORY_NAME(name) name,

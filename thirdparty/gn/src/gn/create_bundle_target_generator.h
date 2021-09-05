@@ -38,6 +38,7 @@ class CreateBundleTargetGenerator : public TargetGenerator {
   bool FillCodeSigningOutputs();
   bool FillCodeSigningArgs();
   bool FillBundleDepsFilter();
+  bool FillXcassetCompilerFlags();
 
   DISALLOW_COPY_AND_ASSIGN(CreateBundleTargetGenerator);
 };

@@ -45,6 +45,8 @@ class TestWebClient : public web::WebClient {
 
   NSString* GetDocumentStartScriptForMainFrame(
       BrowserState* browser_state) const override;
+  NSString* GetDocumentStartScriptForAllFrames(
+      BrowserState* browser_state) const override;
   void AllowCertificateError(WebState*,
                              int cert_error,
                              const net::SSLInfo&,

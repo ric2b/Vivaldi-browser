@@ -9,9 +9,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/reauth_result.h"
+#include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
-#include "chrome/browser/ui/signin_reauth_popup_delegate.h"
 #include "chrome/browser/ui/signin_view_controller_delegate.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -29,6 +29,7 @@
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/signin_reauth_view_controller.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/webui_url_constants.h"
@@ -41,9 +42,6 @@
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 namespace {
-
-const base::Feature kSigninReauthPrompt = {"SigninReauthPrompt",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 
@@ -180,6 +178,53 @@ void SigninViewController::ShowSignin(profiles::BubbleViewMode mode,
   ShowDiceSigninTab(signin_reason, access_point, promo_action, email,
                     redirect_url);
 }
+
+std::unique_ptr<SigninViewController::ReauthAbortHandle>
+SigninViewController::ShowReauthPrompt(
+    const CoreAccountId& account_id,
+    signin_metrics::ReauthAccessPoint access_point,
+    base::OnceCallback<void(signin::ReauthResult)> reauth_callback) {
+  CloseModalSignin();
+
+  auto abort_handle = std::make_unique<ReauthAbortHandleImpl>(base::BindOnce(
+      &SigninViewController::CloseModalSignin, weak_ptr_factory_.GetWeakPtr()));
+
+  // Wrap |reauth_callback| so that it also signals to |reauth_abort_handle|
+  // when executed. The handle outlives the callback because it calls
+  // CloseModalSignin on destruction, and this runs the callback (with a
+  // "cancelled" result). So base::Unretained can be used.
+  auto wrapped_reauth_callback = base::BindOnce(
+      [](ReauthAbortHandleImpl* handle,
+         base::OnceCallback<void(signin::ReauthResult)> cb,
+         signin::ReauthResult result) {
+        handle->SignalReauthDone();
+        std::move(cb).Run(result);
+      },
+      base::Unretained(abort_handle.get()), std::move(reauth_callback));
+
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(browser_->profile());
+  // For now, Reauth is restricted to the primary account only.
+  // TODO(crbug.com/1083429): add support for secondary accounts.
+  CoreAccountId primary_account_id =
+      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kNotRequired);
+
+  if (account_id != primary_account_id) {
+    signin_ui_util::RecordTransactionalReauthResult(
+        access_point, signin::ReauthResult::kAccountNotSignedIn);
+    std::move(wrapped_reauth_callback)
+        .Run(signin::ReauthResult::kAccountNotSignedIn);
+    return abort_handle;
+  }
+
+  // The delegate will delete itself on request of the UI code when the widget
+  // is closed.
+  delegate_ = new SigninReauthViewController(
+      browser_, account_id, access_point, std::move(wrapped_reauth_callback));
+  delegate_observer_.Add(delegate_);
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::SIGNIN_REAUTH);
+  return abort_handle;
+}
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 void SigninViewController::ShowModalSyncConfirmationDialog() {
@@ -200,72 +245,6 @@ void SigninViewController::ShowModalSigninErrorDialog() {
   delegate_ = SigninViewControllerDelegate::CreateSigninErrorDelegate(browser_);
   delegate_observer_.Add(delegate_);
   chrome::RecordDialogCreation(chrome::DialogIdentifier::SIGN_IN_ERROR);
-}
-
-std::unique_ptr<SigninViewController::ReauthAbortHandle>
-SigninViewController::ShowReauthPrompt(
-    const CoreAccountId& account_id,
-    base::OnceCallback<void(signin::ReauthResult)> reauth_callback) {
-  CloseModalSignin();
-
-  auto abort_handle = std::make_unique<ReauthAbortHandleImpl>(base::BindOnce(
-      &SigninViewController::CloseModalSignin, weak_ptr_factory_.GetWeakPtr()));
-
-  // Wrap |reauth_callback| so that it also signals to |reauth_abort_handle|
-  // when executed. The handle outlives the callback because it calls
-  // CloseModalSignin on destruction, and this runs the callback (with a
-  // "cancelled" result). So base::Unretained can be used.
-  auto wrapped_reauth_callback = base::BindOnce(
-      [](ReauthAbortHandleImpl* handle,
-         base::OnceCallback<void(signin::ReauthResult)> cb,
-         signin::ReauthResult result) {
-        handle->SignalReauthDone();
-        std::move(cb).Run(result);
-      },
-      base::Unretained(abort_handle.get()), std::move(reauth_callback));
-
-  // The delegate will delete itself on request of the UI code when the widget
-  // is closed.
-  if (!base::FeatureList::IsEnabled(kSigninReauthPrompt)) {
-    // This currently displays a fake dialog for development purposes. Should
-    // not be called in production.
-    delegate_ = SigninViewControllerDelegate::CreateFakeReauthDelegate(
-        browser_, account_id, std::move(wrapped_reauth_callback));
-    delegate_observer_.Add(delegate_);
-    return abort_handle;
-  }
-
-  signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForProfile(browser_->profile());
-  base::Optional<AccountInfo> account_info =
-      identity_manager
-          ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
-              account_id);
-
-  // For now, Reauth is restricted to the primary account only.
-  CoreAccountId primary_account_id =
-      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kNotRequired);
-
-  if (!account_info || account_id != primary_account_id) {
-    std::move(wrapped_reauth_callback)
-        .Run(signin::ReauthResult::kAccountNotSignedIn);
-    return abort_handle;
-  }
-
-  if (account_info->hosted_domain != kNoHostedDomainFound &&
-      account_info->hosted_domain != "google.com") {
-    // Display a popup for Dasher users. Ideally it should only be shown for
-    // SAML users but there is no way to distinguish them.
-    delegate_ = new SigninReauthPopupDelegate(
-        browser_, account_id, std::move(wrapped_reauth_callback));
-    delegate_observer_.Add(delegate_);
-  } else {
-    delegate_ = SigninViewControllerDelegate::CreateReauthDelegate(
-        browser_, account_id, std::move(wrapped_reauth_callback));
-    delegate_observer_.Add(delegate_);
-  }
-  chrome::RecordDialogCreation(chrome::DialogIdentifier::SIGNIN_REAUTH);
-  return abort_handle;
 }
 
 bool SigninViewController::ShowsModalDialog() {
@@ -450,4 +429,10 @@ content::WebContents*
 SigninViewController::GetModalDialogWebContentsForTesting() {
   DCHECK(delegate_);
   return delegate_->GetWebContents();
+}
+
+SigninViewControllerDelegate*
+SigninViewController::GetModalDialogDelegateForTesting() {
+  DCHECK(delegate_);
+  return delegate_;
 }

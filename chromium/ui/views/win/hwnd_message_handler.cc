@@ -421,6 +421,7 @@ HWNDMessageHandler::HWNDMessageHandler(HWNDMessageHandlerDelegate* delegate,
       dwm_transition_desired_(false),
       dwm_composition_enabled_(ui::win::IsDwmCompositionEnabled()),
       sent_window_size_changing_(false),
+      did_return_uia_object_(false),
       left_button_down_on_caption_(false),
       background_fullscreen_hack_(false),
       pointer_events_for_touch_(::features::IsUsingWMPointerForTouch()) {}
@@ -987,6 +988,8 @@ HICON HWNDMessageHandler::GetSmallWindowIcon() const {
 LRESULT HWNDMessageHandler::OnWndProc(UINT message,
                                       WPARAM w_param,
                                       LPARAM l_param) {
+  TRACE_EVENT1("ui", "HWNDMessageHandler::OnWndProc", "message_id", message);
+
   HWND window = hwnd();
   LRESULT result = 0;
   if (delegate_ && delegate_->PreHandleMSG(message, w_param, l_param, &result))
@@ -1651,15 +1654,17 @@ void HWNDMessageHandler::OnDestroy() {
   if (i != map.end())
     map.erase(i);
 
-  if (::switches::IsExperimentalAccessibilityPlatformUIAEnabled()) {
-    // Signal to UIA that all objects associated with this HWND can be
-    // discarded.
+  // If we have ever returned a UIA object via WM_GETOBJECT, signal that all
+  // objects associated with this HWND can be discarded. See:
+  // https://docs.microsoft.com/en-us/windows/win32/api/uiautomationcoreapi/nf-uiautomationcoreapi-uiareturnrawelementprovider#remarks
+  if (did_return_uia_object_)
     UiaReturnRawElementProvider(hwnd(), 0, 0, nullptr);
-  }
 }
 
 void HWNDMessageHandler::OnDisplayChange(UINT bits_per_pixel,
                                          const gfx::Size& screen_size) {
+  TRACE_EVENT0("ui", "HWNDMessageHandler::OnDisplayChange");
+
   delegate_->HandleDisplayChange();
   // Force a WM_NCCALCSIZE to occur to ensure that we handle auto hide
   // taskbars correctly.
@@ -1667,8 +1672,10 @@ void HWNDMessageHandler::OnDisplayChange(UINT bits_per_pixel,
 }
 
 LRESULT HWNDMessageHandler::OnDwmCompositionChanged(UINT msg,
-                                                    WPARAM w_param,
-                                                    LPARAM l_param) {
+                                                    WPARAM /* w_param */,
+                                                    LPARAM /* l_param */) {
+  TRACE_EVENT0("ui", "HWNDMessageHandler::OnDwmCompositionChanged");
+
   if (!delegate_->HasNonClientView()) {
     SetMsgHandled(FALSE);
     return 0;
@@ -1692,6 +1699,9 @@ LRESULT HWNDMessageHandler::OnDpiChanged(UINT msg,
                                          LPARAM l_param) {
   if (LOWORD(w_param) != HIWORD(w_param))
     NOTIMPLEMENTED() << "Received non-square scaling factors";
+
+  TRACE_EVENT1("ui", "HWNDMessageHandler::OnDwmCompositionChanged", "dpi",
+               LOWORD(w_param));
 
   int dpi;
   float scaling_factor;
@@ -1815,6 +1825,10 @@ LRESULT HWNDMessageHandler::OnGetObject(UINT message,
       Microsoft::WRL::ComPtr<IRawElementProviderSimple> root;
       ax_fragment_root_->GetNativeViewAccessible()->QueryInterface(
           IID_PPV_ARGS(&root));
+
+      // Return the UIA object via UiaReturnRawElementProvider(). See:
+      // https://docs.microsoft.com/en-us/windows/win32/winauto/wm-getobject
+      did_return_uia_object_ = true;
       reference_result =
           UiaReturnRawElementProvider(hwnd(), w_param, l_param, root.Get());
     } else if (is_msaa_request) {
@@ -1983,12 +1997,27 @@ LRESULT HWNDMessageHandler::OnPointerEvent(UINT message,
     return -1;
   }
 
+  // |HandlePointerEventTypePenClient| assumes all pen events happen on the
+  // client area, so WM_NCPOINTER messages sent to it would eventually be
+  // dropped and the native frame wouldn't be able to respond to pens.
+  // |HandlePointerEventTypeTouchOrNonClient| handles non-client area messages
+  // properly. Since we don't need to distinguish between pens and fingers in
+  // non-client area, route the messages to that method.
+  if (pointer_type == PT_PEN &&
+      (message == WM_NCPOINTERDOWN ||
+       message == WM_NCPOINTERUP ||
+       message == WM_NCPOINTERUPDATE)) {
+    pointer_type = PT_TOUCH;
+  }
+
   switch (pointer_type) {
     case PT_PEN:
-      return HandlePointerEventTypePen(message, w_param, l_param);
+      return HandlePointerEventTypePenClient(message, w_param, l_param);
     case PT_TOUCH:
-      if (pointer_events_for_touch_)
-        return HandlePointerEventTypeTouch(message, w_param, l_param);
+      if (pointer_events_for_touch_) {
+        return HandlePointerEventTypeTouchOrNonClient(
+            message, w_param, l_param);
+      }
       FALLTHROUGH;
     default:
       break;
@@ -2394,23 +2423,28 @@ void HWNDMessageHandler::OnPaint(HDC dc) {
       // flicker opaque black. http://crbug.com/586454
 
       FillRect(ps.hdc, &ps.rcPaint, brush);
-    } else if (exposed_pixels_.height() > 0 || exposed_pixels_.width() > 0) {
+    } else if (exposed_pixels_ != gfx::Size()) {
       // Fill in newly exposed window client area with black to ensure Windows
       // doesn't put something else there (eg. copying existing pixels). This
       // isn't needed if we've just cleared the whole client area outside the
       // child window above.
       RECT cr;
       if (GetClientRect(hwnd(), &cr)) {
+        // GetClientRect() always returns a rect with top/left at 0.
+        const gfx::Size client_area = gfx::Rect(cr).size();
+
+        // It's possible that |exposed_pixels_| height and/or width is larger
+        // than the client area if the window frame size changed. This isn't an
+        // issue since FillRect() is clipped by |ps.rcPaint|.
         if (exposed_pixels_.height() > 0) {
-          DCHECK_GE(cr.bottom, exposed_pixels_.height());
-          RECT rect = {cr.left, cr.bottom - exposed_pixels_.height(), cr.right,
-                       cr.bottom};
+          RECT rect = {0, client_area.height() - exposed_pixels_.height(),
+                       client_area.width(), client_area.height()};
           FillRect(ps.hdc, &rect, brush);
         }
         if (exposed_pixels_.width() > 0) {
-          DCHECK_GE(cr.right, exposed_pixels_.width());
-          RECT rect = {cr.right - exposed_pixels_.width(), cr.top, cr.right,
-                       cr.bottom - exposed_pixels_.height()};
+          RECT rect = {client_area.width() - exposed_pixels_.width(), 0,
+                       client_area.width(),
+                       client_area.height() - exposed_pixels_.height()};
           FillRect(ps.hdc, &rect, brush);
         }
       }
@@ -2725,6 +2759,8 @@ LRESULT HWNDMessageHandler::OnTouchEvent(UINT message,
 }
 
 void HWNDMessageHandler::OnWindowPosChanging(WINDOWPOS* window_pos) {
+  TRACE_EVENT0("ui", "HWNDMessageHandler::OnWindowPosChanging");
+
   if (ignore_window_pos_changes_) {
     // If somebody's trying to toggle our visibility, change the nonclient area,
     // change our Z-order, or activate us, we should probably let it go through.
@@ -2876,6 +2912,8 @@ void HWNDMessageHandler::OnWindowPosChanging(WINDOWPOS* window_pos) {
 }
 
 void HWNDMessageHandler::OnWindowPosChanged(WINDOWPOS* window_pos) {
+  TRACE_EVENT0("ui", "HWNDMessageHandler::OnWindowPosChanged");
+
   if (DidClientAreaSizeChange(window_pos))
     ClientAreaSizeChanged();
   if (window_pos->flags & SWP_FRAMECHANGED)
@@ -3088,9 +3126,8 @@ LRESULT HWNDMessageHandler::HandleMouseEventInternal(UINT message,
   return 0;
 }
 
-LRESULT HWNDMessageHandler::HandlePointerEventTypeTouch(UINT message,
-                                                        WPARAM w_param,
-                                                        LPARAM l_param) {
+LRESULT HWNDMessageHandler::HandlePointerEventTypeTouchOrNonClient(
+    UINT message, WPARAM w_param, LPARAM l_param) {
   UINT32 pointer_id = GET_POINTERID_WPARAM(w_param);
   using GetPointerTouchInfoFn = BOOL(WINAPI*)(UINT32, POINTER_TOUCH_INFO*);
   POINTER_TOUCH_INFO pointer_touch_info;
@@ -3198,9 +3235,9 @@ LRESULT HWNDMessageHandler::HandlePointerEventTypeTouch(UINT message,
   return 0;
 }
 
-LRESULT HWNDMessageHandler::HandlePointerEventTypePen(UINT message,
-                                                      WPARAM w_param,
-                                                      LPARAM l_param) {
+LRESULT HWNDMessageHandler::HandlePointerEventTypePenClient(UINT message,
+                                                            WPARAM w_param,
+                                                            LPARAM l_param) {
   UINT32 pointer_id = GET_POINTERID_WPARAM(w_param);
   using GetPointerPenInfoFn = BOOL(WINAPI*)(UINT32, POINTER_PEN_INFO*);
   POINTER_PEN_INFO pointer_pen_info;
@@ -3300,6 +3337,8 @@ void HWNDMessageHandler::PerformDwmTransition() {
 }
 
 void HWNDMessageHandler::UpdateDwmFrame() {
+  TRACE_EVENT0("ui", "HWNDMessageHandler::UpdateDwmFrame");
+
   gfx::Insets insets;
   if (ui::win::IsAeroGlassEnabled() &&
       delegate_->GetDwmFrameInsetsInPixels(&insets)) {

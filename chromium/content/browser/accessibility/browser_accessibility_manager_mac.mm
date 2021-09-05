@@ -11,7 +11,6 @@
 #import "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/time/time.h"
 #import "content/browser/accessibility/browser_accessibility_cocoa.h"
 #import "content/browser/accessibility/browser_accessibility_mac.h"
@@ -372,8 +371,8 @@ void BrowserAccessibilityManagerMac::FireGeneratedEvent(
       // Use native VoiceOver support for live regions.
       base::scoped_nsobject<BrowserAccessibilityCocoa> retained_node(
           [native_node retain]);
-      base::PostDelayedTask(
-          FROM_HERE, {BrowserThread::UI},
+      GetUIThreadTaskRunner({})->PostDelayedTask(
+          FROM_HERE,
           base::BindOnce(
               [](base::scoped_nsobject<BrowserAccessibilityCocoa> node) {
                 if (node && [node instanceActive]) {
@@ -557,10 +556,12 @@ BrowserAccessibilityManagerMac::GetUserInfoForValueChangedNotification(
     }];
   }
   if (!inserted_text.empty()) {
-    // TODO(nektar): Figure out if this is a paste operation instead of typing.
-    // Changes to Blink would be required.
+    // TODO(nektar): Figure out if this is a paste, insertion or typing.
+    // Changes to Blink would be required. A heuristic is currently used.
+    auto edit_type = inserted_text.length() > 1 ? @(AXTextEditTypeInsert)
+                                                : @(AXTextEditTypeTyping);
     [changes addObject:@{
-      NSAccessibilityTextEditType : @(AXTextEditTypeTyping),
+      NSAccessibilityTextEditType : edit_type,
       NSAccessibilityTextChangeValueLength : @(inserted_text.length()),
       NSAccessibilityTextChangeValue : base::SysUTF16ToNSString(inserted_text)
     }];

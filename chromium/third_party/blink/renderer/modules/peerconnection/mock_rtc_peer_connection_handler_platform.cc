@@ -11,6 +11,8 @@
 #include "third_party/blink/public/platform/web_media_stream_source.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
 #include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
+#include "third_party/blink/renderer/platform/mediastream/media_stream_source.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_dtmf_sender_handler.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_ice_candidate_platform.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_rtp_sender_platform.h"
@@ -33,25 +35,24 @@ class DummyRtpSenderInternal
   static uintptr_t last_id_;
 
  public:
-  explicit DummyRtpSenderInternal(WebMediaStreamTrack track)
-      : id_(++last_id_), track_(std::move(track)) {}
+  explicit DummyRtpSenderInternal(MediaStreamComponent* component)
+      : id_(++last_id_), component_(component) {}
 
   uintptr_t id() const { return id_; }
-  WebMediaStreamTrack track() const { return track_; }
-  void set_track(WebMediaStreamTrack track) { track_ = std::move(track); }
+  MediaStreamComponent* track() const { return component_; }
+  void set_track(MediaStreamComponent* component) { component_ = component; }
 
  private:
   const uintptr_t id_;
-  WebMediaStreamTrack track_;
+  Persistent<MediaStreamComponent> component_;
 };
 
 uintptr_t DummyRtpSenderInternal::last_id_ = 0;
 
 class DummyRTCRtpSenderPlatform : public RTCRtpSenderPlatform {
  public:
-  explicit DummyRTCRtpSenderPlatform(WebMediaStreamTrack track)
-      : internal_(
-            base::MakeRefCounted<DummyRtpSenderInternal>(std::move(track))) {}
+  explicit DummyRTCRtpSenderPlatform(MediaStreamComponent* component)
+      : internal_(base::MakeRefCounted<DummyRtpSenderInternal>(component)) {}
   DummyRTCRtpSenderPlatform(const DummyRTCRtpSenderPlatform& other)
       : internal_(other.internal_) {}
   ~DummyRTCRtpSenderPlatform() override {}
@@ -70,11 +71,11 @@ class DummyRTCRtpSenderPlatform : public RTCRtpSenderPlatform {
         webrtc::DtlsTransportState::kNew);
     return dummy;
   }
-  WebMediaStreamTrack Track() const override { return internal_->track(); }
+  MediaStreamComponent* Track() const override { return internal_->track(); }
   Vector<String> StreamIds() const override {
     return Vector<String>({String::FromUTF8("DummyStringId")});
   }
-  void ReplaceTrack(WebMediaStreamTrack, RTCVoidRequest*) override {}
+  void ReplaceTrack(MediaStreamComponent*, RTCVoidRequest*) override {}
   std::unique_ptr<RtcDtmfSenderHandler> GetDtmfSender() const override {
     return nullptr;
   }
@@ -98,14 +99,15 @@ class DummyRTCRtpReceiverPlatform : public RTCRtpReceiverPlatform {
 
  public:
   explicit DummyRTCRtpReceiverPlatform(WebMediaStreamSource::Type type)
-      : id_(++last_id_), track_() {
+      : id_(++last_id_) {
     if (type == WebMediaStreamSource::Type::kTypeAudio) {
       WebMediaStreamSource web_source;
       web_source.Initialize(WebString::FromUTF8("remoteAudioId"),
                             WebMediaStreamSource::Type::kTypeAudio,
                             WebString::FromUTF8("remoteAudioName"),
                             true /* remote */);
-      track_.Initialize(web_source.Id(), web_source);
+      component_ = MakeGarbageCollected<MediaStreamComponent>(web_source.Id(),
+                                                              web_source);
     } else {
       DCHECK_EQ(type, WebMediaStreamSource::Type::kTypeVideo);
       WebMediaStreamSource web_source;
@@ -113,12 +115,13 @@ class DummyRTCRtpReceiverPlatform : public RTCRtpReceiverPlatform {
                             WebMediaStreamSource::Type::kTypeVideo,
                             WebString::FromUTF8("remoteVideoName"),
                             true /* remote */);
-      track_.Initialize(web_source.Id(), web_source);
+      component_ = MakeGarbageCollected<MediaStreamComponent>(web_source.Id(),
+                                                              web_source);
     }
   }
   DummyRTCRtpReceiverPlatform(const DummyRTCRtpReceiverPlatform& other)
-      : id_(other.id_), track_(other.track_) {}
-  ~DummyRTCRtpReceiverPlatform() override {}
+      : id_(other.id_), component_(other.component_) {}
+  ~DummyRTCRtpReceiverPlatform() override = default;
 
   std::unique_ptr<RTCRtpReceiverPlatform> ShallowCopy() const override {
     return nullptr;
@@ -132,7 +135,7 @@ class DummyRTCRtpReceiverPlatform : public RTCRtpReceiverPlatform {
         webrtc::DtlsTransportState::kNew);
     return dummy;
   }
-  const WebMediaStreamTrack& Track() const override { return track_; }
+  MediaStreamComponent* Track() const override { return component_; }
   Vector<String> StreamIds() const override { return Vector<String>(); }
   Vector<std::unique_ptr<RTCRtpSource>> GetSources() override {
     return Vector<std::unique_ptr<RTCRtpSource>>();
@@ -148,7 +151,7 @@ class DummyRTCRtpReceiverPlatform : public RTCRtpReceiverPlatform {
 
  private:
   const uintptr_t id_;
-  WebMediaStreamTrack track_;
+  Persistent<MediaStreamComponent> component_;
 };
 
 uintptr_t DummyRTCRtpReceiverPlatform::last_id_ = 0;
@@ -167,8 +170,9 @@ class DummyTransceiverInternal
         sender_(std::move(sender_track)),
         receiver_(type),
         direction_(webrtc::RtpTransceiverDirection::kSendRecv) {
-    DCHECK(sender_.Track().IsNull() ||
-           sender_.Track().Source().GetType() == type);
+    DCHECK(!sender_.Track() ||
+           sender_.Track()->Source()->GetType() ==
+               static_cast<MediaStreamSource::StreamType>(type));
   }
 
   uintptr_t id() const { return id_; }

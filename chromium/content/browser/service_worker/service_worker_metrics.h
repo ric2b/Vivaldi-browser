@@ -224,8 +224,6 @@ class ServiceWorkerMetrics {
   static void RecordFetchEventStatus(bool is_main_resource,
                                      blink::ServiceWorkerStatusCode status);
 
-  static void RecordProcessCreated(bool is_new_process);
-
   CONTENT_EXPORT static void RecordStartWorkerTiming(const StartTimes& times,
                                                      StartSituation situation);
   static void RecordStartWorkerTimingClockConsistency(
@@ -266,6 +264,8 @@ class ServiceWorkerMetrics {
   static void RecordByteForByteUpdateCheckStatus(
       blink::ServiceWorkerStatusCode status,
       bool has_found_update);
+
+  static void RecordGetAllOriginsInfoTime(base::TimeDelta time);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(ServiceWorkerMetrics);

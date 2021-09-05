@@ -5,7 +5,8 @@
 #include "third_party/blink/renderer/core/editing/ime/ime_text_span.h"
 
 #include <algorithm>
-#include "third_party/blink/public/web/web_ime_text_span.h"
+#include "ui/base/ime/ime_text_span.h"
+#include "ui/base/ime/mojom/ime_types.mojom-blink.h"
 
 namespace blink {
 
@@ -19,6 +20,7 @@ ImeTextSpan::ImeTextSpan(Type type,
                          const Color& background_color,
                          const Color& suggestion_highlight_color,
                          bool remove_on_finish_composing,
+                         bool interim_char_selection,
                          const Vector<String>& suggestions)
     : type_(type),
       underline_color_(underline_color),
@@ -28,6 +30,7 @@ ImeTextSpan::ImeTextSpan(Type type,
       background_color_(background_color),
       suggestion_highlight_color_(suggestion_highlight_color),
       remove_on_finish_composing_(remove_on_finish_composing),
+      interim_char_selection_(interim_char_selection),
       suggestions_(suggestions) {
   // Sanitize offsets by ensuring a valid range corresponding to the last
   // possible position.
@@ -49,33 +52,70 @@ Vector<String> ConvertStdVectorOfStdStringsToVectorOfStrings(
   return output;
 }
 
-ImeTextSpan::Type ConvertWebTypeToType(WebImeTextSpan::Type type) {
+ImeTextSpan::Type ConvertUiTypeToType(ui::ImeTextSpan::Type type) {
   switch (type) {
-    case WebImeTextSpan::Type::kComposition:
+    case ui::ImeTextSpan::Type::kComposition:
       return ImeTextSpan::Type::kComposition;
-    case WebImeTextSpan::Type::kSuggestion:
+    case ui::ImeTextSpan::Type::kSuggestion:
       return ImeTextSpan::Type::kSuggestion;
-    case WebImeTextSpan::Type::kMisspellingSuggestion:
+    case ui::ImeTextSpan::Type::kMisspellingSuggestion:
       return ImeTextSpan::Type::kMisspellingSuggestion;
+    case ui::ImeTextSpan::Type::kAutocorrect:
+      return ImeTextSpan::Type::kAutocorrect;
   }
 
   NOTREACHED();
   return ImeTextSpan::Type::kComposition;
 }
 
+ui::mojom::ImeTextSpanThickness ConvertUiThicknessToThickness(
+    ui::ImeTextSpan::Thickness thickness) {
+  switch (thickness) {
+    case ui::ImeTextSpan::Thickness::kNone:
+      return ui::mojom::ImeTextSpanThickness::kNone;
+    case ui::ImeTextSpan::Thickness::kThin:
+      return ui::mojom::ImeTextSpanThickness::kThin;
+    case ui::ImeTextSpan::Thickness::kThick:
+      return ui::mojom::ImeTextSpanThickness::kThick;
+  }
+
+  NOTREACHED();
+  return ui::mojom::ImeTextSpanThickness::kNone;
+}
+
+ui::mojom::ImeTextSpanUnderlineStyle ConvertUiUnderlineToUnderline(
+    ui::ImeTextSpan::UnderlineStyle underline) {
+  switch (underline) {
+    case ui::ImeTextSpan::UnderlineStyle::kNone:
+      return ui::mojom::ImeTextSpanUnderlineStyle::kNone;
+    case ui::ImeTextSpan::UnderlineStyle::kSolid:
+      return ui::mojom::ImeTextSpanUnderlineStyle::kSolid;
+    case ui::ImeTextSpan::UnderlineStyle::kDot:
+      return ui::mojom::ImeTextSpanUnderlineStyle::kDot;
+    case ui::ImeTextSpan::UnderlineStyle::kDash:
+      return ui::mojom::ImeTextSpanUnderlineStyle::kDash;
+    case ui::ImeTextSpan::UnderlineStyle::kSquiggle:
+      return ui::mojom::ImeTextSpanUnderlineStyle::kSquiggle;
+  }
+
+  NOTREACHED();
+  return ui::mojom::ImeTextSpanUnderlineStyle::kNone;
+}
+
 }  // namespace
 
-ImeTextSpan::ImeTextSpan(const WebImeTextSpan& ime_text_span)
-    : ImeTextSpan(ConvertWebTypeToType(ime_text_span.type),
+ImeTextSpan::ImeTextSpan(const ui::ImeTextSpan& ime_text_span)
+    : ImeTextSpan(ConvertUiTypeToType(ime_text_span.type),
                   ime_text_span.start_offset,
                   ime_text_span.end_offset,
                   Color(ime_text_span.underline_color),
-                  ime_text_span.thickness,
-                  ime_text_span.underline_style,
+                  ConvertUiThicknessToThickness(ime_text_span.thickness),
+                  ConvertUiUnderlineToUnderline(ime_text_span.underline_style),
                   Color(ime_text_span.text_color),
                   Color(ime_text_span.background_color),
                   Color(ime_text_span.suggestion_highlight_color),
                   ime_text_span.remove_on_finish_composing,
+                  ime_text_span.interim_char_selection,
                   ConvertStdVectorOfStdStringsToVectorOfStrings(
                       ime_text_span.suggestions)) {}
 }  // namespace blink

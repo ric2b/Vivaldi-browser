@@ -40,12 +40,23 @@ class AcceleratedVideoEncoder {
   AcceleratedVideoEncoder() = default;
   virtual ~AcceleratedVideoEncoder() = default;
 
+  enum class BitrateControl {
+    kConstantBitrate,  // Constant Bitrate mode. This class relies on other
+                       // parts (e.g. driver) to achieve the specified bitrate.
+    kConstantQuantizationParameter  // Constant Quantization Parameter mode.
+                                    // This class needs to compute a proper
+                                    // quantization parameter and give other
+                                    // parts (e.g. the driver) the value.
+  };
+
   struct Config {
     // Maxium number of reference frames.
     // For H.264 encoding, the value represents the maximum number of reference
     // frames for both the reference picture list 0 (bottom 16 bits) and the
     // reference picture list 1 (top 16 bits).
     size_t max_num_ref_frames;
+
+    BitrateControl bitrate_control = BitrateControl::kConstantBitrate;
   };
 
   // An abstraction of an encode job for one frame. Parameters required for an
@@ -70,6 +81,12 @@ class AcceleratedVideoEncoder {
     // Callbacks can be used to e.g. set up hardware parameters before the job
     // is executed.
     void AddSetupCallback(base::OnceClosure cb);
+
+    // Schedules a callback to be run immediately after this job is executed.
+    // Can be called multiple times to schedule multiple callbacks, and all
+    // of them will be run, in order added. Callbacks can be used to e.g. get
+    // the encoded buffer linear size.
+    void AddPostExecuteCallback(base::OnceClosure cb);
 
     // Adds |ref_pic| to the list of pictures to be used as reference pictures
     // for this frame, to ensure they remain valid until the job is executed
@@ -114,6 +131,10 @@ class AcceleratedVideoEncoder {
     // calls) to set up the job.
     base::queue<base::OnceClosure> setup_callbacks_;
 
+    // Callbacks to be run (in the same order as the order of
+    // AddPostExecuteCallback() calls) to do post processing after execute.
+    base::queue<base::OnceClosure> post_execute_callbacks_;
+
     // Callback to be run to execute this job.
     base::OnceClosure execute_callback_;
 
@@ -153,6 +174,12 @@ class AcceleratedVideoEncoder {
   // Prepares a new |encode_job| to be executed in Accelerator and returns true
   // on success. The caller may then call Execute() on the job to run it.
   virtual bool PrepareEncodeJob(EncodeJob* encode_job) = 0;
+
+  // Notifies the encoded chunk size in bytes to update a bitrate controller in
+  // AcceleratedVideoEncoder. This should be called only if
+  // AcceleratedVideoEncoder is configured with
+  // BitrateControl::kConstantQuantizationParameter.
+  virtual void BitrateControlUpdate(uint64_t encoded_chunk_size_bytes);
 };
 
 }  // namespace media

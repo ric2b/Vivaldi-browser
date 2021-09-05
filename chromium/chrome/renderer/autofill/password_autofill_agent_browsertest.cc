@@ -381,7 +381,7 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
 
     // We need to set the origin so it matches the frame URL and the action so
     // it matches the form action, otherwise we won't autocomplete.
-    UpdateOriginForHTML(kFormHTML);
+    UpdateUrlForHTML(kFormHTML);
     fill_data_.action = GURL("http://www.bidule.com");
 
     LoadHTML(kFormHTML);
@@ -441,9 +441,9 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
         switches::kShowAutofillSignatures);
   }
 
-  void UpdateOriginForHTML(const std::string& html) {
-    std::string origin = "data:text/html;charset=utf-8," + html;
-    fill_data_.origin = GURL(origin);
+  void UpdateUrlForHTML(const std::string& html) {
+    std::string url = "data:text/html;charset=utf-8," + html;
+    fill_data_.url = GURL(url);
   }
 
   void UpdateRendererIDs() {
@@ -769,10 +769,10 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
     tracker->AjaxSucceeded();
   }
 
-  void FireDidCommitProvisionalLoad() {
+  void FireDidFinishSameDocumentNavigation() {
     FormTracker* tracker = autofill_agent_->form_tracker_for_testing();
     static_cast<content::RenderFrameObserver*>(tracker)
-        ->DidCommitProvisionalLoad(true, ui::PAGE_TRANSITION_LINK);
+        ->DidFinishSameDocumentNavigation();
   }
 
   void ClearField(FormFieldData* field) {
@@ -832,7 +832,7 @@ TEST_F(PasswordAutofillAgentTest, InitialAutocompleteForEmptyAction) {
   UpdateUsernameAndPasswordElements();
 
   // Set the expected form origin and action URLs.
-  UpdateOriginForHTML(kEmptyActionFormHTML);
+  UpdateUrlForHTML(kEmptyActionFormHTML);
   fill_data_.action = GURL();
 
   // Simulate the browser sending back the login info, it triggers the
@@ -1327,7 +1327,7 @@ TEST_F(PasswordAutofillAgentTest,
       CreateScriptToRegisterListeners(kPasswordName, &password_event_checkers);
   std::string html = std::string(kFormHTML) + events_registration_script;
   LoadHTML(html.c_str());
-  UpdateOriginForHTML(html);
+  UpdateUrlForHTML(html);
   UpdateUsernameAndPasswordElements();
 
   // Simulate the browser sending back the login info, it triggers the
@@ -1364,7 +1364,7 @@ TEST_F(PasswordAutofillAgentTest,
       CreateScriptToRegisterListeners(kPasswordName, &event_checkers);
   std::string html = std::string(kFormHTML) + events_registration_script;
   LoadHTML(html.c_str());
-  UpdateOriginForHTML(html);
+  UpdateUrlForHTML(html);
   UpdateUsernameAndPasswordElements();
 
   // Simulate the browser sending back the login info, it triggers the
@@ -1834,7 +1834,7 @@ TEST_F(PasswordAutofillAgentTest, TouchToFillClosed) {
 
   // Reload the page and simulate fill.
   LoadHTML(kFormHTML);
-  UpdateOriginForHTML(kFormHTML);
+  UpdateUrlForHTML(kFormHTML);
   UpdateUsernameAndPasswordElements();
   SimulateOnFillPasswordForm(fill_data_);
 
@@ -1985,15 +1985,32 @@ TEST_F(PasswordAutofillAgentTest, ClickAndSelect) {
 
   CheckTextFieldsDOMState(kAliceUsername, true, kAlicePassword, true);
 }
+TEST_F(PasswordAutofillAgentTest,
+       NoPopupOnPasswordFieldWithoutSuggestionsByDefault) {
+  ClearUsernameAndPasswordFields();
+  UpdateRendererIDs();
+
+  // A call to InformNoSavedCredentials(should_show_popup_without_passwords) is
+  // what informs the agent whether it should show the popup even without
+  // suggestions. In this test, that call hasn't happened yet, so the popup
+  // should NOT show up without suggestions.
+
+  SimulateElementClick(kPasswordName);
+
+  EXPECT_CALL(fake_driver_, ShowPasswordSuggestions).Times(0);
+  base::RunLoop().RunUntilIdle();
+}
 
 // With butter, passwords fields should always trigger the popup so the user can
 // unlock account-stored suggestions from there.
 TEST_F(PasswordAutofillAgentTest, ShowPopupOnPasswordFieldWithoutSuggestions) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      password_manager::features::kEnablePasswordsAccountStorage);
   ClearUsernameAndPasswordFields();
   UpdateRendererIDs();
+
+  // InformNoSavedCredentials(should_show_popup_without_passwords) tells the
+  // agent to show the popup even without suggestions.
+  password_autofill_agent_->InformNoSavedCredentials(
+      /*should_show_popup_without_passwords=*/true);
 
   SimulateElementClick(kPasswordName);
 
@@ -2004,11 +2021,13 @@ TEST_F(PasswordAutofillAgentTest, ShowPopupOnPasswordFieldWithoutSuggestions) {
 // Before butter, passwords fields should never trigger the popup on password
 // passwords fields without suggestions since it would not be helpful.
 TEST_F(PasswordAutofillAgentTest, NoPopupOnPasswordFieldWithoutSuggestions) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      password_manager::features::kEnablePasswordsAccountStorage);
   ClearUsernameAndPasswordFields();
   UpdateRendererIDs();
+
+  // InformNoSavedCredentials(should_show_popup_without_passwords) tells the
+  // agent NOT to show the popup without suggestions.
+  password_autofill_agent_->InformNoSavedCredentials(
+      /*should_show_popup_without_passwords=*/false);
 
   SimulateElementClick(kPasswordName);
 
@@ -2454,7 +2473,7 @@ TEST_F(PasswordAutofillAgentTest, ShowPopupOnEmptyPasswordField) {
   LoadHTML(kVisibleFormWithNoUsernameHTML);
   UpdateOnlyPasswordElement();
   fill_data_.username_field = FormFieldData();
-  UpdateOriginForHTML(kVisibleFormWithNoUsernameHTML);
+  UpdateUrlForHTML(kVisibleFormWithNoUsernameHTML);
   fill_data_.additional_logins.clear();
 
   password_element_.SetValue("");
@@ -2479,7 +2498,7 @@ TEST_F(PasswordAutofillAgentTest, ShowPopupOnAutofilledPasswordField) {
   LoadHTML(kVisibleFormWithNoUsernameHTML);
   UpdateOnlyPasswordElement();
   fill_data_.username_field = FormFieldData();
-  UpdateOriginForHTML(kVisibleFormWithNoUsernameHTML);
+  UpdateUrlForHTML(kVisibleFormWithNoUsernameHTML);
   fill_data_.additional_logins.clear();
 
   password_element_.SetValue("");
@@ -2504,7 +2523,7 @@ TEST_F(PasswordAutofillAgentTest, NotShowPopupPasswordField) {
   LoadHTML(kVisibleFormWithNoUsernameHTML);
   UpdateOnlyPasswordElement();
   fill_data_.username_field = FormFieldData();
-  UpdateOriginForHTML(kVisibleFormWithNoUsernameHTML);
+  UpdateUrlForHTML(kVisibleFormWithNoUsernameHTML);
   fill_data_.additional_logins.clear();
 
   password_element_.SetValue("");
@@ -2669,7 +2688,7 @@ TEST_F(PasswordAutofillAgentTest, PasswordGenerationSupersedesAutofill) {
   fill_data_.wait_for_username = true;
   fill_data_.username_field = FormFieldData();
   fill_data_.password_field.name = ASCIIToUTF16("new_password");
-  UpdateOriginForHTML(kSignupFormHTML);
+  UpdateUrlForHTML(kSignupFormHTML);
   SimulateOnFillPasswordForm(fill_data_);
 
   // Simulate generation triggering.
@@ -2697,7 +2716,7 @@ TEST_F(PasswordAutofillAgentTest, PasswordGenerationSupersedesAutofill) {
 // password.
 TEST_F(PasswordAutofillAgentTest, FillSuggestionPasswordChangeForms) {
   LoadHTML(kPasswordChangeFormHTML);
-  UpdateOriginForHTML(kPasswordChangeFormHTML);
+  UpdateUrlForHTML(kPasswordChangeFormHTML);
   UpdateUsernameAndPasswordElements();
   // Simulate the browser sending the login info, but set |wait_for_username|
   // to prevent the form from being immediately filled.
@@ -2722,7 +2741,7 @@ TEST_F(PasswordAutofillAgentTest, FillSuggestionPasswordChangeForms) {
 TEST_F(PasswordAutofillAgentTest,
        SuggestionsOnUsernameFieldOfChangePasswordForm) {
   LoadHTML(kPasswordChangeFormHTML);
-  UpdateOriginForHTML(kPasswordChangeFormHTML);
+  UpdateUrlForHTML(kPasswordChangeFormHTML);
   UpdateUsernameAndPasswordElements();
 
   ClearUsernameAndPasswordFields();
@@ -2739,7 +2758,7 @@ TEST_F(PasswordAutofillAgentTest,
 TEST_F(PasswordAutofillAgentTest,
        SuggestionsOnPasswordFieldOfChangePasswordForm) {
   LoadHTML(kPasswordChangeFormHTML);
-  UpdateOriginForHTML(kPasswordChangeFormHTML);
+  UpdateUrlForHTML(kPasswordChangeFormHTML);
   UpdateUsernameAndPasswordElements();
 
   ClearUsernameAndPasswordFields();
@@ -3193,7 +3212,7 @@ TEST_F(PasswordAutofillAgentTest,
       password_element_ = control_elements[0].To<WebInputElement>();
     }
 
-    UpdateOriginForHTML(test_case.html_form);
+    UpdateUrlForHTML(test_case.html_form);
     if (test_case.does_trigger_autocomplete_on_fill) {
       // Prepare |fill_data_| to trigger autocomplete.
       fill_data_.username_field.name =
@@ -3247,7 +3266,7 @@ TEST_F(PasswordAutofillAgentTest, ShowSuggestionForNonUsernameFieldForms) {
   LoadHTML(kTwoNoUsernameFormsHTML);
   fill_data_.username_field.name.clear();
   fill_data_.username_field.value.clear();
-  UpdateOriginForHTML(kTwoNoUsernameFormsHTML);
+  UpdateUrlForHTML(kTwoNoUsernameFormsHTML);
   SimulateOnFillPasswordForm(fill_data_);
 
   SimulateElementClick("password1");
@@ -3354,7 +3373,7 @@ TEST_F(PasswordAutofillAgentTest, SuggestPasswordFieldSignInForm) {
 // only on this field.
 TEST_F(PasswordAutofillAgentTest, SuggestMultiplePasswordFields) {
   LoadHTML(kPasswordChangeFormHTML);
-  UpdateOriginForHTML(kPasswordChangeFormHTML);
+  UpdateUrlForHTML(kPasswordChangeFormHTML);
   UpdateUsernameAndPasswordElements();
 
   // Simulate the browser sending back the login info.
@@ -3455,7 +3474,7 @@ TEST_F(PasswordAutofillAgentTest,
       "form.parentNode.removeChild(form);";
   ExecuteJavaScriptForTests(remove_form.c_str());
 
-  FireDidCommitProvisionalLoad();
+  FireDidFinishSameDocumentNavigation();
 
   ExpectSameDocumentNavigationWithUsernameAndPasswords(
       renderer_id, std::string(), "random", std::string(),
@@ -3501,7 +3520,7 @@ TEST_F(PasswordAutofillAgentTest,
 // between discovering a form and receving credentials from the browser process.
 TEST_F(PasswordAutofillAgentTest, AutocompleteWhenPageUrlIsChanged) {
   // Simulate that JavaScript changes url.
-  fill_data_.origin = GURL(fill_data_.origin.possibly_invalid_spec() + "/path");
+  fill_data_.url = GURL(fill_data_.url.possibly_invalid_spec() + "/path");
 
   SimulateOnFillPasswordForm(fill_data_);
 
@@ -3574,7 +3593,7 @@ TEST_F(PasswordAutofillAgentTest, ManualFallbackForSaving) {
 
 TEST_F(PasswordAutofillAgentTest, ManualFallbackForSaving_PasswordChangeForm) {
   LoadHTML(kPasswordChangeFormHTML);
-  UpdateOriginForHTML(kPasswordChangeFormHTML);
+  UpdateUrlForHTML(kPasswordChangeFormHTML);
   UpdateUsernameAndPasswordElements();
 
   // No password to save yet - no fallback.
@@ -3686,7 +3705,7 @@ TEST_F(PasswordAutofillAgentTest, PSLMatchedPasswordIsNotAutofill) {
   UpdateUsernameAndPasswordElements();
 
   // Set the expected form origin and action URLs.
-  UpdateOriginForHTML(kFormWithPrefilledUsernameHTML);
+  UpdateUrlForHTML(kFormWithPrefilledUsernameHTML);
 
   // Add PSL matched credentials with username equal to prefilled one.
   PasswordAndMetadata psl_credentials;

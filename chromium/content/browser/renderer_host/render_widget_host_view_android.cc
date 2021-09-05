@@ -6,6 +6,7 @@
 
 #include <android/bitmap.h>
 
+#include <limits>
 #include <utility>
 
 #include "base/android/build_info.h"
@@ -84,8 +85,6 @@
 #include "ui/android/view_android_observer.h"
 #include "ui/android/window_android.h"
 #include "ui/android/window_android_compositor.h"
-#include "ui/base/cursor/cursor.h"
-#include "ui/base/cursor/cursor_lookup.h"
 #include "ui/base/layout.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/events/android/gesture_event_android.h"
@@ -233,8 +232,10 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
       observing_root_window_(false),
       prev_top_shown_pix_(0.f),
       prev_top_controls_translate_(0.f),
+      prev_top_controls_min_height_offset_pix_(0.f),
       prev_bottom_shown_pix_(0.f),
       prev_bottom_controls_translate_(0.f),
+      prev_bottom_controls_min_height_offset_pix_(0.f),
       page_scale_(1.f),
       min_page_scale_(1.f),
       max_page_scale_(1.f),
@@ -492,6 +493,23 @@ void RenderWidgetHostViewAndroid::OnRenderFrameMetadataChangedBeforeActivation(
   // change. We must still call UpdateWebViewBackgroundColorIfNecessary to
   // maintain the associated background color changes.
   UpdateWebViewBackgroundColorIfNecessary();
+
+  if (metadata.new_vertical_scroll_direction !=
+      viz::VerticalScrollDirection::kNull) {
+    bool can_scroll = metadata.root_layer_size.height() -
+                          metadata.viewport_size_in_pixels.height() >
+                      std::numeric_limits<float>::epsilon();
+    float scroll_ratio = 0.f;
+    if (can_scroll && metadata.root_scroll_offset) {
+      scroll_ratio = metadata.root_scroll_offset.value().y() /
+                     (metadata.root_layer_size.height() -
+                      metadata.viewport_size_in_pixels.height());
+    }
+    view_.OnVerticalScrollDirectionChanged(
+        metadata.new_vertical_scroll_direction ==
+            viz::VerticalScrollDirection::kUp,
+        scroll_ratio);
+  }
 }
 
 base::android::ScopedJavaLocalRef<jobject>
@@ -578,6 +596,12 @@ void RenderWidgetHostViewAndroid::
         metadata.scrollable_viewport_size);
   }
   RenderWidgetHostViewBase::OnRenderFrameMetadataChangedAfterActivation();
+}
+
+void RenderWidgetHostViewAndroid::OnRootScrollOffsetChanged(
+    const gfx::Vector2dF& root_scroll_offset) {
+  if (gesture_listener_manager_)
+    gesture_listener_manager_->OnRootScrollOffsetChanged(root_scroll_offset);
 }
 
 void RenderWidgetHostViewAndroid::Focus() {
@@ -684,9 +708,7 @@ int RenderWidgetHostViewAndroid::GetMouseWheelMinimumGranularity() const {
 }
 
 void RenderWidgetHostViewAndroid::UpdateCursor(const WebCursor& webcursor) {
-  const ui::Cursor& cursor = webcursor.cursor();
-  view_.OnCursorChanged(static_cast<int>(cursor.type()),
-                        GetCursorBitmap(cursor), GetCursorHotspot(cursor));
+  view_.OnCursorChanged(webcursor.cursor());
 }
 
 void RenderWidgetHostViewAndroid::SetIsLoading(bool is_loading) {
@@ -703,10 +725,10 @@ void RenderWidgetHostViewAndroid::OnUpdateTextInputStateCalled(
   DCHECK_EQ(text_input_manager_, text_input_manager);
   // If there are no active widgets, the TextInputState.type should be reported
   // as none.
-  const TextInputState& state =
+  const ui::mojom::TextInputState& state =
       GetTextInputManager()->GetActiveWidget()
           ? *GetTextInputManager()->GetTextInputState()
-          : TextInputState();
+          : ui::mojom::TextInputState();
 
   if (!ime_adapter_android_)
     return;
@@ -787,6 +809,20 @@ bool RenderWidgetHostViewAndroid::TransformPointToCoordSpaceForView(
   // for converting before computing the final transform.
   return target_view->TransformPointToLocalCoordSpace(point, surface_id,
                                                       transformed_point);
+}
+
+void RenderWidgetHostViewAndroid::SetGestureListenerManager(
+    GestureListenerManager* manager) {
+  gesture_listener_manager_ = manager;
+  UpdateReportAllRootScrolls();
+}
+
+void RenderWidgetHostViewAndroid::UpdateReportAllRootScrolls() {
+  if (!host())
+    return;
+
+  host()->render_frame_metadata_provider()->ReportAllRootScrolls(
+      ShouldReportAllRootScrolls());
 }
 
 base::WeakPtr<RenderWidgetHostViewAndroid>
@@ -1321,6 +1357,7 @@ bool RenderWidgetHostViewAndroid::UpdateControls(
                                top_min_height_offset_pix);
   prev_top_shown_pix_ = top_shown_pix;
   prev_top_controls_translate_ = top_translate;
+  prev_top_controls_min_height_offset_pix_ = top_min_height_offset_pix;
 
   float bottom_controls_pix = bottom_controls_height * to_pix;
   float bottom_shown_pix = bottom_controls_pix * bottom_controls_shown_ratio;
@@ -1339,6 +1376,7 @@ bool RenderWidgetHostViewAndroid::UpdateControls(
                                   bottom_min_height_offset_pix);
   prev_bottom_shown_pix_ = bottom_shown_pix;
   prev_bottom_controls_translate_ = bottom_translate;
+  prev_bottom_controls_min_height_offset_pix_ = bottom_min_height_offset_pix;
   controls_initialized_ = true;
   return top_changed || bottom_changed;
 }
@@ -1973,6 +2011,15 @@ void RenderWidgetHostViewAndroid::UpdateNativeViewTree(
   CreateOverscrollControllerIfPossible();
 }
 
+bool RenderWidgetHostViewAndroid::ShouldReportAllRootScrolls() {
+  // In order to provide support for onScrollOffsetOrExtentChanged()
+  // GestureListenerManager needs root-scroll-offsets. This is only necessary
+  // if a GestureStateListenerWithScroll is added.
+  return web_contents_accessibility_ != nullptr ||
+         (gesture_listener_manager_ &&
+          gesture_listener_manager_->has_listeners_attached());
+}
+
 MouseWheelPhaseHandler*
 RenderWidgetHostViewAndroid::GetMouseWheelPhaseHandler() {
   return &mouse_wheel_phase_handler_;
@@ -2363,12 +2410,7 @@ void RenderWidgetHostViewAndroid::OnUpdateScopedSelectionHandles() {
 void RenderWidgetHostViewAndroid::SetWebContentsAccessibility(
     WebContentsAccessibilityAndroid* web_contents_accessibility) {
   web_contents_accessibility_ = web_contents_accessibility;
-
-  if (host()) {
-    host()
-        ->render_frame_metadata_provider()
-        ->ReportAllRootScrollsForAccessibility(!!web_contents_accessibility_);
-  }
+  UpdateReportAllRootScrolls();
 }
 
 void RenderWidgetHostViewAndroid::SetNeedsBeginFrameForFlingProgress() {

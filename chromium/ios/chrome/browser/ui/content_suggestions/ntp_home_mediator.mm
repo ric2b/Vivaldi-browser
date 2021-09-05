@@ -6,6 +6,8 @@
 
 #include <memory>
 
+#import <MaterialComponents/MaterialSnackbar.h>
+
 #include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -50,7 +52,6 @@
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/signin/signin_resources_provider.h"
-#import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #include "ios/web/public/navigation/referrer.h"
@@ -368,6 +369,15 @@ const char kNTPHelpURL[] =
   if (notificationPromo->IsChromeCommandPromo()) {
     // "What's New" promo that runs a command can be added here by calling
     // self.dispatcher.
+    if (notificationPromo->command() == kSetDefaultBrowserCommand) {
+      [[UIApplication sharedApplication]
+                    openURL:
+                        [NSURL URLWithString:UIApplicationOpenSettingsURLString]
+                    options:{}
+          completionHandler:nil];
+      return;
+    }
+
     DCHECK_EQ(kTestWhatsNewCommand, notificationPromo->command())
         << "Promo command is not valid.";
     return;

@@ -20,7 +20,6 @@ import android.text.style.URLSpan;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewStructure;
 import android.view.accessibility.AccessibilityEvent;
@@ -127,7 +126,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
     private boolean mIsHovering;
     private int mLastHoverId = View.NO_ID;
     private int mCurrentRootId;
-    protected ViewGroup mView;
+    protected View mView;
     private boolean mUserHasTouchExplored;
     private boolean mPendingScrollToMakeNodeVisible;
     private boolean mNotifyFrameInfoInitializedCalled;
@@ -244,7 +243,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
                                 buildAccessibilityEvent(virtualViewId, eventType);
                         if (event == null) return false;
 
-                        mView.requestSendAccessibilityEvent(mView, event);
+                        requestSendAccessibilityEvent(event);
 
                         // Always send the ENTER and then the EXIT event, to match a standard
                         // Android View.
@@ -252,7 +251,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
                             AccessibilityEvent exitEvent = buildAccessibilityEvent(
                                     mLastHoverId, AccessibilityEvent.TYPE_VIEW_HOVER_EXIT);
                             if (exitEvent != null) {
-                                mView.requestSendAccessibilityEvent(mView, exitEvent);
+                                requestSendAccessibilityEvent(exitEvent);
                                 mLastHoverId = virtualViewId;
                             }
                         }
@@ -954,8 +953,8 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
         traverseEvent.setContentDescription(text);
         traverseEvent.setAction(AccessibilityNodeInfo.ACTION_NEXT_AT_MOVEMENT_GRANULARITY);
 
-        mView.requestSendAccessibilityEvent(mView, selectionEvent);
-        mView.requestSendAccessibilityEvent(mView, traverseEvent);
+        requestSendAccessibilityEvent(selectionEvent);
+        requestSendAccessibilityEvent(traverseEvent);
 
         // Suppress the next event since we have already sent traverse and selection for this move
         mSuppressNextSelectionEvent = true;
@@ -1012,8 +1011,8 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
         traverseEvent.setContentDescription(text);
         traverseEvent.setAction(AccessibilityNodeInfo.ACTION_PREVIOUS_AT_MOVEMENT_GRANULARITY);
 
-        mView.requestSendAccessibilityEvent(mView, selectionEvent);
-        mView.requestSendAccessibilityEvent(mView, traverseEvent);
+        requestSendAccessibilityEvent(selectionEvent);
+        requestSendAccessibilityEvent(traverseEvent);
 
         // Suppress the next event since we have already sent traverse and selection for this move
         mSuppressNextSelectionEvent = true;
@@ -1328,11 +1327,13 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
     @CalledByNative
     private void setAccessibilityNodeInfoBooleanAttributes(AccessibilityNodeInfo node,
             int virtualViewId, boolean checkable, boolean checked, boolean clickable,
-            boolean enabled, boolean focusable, boolean focused, boolean password,
-            boolean scrollable, boolean selected, boolean visibleToUser) {
+            boolean contentInvalid, boolean enabled, boolean focusable, boolean focused,
+            boolean hasImage, boolean password, boolean scrollable, boolean selected,
+            boolean visibleToUser) {
         node.setCheckable(checkable);
         node.setChecked(checked);
         node.setClickable(clickable);
+        node.setContentInvalid(contentInvalid);
         node.setEnabled(enabled);
         node.setFocusable(focusable);
         node.setFocused(focused);
@@ -1340,6 +1341,11 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
         node.setScrollable(scrollable);
         node.setSelected(selected);
         node.setVisibleToUser(visibleToUser);
+
+        if (hasImage) {
+            Bundle bundle = node.getExtras();
+            bundle.putCharSequence("AccessibilityNodeInfo.hasImage", "true");
+        }
 
         node.setMovementGranularities(AccessibilityNodeInfo.MOVEMENT_GRANULARITY_CHARACTER
                 | AccessibilityNodeInfo.MOVEMENT_GRANULARITY_WORD
@@ -1458,8 +1464,21 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
     }
 
     @CalledByNative
-    private void setAccessibilityNodeInfoClassName(AccessibilityNodeInfo node, String className) {
+    private void setAccessibilityNodeInfoBaseAttributes(AccessibilityNodeInfo node, boolean isRoot,
+            String className, String role, String roleDescription, String hint, String targetUrl) {
         node.setClassName(className);
+
+        Bundle bundle = node.getExtras();
+        bundle.putCharSequence("AccessibilityNodeInfo.chromeRole", role);
+        bundle.putCharSequence("AccessibilityNodeInfo.roleDescription", roleDescription);
+        bundle.putCharSequence("AccessibilityNodeInfo.hint", hint);
+        if (!targetUrl.isEmpty()) {
+            bundle.putCharSequence("AccessibilityNodeInfo.targetUrl", targetUrl);
+        }
+        if (isRoot) {
+            bundle.putCharSequence(
+                    "ACTION_ARGUMENT_HTML_ELEMENT_STRING_VALUES", mSupportedHtmlElementTypes);
+        }
     }
 
     @SuppressLint("NewApi")
@@ -1514,6 +1533,14 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
         if (rect.bottom > viewportRectBottom) rect.bottom = viewportRectBottom;
     }
 
+    private void requestSendAccessibilityEvent(AccessibilityEvent event) {
+        // If there is no parent, then the event can be ignored. In general the parent is only
+        // transiently null (such as during teardown, switching tabs...).
+        if (mView.getParent() != null) {
+            mView.getParent().requestSendAccessibilityEvent(mView, event);
+        }
+    }
+
     @CalledByNative
     private void setAccessibilityNodeInfoLocation(AccessibilityNodeInfo node,
             final int virtualViewId, int absoluteLeft, int absoluteTop, int parentRelativeLeft,
@@ -1549,31 +1576,6 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
     }
 
     @CalledByNative
-    protected void setAccessibilityNodeInfoKitKatAttributes(AccessibilityNodeInfo node,
-            boolean isRoot, boolean isEditableText, String role, String roleDescription,
-            String hint, int selectionStartIndex, int selectionEndIndex, boolean hasImage,
-            boolean contentInvalid, String targetUrl) {
-        Bundle bundle = node.getExtras();
-        bundle.putCharSequence("AccessibilityNodeInfo.chromeRole", role);
-        bundle.putCharSequence("AccessibilityNodeInfo.roleDescription", roleDescription);
-        bundle.putCharSequence("AccessibilityNodeInfo.hint", hint);
-        if (!targetUrl.isEmpty()) {
-            bundle.putCharSequence("AccessibilityNodeInfo.targetUrl", targetUrl);
-        }
-        if (hasImage) bundle.putCharSequence("AccessibilityNodeInfo.hasImage", "true");
-        if (isRoot) {
-            bundle.putCharSequence(
-                    "ACTION_ARGUMENT_HTML_ELEMENT_STRING_VALUES", mSupportedHtmlElementTypes);
-        }
-        if (isEditableText) {
-            node.setEditable(true);
-            node.setTextSelection(selectionStartIndex, selectionEndIndex);
-        }
-
-        node.setContentInvalid(contentInvalid);
-    }
-
-    @CalledByNative
     protected void setAccessibilityNodeInfoLollipopAttributes(AccessibilityNodeInfo node,
             boolean canOpenPopup, boolean contentInvalid, boolean dismissable, boolean multiLine,
             int inputType, int liveRegion, String errorMessage) {
@@ -1606,13 +1608,20 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
 
     @CalledByNative
     protected void setAccessibilityNodeInfoOAttributes(
-            AccessibilityNodeInfo node, boolean hasCharacterLocations) {
+            AccessibilityNodeInfo node, boolean hasCharacterLocations, String hint) {
         // Requires O or higher.
     }
 
     @CalledByNative
     protected void setAccessibilityNodeInfoPaneTitle(AccessibilityNodeInfo node, String title) {
         // Requires P or higher.
+    }
+
+    @CalledByNative
+    protected void setAccessibilityNodeInfoSelectionAttrs(
+            AccessibilityNodeInfo node, int startIndex, int endIndex) {
+        node.setEditable(true);
+        node.setTextSelection(startIndex, endIndex);
     }
 
     @CalledByNative

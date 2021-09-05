@@ -470,8 +470,16 @@ LayoutRect LayoutInline::LocalCaretRect(
   LayoutRect caret_rect =
       LocalCaretRectForEmptyElement(BorderAndPaddingWidth(), LayoutUnit());
 
-  if (InlineBox* first_box = FirstLineBox())
+  if (InlineBox* first_box = FirstLineBox()) {
     caret_rect.MoveBy(first_box->Location());
+  } else if (IsInLayoutNGInlineFormattingContext()) {
+    NGInlineCursor cursor;
+    cursor.MoveTo(*this);
+    if (cursor) {
+      caret_rect.MoveBy(
+          cursor.Current().OffsetInContainerBlock().ToLayoutPoint());
+    }
+  }
 
   return caret_rect;
 }
@@ -1786,27 +1794,25 @@ void LayoutInline::InvalidateDisplayItemClients(
     PaintInvalidationReason invalidation_reason) const {
   ObjectPaintInvalidator paint_invalidator(*this);
 
-  if (RuntimeEnabledFeatures::LayoutNGBlockFragmentationEnabled() &&
-      !RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
-    auto fragments = NGPaintFragment::InlineFragmentsFor(this);
-    if (fragments.IsInLayoutNGInlineFormattingContext()) {
-      for (NGPaintFragment* fragment : fragments) {
-        paint_invalidator.InvalidateDisplayItemClient(*fragment,
-                                                      invalidation_reason);
-      }
-      return;
-    }
-  }
-
   if (IsInLayoutNGInlineFormattingContext()) {
     if (!ShouldCreateBoxFragment())
       return;
-    NGInlineCursor cursor;
-    for (cursor.MoveTo(*this); cursor; cursor.MoveToNextForSameLayoutObject()) {
-      DCHECK_EQ(cursor.Current().GetLayoutObject(), this);
-      paint_invalidator.InvalidateDisplayItemClient(
-          *cursor.Current().GetDisplayItemClient(), invalidation_reason);
+    if (!RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
+      NGInlineCursor cursor;
+      for (cursor.MoveTo(*this); cursor;
+           cursor.MoveToNextForSameLayoutObject()) {
+        DCHECK_EQ(cursor.Current().GetLayoutObject(), this);
+        paint_invalidator.InvalidateDisplayItemClient(
+            *cursor.Current().GetDisplayItemClient(), invalidation_reason);
+      }
+      return;
     }
+#if DCHECK_IS_ON()
+    NGInlineCursor cursor;
+    for (cursor.MoveTo(*this); cursor; cursor.MoveToNextForSameLayoutObject())
+      DCHECK_EQ(cursor.Current().GetDisplayItemClient(), this);
+#endif
+    paint_invalidator.InvalidateDisplayItemClient(*this, invalidation_reason);
     return;
   }
 

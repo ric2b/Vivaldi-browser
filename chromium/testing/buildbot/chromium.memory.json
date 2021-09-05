@@ -1653,6 +1653,7 @@
       },
       {
         "args": [
+          "--use-cmd-decoder=validating",
           "--gs-results-bucket=chromium-result-details",
           "--recover-devices"
         ],
@@ -1661,10 +1662,11 @@
             "--bucket",
             "chromium-result-details",
             "--test-name",
-            "gl_tests"
+            "gl_tests_validating"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "name": "gl_tests_validating",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -3900,6 +3902,7 @@
       },
       {
         "args": [
+          "--use-cmd-decoder=validating",
           "--test-launcher-print-test-stdio=always",
           "--use-gpu-in-tests",
           "--no-xvfb"
@@ -3908,20 +3911,20 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "gl_tests_validating",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
               "gpu": "10de:1cb3",
               "os": "Ubuntu",
-              "pool": "chromium.tests.gpu.template"
+              "pool": "chromium.tests.gpu"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test": "gl_tests",
-        "test_id_prefix": "ninja://gpu:gl_tests/",
-        "use_xvfb": false
+        "test_id_prefix": "ninja://gpu:gl_tests/"
       },
       {
         "args": [
@@ -5592,6 +5595,7 @@
       },
       {
         "args": [
+          "--use-cmd-decoder=validating",
           "--use-gpu-in-tests",
           "--no-xvfb"
         ],
@@ -5599,26 +5603,22 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "gl_tests_validating",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
               "gpu": "10de:1cb3",
               "os": "Ubuntu",
-              "pool": "chromium.tests.gpu.template"
+              "pool": "chromium.tests.gpu"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test": "gl_tests",
-        "test_id_prefix": "ninja://gpu:gl_tests/",
-        "use_xvfb": false
+        "test_id_prefix": "ninja://gpu:gl_tests/"
       },
       {
-        "args": [
-          "--use-gpu-in-tests",
-          "--no-xvfb"
-        ],
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5627,16 +5627,13 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "10de:1cb3",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu.template"
+              "os": "Ubuntu-16.04"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test": "gl_unittests",
-        "test_id_prefix": "ninja://ui/gl:gl_unittests/",
-        "use_xvfb": false
+        "test_id_prefix": "ninja://ui/gl:gl_unittests/"
       },
       {
         "merge": {
@@ -8588,7 +8585,8 @@
       },
       {
         "args": [
-          "--test-launcher-print-test-stdio=always"
+          "--test-launcher-print-test-stdio=always",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/chromeos.msan.browser_tests.oobe_negative.filter"
         ],
         "merge": {
           "args": [],
@@ -8603,7 +8601,32 @@
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 40
+          "shards": 32
+        },
+        "test": "browser_tests",
+        "test_id_prefix": "ninja://chrome/test:browser_tests/"
+      },
+      {
+        "args": [
+          "--test-launcher-filter-file=../../testing/buildbot/filters/chromeos.msan.browser_tests.oobe_positive.filter",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "experiment_percentage": 100,
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "oobe_only_browser_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 20
         },
         "test": "browser_tests",
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
@@ -11044,27 +11067,6 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test": "gl_unittests",
-        "test_id_prefix": "ninja://ui/gl:gl_unittests/"
-      },
-      {
-        "args": [
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "cpu": "x86-64",
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
         "test": "google_apis_unittests",
         "test_id_prefix": "ninja://google_apis:google_apis_unittests/"
       },
@@ -12757,6 +12759,7 @@
       },
       {
         "args": [
+          "--use-cmd-decoder=validating",
           "--test-launcher-print-test-stdio=always",
           "--use-gpu-in-tests",
           "--no-xvfb"
@@ -12765,20 +12768,20 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "gl_tests_validating",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
               "gpu": "10de:1cb3",
               "os": "Ubuntu",
-              "pool": "chromium.tests.gpu.template"
+              "pool": "chromium.tests.gpu"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test": "gl_tests",
-        "test_id_prefix": "ninja://gpu:gl_tests/",
-        "use_xvfb": false
+        "test_id_prefix": "ninja://gpu:gl_tests/"
       },
       {
         "args": [
@@ -14871,6 +14874,9 @@
     ]
   },
   "WebKit Linux Leak": {
+    "additional_compile_targets": [
+      "blink_tests"
+    ],
     "isolated_scripts": [
       {
         "args": [
@@ -14968,9 +14974,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15014,9 +15020,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15060,9 +15066,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15106,9 +15112,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15152,9 +15158,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15198,9 +15204,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15244,9 +15250,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15290,9 +15296,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15337,9 +15343,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15384,9 +15390,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15430,9 +15436,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15477,9 +15483,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15523,9 +15529,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15570,9 +15576,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15616,9 +15622,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15662,9 +15668,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15708,9 +15714,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15754,9 +15760,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15800,9 +15806,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15848,9 +15854,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15895,9 +15901,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15942,9 +15948,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -15988,9 +15994,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16034,9 +16040,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16080,9 +16086,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16126,9 +16132,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16172,9 +16178,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16218,9 +16224,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16241,6 +16247,7 @@
       },
       {
         "args": [
+          "--use-cmd-decoder=validating",
           "--gs-results-bucket=chromium-result-details",
           "--recover-devices"
         ],
@@ -16249,10 +16256,11 @@
             "--bucket",
             "chromium-result-details",
             "--test-name",
-            "gl_tests"
+            "gl_tests_validating"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "name": "gl_tests_validating",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -16264,9 +16272,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16310,9 +16318,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16356,9 +16364,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16402,9 +16410,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16448,9 +16456,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16494,9 +16502,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16541,9 +16549,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16587,9 +16595,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16633,9 +16641,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16679,9 +16687,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16725,9 +16733,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16771,9 +16779,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16817,9 +16825,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16863,9 +16871,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16910,9 +16918,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -16957,9 +16965,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17003,9 +17011,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17049,9 +17057,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17095,9 +17103,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17141,9 +17149,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17187,9 +17195,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17233,9 +17241,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17279,9 +17287,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17326,9 +17334,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17373,9 +17381,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17419,9 +17427,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17465,9 +17473,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17511,9 +17519,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17557,9 +17565,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17603,9 +17611,9 @@
           ],
           "dimension_sets": [
             {
-              "device_os": "KTU84P",
+              "device_os": "MMB29Q",
               "device_os_type": "userdebug",
-              "device_type": "hammerhead",
+              "device_type": "bullhead",
               "os": "Android"
             }
           ],
@@ -17880,7 +17888,7 @@
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 20
+          "shards": 40
         },
         "test": "browser_tests",
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
@@ -18753,7 +18761,8 @@
               "os": "Windows-10-15063"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 16
         },
         "test": "net_unittests",
         "test_id_prefix": "ninja://net:net_unittests/"

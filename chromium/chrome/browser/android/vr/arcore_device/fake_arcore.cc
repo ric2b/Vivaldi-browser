@@ -208,8 +208,8 @@ bool FakeArCore::RequestHitTest(
     const mojom::XRRayPtr& ray,
     std::vector<mojom::XRHitResultPtr>* hit_results) {
   mojom::XRHitResultPtr hit = mojom::XRHitResult::New();
-  // Identity matrix - no translation and default orientation.
-  hit->hit_matrix = gfx::Transform();
+  // Default-constructed `hit->mojo_from_result` is fine, no need to set
+  // anything.
   hit_results->push_back(std::move(hit));
 
   return true;
@@ -246,9 +246,7 @@ mojom::XRPlaneDetectionDataPtr FakeArCore::GetDetectedPlanesData() {
   std::vector<mojom::XRPlaneDataPtr> result;
 
   // 1m ahead of the origin, neutral orientation facing forward.
-  mojom::PosePtr pose = mojom::Pose::New();
-  pose->position = gfx::Point3F(0.0, 0.0, -1.0);
-  pose->orientation = gfx::Quaternion();
+  device::Pose pose(gfx::Point3F(0.0, 0.0, -1.0), gfx::Quaternion());
 
   // some random triangle
   std::vector<mojom::XRPlanePointDataPtr> vertices;
@@ -258,7 +256,7 @@ mojom::XRPlaneDetectionDataPtr FakeArCore::GetDetectedPlanesData() {
 
   result.push_back(
       mojom::XRPlaneData::New(1, device::mojom::XRPlaneOrientation::HORIZONTAL,
-                              std::move(pose), std::move(vertices)));
+                              pose, std::move(vertices)));
 
   return mojom::XRPlaneDetectionData::New(std::vector<uint64_t>{1},
                                           std::move(result));
@@ -269,12 +267,10 @@ mojom::XRAnchorsDataPtr FakeArCore::GetAnchorsData() {
   std::vector<uint64_t> result_ids;
 
   for (auto& anchor_id_and_data : anchors_) {
-    mojom::PosePtr pose = mojom::Pose::New();
-    pose->position = anchor_id_and_data.second.position;
-    pose->orientation = anchor_id_and_data.second.orientation;
+    device::Pose pose(anchor_id_and_data.second.position,
+                      anchor_id_and_data.second.orientation);
 
-    result.push_back(
-        mojom::XRAnchorData::New(anchor_id_and_data.first, std::move(pose)));
+    result.push_back(mojom::XRAnchorData::New(anchor_id_and_data.first, pose));
     result_ids.push_back(anchor_id_and_data.first);
   }
 
@@ -307,16 +303,18 @@ mojom::XRLightEstimationDataPtr FakeArCore::GetLightEstimationData() {
   return result;
 }
 
-void FakeArCore::CreatePlaneAttachedAnchor(const mojom::Pose& plane_from_anchor,
-                                           uint64_t plane_id,
-                                           CreateAnchorCallback callback) {
+void FakeArCore::CreatePlaneAttachedAnchor(
+    const mojom::XRNativeOriginInformation& native_origin_information,
+    const device::Pose& native_origin_from_anchor,
+    uint64_t plane_id,
+    CreateAnchorCallback callback) {
   // TODO(992035): Fix this when implementing tests.
   std::move(callback).Run(mojom::CreateAnchorResult::FAILURE, 0);
 }
 
 void FakeArCore::CreateAnchor(
     const mojom::XRNativeOriginInformation& native_origin_information,
-    const mojom::Pose& native_origin_from_anchor,
+    const device::Pose& native_origin_from_anchor,
     CreateAnchorCallback callback) {
   std::move(callback).Run(mojom::CreateAnchorResult::FAILURE, 0);
 }

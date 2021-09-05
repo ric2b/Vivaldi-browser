@@ -4,10 +4,10 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.matcher.RootMatchers.withDecorView;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.matcher.RootMatchers.withDecorView;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
@@ -30,10 +30,11 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.v
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.espresso.contrib.RecyclerViewActions;
-import android.support.test.filters.MediumTest;
 import android.view.View;
 import android.widget.FrameLayout;
+
+import androidx.test.espresso.contrib.RecyclerViewActions;
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Rule;
@@ -63,6 +64,7 @@ import org.chromium.ui.UiSwitches;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** End-to-end tests for TabGroupPopupUi component. */
 @RunWith(ChromeJUnit4ClassRunner.class)
@@ -179,7 +181,7 @@ public class TabGroupPopupUiTest {
 
         // Re-verify that tab strip never shows in single tab.
         clickFirstCardFromTabSwitcher(cta);
-        closeFirstTabInDialog(cta);
+        closeFirstTabInDialog();
         clickFirstTabInDialog(cta);
         CriteriaHelper.pollInstrumentationThread(() -> isTabStripHidden(cta));
         triggerTabStripAndVerify(cta, 0);
@@ -187,7 +189,7 @@ public class TabGroupPopupUiTest {
 
     @Test
     @MediumTest
-    public void testTabStripUpdate() {
+    public void testTabStripUpdate() throws InterruptedException {
         launchActivity();
         final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
 
@@ -211,14 +213,20 @@ public class TabGroupPopupUiTest {
         onView(withId(R.id.tab_list_view))
                 .inRoot(withDecorView(not(cta.getWindow().getDecorView())))
                 .perform(RecyclerViewActions.actionOnItemAtPosition(
-                        getCurrentTabIndexInGroup(cta), click()));
+                        getCurrentTabIndexInGroupOnUiThread(cta), click()));
         verifyShowingTabStrip(cta, 3);
-
         onView(withId(R.id.tab_list_view))
                 .inRoot(withDecorView(not(cta.getWindow().getDecorView())))
                 .perform(RecyclerViewActions.actionOnItemAtPosition(
-                        getCurrentTabIndexInGroup(cta), click()));
+                        getCurrentTabIndexInGroupOnUiThread(cta), click()));
         verifyShowingTabStrip(cta, 2);
+    }
+
+    private int getCurrentTabIndexInGroupOnUiThread(final ChromeTabbedActivity cta)
+            throws InterruptedException {
+        final AtomicInteger res = new AtomicInteger();
+        TestThreadUtils.runOnUiThreadBlocking(() -> { res.set(getCurrentTabIndexInGroup(cta)); });
+        return res.get();
     }
 
     @Test

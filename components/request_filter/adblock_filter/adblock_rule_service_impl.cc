@@ -11,6 +11,7 @@
 #include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
 #include "components/request_filter/adblock_filter/adblock_request_filter.h"
 #include "components/request_filter/adblock_filter/adblock_rule_source_handler.h"
+#include "components/request_filter/adblock_filter/adblock_rules_index.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_manager.h"
 #include "components/request_filter/request_filter_manager.h"
 #include "components/request_filter/request_filter_manager_factory.h"
@@ -22,6 +23,8 @@ const std::string kDuckDuckGoList =
     "https://downloads.vivaldi.com/ddg/tds-v2-current.json";
 const std::string kEasyList =
     "https://downloads.vivaldi.com/easylist/easylist-current.txt";
+const std::string kPartnersList =
+    "https://downloads.vivaldi.com/lists/vivaldi/partners-current.txt";
 }  // namespace
 
 RuleServiceImpl::RuleServiceImpl(content::BrowserContext* context)
@@ -40,6 +43,7 @@ void RuleServiceImpl::Load(
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
   DCHECK(!is_loaded_ && !state_store_);
   file_task_runner_ = task_runner;
+  resources_.emplace(task_runner.get());
 
   state_store_.emplace(context_, this, task_runner.get());
 
@@ -61,7 +65,7 @@ void RuleServiceImpl::Shutdown() {
 void RuleServiceImpl::AddRequestFilter(RuleGroup group) {
   auto request_filter = std::make_unique<AdBlockRequestFilter>(
       group, index_managers_[static_cast<size_t>(group)]->AsWeakPtr(),
-      blocked_urls_reporter_->AsWeakPtr());
+      blocked_urls_reporter_->AsWeakPtr(), resources_->AsWeakPtr());
   request_filters_[static_cast<size_t>(group)] = request_filter.get();
   vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
       ->AddFilter(std::move(request_filter));
@@ -150,6 +154,9 @@ void RuleServiceImpl::OnStateLoaded(
   if (load_result->storage_version < 1) {
     AddRulesFromURL(RuleGroup::kTrackingRules, GURL(kDuckDuckGoList));
     AddRulesFromURL(RuleGroup::kAdBlockingRules, GURL(kEasyList));
+  }
+  if (load_result->storage_version < 3) {
+    AddRulesFromURL(RuleGroup::kAdBlockingRules, GURL(kPartnersList));
   }
 
   known_sources_handler_.emplace(
@@ -377,6 +384,26 @@ bool RuleServiceImpl::IsExemptOfFiltering(RuleGroup group,
   }
 
   return default_exempt;
+}
+
+bool RuleServiceImpl::IsDocumentBlocked(RuleGroup group,
+                                        content::RenderFrameHost* frame,
+                                        const GURL& url) const {
+  if (!url.SchemeIs(url::kFtpScheme) && !url.SchemeIsHTTPOrHTTPS())
+    return false;
+
+  url::Origin origin = url::Origin::Create(url);
+  if (IsExemptOfFiltering(group, origin))
+    return false;
+
+  auto* index = index_managers_[static_cast<size_t>(group)]->rules_index();
+  if (!index)
+    return false;
+
+  RulesIndex::ActivationsFound activations =
+      index->FindMatchingActivationsRules(url, origin, false, frame);
+
+  return (activations.in_block_rules & flat::ActivationType_DOCUMENT) != 0;
 }
 
 KnownRuleSourcesHandler* RuleServiceImpl::GetKnownSourcesHandler() {

@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,7 @@ class AXTreeSourceArc : public ui::AXTreeSource<AccessibilityInfoDataWrapper*,
   class Delegate {
    public:
     virtual void OnAction(const ui::AXActionData& data) const = 0;
+    virtual bool IsScreenReaderEnabled() const = 0;
   };
 
   AXTreeSourceArc(Delegate* delegate, float device_scale_factor);
@@ -59,9 +61,18 @@ class AXTreeSourceArc : public ui::AXTreeSource<AccessibilityInfoDataWrapper*,
   // Invalidates the tree serializer.
   void InvalidateTree();
 
+  // When it is enabled, this class exposes an accessibility tree optimized for
+  // screen readers such as ChromeVox and SwitchAccess. This intends to have the
+  // navigation order and focusabilities similar to TalkBack.
+  bool IsScreenReaderMode() const;
+
   // Returns true if the node id is the root of the node tree (which can have a
   // parent window).
-  bool IsRootOfNodeTree(int32_t id) const;
+  // virtual for testing.
+  virtual bool IsRootOfNodeTree(int32_t id) const;
+
+  AccessibilityInfoDataWrapper* GetFirstImportantAncestor(
+      AccessibilityInfoDataWrapper* info_data) const;
 
   // AXTreeSource:
   bool GetTreeData(ui::AXTreeData* data) const override;
@@ -97,35 +108,22 @@ class AXTreeSourceArc : public ui::AXTreeSource<AccessibilityInfoDataWrapper*,
   // Helper to recursively compute bounds for |info_data|. Returns true if
   // non-empty bounds were encountered.
   void ComputeEnclosingBoundsInternal(AccessibilityInfoDataWrapper* info_data,
-                                      gfx::Rect& computed_bounds) const;
-
-  // Computes if the node is clickable and has no clickable descendants.
-  bool ComputeIsClickableLeaf(
-      const std::vector<mojom::AccessibilityNodeInfoDataPtr>& nodes,
-      int32_t node_index,
-      const std::map<int32_t, int32_t>& node_id_to_nodes_index) const;
-
-  // Builds a mapping from index in |nodes| to whether ignored state should be
-  // applied to the node in chrome accessibility.
-  void BuildImportanceTable(
-      mojom::AccessibilityEventData* event_data,
-      const std::map<int32_t, int32_t>& node_id_to_nodes_index,
-      std::vector<bool>& out_node) const;
-
-  bool BuildHasImportantProperty(
-      int32_t nodes_index,
-      const std::vector<mojom::AccessibilityNodeInfoDataPtr>& nodes,
-      const std::map<int32_t, int32_t>& node_id_to_nodes_index,
-      std::vector<bool>& has_important_prop_cache) const;
+                                      gfx::Rect* computed_bounds) const;
 
   // Find the most top-left focusable node under the given node.
   AccessibilityInfoDataWrapper* FindFirstFocusableNode(
       AccessibilityInfoDataWrapper* info_data) const;
 
   AccessibilityInfoDataWrapper* GetSelectedNodeInfoFromAdapterView(
-      mojom::AccessibilityEventData* event_data) const;
+      const mojom::AccessibilityEventData& event_data) const;
 
-  void UpdateAXNameCache(AccessibilityInfoDataWrapper* focused_node,
+  // Update android_focused_id_ from given AccessibilityEventData.
+  // Returns true if it is successfully updated to existing node.
+  // Returns false if we don't dispatch the processing event to chrome
+  // automation.
+  bool UpdateAndroidFocusedId(const mojom::AccessibilityEventData& event_data);
+
+  void UpdateAXNameCache(AccessibilityInfoDataWrapper* source_node,
                          const std::vector<std::string>& event_text);
 
   void ApplyCachedProperties();

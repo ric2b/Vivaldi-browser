@@ -377,14 +377,20 @@ void SearchResultTileItemView::OnGetContextMenuModel(
                          views::MenuRunner::USE_TOUCHABLE_LAYOUT |
                          views::MenuRunner::CONTEXT_MENU |
                          views::MenuRunner::FIXED_ANCHOR);
-  source->RequestFocus();
+  if (!selected()) {
+    selected_for_context_menu_ = true;
+    SetSelected(true, base::nullopt);
+  }
 }
 
 void SearchResultTileItemView::OnMenuClosed() {
   // Release menu since its menu model delegate (AppContextMenu) could be
   // released as a result of menu command execution.
   context_menu_.reset();
-  OnBlur();
+  if (selected_for_context_menu_) {
+    selected_for_context_menu_ = false;
+    SetSelected(false, base::nullopt);
+  }
 }
 
 void SearchResultTileItemView::ActivateResult(int event_flags,
@@ -539,7 +545,8 @@ void SearchResultTileItemView::Layout() {
         AppListConfig::instance(), rect, icon_->GetImage().size(),
         /*icon_scale=*/1.0f));
     title_->SetBoundsRect(AppListItemView::GetTitleBoundsForTargetViewBounds(
-        AppListConfig::instance(), rect, title_->GetPreferredSize()));
+        AppListConfig::instance(), rect, title_->GetPreferredSize(),
+        /*icon_scale=*/1.0f));
   } else {
     gfx::Rect icon_rect(rect);
     icon_rect.ClampToCenteredSize(icon_->GetImage().size());

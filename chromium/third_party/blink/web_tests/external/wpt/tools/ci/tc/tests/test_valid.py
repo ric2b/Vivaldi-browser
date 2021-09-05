@@ -46,7 +46,11 @@ def test_verify_payload():
     r.raise_for_status()
     create_task_schema = r.json()
 
-    r = requests.get("https://raw.githubusercontent.com/taskcluster/taskcluster/master/workers/docker-worker/schemas/v1/payload.json")
+    # TODO(Hexcles): Change it to https://community-tc.services.mozilla.com/references/schemas/docker-worker/v1/payload.json
+    # after the next Community-TC release (see https://bugzilla.mozilla.org/show_bug.cgi?id=1639732)..
+    r = requests.get(
+        "https://raw.githubusercontent.com/taskcluster/taskcluster/"
+        "3ed511ef9119da54fc093e976b7b5955874c9b54/workers/docker-worker/schemas/v1/payload.json")
     r.raise_for_status()
     payload_schema = r.json()
 
@@ -120,9 +124,13 @@ def test_verify_payload():
       'wpt-chrome-dev-reftest-4',
       'wpt-chrome-dev-reftest-5',
       'wpt-firefox-nightly-wdspec-1',
+      'wpt-firefox-nightly-wdspec-2',
       'wpt-chrome-dev-wdspec-1',
+      'wpt-chrome-dev-wdspec-2',
       'wpt-firefox-nightly-crashtest-1',
       'wpt-chrome-dev-crashtest-1',
+      'wpt-firefox-nightly-print-reftest-1',
+      'wpt-chrome-dev-print-reftest-1',
       'lint'}),
     ("pr_event.json", True, {".taskcluster.yml",".travis.yml","tools/ci/start.sh"},
      {'download-firefox-nightly',
@@ -130,9 +138,9 @@ def test_verify_payload():
       'tools/ unittests (Python 2)',
       'tools/ unittests (Python 3.6)',
       'tools/ unittests (Python 3.8)',
-      'tools/wpt/ tests (Python 2)',
-      'tools/wpt/ tests (Python 3.6)',
-      'tools/wpt/ tests (Python 3.8)',
+      'tools/ integration tests (Python 2)',
+      'tools/ integration tests (Python 3.6)',
+      'tools/ integration tests (Python 3.8)',
       'resources/ tests',
       'infrastructure/ tests',
       'infrastructure/ tests (Python 3)'}),
@@ -154,6 +162,7 @@ def test_verify_payload():
       'wpt-chrome-stable-reftest-3',
       'wpt-chrome-stable-reftest-4',
       'wpt-chrome-stable-reftest-5',
+      'wpt-chrome-stable-print-reftest-1',
       'wpt-chrome-stable-testharness-1',
       'wpt-chrome-stable-testharness-10',
       'wpt-chrome-stable-testharness-11',
@@ -171,12 +180,14 @@ def test_verify_payload():
       'wpt-chrome-stable-testharness-8',
       'wpt-chrome-stable-testharness-9',
       'wpt-chrome-stable-wdspec-1',
+      'wpt-chrome-stable-wdspec-2',
       'wpt-chrome-stable-crashtest-1',
       'wpt-firefox-stable-reftest-1',
       'wpt-firefox-stable-reftest-2',
       'wpt-firefox-stable-reftest-3',
       'wpt-firefox-stable-reftest-4',
       'wpt-firefox-stable-reftest-5',
+      'wpt-firefox-stable-print-reftest-1',
       'wpt-firefox-stable-testharness-1',
       'wpt-firefox-stable-testharness-10',
       'wpt-firefox-stable-testharness-11',
@@ -194,12 +205,14 @@ def test_verify_payload():
       'wpt-firefox-stable-testharness-8',
       'wpt-firefox-stable-testharness-9',
       'wpt-firefox-stable-wdspec-1',
+      'wpt-firefox-stable-wdspec-2',
       'wpt-firefox-stable-crashtest-1',
       'wpt-webkitgtk_minibrowser-nightly-reftest-1',
       'wpt-webkitgtk_minibrowser-nightly-reftest-2',
       'wpt-webkitgtk_minibrowser-nightly-reftest-3',
       'wpt-webkitgtk_minibrowser-nightly-reftest-4',
       'wpt-webkitgtk_minibrowser-nightly-reftest-5',
+      'wpt-webkitgtk_minibrowser-nightly-print-reftest-1',
       'wpt-webkitgtk_minibrowser-nightly-testharness-1',
       'wpt-webkitgtk_minibrowser-nightly-testharness-10',
       'wpt-webkitgtk_minibrowser-nightly-testharness-11',
@@ -217,12 +230,14 @@ def test_verify_payload():
       'wpt-webkitgtk_minibrowser-nightly-testharness-8',
       'wpt-webkitgtk_minibrowser-nightly-testharness-9',
       'wpt-webkitgtk_minibrowser-nightly-wdspec-1',
+      'wpt-webkitgtk_minibrowser-nightly-wdspec-2',
       'wpt-webkitgtk_minibrowser-nightly-crashtest-1',
       'wpt-servo-nightly-reftest-1',
       'wpt-servo-nightly-reftest-2',
       'wpt-servo-nightly-reftest-3',
       'wpt-servo-nightly-reftest-4',
       'wpt-servo-nightly-reftest-5',
+      'wpt-servo-nightly-print-reftest-1',
       'wpt-servo-nightly-testharness-1',
       'wpt-servo-nightly-testharness-10',
       'wpt-servo-nightly-testharness-11',
@@ -240,6 +255,7 @@ def test_verify_payload():
       'wpt-servo-nightly-testharness-8',
       'wpt-servo-nightly-testharness-9',
       'wpt-servo-nightly-wdspec-1',
+      'wpt-servo-nightly-wdspec-2',
       'wpt-servo-nightly-crashtest-1',})
 ])
 def test_schedule_tasks(event_path, is_pr, files_changed, expected):

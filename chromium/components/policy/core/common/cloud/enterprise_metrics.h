@@ -134,6 +134,8 @@ enum MetricEnrollment {
   kMetricEnrollmentRegisterConsumerAccountWithPackagedLicense = 58,
   // Device was not pre-provisioned for Zero-Touch.
   kMetricEnrollmentDeviceNotPreProvisioned = 59,
+  // Enrollment failed: Enterprise account is not eligible to enroll.
+  kMetricEnrollmentRegisterEnterpriseAccountIsNotEligibleToEnroll = 60,
   // Enrollment failed: Enterprise TOS has not been accepted.
   kMetricEnrollmentRegisterEnterpriseTosHasNotBeenAccepted = 61,
   // Max value for use with enumeration histogram UMA functions.
@@ -243,6 +245,11 @@ POLICY_EXPORT extern const char kMetricDeviceLocalAccountPolicyRefreshFcm[];
 POLICY_EXPORT extern const char kMetricDeviceLocalAccountPolicyInvalidations[];
 POLICY_EXPORT extern const char
     kMetricDeviceLocalAccountPolicyInvalidationsFcm[];
+
+POLICY_EXPORT extern const char kMetricCBCMPolicyRefresh[];
+POLICY_EXPORT extern const char kMetricCBCMPolicyRefreshFcm[];
+POLICY_EXPORT extern const char kMetricCBCMPolicyInvalidations[];
+POLICY_EXPORT extern const char kMetricCBCMPolicyInvalidationsFcm[];
 
 POLICY_EXPORT extern const char kMetricPolicyInvalidationRegistration[];
 POLICY_EXPORT extern const char kMetricPolicyInvalidationRegistrationFcm[];

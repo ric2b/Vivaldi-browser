@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="bg">
-<translation id="1169602411434249000">Блокиране на тракери</translation>
 <translation id="1397811292916898096">Потърси чрез <ph name="PRODUCT_NAME" /></translation>
 <translation id="1598449788754183301">Превключване между обикновени и частни раздели</translation>
 <translation id="1644574205037202324">История</translation>
@@ -19,9 +18,12 @@
 <translation id="4526803704855831732">Частни раздели</translation>
 <translation id="4883379392681899581">Излизане от частен режим</translation>
 <translation id="4943872375798546930">Няма резултати</translation>
+<translation id="49576331685473090">Блокер на съдържание</translation>
+<translation id="4960569554487356883">Включете разрешение за Vivaldi в <ph name="BEGIN_LINK" />Настройки на Android<ph name="END_LINK" />.</translation>
 <translation id="5118676864324397542">Хранилище на <ph name="APP_NAME" /></translation>
 <translation id="5233638681132016545">Създай раздел</translation>
 <translation id="5495228542153126976">Преминахте в частен режим</translation>
+<translation id="5553467336321715093">Включете разрешения за Vivaldi в <ph name="BEGIN_LINK" />Настройки на Android<ph name="END_LINK" />.</translation>
 <translation id="572328651809341494">Последни раздели</translation>
 <translation id="5840488417521835756">Узнавате темите в сайтовете, без да напускате страницата. Възможността Търси с докосване е достъпна, когато Google е зададена като основна търсачка във Vivaldi. Само в този случай думата и нейният контекст се изпращат до търсачката на Google и в резултат се извеждат определения, картини, резултати от търсенето и др. подробности.
 

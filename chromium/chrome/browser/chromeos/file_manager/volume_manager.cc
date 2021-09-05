@@ -24,7 +24,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_documents_provider_root_map.h"
@@ -677,8 +676,7 @@ void VolumeManager::AddSshfsCrostiniVolume(
   // Listen for crostini container shutdown and remove volume.
   crostini::CrostiniManager::GetForProfile(profile_)
       ->AddShutdownContainerCallback(
-          crostini::kCrostiniDefaultVmName,
-          crostini::kCrostiniDefaultContainerName,
+          crostini::ContainerId::GetDefault(),
           base::BindOnce(&VolumeManager::RemoveSshfsCrostiniVolume,
                          weak_ptr_factory_.GetWeakPtr(), sshfs_mount_path,
                          base::BindOnce([](bool result) {
@@ -1227,8 +1225,8 @@ void VolumeManager::DoAttachMtpStorage(
           storage::FileSystemMountOption(), path);
   DCHECK(result);
 
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::IO},
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&MTPDeviceMapService::RegisterMTPFileSystem,
                      base::Unretained(MTPDeviceMapService::GetInstance()),
                      info.location(), fsid, read_only));
@@ -1248,8 +1246,8 @@ void VolumeManager::OnRemovableStorageDetached(
 
       const std::string fsid = GetMountPointNameForMediaStorage(info);
       storage::ExternalMountPoints::GetSystemInstance()->RevokeFileSystem(fsid);
-      base::PostTask(
-          FROM_HERE, {content::BrowserThread::IO},
+      content::GetIOThreadTaskRunner({})->PostTask(
+          FROM_HERE,
           base::BindOnce(&MTPDeviceMapService::RevokeMTPFileSystem,
                          base::Unretained(MTPDeviceMapService::GetInstance()),
                          fsid));

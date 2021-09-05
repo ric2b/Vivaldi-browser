@@ -18,6 +18,7 @@
 #include "gn/input_file.h"
 #include "gn/parse_tree.h"
 #include "gn/settings.h"
+#include "gn/vector_utils.h"
 #include "util/auto_reset_event.h"
 
 class BuildSettings;
@@ -91,8 +92,16 @@ class InputFileManager : public base::RefCountedThreadSafe<InputFileManager> {
   // Does not count dynamic input.
   int GetInputFileCount() const;
 
-  // Fills the vector with all input files.
-  void GetAllPhysicalInputFileNames(std::vector<base::FilePath>* result) const;
+  // Add all physical input files to a VectorSetSorter instance.
+  // This allows fast merging and sorting with other file paths sets.
+  //
+  // This is more memory efficient than returning a vector of base::FilePath
+  // instance, especially with projects with a very large number of input files,
+  // but note that the VectorSetSorter only holds pointers to the
+  // items recorded in this InputFileManager instance, and it is up to the
+  // caller to ensure these will not change until the sorter is destroyed.
+  void AddAllPhysicalInputFileNamesToVectorSetSorter(
+      VectorSetSorter<base::FilePath>* sorter) const;
 
   void set_load_file_callback(SyncLoadFileCallback load_file_callback) {
     load_file_callback_ = load_file_callback;

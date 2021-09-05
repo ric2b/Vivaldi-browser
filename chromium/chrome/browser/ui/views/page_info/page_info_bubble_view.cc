@@ -16,7 +16,6 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/certificate_viewer.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
@@ -420,7 +419,7 @@ InternalPageInfoBubbleView::InternalPageInfoBubbleView(
       ChromeLayoutProvider::Get()->GetInsetsMetric(views::INSETS_DIALOG));
   set_margins(gfx::Insets());
 
-  set_window_title(l10n_util::GetStringUTF16(text));
+  SetTitle(text);
 
   views::BubbleDialogDelegateView::CreateBubble(this);
 
@@ -766,9 +765,8 @@ void PageInfoBubbleView::SetIdentityInfo(const IdentityInfo& identity_info) {
   std::unique_ptr<PageInfoUI::SecurityDescription> security_description =
       GetSecurityDescription(identity_info);
 
-  set_window_title(security_description->summary);
+  SetTitle(security_description->summary);
   set_security_description_type(security_description->type);
-  GetBubbleFrameView()->UpdateWindowTitle();
   int text_style = views::style::STYLE_PRIMARY;
   switch (security_description->summary_style) {
     case SecuritySummaryColor::RED:
@@ -982,8 +980,8 @@ void PageInfoBubbleView::HandleMoreInfoRequest(views::View* source) {
   // The bubble closes automatically when the collected cookies dialog or the
   // certificate viewer opens. So delay handling of the link clicked to avoid
   // a crash in the base class which needs to complete the mouse event handling.
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(&PageInfoBubbleView::HandleMoreInfoRequestAsync,
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&PageInfoBubbleView::HandleMoreInfoRequestAsync,
                                 weak_factory_.GetWeakPtr(), source->GetID()));
 }
 

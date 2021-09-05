@@ -267,14 +267,6 @@ std::unique_ptr<SeedResponse> MaybeImportFirstRunSeed(
   return nullptr;
 }
 
-// Called when the VariationsSeedStore first stores a seed.
-void OnInitialSeedStored() {
-#if defined(OS_ANDROID)
-  android::MarkVariationsSeedAsStored();
-  android::ClearJavaFirstRunPrefs();
-#endif
-}
-
 }  // namespace
 
 #if defined(OS_CHROMEOS)
@@ -377,7 +369,7 @@ VariationsService::VariationsService(
                            std::make_unique<VariationsSeedStore>(
                                local_state,
                                MaybeImportFirstRunSeed(local_state),
-                               base::BindOnce(&OnInitialSeedStored)),
+                               /*signature_verification_enabled=*/true),
                            ui_string_overrider),
       last_request_was_http_retry_(false) {
   DCHECK(client_);
@@ -699,15 +691,13 @@ bool VariationsService::StoreSeed(const std::string& seed_data,
                                   const std::string& country_code,
                                   base::Time date_fetched,
                                   bool is_delta_compressed,
-                                  bool is_gzip_compressed,
-                                  bool fetched_insecurely) {
+                                  bool is_gzip_compressed) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::unique_ptr<VariationsSeed> seed(new VariationsSeed);
   if (!field_trial_creator_.seed_store()->StoreSeedData(
           seed_data, seed_signature, country_code, date_fetched,
-          is_delta_compressed, is_gzip_compressed, fetched_insecurely,
-          seed.get())) {
+          is_delta_compressed, is_gzip_compressed, seed.get())) {
     return false;
   }
 
@@ -810,19 +800,12 @@ void VariationsService::OnSimpleLoaderCompleteOrRedirect(
   scoped_refptr<net::HttpResponseHeaders> headers;
 
   int response_code = -1;
-  // We use the final URL HTTPS/HTTP value to pass to StoreSeed, since
-  // signature validation should be forced on for any HTTP fetch, including
-  // redirects from HTTPS to HTTP. We default to false since we can't get this
-  // value (nor will it be used) in the redirect case.
-  bool final_url_was_https = false;
 
   // Variations seed fetches should not follow redirects, so if this request was
   // redirected, keep the default values for |net_error| and |is_success| (treat
   // it as a net::ERR_INVALID_REDIRECT), and the fetch will be cancelled when
   // pending_seed_request is reset.
   if (!was_redirect) {
-    final_url_was_https =
-        pending_seed_request_->GetFinalURL().SchemeIs(url::kHttpsScheme);
     const network::mojom::URLResponseHead* response_info =
         pending_seed_request_->ResponseInfo();
     if (response_info && response_info->headers) {
@@ -919,7 +902,7 @@ void VariationsService::OnSimpleLoaderCompleteOrRedirect(
   const std::string country_code = GetHeaderValue(headers.get(), "X-Country");
   const bool store_success =
       StoreSeed(*response_body, signature, country_code, response_date,
-                is_delta_compressed, is_gzip_compressed, !final_url_was_https);
+                is_delta_compressed, is_gzip_compressed);
   if (!store_success && is_delta_compressed) {
     disable_deltas_for_next_request_ = true;
     // |request_scheduler_| will be null during unit tests.
@@ -1016,15 +999,13 @@ bool VariationsService::SetupFieldTrials(
     const char* kEnableGpuBenchmarking,
     const char* kEnableFeatures,
     const char* kDisableFeatures,
-    const std::set<std::string>& unforceable_field_trials,
     const std::vector<std::string>& variation_ids,
     const std::vector<base::FeatureList::FeatureOverrideInfo>& extra_overrides,
     std::unique_ptr<base::FeatureList> feature_list,
     variations::PlatformFieldTrials* platform_field_trials) {
   return field_trial_creator_.SetupFieldTrials(
-      kEnableGpuBenchmarking, kEnableFeatures, kDisableFeatures,
-      unforceable_field_trials, variation_ids, extra_overrides,
-      CreateLowEntropyProvider(), std::move(feature_list),
+      kEnableGpuBenchmarking, kEnableFeatures, kDisableFeatures, variation_ids,
+      extra_overrides, CreateLowEntropyProvider(), std::move(feature_list),
       platform_field_trials, &safe_seed_manager_);
 }
 

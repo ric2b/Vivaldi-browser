@@ -63,7 +63,7 @@
 <translation id="1360699455582016846"><ph name="ROUTING_KEY_NUMBER" /> ரூட்டிங் விசைக்குக் கீழுள்ள உருப்படியைக் கிளிக் செய்யவும்</translation>
 <translation id="1377925789329510816">இது கடைசி தலைப்பாகும். முதல் தலைப்பிற்குச் செல்ல, தேடல்+Hஐ ஒன்றாக அழுத்தவும் அல்லது இந்தப் பக்கத்தில் உள்ள இரண்டாவது தலைப்பிற்குச் செல்ல, தேடல்+Shift+Hஐ ஒன்றாக அழுத்தவும்.</translation>
 <translation id="138218114945450791">வெளிர் நீலம்</translation>
-<translation id="1383876407941801731">தேடல்</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1396114365388024581">tablst</translation>
 <translation id="1405567553485452995">வெளிர் பச்சை</translation>
 <translation id="1417889266572670458">நேவி</translation>
@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">வலப்புறம் செல்</translation>
 <translation id="1781173782405573156">பாஸ் த்ரூ விசை</translation>
 <translation id="1787176709638001873">கடவுச்சொல் திருத்த உரை</translation>
+<translation id="180203835522132923">Search + O, அதன் பின்னர் W</translation>
 <translation id="1810107444790159527">பட்டியல் பெட்டி</translation>
 <translation id="1812527064848182527">லேண்ட்ஸ்கேப்</translation>
 <translation id="1829244130665387512">இந்தப் பக்கத்தில் தேடு</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">இரண்டு விரல்களை இடதுபுறமாக ஸ்வைப் செய்யவும்</translation>
 <translation id="2998131015536248178">முந்தைய எழுத்து</translation>
 <translation id="2999559350546931576">ஸ்ருதியைக் குறை</translation>
+<translation id="3009352964623081324">Search + O, அதன் பின்னர் S. குரல்களை நிறுவவும் நிர்வகிக்கவும் பிரத்தியேகமாக்கவும் இந்த ஷார்ட்கட்டைப் பயன்படுத்தலாம்.</translation>
 <translation id="3014130421870723208">@ed 8dot</translation>
 <translation id="3030432017085518523">மெனு விருப்பம் ரேடியோ பட்டன்</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{தனி மேற்கோள் குறி}other{# தனி மேற்கோள் குறிகள்}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">செருகும்</translation>
 <translation id="4511186779140817916">பிலாஞ்ச்டு ஆல்மண்ட்</translation>
 <translation id="451510441928265982">முந்தைய 2ம் நிலை தலைப்பு எதுவும் இல்லை</translation>
+<translation id="4515799157838123044">பின்புலத்தில் உள்ளவற்றை மங்கலாக்கு</translation>
 <translation id="4517854969512651305">மதிப்பை அதிகரிக்கும்</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{சாய்கோடு}other{# சாய்கோடுகள்}}</translation>
 <translation id="4537277403911487429">இதேபோன்ற அடுத்த கட்டளை</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">பகுதி</translation>
 <translation id="6637586476836377253">பதிவு</translation>
 <translation id="6657128831881431364">செயல்நிலைப் பட்டி</translation>
+<translation id="6660819301598582123">அகர முதல எழுத்தெல்லாம் ஆதிபகவன் முதற்றே உலகு.</translation>
 <translation id="667999046851023355">ஆவணம்</translation>
 <translation id="6688209025607531203">கட்டாயமல்லாத விழிப்பூட்டல்</translation>
 <translation id="6689672606256159458">டார்க் சால்மன்</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">அடுத்த 5ம் நிலை தலைப்பு எதுவும் இல்லை</translation>
 <translation id="6955705049214951590">மிஸ்ட்டி ரோஸ்</translation>
 <translation id="696356426651109308">ஆரம்பத்திற்குச் செல்</translation>
-<translation id="699159175332639490">தேடல் + O + W</translation>
 <translation id="6994042831499278539">அருஞ்சொல் திரட்டு மேற்கோள்</translation>
 <translation id="6996566555547746822">அடுத்த சேர்க்கைப் பெட்டி</translation>
 <translation id="6997224546856374593">பேரெழுத்துகளைப் படிக்கும்போது:</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">உதாரணம்</translation>
 <translation id="7439060726180460871">கோப்பகம்</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">உறுப்பு வகைகளையும் மேற்கோளிடப்பட்ட, நீக்கப்பட்ட, தடிமனாக்கப்பட்ட, அடைப்புக்குறிக்குள் இடப்பட்ட, பேரெழுத்தாக்கப்பட்ட உரையையும் பேசும்போது பேச்சின் தொனியை மாற்றும்.</translation>
 <translation id="7491962110804786152">tab</translation>
 <translation id="7505149250476994901">எழுத்துக்கு முன் "பேரெழுத்து" என்று சொல்லும்</translation>
 <translation id="7518543783849163354">ChromeVox ஆடியோவைத் தற்காலிகமாக நிறுத்த, கன்ட்ரோல் விசையை அழுத்தவும்.</translation>

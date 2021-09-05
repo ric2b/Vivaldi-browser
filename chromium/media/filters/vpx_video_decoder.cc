@@ -182,8 +182,7 @@ void VpxVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
   // We might get a successful VpxDecode but not a frame if only a partial
   // decode happened.
   if (video_frame) {
-    video_frame->metadata()->SetBoolean(VideoFrameMetadata::POWER_EFFICIENT,
-                                        false);
+    video_frame->metadata()->power_efficient = false;
     output_cb_.Run(video_frame);
   }
 
@@ -239,6 +238,14 @@ bool VpxVideoDecoder::ConfigureDecoder(const VideoDecoderConfig& config) {
             vpx_codec_.get(), &GetVP9FrameBuffer, &ReleaseVP9FrameBuffer,
             memory_pool_.get())) {
       DLOG(ERROR) << "Failed to configure external buffers. "
+                  << vpx_codec_error(vpx_codec_.get());
+      return false;
+    }
+
+    vpx_codec_err_t status =
+        vpx_codec_control(vpx_codec_.get(), VP9D_SET_LOOP_FILTER_OPT, 1);
+    if (status != VPX_CODEC_OK) {
+      DLOG(ERROR) << "Failed to enable VP9D_SET_LOOP_FILTER_OPT. "
                   << vpx_codec_error(vpx_codec_.get());
       return false;
     }

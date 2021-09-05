@@ -111,6 +111,10 @@ COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kReportOsUpdateStatus[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kReportRunningKioskApp[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kReportUploadFrequency[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kReportDeviceAppInfo[];
+COMPONENT_EXPORT(CHROMEOS_SETTINGS)
+extern const char kReportDeviceBluetoothInfo[];
+COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kReportDeviceFanInfo[];
+COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kReportDeviceVpdInfo[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kHeartbeatEnabled[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kHeartbeatFrequency[];
@@ -212,6 +216,9 @@ extern const char kTPMFirmwareUpdateSettings[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kMinimumChromeVersionEnforced[];
 
+COMPONENT_EXPORT(CHROMEOS_SETTINGS)
+extern const char kMinimumChromeVersionEolMessage[];
+
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kCastReceiverName[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kUnaffiliatedArcAllowed[];
@@ -261,6 +268,8 @@ extern const char kSystemProxySettingsKeySystemServicesUsername[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kSystemProxySettingsKeySystemServicesPassword[];
 
+COMPONENT_EXPORT(CHROMEOS_SETTINGS)
+extern const char kDeviceCrostiniArcAdbSideloadingAllowed[];
 }  // namespace chromeos
 
 #endif  // CHROMEOS_SETTINGS_CROS_SETTINGS_NAMES_H_

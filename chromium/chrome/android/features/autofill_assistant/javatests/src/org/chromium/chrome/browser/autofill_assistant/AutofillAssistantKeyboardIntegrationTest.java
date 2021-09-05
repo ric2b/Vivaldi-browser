@@ -4,10 +4,10 @@
 
 package org.chromium.chrome.browser.autofill_assistant;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -18,7 +18,8 @@ import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUi
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilViewMatchesCondition;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Before;
@@ -35,11 +36,11 @@ import org.chromium.chrome.browser.autofill_assistant.proto.ClickProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ClickType;
 import org.chromium.chrome.browser.autofill_assistant.proto.ElementAreaProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ElementAreaProto.Rectangle;
-import org.chromium.chrome.browser.autofill_assistant.proto.ElementReferenceProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.FocusElementProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.KeyboardValueFillStrategy;
 import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto.Choice;
+import org.chromium.chrome.browser.autofill_assistant.proto.SelectorProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SetFormFieldValueProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SetFormFieldValueProto.KeyPress;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto;
@@ -103,9 +104,11 @@ public class AutofillAssistantKeyboardIntegrationTest {
     @Test
     @MediumTest
     public void keyboardDoesNotShowOnElementClick() throws Exception {
-        ElementReferenceProto element = (ElementReferenceProto) ElementReferenceProto.newBuilder()
-                                                .addSelectors("#profile_name")
-                                                .build();
+        SelectorProto element =
+                (SelectorProto) SelectorProto.newBuilder()
+                        .addFilters(
+                                SelectorProto.Filter.newBuilder().setCssSelector("#profile_name"))
+                        .build();
 
         ArrayList<ActionProto> list = new ArrayList<>();
         list.add((ActionProto) ActionProto.newBuilder()
@@ -159,9 +162,11 @@ public class AutofillAssistantKeyboardIntegrationTest {
     @Test
     @MediumTest
     public void keyboardDoesNotShowOnKeyStrokes() throws Exception {
-        ElementReferenceProto element = (ElementReferenceProto) ElementReferenceProto.newBuilder()
-                                                .addSelectors("#profile_name")
-                                                .build();
+        SelectorProto element =
+                (SelectorProto) SelectorProto.newBuilder()
+                        .addFilters(
+                                SelectorProto.Filter.newBuilder().setCssSelector("#profile_name"))
+                        .build();
 
         ArrayList<ActionProto> list = new ArrayList<>();
         list.add((ActionProto) ActionProto.newBuilder()
@@ -241,10 +246,15 @@ public class AutofillAssistantKeyboardIntegrationTest {
     @Test
     @MediumTest
     public void keyboardDoesNotShowOnElementClickInIFrame() throws Exception {
-        ElementReferenceProto element = (ElementReferenceProto) ElementReferenceProto.newBuilder()
-                                                .addSelectors("#iframe")
-                                                .addSelectors("#name")
-                                                .build();
+        SelectorProto element =
+                (SelectorProto) SelectorProto.newBuilder()
+                        .addFilters(SelectorProto.Filter.newBuilder().setCssSelector("#iframe"))
+                        .addFilters(SelectorProto.Filter.newBuilder().setPickOne(
+                                SelectorProto.EmptyFilter.getDefaultInstance()))
+                        .addFilters(SelectorProto.Filter.newBuilder().setEnterFrame(
+                                SelectorProto.EmptyFilter.getDefaultInstance()))
+                        .addFilters(SelectorProto.Filter.newBuilder().setCssSelector("#name"))
+                        .build();
 
         ArrayList<ActionProto> list = new ArrayList<>();
         list.add((ActionProto) ActionProto.newBuilder()

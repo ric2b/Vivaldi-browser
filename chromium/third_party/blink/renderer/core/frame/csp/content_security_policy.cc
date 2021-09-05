@@ -29,6 +29,7 @@
 #include <utility>
 
 #include "base/debug/dump_without_crashing.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
@@ -286,7 +287,7 @@ void ContentSecurityPolicy::ApplyPolicySideEffectsToDelegate() {
 
 ContentSecurityPolicy::~ContentSecurityPolicy() = default;
 
-void ContentSecurityPolicy::Trace(Visitor* visitor) {
+void ContentSecurityPolicy::Trace(Visitor* visitor) const {
   visitor->Trace(delegate_);
   visitor->Trace(policies_);
   visitor->Trace(console_messages_);
@@ -551,7 +552,7 @@ bool ContentSecurityPolicy::AllowInline(
   // Step 3. For each policy in element’s Document's global object’s CSP list:
   // [spec text]
   for (const auto& policy : policies_) {
-    // May be whitelisted by hash, if 'unsafe-hashes' is present in a policy.
+    // May be allowed by hash, if 'unsafe-hashes' is present in a policy.
     // Check against the digest of the |content| and also check whether inline
     // script is allowed.
     is_allowed &=
@@ -643,23 +644,6 @@ bool ContentSecurityPolicy::AllowPluginTypeForDocument(
   return true;
 }
 
-bool ContentSecurityPolicy::AllowRequestWithoutIntegrity(
-    mojom::RequestContextType context,
-    network::mojom::RequestDestination request_destination,
-    const KURL& url,
-    RedirectStatus redirect_status,
-    ReportingDisposition reporting_disposition,
-    CheckHeaderType check_header_type) const {
-  for (const auto& policy : policies_) {
-    if (CheckHeaderTypeMatches(check_header_type, policy->HeaderType()) &&
-        !policy->AllowRequestWithoutIntegrity(context, request_destination, url,
-                                              redirect_status,
-                                              reporting_disposition))
-      return false;
-  }
-  return true;
-}
-
 static base::Optional<ContentSecurityPolicy::DirectiveType>
 GetDirectiveTypeFromRequestContextType(mojom::RequestContextType context) {
   switch (context) {
@@ -732,24 +716,18 @@ bool ContentSecurityPolicy::AllowRequest(
     const String& nonce,
     const IntegrityMetadataSet& integrity_metadata,
     ParserDisposition parser_disposition,
+    const KURL& url_before_redirects,
     RedirectStatus redirect_status,
     ReportingDisposition reporting_disposition,
     CheckHeaderType check_header_type) const {
-  if (integrity_metadata.IsEmpty() &&
-      !AllowRequestWithoutIntegrity(context, request_destination, url,
-                                    redirect_status, reporting_disposition,
-                                    check_header_type)) {
-    return false;
-  }
-
   base::Optional<ContentSecurityPolicy::DirectiveType> type =
       GetDirectiveTypeFromRequestContextType(context);
 
   if (!type)
     return true;
-  return AllowFromSource(*type, url, redirect_status, reporting_disposition,
-                         check_header_type, nonce, integrity_metadata,
-                         parser_disposition);
+  return AllowFromSource(*type, url, url_before_redirects, redirect_status,
+                         reporting_disposition, check_header_type, nonce,
+                         integrity_metadata, parser_disposition);
 }
 
 void ContentSecurityPolicy::UsesScriptHashAlgorithms(uint8_t algorithms) {
@@ -763,6 +741,7 @@ void ContentSecurityPolicy::UsesStyleHashAlgorithms(uint8_t algorithms) {
 bool ContentSecurityPolicy::AllowFromSource(
     ContentSecurityPolicy::DirectiveType type,
     const KURL& url,
+    const KURL& url_before_redirects,
     RedirectStatus redirect_status,
     ReportingDisposition reporting_disposition,
     CheckHeaderType check_header_type,
@@ -803,9 +782,9 @@ bool ContentSecurityPolicy::AllowFromSource(
   for (const auto& policy : policies_) {
     if (!CheckHeaderTypeMatches(check_header_type, policy->HeaderType()))
       continue;
-    is_allowed &= policy->AllowFromSource(type, url, redirect_status,
-                                          reporting_disposition, nonce, hashes,
-                                          parser_disposition);
+    is_allowed &= policy->AllowFromSource(
+        type, url, url_before_redirects, redirect_status, reporting_disposition,
+        nonce, hashes, parser_disposition);
   }
 
   return is_allowed;
@@ -815,40 +794,45 @@ bool ContentSecurityPolicy::AllowBaseURI(const KURL& url) const {
   // `base-uri` isn't affected by 'upgrade-insecure-requests', so we use
   // CheckHeaderType::kCheckAll to check both report-only and enforce headers
   // here.
-  return AllowFromSource(ContentSecurityPolicy::DirectiveType::kBaseURI, url);
+  return AllowFromSource(ContentSecurityPolicy::DirectiveType::kBaseURI, url,
+                         url, RedirectStatus::kNoRedirect);
 }
 
 bool ContentSecurityPolicy::AllowConnectToSource(
     const KURL& url,
+    const KURL& url_before_redirects,
     RedirectStatus redirect_status,
     ReportingDisposition reporting_disposition,
     CheckHeaderType check_header_type) const {
   return AllowFromSource(ContentSecurityPolicy::DirectiveType::kConnectSrc, url,
-                         redirect_status, reporting_disposition,
-                         check_header_type);
+                         url_before_redirects, redirect_status,
+                         reporting_disposition, check_header_type);
 }
 
 bool ContentSecurityPolicy::AllowFormAction(const KURL& url) const {
-  return AllowFromSource(ContentSecurityPolicy::DirectiveType::kFormAction,
-                         url);
+  return AllowFromSource(ContentSecurityPolicy::DirectiveType::kFormAction, url,
+                         url, RedirectStatus::kNoRedirect);
 }
 
 bool ContentSecurityPolicy::AllowImageFromSource(
     const KURL& url,
+    const KURL& url_before_redirects,
     RedirectStatus redirect_status,
     ReportingDisposition reporting_disposition,
     CheckHeaderType check_header_type) const {
   return AllowFromSource(ContentSecurityPolicy::DirectiveType::kImgSrc, url,
-                         redirect_status, reporting_disposition,
-                         check_header_type);
+                         url_before_redirects, redirect_status,
+                         reporting_disposition, check_header_type);
 }
 
 bool ContentSecurityPolicy::AllowMediaFromSource(const KURL& url) const {
-  return AllowFromSource(ContentSecurityPolicy::DirectiveType::kMediaSrc, url);
+  return AllowFromSource(ContentSecurityPolicy::DirectiveType::kMediaSrc, url,
+                         url, RedirectStatus::kNoRedirect);
 }
 
 bool ContentSecurityPolicy::AllowObjectFromSource(const KURL& url) const {
-  return AllowFromSource(ContentSecurityPolicy::DirectiveType::kObjectSrc, url);
+  return AllowFromSource(ContentSecurityPolicy::DirectiveType::kObjectSrc, url,
+                         url, RedirectStatus::kNoRedirect);
 }
 
 bool ContentSecurityPolicy::AllowScriptFromSource(
@@ -856,17 +840,20 @@ bool ContentSecurityPolicy::AllowScriptFromSource(
     const String& nonce,
     const IntegrityMetadataSet& hashes,
     ParserDisposition parser_disposition,
+    const KURL& url_before_redirects,
     RedirectStatus redirect_status,
     ReportingDisposition reporting_disposition,
     CheckHeaderType check_header_type) const {
   return AllowFromSource(ContentSecurityPolicy::DirectiveType::kScriptSrcElem,
-                         url, redirect_status, reporting_disposition,
-                         check_header_type, nonce, hashes, parser_disposition);
+                         url, url_before_redirects, redirect_status,
+                         reporting_disposition, check_header_type, nonce,
+                         hashes, parser_disposition);
 }
 
 bool ContentSecurityPolicy::AllowWorkerContextFromSource(
     const KURL& url) const {
-  return AllowFromSource(ContentSecurityPolicy::DirectiveType::kWorkerSrc, url);
+  return AllowFromSource(ContentSecurityPolicy::DirectiveType::kWorkerSrc, url,
+                         url, RedirectStatus::kNoRedirect);
 }
 
 bool ContentSecurityPolicy::AllowTrustedTypePolicy(const String& policy_name,
@@ -1015,9 +1002,13 @@ static void GatherSecurityPolicyViolationEventData(
         init->setBlockedURI("eval");
         break;
       case ContentSecurityPolicy::kURLViolation:
-        init->setBlockedURI(
-            StripURLForUseInReport(delegate->GetSecurityOrigin(), blocked_url,
-                                   redirect_status, effective_type));
+        // We pass RedirectStatus::kNoRedirect so that StripURLForUseInReport
+        // does not strip path and query from the URL. This is safe since
+        // blocked_url at this point is always the original url (before
+        // redirects).
+        init->setBlockedURI(StripURLForUseInReport(
+            delegate->GetSecurityOrigin(), blocked_url,
+            RedirectStatus::kNoRedirect, effective_type));
         break;
       case ContentSecurityPolicy::kTrustedTypesSinkViolation:
         init->setBlockedURI("trusted-types-sink");
@@ -1147,7 +1138,7 @@ void ContentSecurityPolicy::ReportViolation(
   // |delegate_|.
   ContentSecurityPolicyDelegate* relevant_delegate =
       context_frame
-          ? &context_frame->GetDocument()->GetContentSecurityPolicyDelegate()
+          ? &context_frame->DomWindow()->GetContentSecurityPolicyDelegate()
           : delegate_.Get();
   DCHECK(relevant_delegate);
   GatherSecurityPolicyViolationEventData(
@@ -1228,7 +1219,7 @@ void ContentSecurityPolicy::PostViolationReport(
     bool is_frame_ancestors_violation = !!context_frame;
     ContentSecurityPolicyDelegate* relevant_delegate =
         is_frame_ancestors_violation
-            ? &context_frame->GetDocument()->GetContentSecurityPolicyDelegate()
+            ? &context_frame->DomWindow()->GetContentSecurityPolicyDelegate()
             : delegate_.Get();
     DCHECK(relevant_delegate);
 
@@ -1239,10 +1230,10 @@ void ContentSecurityPolicy::PostViolationReport(
 }
 
 void ContentSecurityPolicy::ReportMixedContent(
-    const KURL& mixed_url,
+    const KURL& blocked_url,
     RedirectStatus redirect_status) const {
   for (const auto& policy : policies_)
-    policy->ReportMixedContent(mixed_url, redirect_status);
+    policy->ReportMixedContent(blocked_url, redirect_status);
 }
 
 void ContentSecurityPolicy::ReportReportOnlyInMeta(const String& header) {
@@ -1363,14 +1354,6 @@ void ContentSecurityPolicy::ReportInvalidSandboxFlags(
   LogToConsole(
       "Error while parsing the 'sandbox' Content Security Policy directive: " +
       invalid_flags);
-}
-
-void ContentSecurityPolicy::ReportInvalidRequireSRIForTokens(
-    const String& invalid_tokens) {
-  LogToConsole(
-      "Error while parsing the 'require-sri-for' Content Security Policy "
-      "directive: " +
-      invalid_tokens);
 }
 
 void ContentSecurityPolicy::ReportInvalidDirectiveValueCharacter(
@@ -1536,8 +1519,6 @@ const char* ContentSecurityPolicy::GetDirectiveName(const DirectiveType& type) {
       return "plugin-types";
     case DirectiveType::kReportURI:
       return "report-uri";
-    case DirectiveType::kRequireSRIFor:
-      return "require-sri-for";
     case DirectiveType::kTrustedTypes:
       return "trusted-types";
     case DirectiveType::kSandbox:
@@ -1607,8 +1588,6 @@ ContentSecurityPolicy::DirectiveType ContentSecurityPolicy::GetDirectiveType(
     return DirectiveType::kPrefetchSrc;
   if (name == "report-uri")
     return DirectiveType::kReportURI;
-  if (name == "require-sri-for")
-    return DirectiveType::kRequireSRIFor;
   if (name == "require-trusted-types-for")
     return DirectiveType::kRequireTrustedTypesFor;
   if (name == "trusted-types")
@@ -1640,6 +1619,7 @@ ContentSecurityPolicy::DirectiveType ContentSecurityPolicy::GetDirectiveType(
 }
 
 bool ContentSecurityPolicy::Subsumes(const ContentSecurityPolicy& other) const {
+  DCHECK(!base::FeatureList::IsEnabled(network::features::kOutOfBlinkCSPEE));
   if (!policies_.size() || !other.policies_.size())
     return !policies_.size();
   // Required-CSP must specify only one policy.
@@ -1701,6 +1681,9 @@ bool ContentSecurityPolicy::IsValidCSPAttr(const String& attr,
   if (context_required_csp.IsEmpty() || context_required_csp.IsNull()) {
     return true;
   }
+
+  if (base::FeatureList::IsEnabled(network::features::kOutOfBlinkCSPEE))
+    return true;
 
   auto* context_policy = MakeGarbageCollected<ContentSecurityPolicy>();
   context_policy->AddPolicyFromHeaderValue(context_required_csp,

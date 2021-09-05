@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "build/build_config.h"
 #include "components/vector_icons/vector_icons.h"
 #include "third_party/skia/include/core/SkPath.h"
@@ -34,10 +35,12 @@
 #include "ui/views/paint_info.h"
 #include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/views_features.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/window/client_view.h"
 #include "ui/views/window/dialog_delegate.h"
+#include "ui/views/window/vector_icons/vector_icons.h"
 
 namespace views {
 
@@ -98,6 +101,15 @@ BubbleFrameView::BubbleFrameView(const gfx::Insets& title_margins,
 #endif
   close_ = AddChildView(std::move(close));
 
+  auto minimize = CreateMinimizeButton(this);
+  minimize->SetVisible(false);
+#if defined(OS_WIN)
+  minimize->SetTooltipText(base::string16());
+  minimize->SetAccessibleName(
+      l10n_util::GetStringUTF16(IDS_APP_ACCNAME_MINIMIZE));
+#endif
+  minimize_ = AddChildView(std::move(minimize));
+
   auto progress_indicator = std::make_unique<ProgressBar>(
       kProgressIndicatorHeight, /*allow_round_corner=*/false);
   progress_indicator->SetBackgroundColor(SK_ColorTRANSPARENT);
@@ -129,6 +141,21 @@ std::unique_ptr<Button> BubbleFrameView::CreateCloseButton(
   InstallCircleHighlightPathGenerator(close_button.get());
 
   return close_button;
+}
+
+// static
+std::unique_ptr<Button> BubbleFrameView::CreateMinimizeButton(
+    ButtonListener* listener) {
+  auto minimize_button = CreateVectorImageButtonWithNativeTheme(
+      listener, kWindowControlMinimizeIcon);
+  minimize_button->SetTooltipText(
+      l10n_util::GetStringUTF16(IDS_APP_ACCNAME_MINIMIZE));
+  minimize_button->SizeToPreferredSize();
+  minimize_button->SetFocusForPlatform();
+
+  InstallCircleHighlightPathGenerator(minimize_button.get());
+
+  return minimize_button;
 }
 
 gfx::Rect BubbleFrameView::GetBoundsForClientView() const {
@@ -190,6 +217,8 @@ int BubbleFrameView::NonClientHitTest(const gfx::Point& point) {
     return HTTRANSPARENT;
   if (close_->GetVisible() && close_->GetMirroredBounds().Contains(point))
     return HTCLOSE;
+  if (minimize_->GetVisible() && minimize_->GetMirroredBounds().Contains(point))
+    return HTMINBUTTON;
 
   // Convert to RRectF to accurately represent the rounded corners of the
   // dialog and allow events to pass through the shadows.
@@ -249,6 +278,7 @@ void BubbleFrameView::GetWindowMask(const gfx::Size& size,
 
 void BubbleFrameView::ResetWindowControls() {
   close_->SetVisible(GetWidget()->widget_delegate()->ShouldShowCloseButton());
+  minimize_->SetVisible(GetWidget()->widget_delegate()->CanMinimize());
 }
 
 void BubbleFrameView::UpdateWindowIcon() {
@@ -354,18 +384,23 @@ void BubbleFrameView::Layout() {
   if (bounds.IsEmpty())
     return;
 
+  // The buttons are positioned somewhat closer to the edge of the bubble.
+  const int close_margin =
+      LayoutProvider::Get()->GetDistanceMetric(DISTANCE_CLOSE_BUTTON_MARGIN);
+  const int button_y = contents_bounds.y() + close_margin;
+  int button_right = contents_bounds.right() - close_margin;
   int title_label_right = bounds.right();
-  if (close_->GetVisible()) {
-    // The close button is positioned somewhat closer to the edge of the bubble.
-    const int close_margin =
-        LayoutProvider::Get()->GetDistanceMetric(DISTANCE_CLOSE_BUTTON_MARGIN);
-    close_->SetPosition(
-        gfx::Point(contents_bounds.right() - close_margin - close_->width(),
-                   contents_bounds.y() + close_margin));
-    // Only reserve space if the close button extends over the header.
-    if (close_->bounds().bottom() > header_bottom) {
+  for (Button* button : {close_, minimize_}) {
+    if (!button->GetVisible())
+      continue;
+    button->SetPosition(gfx::Point(button_right - button->width(), button_y));
+    button_right -= button->width();
+    button_right -= LayoutProvider::Get()->GetDistanceMetric(
+        DISTANCE_RELATED_BUTTON_HORIZONTAL);
+    // Only reserve space if the button extends over the header.
+    if (button->bounds().bottom() > header_bottom) {
       title_label_right =
-          std::min(title_label_right, close_->x() - close_margin);
+          std::min(title_label_right, button->x() - close_margin);
     }
   }
 
@@ -417,6 +452,7 @@ void BubbleFrameView::OnThemeChanged() {
   if (bubble_border_ && bubble_border_->use_theme_background_color()) {
     bubble_border_->set_background_color(GetNativeTheme()->GetSystemColor(
         ui::NativeTheme::kColorId_DialogBackground));
+    UpdateClientViewBackground();
     SchedulePaint();
   }
 }
@@ -464,6 +500,8 @@ void BubbleFrameView::ButtonPressed(Button* sender, const ui::Event& event) {
 
   if (sender == close_) {
     GetWidget()->CloseWithReason(Widget::ClosedReason::kCloseButtonClicked);
+  } else if (sender == minimize_) {
+    GetWidget()->Minimize();
   }
 }
 
@@ -519,11 +557,30 @@ void BubbleFrameView::SetArrow(BubbleBorder::Arrow arrow) {
 
 void BubbleFrameView::SetBackgroundColor(SkColor color) {
   bubble_border_->set_background_color(color);
+  UpdateClientViewBackground();
   SchedulePaint();
 }
 
 SkColor BubbleFrameView::GetBackgroundColor() const {
   return bubble_border_->background_color();
+}
+
+void BubbleFrameView::UpdateClientViewBackground() {
+  if (!base::FeatureList::IsEnabled(features::kEnableMDRoundedCornersOnDialogs))
+    return;
+  DCHECK(GetWidget());
+  DCHECK(GetWidget()->client_view());
+
+  // If dealing with a layer backed ClientView we need to update it's color to
+  // match that of the frame view.
+  View* client_view = GetWidget()->client_view();
+  if (client_view->layer()) {
+    // If the ClientView's background is transparent this could result in visual
+    // artifacts. Make sure this isn't the case.
+    DCHECK_EQ(SK_AlphaOPAQUE, SkColorGetA(GetBackgroundColor()));
+    client_view->SetBackground(CreateSolidBackground(GetBackgroundColor()));
+    client_view->SchedulePaint();
+  }
 }
 
 gfx::Rect BubbleFrameView::GetUpdatedWindowBounds(
@@ -581,7 +638,7 @@ gfx::Rect BubbleFrameView::GetAvailableScreenBounds(
 }
 
 gfx::Rect BubbleFrameView::GetAvailableAnchorWindowBounds() const {
-  views::BubbleDialogDelegateView* bubble_delegate_view =
+  views::BubbleDialogDelegate* bubble_delegate_view =
       GetWidget()->widget_delegate()->AsBubbleDialogDelegate();
   if (bubble_delegate_view) {
     views::View* const anchor_view = bubble_delegate_view->GetAnchorView();

@@ -4,11 +4,11 @@
 
 #include "base/profiler/stack_sampler_impl.h"
 
+#include <iterator>
 #include <utility>
 
 #include "base/check.h"
 #include "base/compiler_specific.h"
-#include "base/logging.h"
 #include "base/profiler/metadata_recorder.h"
 #include "base/profiler/profile_builder.h"
 #include "base/profiler/sample_metadata.h"
@@ -64,15 +64,22 @@ class StackCopierDelegate : public StackCopier::Delegate {
 
 }  // namespace
 
-StackSamplerImpl::StackSamplerImpl(std::unique_ptr<StackCopier> stack_copier,
-                                   std::unique_ptr<Unwinder> native_unwinder,
-                                   ModuleCache* module_cache,
-                                   StackSamplerTestDelegate* test_delegate)
+// |core_unwinders| is iterated backward since |core_unwinders| is passed in
+// increasing priority order while |unwinders_| is stored in decreasing priority
+// order.
+StackSamplerImpl::StackSamplerImpl(
+    std::unique_ptr<StackCopier> stack_copier,
+    std::vector<std::unique_ptr<Unwinder>> core_unwinders,
+    ModuleCache* module_cache,
+    StackSamplerTestDelegate* test_delegate)
     : stack_copier_(std::move(stack_copier)),
+      unwinders_(std::make_move_iterator(core_unwinders.rbegin()),
+                 std::make_move_iterator(core_unwinders.rend())),
       module_cache_(module_cache),
       test_delegate_(test_delegate) {
-  DCHECK(native_unwinder);
-  unwinders_.push_front(std::move(native_unwinder));
+  DCHECK(!unwinders_.empty());
+  for (const auto& unwinder : unwinders_)
+    unwinder->AddInitialModules(module_cache_);
 }
 
 StackSamplerImpl::~StackSamplerImpl() = default;
@@ -89,6 +96,8 @@ void StackSamplerImpl::RecordStackFrames(StackBuffer* stack_buffer,
   RegisterContext thread_context;
   uintptr_t stack_top;
   TimeTicks timestamp;
+
+  bool copy_stack_succeeded;
   {
     // Make this scope as small as possible because |metadata_provider| is
     // holding a lock.
@@ -96,11 +105,15 @@ void StackSamplerImpl::RecordStackFrames(StackBuffer* stack_buffer,
         GetSampleMetadataRecorder());
     StackCopierDelegate delegate(&unwinders_, profile_builder,
                                  &metadata_provider);
-    bool success = stack_copier_->CopyStack(
+    copy_stack_succeeded = stack_copier_->CopyStack(
         stack_buffer, &stack_top, &timestamp, &thread_context, &delegate);
-    if (!success)
-      return;
   }
+  if (!copy_stack_succeeded) {
+    profile_builder->OnSampleCompleted(
+        {}, timestamp.is_null() ? TimeTicks::Now() : timestamp);
+    return;
+  }
+
   for (const auto& unwinder : unwinders_)
     unwinder->UpdateModules(module_cache_);
 
@@ -155,8 +168,8 @@ std::vector<Frame> StackSamplerImpl::WalkStack(
     result = unwinder->get()->TryUnwind(thread_context, stack_top, module_cache,
                                         &stack);
 
-    // The native unwinder should be the only one that returns COMPLETED
-    // since the stack starts in native code.
+    // The unwinder with the lowest priority should be the only one that returns
+    // COMPLETED since the stack starts in native code.
     DCHECK(result != UnwindResult::COMPLETED ||
            unwinder->get() == unwinders.back().get());
   } while (result != UnwindResult::ABORTED &&

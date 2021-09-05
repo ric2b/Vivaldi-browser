@@ -37,6 +37,7 @@ jumbo_source_set("base") {
     "android_overlay_config.cc",
     "android_overlay_config.h",
     "android_overlay_mojo_factory.h",
+    "async_destroy_video_decoder.h",
     "audio_block_fifo.cc",
     "audio_block_fifo.h",
     "audio_buffer.cc",
@@ -345,6 +346,7 @@ jumbo_source_set("base") {
   ]
   deps = [
     "//base/allocator:buildflags",
+    "//base/util/values:values_util",
     "//components/system_media_controls/linux/buildflags",
     "//gpu/command_buffer/common",
     "//gpu/ipc/common:common",
@@ -411,7 +413,10 @@ jumbo_source_set("base") {
   }
 
   if (is_win) {
-    public_deps += [ "//media/base/win:d3d11" ]
+    public_deps += [
+      "//media/base/win:d3d11",
+      "//media/base/win:mf_cdm_proxy",
+    ]
   }
 
   if (is_chromecast || is_fuchsia) {

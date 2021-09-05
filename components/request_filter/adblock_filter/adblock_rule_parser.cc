@@ -7,6 +7,8 @@
 #include <utility>
 
 #include "base/i18n/case_conversion.h"
+#include "base/notreached.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -23,6 +25,8 @@ const char kRedirectTag[] = "Redirect:";
 const char kExpiresTag[] = "Expires:";
 const char kVersionTag[] = "Version:";
 
+const char kRewritePrefix[] = "abp-resource:";
+
 enum class OptionType {
   kThirdParty,
   kMatchCase,
@@ -30,6 +34,7 @@ enum class OptionType {
   kCSP,
   kHost,  // Vivaldi-specific, allows us to handle DDG filter.
   kRewrite,
+  kRedirect,
 };
 
 const std::map<base::StringPiece, OptionType> kOptionMap{
@@ -38,21 +43,8 @@ const std::map<base::StringPiece, OptionType> kOptionMap{
     {"domain", OptionType::kDomain},
     {"host", OptionType::kHost},
     {"csp", OptionType::kCSP},
-    {"rewrite", OptionType::kRewrite}};
-
-const std::map<base::StringPiece, FilterRule::RedirectResource>
-    kRedirectResourcesMap{
-        {"abp-resource:blank-text", FilterRule::kBlankText},
-        {"abp-resource:blank-css", FilterRule::kBlankCss},
-        {"abp-resource:blank-js", FilterRule::kBlankJS},
-        {"abp-resource:blank-html", FilterRule::kBlankHTML},
-        {"abp-resource:blank-mp3", FilterRule::kBlankMP3},
-        {"abp-resource:blank-mp4", FilterRule::kBlankMP4},
-        {"abp-resource:1x1-transparent-gif", FilterRule::k1x1TransparentGIF},
-        {"abp-resource:2x2-transparent-png", FilterRule::k2x2TransparentPNG},
-        {"abp-resource:3x2-transparent-png", FilterRule::k3x2TransparentPNG},
-        {"abp-resource:32x32-transparent-png", FilterRule::k3x2TransparentPNG},
-    };
+    {"rewrite", OptionType::kRewrite},
+    {"redirect", OptionType::kRedirect}};
 
 struct ActivationTypeDetails {
   int type;
@@ -214,23 +206,6 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
     return result;
 
   base::StringPiece pattern = rule_string.substr(0, options_start);
-
-  // TODO(julien): These limitations on rewrite match the one set in the adblock
-  // plus code, but I can't make sense of them. They should be reviewed
-  // carefully because this feature can have security implications.
-  if (rule->redirect != FilterRule::kNoRedirect) {
-    bool has_domains =
-        !rule->included_domains.empty() || !rule->excluded_domains.empty();
-    if (pattern.starts_with("*")) {
-      if (!has_domains)
-        return kError;
-    } else if (pattern.starts_with("||")) {
-      if (!has_domains && rule->party.test(FilterRule::kThirdParty))
-        return kError;
-    } else {
-      return kError;
-    }
-  }
 
   if (pattern.starts_with("/") && pattern.ends_with("/") &&
       pattern.length() > 1) {
@@ -462,17 +437,20 @@ RuleParser::Result RuleParser::ParseFilterRuleOptions(base::StringPiece options,
           return Result::kError;
         break;
 
-      case OptionType::kRewrite: {
-        if (rule->redirect != FilterRule::kNoRedirect)
+      case OptionType::kRewrite:
+        if (!rule->redirect.empty())
           return kError;
-        auto redirect_resource = kRedirectResourcesMap.find(option_value);
-        if (redirect_resource != kRedirectResourcesMap.end()) {
-          rule->redirect = redirect_resource->second;
-        } else {
+        if (!option_value.starts_with(kRewritePrefix))
           return kError;
-        }
+        option_value.remove_prefix(base::size(kRewritePrefix) - 1);
+        rule->redirect = std::string(option_value);
         break;
-      }
+
+      case OptionType::kRedirect:
+        if (!rule->redirect.empty())
+          return kError;
+        rule->redirect = std::string(option_value);
+        break;
 
       case OptionType::kCSP:
         for (auto csp :

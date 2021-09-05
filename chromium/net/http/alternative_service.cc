@@ -47,13 +47,14 @@ quic::ParsedQuicVersion ParsedQuicVersionFromAlpn(
     if (AlpnForVersion(version) == str)
       return version;
   }
-  return {quic::PROTOCOL_UNSUPPORTED, quic::QUIC_VERSION_UNSUPPORTED};
+  return quic::ParsedQuicVersion::Unsupported();
 }
 
 }  // anonymous namespace
 
 void HistogramAlternateProtocolUsage(AlternateProtocolUsage usage,
-                                     bool proxy_server_used) {
+                                     bool proxy_server_used,
+                                     bool is_google_host) {
   if (proxy_server_used) {
     DCHECK_LE(usage, ALTERNATE_PROTOCOL_USAGE_LOST_RACE);
     LOCAL_HISTOGRAM_ENUMERATION("Net.QuicAlternativeProxy.Usage",
@@ -62,6 +63,10 @@ void HistogramAlternateProtocolUsage(AlternateProtocolUsage usage,
   } else {
     UMA_HISTOGRAM_ENUMERATION("Net.AlternateProtocolUsage", usage,
                               ALTERNATE_PROTOCOL_USAGE_MAX);
+    if (is_google_host) {
+      UMA_HISTOGRAM_ENUMERATION("Net.AlternateProtocolUsageGoogle", usage,
+                                ALTERNATE_PROTOCOL_USAGE_MAX);
+    }
   }
 }
 
@@ -201,8 +206,7 @@ AlternativeServiceInfoVector ProcessAlternativeServices(
     } else if (!IsAlternateProtocolValid(protocol)) {
       quic::ParsedQuicVersion version = ParsedQuicVersionFromAlpn(
           alternative_service_entry.protocol_id, supported_quic_versions);
-      if (version.handshake_protocol == quic::PROTOCOL_UNSUPPORTED ||
-          version.transport_version == quic::QUIC_VERSION_UNSUPPORTED) {
+      if (version == quic::ParsedQuicVersion::Unsupported()) {
         continue;
       }
       protocol = kProtoQUIC;

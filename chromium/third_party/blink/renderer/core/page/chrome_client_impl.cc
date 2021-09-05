@@ -172,7 +172,7 @@ ChromeClientImpl::~ChromeClientImpl() {
   DCHECK(file_chooser_queue_.IsEmpty());
 }
 
-void ChromeClientImpl::Trace(Visitor* visitor) {
+void ChromeClientImpl::Trace(Visitor* visitor) const {
   visitor->Trace(popup_opening_observers_);
   visitor->Trace(external_date_time_chooser_);
   ChromeClient::Trace(visitor);
@@ -200,11 +200,13 @@ IntRect ChromeClientImpl::RootWindowRect(LocalFrame& frame) {
   return IntRect(client->WindowRect());
 }
 
-void ChromeClientImpl::Focus(LocalFrame* calling_frame) {
-  if (web_view_->Client()) {
-    web_view_->Client()->DidFocus(
-        calling_frame ? WebLocalFrameImpl::FromFrame(calling_frame) : nullptr);
-  }
+void ChromeClientImpl::FocusPage() {
+  web_view_->Focus();
+}
+
+void ChromeClientImpl::DidFocusPage() {
+  if (web_view_->Client())
+    web_view_->Client()->DidFocus();
 }
 
 bool ChromeClientImpl::CanTakeFocus(mojom::blink::FocusType) {
@@ -285,7 +287,7 @@ void ChromeClientImpl::DidOverscroll(
     return;
   // TODO(darin): Change caller to pass LocalFrame.
   DCHECK(web_view_->MainFrameImpl());
-  web_view_->MainFrameImpl()->FrameWidgetImpl()->Client()->DidOverscroll(
+  web_view_->MainFrameImpl()->FrameWidgetImpl()->DidOverscroll(
       overscroll_delta, accumulated_overscroll, position_in_viewport,
       velocity_in_viewport);
 }
@@ -297,9 +299,8 @@ void ChromeClientImpl::InjectGestureScrollEvent(
     ScrollGranularity granularity,
     CompositorElementId scrollable_area_element_id,
     WebInputEvent::Type injected_type) {
-  WebWidgetClient* client = local_frame.GetWidgetForLocalRoot()->Client();
-  client->InjectGestureScrollEvent(device, delta, granularity,
-                                   scrollable_area_element_id, injected_type);
+  local_frame.GetWidgetForLocalRoot()->InjectGestureScrollEvent(
+      device, delta, granularity, scrollable_area_element_id, injected_type);
 }
 
 void ChromeClientImpl::SetOverscrollBehavior(
@@ -351,10 +352,21 @@ bool ChromeClientImpl::CanOpenBeforeUnloadConfirmPanel() {
 bool ChromeClientImpl::OpenBeforeUnloadConfirmPanelDelegate(LocalFrame* frame,
                                                             bool is_reload) {
   NotifyPopupOpeningObservers();
+
+  if (before_unload_confirm_panel_result_for_testing_.has_value()) {
+    bool success = before_unload_confirm_panel_result_for_testing_.value();
+    before_unload_confirm_panel_result_for_testing_.reset();
+    return success;
+  }
   bool success = false;
   // Synchronous mojo call.
   frame->GetLocalFrameHostRemote().RunBeforeUnloadConfirm(is_reload, &success);
   return success;
+}
+
+void ChromeClientImpl::SetBeforeUnloadConfirmPanelResultForTesting(
+    bool result) {
+  before_unload_confirm_panel_result_for_testing_ = result;
 }
 
 void ChromeClientImpl::CloseWindowSoon() {
@@ -569,16 +581,16 @@ void ChromeClientImpl::ShowMouseOverURL(const HitTestResult& result) {
 void ChromeClientImpl::SetToolTip(LocalFrame& frame,
                                   const String& tooltip_text,
                                   TextDirection dir) {
-  WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(frame);
+  WebFrameWidgetBase* widget =
+      WebLocalFrameImpl::FromFrame(frame)->LocalRootFrameWidget();
   if (!tooltip_text.IsEmpty()) {
-    web_frame->LocalRootFrameWidget()->Client()->SetToolTipText(
-        tooltip_text, ToBaseTextDirection(dir));
+    widget->SetToolTipText(tooltip_text, dir);
     did_request_non_empty_tool_tip_ = true;
   } else if (did_request_non_empty_tool_tip_) {
-    // WebWidgetClient::setToolTipText will send an IPC message.  We'd like to
-    // reduce the number of setToolTipText calls.
-    web_frame->LocalRootFrameWidget()->Client()->SetToolTipText(
-        tooltip_text, ToBaseTextDirection(dir));
+    // WebFrameWidgetBase::SetToolTipText will send a Mojo message via
+    // mojom::blink::WidgetHost. We'd like to reduce the number of
+    // SetToolTipText calls.
+    widget->SetToolTipText(tooltip_text, dir);
     did_request_non_empty_tool_tip_ = false;
   }
 }
@@ -721,7 +733,7 @@ void ChromeClientImpl::SetCursorInternal(const ui::Cursor& cursor,
 
   // TODO(dcheng): Why is this null check necessary?
   if (FrameWidget* widget = local_frame->GetWidgetForLocalRoot())
-    widget->Client()->DidChangeCursor(cursor);
+    widget->DidChangeCursor(cursor);
 }
 
 void ChromeClientImpl::SetCursorForPlugin(const ui::Cursor& cursor,
@@ -1050,8 +1062,7 @@ void ChromeClientImpl::SetTouchAction(LocalFrame* frame,
   if (!widget)
     return;
 
-  if (WebWidgetClient* client = widget->Client())
-    client->SetTouchAction(static_cast<TouchAction>(touch_action));
+  widget->ProcessTouchAction(touch_action);
 }
 
 bool ChromeClientImpl::RequestPointerLock(
@@ -1092,7 +1103,6 @@ void ChromeClientImpl::DidAssociateFormControlsAfterLoad(LocalFrame* frame) {
 void ChromeClientImpl::ShowVirtualKeyboardOnElementFocus(LocalFrame& frame) {
   WebLocalFrameImpl::FromFrame(frame)
       ->LocalRootFrameWidget()
-      ->Client()
       ->ShowVirtualKeyboardOnElementFocus();
 }
 
@@ -1123,7 +1133,7 @@ void ChromeClientImpl::DidChangeValueInTextField(
   // Value changes caused by |document.execCommand| calls should not be
   // interpreted as a user action. See https://crbug.com/764760.
   if (!doc.IsRunningExecCommand()) {
-    UseCounter::Count(doc, doc.IsSecureContext()
+    UseCounter::Count(doc, doc.GetExecutionContext()->IsSecureContext()
                                ? WebFeature::kFieldEditInSecureContext
                                : WebFeature::kFieldEditInNonSecureContext);
     doc.MaybeQueueSendDidEditFieldInInsecureContext();
@@ -1231,6 +1241,12 @@ void ChromeClientImpl::DocumentDetached(Document& document) {
 
 double ChromeClientImpl::UserZoomFactor() const {
   return PageZoomLevelToZoomFactor(web_view_->ZoomLevel());
+}
+
+void ChromeClientImpl::SetDelegatedInkMetadata(
+    LocalFrame* frame,
+    std::unique_ptr<viz::DelegatedInkMetadata> metadata) {
+  frame->GetWidgetForLocalRoot()->SetDelegatedInkMetadata(std::move(metadata));
 }
 
 }  // namespace blink

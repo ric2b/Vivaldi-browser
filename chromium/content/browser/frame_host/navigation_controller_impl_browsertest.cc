@@ -19,7 +19,6 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -608,10 +607,27 @@ namespace {
 // current entry.
 bool RendererLocationReplace(Shell* shell, const GURL& url) {
   WebContents* web_contents = shell->web_contents();
+  NavigationControllerImpl& controller =
+      static_cast<NavigationControllerImpl&>(web_contents->GetController());
   WaitForLoadStop(web_contents);
-  TestNavigationObserver same_tab_observer(web_contents, 1);
+  TestNavigationManager navigation_manager(web_contents, url);
+  const GURL& current_url = web_contents->GetMainFrame()->GetLastCommittedURL();
   EXPECT_TRUE(ExecJs(shell, JsReplace("window.location.replace($1)", url)));
-  same_tab_observer.Wait();
+  // Observe pending entry if it's not a same-document navigation. We can't
+  // observe same-document navigations because it might finish in the renderer,
+  // only telling the browser side at the end.
+  if (!current_url.EqualsIgnoringRef(url)) {
+    EXPECT_TRUE(navigation_manager.WaitForRequestStart());
+    // Both should_replace_entry (in the pending NavigationEntry) and
+    // should_replace_current_entry (in NavigationRequest params) should be
+    // true.
+    EXPECT_TRUE(controller.GetPendingEntry()->should_replace_entry());
+    EXPECT_TRUE(
+        NavigationRequest::From(navigation_manager.GetNavigationHandle())
+            ->common_params()
+            .should_replace_current_entry);
+  }
+  navigation_manager.WaitForNavigationFinished();
   if (!IsLastCommittedEntryOfPageType(web_contents, PAGE_TYPE_NORMAL))
     return false;
   return web_contents->GetLastCommittedURL() == url;
@@ -1086,8 +1102,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, ErrorPageReplacement) {
   NavigationController& controller = shell()->web_contents()->GetController();
   GURL error_url = embedded_test_server()->GetURL("/close-socket");
-  base::PostTask(FROM_HERE, {BrowserThread::IO},
-                 base::BindOnce(&net::URLRequestFailedJob::AddUrlHandler));
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&net::URLRequestFailedJob::AddUrlHandler));
 
   EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
   EXPECT_EQ(1, controller.GetEntryCount());
@@ -6686,15 +6702,15 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, PostInSubframe) {
 }
 
 // Tests that POST body is not lost when decidePolicyForNavigation tells the
-// renderer to route the request via FrameHostMsg_OpenURL sent to the browser.
+// renderer to route the request via OpenURL mojo method sent to the browser.
 // See also https://crbug.com/344348.
 IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, PostViaOpenUrlMsg) {
   GURL main_url(
       embedded_test_server()->GetURL("/form_that_posts_to_echoall.html"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
 
-  // Ask the renderer to go through OpenURL FrameHostMsg_OpenURL IPC message.
-  // Without this, the test wouldn't repro https://crbug.com/344348.
+  // Ask the renderer to go through OpenURL Mojo method. Without this, the test
+  // wouldn't repro https://crbug.com/344348.
   shell()
       ->web_contents()
       ->GetMutableRendererPrefs()
@@ -10595,6 +10611,573 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     ASSERT_TRUE(NavigateFrameToURL(child, child_url));
     EXPECT_EQ(entry_count, contents()->GetController().GetEntryCount());
   }
+}
+
+// Verify that if a history navigation only affects a subframe that was
+// removed, the main frame should not be reloaded.  See
+// httos://crbug.com/705550.  This test checks the case where the attempted
+// subframe navigation was same-document.
+//
+// TODO(alexmos, creis): Consider changing this behavior to auto-traverse
+// history to the first entry which finds a frame to navigate.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       GoBackSameDocumentInRemovedSubframe) {
+  GURL main_url = embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b,c)");
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+
+  NavigationControllerImpl& controller = contents()->GetController();
+  ASSERT_EQ(1, controller.GetEntryCount());
+
+  FrameTreeNode* ftn_a = contents()->GetFrameTree()->root();
+  FrameTreeNode* ftn_b = ftn_a->child_at(0);
+  FrameTreeNode* ftn_c = ftn_a->child_at(1);
+
+  // Set some state in the main frame that we can check later to make sure it
+  // wasn't reloaded.
+  EXPECT_TRUE(ExecJs(ftn_a, "window.state = 'a';"));
+
+  // history.pushState() in the main frame.
+  GURL ps2_url(embedded_test_server()->GetURL("a.com", "/ps2.html"));
+  {
+    FrameNavigateParamsCapturer capturer(ftn_a);
+    ASSERT_TRUE(
+        ExecuteScript(ftn_a, "history.pushState({}, 'page 2', 'ps2.html')"));
+    capturer.Wait();
+    EXPECT_EQ(2, controller.GetEntryCount());
+    EXPECT_EQ(ps2_url, controller.GetLastCommittedEntry()->GetURL());
+  }
+
+  // history.pushState() twice in the c subframe.
+  {
+    FrameNavigateParamsCapturer capturer(ftn_c);
+    ASSERT_TRUE(
+        ExecuteScript(ftn_c, "history.pushState({}, 'page 3', 'ps3.html')"));
+    capturer.Wait();
+    EXPECT_EQ(3, controller.GetEntryCount());
+  }
+  {
+    FrameNavigateParamsCapturer capturer(ftn_c);
+    ASSERT_TRUE(
+        ExecuteScript(ftn_c, "history.pushState({}, 'page 4', 'ps4.html')"));
+    capturer.Wait();
+    EXPECT_EQ(4, controller.GetEntryCount());
+  }
+
+  // Navigate frame b cross-document.
+  GURL url_b(embedded_test_server()->GetURL("b.com", "/title1.html"));
+  TestNavigationObserver navigation_observer(contents());
+  EXPECT_TRUE(NavigateFrameToURL(ftn_b, url_b));
+  navigation_observer.WaitForNavigationFinished();
+  EXPECT_EQ(5, controller.GetEntryCount());
+
+  // Go back.  This navigates frame b back, and we should be at next-to-last
+  // entry (of 5 total) after that's done.
+  EXPECT_EQ(4, controller.GetCurrentEntryIndex());
+  {
+    TestNavigationObserver navigation_observer(shell()->web_contents());
+    shell()->GoBackOrForward(-1);
+    navigation_observer.Wait();
+  }
+  EXPECT_EQ(5, controller.GetEntryCount());
+  EXPECT_EQ(3, controller.GetCurrentEntryIndex());
+
+  // Last committed entry's URL should be ps2.html, corresponding to latest
+  // navigation in the main frame.
+  EXPECT_EQ(ps2_url, controller.GetLastCommittedEntry()->GetURL());
+
+  // Set some state in frame b that we can check later to make sure it wasn't
+  // reloaded.
+  EXPECT_TRUE(ExecJs(ftn_b, "window.state='b';"));
+
+  // Remove the c subframe.
+  RenderFrameDeletedObserver deleted_observer(ftn_c->current_frame_host());
+  EXPECT_TRUE(ExecJs(ftn_a,
+                     "var f = document.querySelectorAll('iframe')[1];"
+                     "f.parentNode.removeChild(f);"));
+  deleted_observer.WaitUntilDeleted();
+
+  // Try going back.  The target of this navigation had been a same-document
+  // navigation in subframe c (to ps3.html), but since c has been removed, this
+  // shouldn't reload frames a or b.  Frame |a| also shouldn't fire redundant
+  // popstate events.
+  EXPECT_TRUE(ExecJs(ftn_a, "window.popstateCalled = false"));
+  EXPECT_TRUE(ExecJs(
+      ftn_a, "window.onpopstate = () => { window.popstateCalled = true; }"));
+  shell()->GoBackOrForward(-1);
+  EXPECT_TRUE(WaitForLoadStop(contents()));
+  EXPECT_EQ(ps2_url, controller.GetLastCommittedEntry()->GetURL());
+  EXPECT_EQ("a", EvalJs(ftn_a, "window.state"));
+  EXPECT_EQ("b", EvalJs(ftn_b, "window.state"));
+  EXPECT_EQ(false, EvalJs(ftn_a, "window.popstateCalled"));
+
+  // The corresponding NavigationEntry should now be the current one.
+  EXPECT_EQ(5, controller.GetEntryCount());
+  EXPECT_EQ(2, controller.GetCurrentEntryIndex());
+
+  // Try going back again.  Similarly, this would've gone back to c's original
+  // URL when it was loaded from main_url, but since c is removed, this
+  // shouldn't reload frames a or b or fire popstate events.
+  shell()->GoBackOrForward(-1);
+  EXPECT_TRUE(WaitForLoadStop(contents()));
+  EXPECT_EQ(ps2_url, controller.GetLastCommittedEntry()->GetURL());
+  EXPECT_EQ("a", EvalJs(ftn_a, "window.state"));
+  EXPECT_EQ("b", EvalJs(ftn_b, "window.state"));
+  EXPECT_EQ(false, EvalJs(ftn_a, "window.popstateCalled"));
+  EXPECT_EQ(5, controller.GetEntryCount());
+  EXPECT_EQ(1, controller.GetCurrentEntryIndex());
+
+  // Going back now should result in a same-document navigation in the main
+  // frame to main_url.
+  shell()->GoBackOrForward(-1);
+  EXPECT_TRUE(WaitForLoadStop(contents()));
+  EXPECT_EQ(main_url, controller.GetLastCommittedEntry()->GetURL());
+  EXPECT_EQ("a", EvalJs(ftn_a, "window.state"));
+  EXPECT_EQ("b", EvalJs(ftn_b, "window.state"));
+  EXPECT_EQ(true, EvalJs(ftn_a, "window.popstateCalled"));
+  EXPECT_EQ(5, controller.GetEntryCount());
+  EXPECT_EQ(0, controller.GetCurrentEntryIndex());
+
+  // Go forward.  This should navigate the main frame same-document to
+  // ps2.html.
+  {
+    FrameNavigateParamsCapturer capturer(ftn_a);
+    shell()->GoBackOrForward(1);
+    capturer.Wait();
+  }
+  EXPECT_EQ(5, controller.GetEntryCount());
+  EXPECT_EQ(1, controller.GetCurrentEntryIndex());
+  EXPECT_EQ(ps2_url, ftn_a->current_frame_host()->GetLastCommittedURL());
+  EXPECT_EQ("a", EvalJs(ftn_a, "window.state"));
+  EXPECT_EQ("b", EvalJs(ftn_b, "window.state"));
+
+  // Go forward three steps.  This should navigate the subframe b
+  // cross-document to url_b (erasing its window.state).
+  {
+    FrameNavigateParamsCapturer capturer(ftn_b);
+    shell()->GoBackOrForward(3);
+    capturer.Wait();
+  }
+  EXPECT_EQ(url_b, ftn_b->current_frame_host()->GetLastCommittedURL());
+  EXPECT_EQ(5, controller.GetEntryCount());
+  EXPECT_EQ(4, controller.GetCurrentEntryIndex());
+  EXPECT_EQ("a", EvalJs(ftn_a, "window.state"));
+  EXPECT_EQ(nullptr, EvalJs(ftn_b, "window.state"));
+}
+
+// Verify that if a history navigation only affects a subframe that was
+// removed, the main frame should not be reloaded. See
+// httos://crbug.com/705550.  This test is similar to the one above, but checks
+// the case where the attempted subframe navigation was cross-document rather
+// than same-document.
+//
+// TODO(alexmos, creis): Consider changing this behavior to auto-traverse
+// history to the first entry which finds a frame to navigate.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       GoBackCrossDocumentInRemovedSubframe) {
+  GURL main_url = embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)");
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+
+  NavigationControllerImpl& controller = contents()->GetController();
+  ASSERT_EQ(1, controller.GetEntryCount());
+
+  FrameTreeNode* ftn_a = contents()->GetFrameTree()->root();
+  FrameTreeNode* ftn_b = ftn_a->child_at(0);
+
+  // Set some state in the main frame that we can check later to make sure it
+  // wasn't reloaded.
+  EXPECT_TRUE(ExecJs(ftn_a, "window.state = 'a';"));
+
+  // Navigate frame b cross-document.
+  GURL url_b(embedded_test_server()->GetURL("b.com", "/title1.html"));
+  {
+    TestNavigationObserver navigation_observer(contents());
+    EXPECT_TRUE(NavigateFrameToURL(ftn_b, url_b));
+    navigation_observer.WaitForNavigationFinished();
+  }
+  EXPECT_EQ(2, controller.GetEntryCount());
+  EXPECT_EQ(1, controller.GetCurrentEntryIndex());
+
+  // Delete frame b.
+  RenderFrameDeletedObserver deleted_observer(
+      ftn_a->child_at(0)->current_frame_host());
+  EXPECT_TRUE(ExecJs(ftn_a,
+                     "var f = document.querySelector('iframe');"
+                     "f.parentNode.removeChild(f);"));
+  deleted_observer.WaitUntilDeleted();
+  EXPECT_EQ(2, controller.GetEntryCount());
+  EXPECT_EQ(1, controller.GetCurrentEntryIndex());
+
+  // Go back.  Since this history navigation targets a non-existent subframe,
+  // the main frame shouldn't be reloaded, and the corresponding
+  // NavigationEntry should become the current one.
+  shell()->GoBackOrForward(-1);
+  EXPECT_TRUE(WaitForLoadStop(contents()));
+  EXPECT_EQ(main_url, controller.GetLastCommittedEntry()->GetURL());
+  EXPECT_EQ("a", EvalJs(ftn_a, "window.state"));
+  EXPECT_EQ(2, controller.GetEntryCount());
+  EXPECT_EQ(0, controller.GetCurrentEntryIndex());
+  EXPECT_FALSE(controller.CanGoBack());
+  EXPECT_TRUE(controller.CanGoForward());
+
+  // Go forward and expect similar behavior.
+  shell()->GoBackOrForward(1);
+  EXPECT_TRUE(WaitForLoadStop(contents()));
+  EXPECT_EQ(main_url, controller.GetLastCommittedEntry()->GetURL());
+  EXPECT_EQ("a", EvalJs(ftn_a, "window.state"));
+  EXPECT_EQ(2, controller.GetEntryCount());
+  EXPECT_EQ(1, controller.GetCurrentEntryIndex());
+  EXPECT_TRUE(controller.CanGoBack());
+  EXPECT_FALSE(controller.CanGoForward());
+}
+
+// This test is similar to the one above, but checks the case where the first
+// attempted navigation after subframe removal is a forward navigation
+// rather than a back navigation.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       GoForwardCrossDocumentInRemovedSubframe) {
+  GURL main_url = embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)");
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+
+  NavigationControllerImpl& controller = contents()->GetController();
+  ASSERT_EQ(1, controller.GetEntryCount());
+
+  FrameTreeNode* ftn_a = contents()->GetFrameTree()->root();
+  FrameTreeNode* ftn_b = contents()->GetFrameTree()->root()->child_at(0);
+  GURL orig_subframe_url(ftn_b->current_frame_host()->GetLastCommittedURL());
+
+  // Set some state in the main frame that we can check later to make sure it
+  // wasn't reloaded.
+  EXPECT_TRUE(ExecJs(ftn_a, "window.state = 'a';"));
+
+  // Navigate frame b cross-document twice.
+  GURL url_b(embedded_test_server()->GetURL("b.com", "/title1.html"));
+  {
+    TestNavigationObserver navigation_observer(contents());
+    EXPECT_TRUE(NavigateFrameToURL(ftn_b, url_b));
+    navigation_observer.WaitForNavigationFinished();
+  }
+  EXPECT_EQ(2, controller.GetEntryCount());
+  EXPECT_EQ(1, controller.GetCurrentEntryIndex());
+  GURL url_c(embedded_test_server()->GetURL("c.com", "/title2.html"));
+  {
+    TestNavigationObserver navigation_observer(contents());
+    EXPECT_TRUE(NavigateFrameToURL(ftn_b, url_c));
+    navigation_observer.WaitForNavigationFinished();
+  }
+  EXPECT_EQ(3, controller.GetEntryCount());
+  EXPECT_EQ(2, controller.GetCurrentEntryIndex());
+
+  // history.pushState() in the main frame.
+  GURL ps_url(embedded_test_server()->GetURL("a.com", "/ps.html"));
+  {
+    FrameNavigateParamsCapturer capturer(ftn_a);
+    ASSERT_TRUE(
+        ExecuteScript(ftn_a, "history.pushState({}, 'push state', 'ps.html')"));
+    capturer.Wait();
+    EXPECT_EQ(4, controller.GetEntryCount());
+    EXPECT_EQ(ps_url, controller.GetLastCommittedEntry()->GetURL());
+  }
+
+  // Go back three stops, bringing back the original URL in the subframe.
+  // (Note that going back by three steps all at once won't work as expected
+  // due to https://crbug.com/542299, where finding that the main frame needs
+  // to navigate same-document ignores any subframe navigations that should
+  // also be part of the history entry navigation.)
+  shell()->GoBackOrForward(-1);
+  EXPECT_TRUE(WaitForLoadStop(contents()));
+  EXPECT_EQ(4, controller.GetEntryCount());
+  EXPECT_EQ(2, controller.GetCurrentEntryIndex());
+  EXPECT_EQ(main_url, controller.GetLastCommittedEntry()->GetURL());
+  shell()->GoBackOrForward(-2);
+  EXPECT_TRUE(WaitForLoadStop(contents()));
+  EXPECT_EQ(4, controller.GetEntryCount());
+  EXPECT_EQ(0, controller.GetCurrentEntryIndex());
+  EXPECT_EQ(orig_subframe_url,
+            ftn_b->current_frame_host()->GetLastCommittedURL());
+
+  // Delete frame b.
+  RenderFrameDeletedObserver deleted_observer(
+      ftn_a->child_at(0)->current_frame_host());
+  EXPECT_TRUE(ExecJs(ftn_a,
+                     "var f = document.querySelector('iframe');"
+                     "f.parentNode.removeChild(f);"));
+  deleted_observer.WaitUntilDeleted();
+  EXPECT_EQ(4, controller.GetEntryCount());
+  EXPECT_EQ(0, controller.GetCurrentEntryIndex());
+
+  // Go forward.  Since this navigation attempt targets a non-existent
+  // subframe, the main frame shouldn't be reloaded, and the corresponding
+  // NavigationEntry should become current.  There should be no redundant
+  // popstate events.
+  EXPECT_TRUE(ExecJs(ftn_a, "window.popstateCalled = false"));
+  EXPECT_TRUE(ExecJs(
+      ftn_a, "window.onpopstate = () => { window.popstateCalled = true; }"));
+  shell()->GoBackOrForward(1);
+  EXPECT_TRUE(WaitForLoadStop(contents()));
+  EXPECT_EQ("a", EvalJs(ftn_a, "window.state"));
+  EXPECT_EQ(false, EvalJs(ftn_a, "window.popstateCalled"));
+  EXPECT_EQ(4, controller.GetEntryCount());
+  EXPECT_EQ(1, controller.GetCurrentEntryIndex());
+
+  // Go forward again and expect similar behavior.
+  shell()->GoBackOrForward(1);
+  EXPECT_TRUE(WaitForLoadStop(contents()));
+  EXPECT_EQ("a", EvalJs(ftn_a, "window.state"));
+  EXPECT_EQ(false, EvalJs(ftn_a, "window.popstateCalled"));
+  EXPECT_EQ(4, controller.GetEntryCount());
+  EXPECT_EQ(2, controller.GetCurrentEntryIndex());
+
+  // Go forward yet again.  This should result in a same-document navigation in
+  // the main frame to ps.html.
+  shell()->GoBackOrForward(1);
+  EXPECT_TRUE(WaitForLoadStop(contents()));
+  EXPECT_EQ(true, EvalJs(ftn_a, "window.popstateCalled"));
+  EXPECT_EQ(4, controller.GetEntryCount());
+  EXPECT_EQ(3, controller.GetCurrentEntryIndex());
+  EXPECT_TRUE(controller.CanGoBack());
+  EXPECT_FALSE(controller.CanGoForward());
+  EXPECT_EQ(ps_url, controller.GetLastCommittedEntry()->GetURL());
+}
+
+// Check that if we ignore a history entry that targets a removed subframe, the
+// entry still stays around and is used properly when the subframe gets
+// recreated.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       RestoreRemovedSubframe) {
+  // Start on a page with a same-site iframe.  It's important that this iframe
+  // isn't dynamically inserted for history navigations in this test.
+  GURL main_url =
+      embedded_test_server()->GetURL("a.com", "/page_with_iframe.html");
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+  NavigationControllerImpl& controller = contents()->GetController();
+  FrameTreeNode* ftn_a = contents()->GetFrameTree()->root();
+  FrameTreeNode* ftn_b = ftn_a->child_at(0);
+  EXPECT_EQ(embedded_test_server()->GetURL("a.com", "/title1.html"),
+            ftn_b->current_frame_host()->GetLastCommittedURL());
+
+  // Set some state in the main frame that we can check later to make sure it
+  // wasn't reloaded.
+  EXPECT_TRUE(ExecJs(ftn_a, "window.state = 'a';"));
+
+  // Navigate subframe cross-site twice.
+  GURL url_b(embedded_test_server()->GetURL("b.com", "/title2.html"));
+  {
+    TestNavigationObserver navigation_observer(contents());
+    EXPECT_TRUE(NavigateFrameToURL(ftn_b, url_b));
+    navigation_observer.WaitForNavigationFinished();
+  }
+
+  GURL url_c(embedded_test_server()->GetURL("c.com", "/title3.html"));
+  {
+    TestNavigationObserver navigation_observer(contents());
+    EXPECT_TRUE(NavigateFrameToURL(ftn_b, url_c));
+    navigation_observer.WaitForNavigationFinished();
+  }
+  EXPECT_EQ(3, controller.GetEntryCount());
+  EXPECT_EQ(2, controller.GetCurrentEntryIndex());
+
+  // Remove subframe.
+  RenderFrameDeletedObserver deleted_observer(
+      ftn_a->child_at(0)->current_frame_host());
+  EXPECT_TRUE(ExecJs(ftn_a,
+                     "var f = document.querySelector('iframe');"
+                     "f.parentNode.removeChild(f);"));
+  deleted_observer.WaitUntilDeleted();
+
+  // Go back.  This normally attempts to navigate the subframe from url_c to
+  // url_b, but the subframe no longer exists.  Check that the main frame isn't
+  // reloaded.
+  controller.GoBack();
+  EXPECT_TRUE(WaitForLoadStop(contents()));
+  EXPECT_EQ("a", EvalJs(ftn_a, "window.state"));
+  EXPECT_EQ(3, controller.GetEntryCount());
+  EXPECT_EQ(1, controller.GetCurrentEntryIndex());
+
+  // Navigate main frame to another url.
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("a.com", "/title2.html")));
+  EXPECT_EQ(3, controller.GetEntryCount());
+  EXPECT_EQ(2, controller.GetCurrentEntryIndex());
+
+  // Now navigate back.  This should go back to |main_url|, reloading the
+  // subframe at |url_b|, which is its URL in the history entry that we ignored
+  // during the last back navigation above.
+  controller.GoBack();
+  EXPECT_TRUE(WaitForLoadStop(contents()));
+  EXPECT_EQ(3, controller.GetEntryCount());
+  EXPECT_EQ(1, controller.GetCurrentEntryIndex());
+  EXPECT_EQ(url_b,
+            ftn_a->child_at(0)->current_frame_host()->GetLastCommittedURL());
+}
+
+// Check that when we go back in a subframe on a page that contains another
+// frame which is crashed, we not only go back in the subframe but also reload
+// the sad frame.  This restores restore the state covered by the corresponding
+// NavigationEntry more faithfully.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       ReloadSadFrameWithSubframeHistoryNavigation) {
+  // Ensure this test runs in full site-per-process mode so that we can get a
+  // sad frame on Android.
+  IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
+
+  // Start on a page with two iframes.
+  GURL main_url = embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b,c)");
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+  NavigationControllerImpl& controller = contents()->GetController();
+  FrameTreeNode* ftn_a = contents()->GetFrameTree()->root();
+  FrameTreeNode* ftn_b = ftn_a->child_at(0);
+  FrameTreeNode* ftn_c = ftn_a->child_at(1);
+  GURL url_b(ftn_b->current_frame_host()->GetLastCommittedURL());
+  GURL url_c(ftn_c->current_frame_host()->GetLastCommittedURL());
+
+  // Navigate first subframe cross-site.
+  GURL url_d(embedded_test_server()->GetURL("d.com", "/title2.html"));
+  {
+    TestNavigationObserver navigation_observer(contents());
+    EXPECT_TRUE(NavigateFrameToURL(ftn_b, url_d));
+    navigation_observer.WaitForNavigationFinished();
+  }
+  EXPECT_EQ(2, controller.GetEntryCount());
+  EXPECT_EQ(1, controller.GetCurrentEntryIndex());
+  EXPECT_EQ(url_d, ftn_b->current_frame_host()->GetLastCommittedURL());
+
+  // Crash second subframe.
+  RenderProcessHost* process_c = ftn_c->current_frame_host()->GetProcess();
+  RenderProcessHostWatcher crash_observer(
+      process_c, RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  process_c->Shutdown(0);
+  crash_observer.Wait();
+  EXPECT_FALSE(ftn_c->current_frame_host()->IsRenderFrameLive());
+  EXPECT_TRUE(ftn_c->current_frame_host()->GetLastCommittedURL().is_empty());
+
+  // Go back.  This should navigate the first subframe back to b.com, and it
+  // should also restore the subframe in c.com.
+  controller.GoBack();
+  EXPECT_TRUE(WaitForLoadStop(contents()));
+  EXPECT_EQ(2, controller.GetEntryCount());
+  EXPECT_EQ(0, controller.GetCurrentEntryIndex());
+  EXPECT_EQ(url_b, ftn_b->current_frame_host()->GetLastCommittedURL());
+  EXPECT_EQ(url_c, ftn_c->current_frame_host()->GetLastCommittedURL());
+  EXPECT_TRUE(ftn_c->current_frame_host()->IsRenderFrameLive());
+}
+
+// Regression test for https://crbug.com/1088354, where a different-document
+// load was incorrectly scheduled for a history navigation in a subframe that
+// had no existing and no target FrameNavigationEntry.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       SubframeGoesBackAndSiblingHasNoFrameEntry) {
+  // Start on a page with a same-site iframe.
+  GURL main_url =
+      embedded_test_server()->GetURL("a.com", "/page_with_iframe.html");
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+  NavigationControllerImpl& controller = contents()->GetController();
+  FrameTreeNode* ftn_a = contents()->GetFrameTree()->root();
+  FrameTreeNode* ftn_b = ftn_a->child_at(0);
+  EXPECT_EQ(embedded_test_server()->GetURL("a.com", "/title1.html"),
+            ftn_b->current_frame_host()->GetLastCommittedURL());
+
+  // Add a second subframe dynamically and set some state on it to ensure it's
+  // not reloaded.  Using a javascript: URL results in the renderer not sending
+  // a DidCommitNavigation IPC back for the new frame, leaving it without a
+  // FrameNavigationEntry.
+  EXPECT_TRUE(ExecJs(ftn_a,
+                     "var f = document.createElement('iframe');"
+                     "f.src = 'javascript:void(0)';"
+                     "document.body.appendChild(f);"));
+  FrameTreeNode* ftn_c = ftn_a->child_at(1);
+  EXPECT_TRUE(ExecJs(ftn_c, "window.state='c';"));
+
+  // Navigate first subframe same-document.
+  {
+    FrameNavigateParamsCapturer capturer(ftn_b);
+    EXPECT_TRUE(ExecJs(ftn_b, "location.hash = 'foo'"));
+    capturer.Wait();
+    EXPECT_TRUE(capturer.is_same_document());
+  }
+
+  // Go back in the first subframe.  This should navigate the first subframe
+  // back same-document, while the second subframe shouldn't be reloaded, and
+  // the history navigation shouldn't crash while processing it.
+  {
+    FrameNavigateParamsCapturer capturer(ftn_b);
+    controller.GoBack();
+    capturer.Wait();
+    EXPECT_TRUE(capturer.is_same_document());
+    EXPECT_TRUE(WaitForLoadStop(contents()));
+    EXPECT_EQ("c", EvalJs(ftn_c, "window.state"));
+  }
+}
+
+// Checks that a browser-initiated same-document navigation on a page which has
+// a valid base URL preserves the base URL.
+// See https://crbug.com/1082141.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       LoadDataWithBaseURLSameDocumentNavigation) {
+  // LoadDataWithBaseURL is never subject to --site-per-process policy today
+  // (this API is only used by Android WebView [where OOPIFs have not shipped
+  // yet] and GuestView cases [which always hosts guests inside a renderer
+  // without an origin lock]).  Therefore, skip the test in --site-per-process
+  // mode to avoid renderer kills which won't happen in practice as described
+  // above.
+  //
+  // TODO(https://crbug.com/962643): Consider enabling this test once Android
+  // Webview or WebView guests support OOPIFs and/or origin locks.
+  if (AreAllSitesIsolatedForTesting())
+    return;
+
+  const GURL base_url("http://baseurl");
+  const GURL history_url("http://history");
+  const std::string data = "<html><title>One</title><body>foo</body></html>";
+  const GURL data_url = GURL("data:text/html;charset=utf-8," + data);
+
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  {
+    TestNavigationObserver same_tab_observer(shell()->web_contents(), 1);
+    shell()->LoadDataWithBaseURL(history_url, data, base_url);
+    same_tab_observer.Wait();
+  }
+
+  // Verify the last committed NavigationEntry.
+  NavigationEntryImpl* entry = controller.GetLastCommittedEntry();
+  EXPECT_EQ(base_url, entry->GetBaseURLForDataURL());
+  EXPECT_EQ(history_url, entry->GetVirtualURL());
+  EXPECT_EQ(history_url, entry->GetHistoryURLForDataURL());
+  EXPECT_EQ(data_url, entry->GetURL());
+
+  {
+    // Make a same-document navigation via history.pushState.
+    TestNavigationObserver same_tab_observer(shell()->web_contents(), 1);
+    EXPECT_TRUE(ExecuteScript(shell(), "history.pushState('', 'test', '#')"));
+    same_tab_observer.Wait();
+  }
+
+  // Verify the last committed NavigationEntry.
+  entry = controller.GetLastCommittedEntry();
+  EXPECT_EQ(base_url, entry->GetBaseURLForDataURL());
+  EXPECT_EQ(history_url, entry->GetVirtualURL());
+  EXPECT_EQ(history_url, entry->GetHistoryURLForDataURL());
+  EXPECT_EQ(data_url, entry->GetURL());
+
+  {
+    // Go back.
+    TestNavigationObserver back_load_observer(shell()->web_contents());
+    controller.GoBack();
+    back_load_observer.Wait();
+  }
+
+  // Verify the last committed NavigationEntry.
+  entry = controller.GetLastCommittedEntry();
+  EXPECT_EQ(base_url, entry->GetBaseURLForDataURL());
+  EXPECT_EQ(history_url, entry->GetVirtualURL());
+  EXPECT_EQ(history_url, entry->GetHistoryURLForDataURL());
+  EXPECT_EQ(data_url, entry->GetURL());
+  EXPECT_EQ(base_url, EvalJs(shell(), "document.URL"));
 }
 
 }  // namespace content

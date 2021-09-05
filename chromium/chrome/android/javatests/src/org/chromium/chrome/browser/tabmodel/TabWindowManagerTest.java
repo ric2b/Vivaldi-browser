@@ -6,8 +6,9 @@ package org.chromium.chrome.browser.tabmodel;
 
 import android.app.Activity;
 import android.support.test.annotation.UiThreadTest;
-import android.support.test.filters.SmallTest;
 import android.support.test.rule.UiThreadTestRule;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -22,6 +23,7 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.NextTabPolicy.NextTabPolicySupplier;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager.TabModelSelectorFactory;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
@@ -40,10 +42,11 @@ public class TabWindowManagerTest {
             new TabModelSelectorFactory() {
                 @Override
                 public TabModelSelector buildSelector(Activity activity,
-                        TabCreatorManager tabCreatorManager, int selectorIndex) {
+                        TabCreatorManager tabCreatorManager,
+                        NextTabPolicySupplier nextTabPolicySupplier, int selectorIndex) {
                     return new MockTabModelSelector(0, 0, null);
                 }
-    };
+            };
 
     private ChromeActivity buildActivity() {
         ChromeActivity activity = new CustomTabActivity();
@@ -60,7 +63,8 @@ public class TabWindowManagerTest {
     private MockTabModelSelector requestSelector(ChromeActivity activity, int requestedIndex) {
         final TabWindowManager manager = TabWindowManager.getInstance();
         manager.setTabModelSelectorFactory(mMockTabModelSelectorFactory);
-        return (MockTabModelSelector) manager.requestSelector(activity, activity, requestedIndex);
+        return (MockTabModelSelector) manager.requestSelector(
+                activity, activity, () -> NextTabPolicy.HIERARCHICAL, requestedIndex);
     }
 
     @After
@@ -295,7 +299,7 @@ public class TabWindowManagerTest {
         AsyncTabParamsManager.getAsyncTabParams().clear();
         final int asyncTabId = 123;
         final TabReparentingParams dummyParams =
-                new TabReparentingParams(new MockTab(0, false), null, null);
+                new TabReparentingParams(new MockTab(0, false), null);
         Assert.assertFalse(manager.tabExistsInAnySelector(asyncTabId));
         AsyncTabParamsManager.add(asyncTabId, dummyParams);
         try {
@@ -330,7 +334,7 @@ public class TabWindowManagerTest {
         AsyncTabParamsManager.getAsyncTabParams().clear();
         final int asyncTabId = 123;
         final TabReparentingParams dummyParams =
-                new TabReparentingParams(new MockTab(0, false), null, null);
+                new TabReparentingParams(new MockTab(0, false), null);
         Assert.assertNull(manager.getTabById(asyncTabId));
         AsyncTabParamsManager.add(asyncTabId, dummyParams);
         try {

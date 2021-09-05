@@ -10,6 +10,7 @@
 #include "base/containers/span.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_items.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_text_offset.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
@@ -43,7 +44,7 @@ struct PhysicalSize;
 // is faster than moving to |NGFragmentItem|.
 class CORE_EXPORT NGInlineCursorPosition {
  public:
-  using ItemsSpan = base::span<const scoped_refptr<const NGFragmentItem>>;
+  using ItemsSpan = NGFragmentItems::Span;
 
   const NGPaintFragment* PaintFragment() const { return paint_fragment_; }
   const NGFragmentItem* Item() const { return item_; }
@@ -109,6 +110,7 @@ class CORE_EXPORT NGInlineCursorPosition {
   LayoutObject* GetMutableLayoutObject() const;
   const Node* GetNode() const;
   const DisplayItemClient* GetDisplayItemClient() const;
+  wtf_size_t FragmentId() const;
 
   // True if fragment at the current position can have children.
   bool CanHaveChildren() const;
@@ -154,6 +156,10 @@ class CORE_EXPORT NGInlineCursorPosition {
   // line.
   TextDirection BaseDirection() const;
 
+  TextDirection ResolvedOrBaseDirection() const {
+    return IsLineBox() ? BaseDirection() : ResolvedDirection();
+  }
+
   // True if the current position is text or atomic inline box.
   // Note: Because of this function is used for caret rect, hit testing, etc,
   // this function returns false for hidden for paint, text overflow ellipsis,
@@ -164,12 +170,25 @@ class CORE_EXPORT NGInlineCursorPosition {
   // other than line.
   bool HasSoftWrapToNextLine() const;
 
-  // Returns a point at the visual start/end of the line.
+  // Returns a point at the visual start/end of the line. (0, 0) is left-top of
+  // the line.
   // Encapsulates the handling of text direction and writing mode.
   PhysicalOffset LineStartPoint() const;
   PhysicalOffset LineEndPoint() const;
 
+  // LogicalRect/PhysicalRect conversions
+  // |logical_rect| and |physical_rect| are converted with |Size()| as
+  // "outer size".
+  LogicalRect ConvertChildToLogical(const PhysicalRect& physical_rect) const;
+  PhysicalRect ConvertChildToPhysical(const LogicalRect& logical_rect) const;
+
  private:
+  void Set(const ItemsSpan::iterator& iter) {
+    DCHECK(!paint_fragment_);
+    item_iter_ = iter;
+    item_ = &*iter;
+  }
+
   void Clear() {
     paint_fragment_ = nullptr;
     item_ = nullptr;
@@ -197,7 +216,7 @@ class CORE_EXPORT NGInlineCursor {
   STACK_ALLOCATED();
 
  public:
-  using ItemsSpan = base::span<const scoped_refptr<const NGFragmentItem>>;
+  using ItemsSpan = NGFragmentItems::Span;
 
   explicit NGInlineCursor(const LayoutBlockFlow& block_flow);
   explicit NGInlineCursor(const NGFragmentItems& items);
@@ -296,6 +315,20 @@ class CORE_EXPORT NGInlineCursor {
   PositionWithAffinity PositionForPointInInlineBox(
       const PhysicalOffset& point) const;
 
+  // Returns |PositionWithAffinity| in current position at x-coordinate of
+  // |point_in_container| for horizontal writing mode, or y-coordinate of
+  // |point_in_container| for vertical writing mode.
+  // Note: Even if |point_in_container| is outside of an item of current
+  // position, this function returns boundary position of an item.
+  // Note: This function is used for locating caret at same x/y-coordinate as
+  // previous caret after line up/down.
+  PositionWithAffinity PositionForPointInChild(
+      const PhysicalOffset& point_in_container) const;
+
+  // Returns first/last position of |this| line. |this| should be line box.
+  PositionWithAffinity PositionForStartOfLine() const;
+  PositionWithAffinity PositionForEndOfLine() const;
+
   //
   // Functions to move the current position.
   //
@@ -376,6 +409,9 @@ class CORE_EXPORT NGInlineCursor {
   // Returns true if the current position moves to first child.
   bool TryToMoveToFirstChild();
 
+  // Returns true if the current position moves to first inline leaf child.
+  bool TryToMoveToFirstInlineLeafChild();
+
   // Returns true if the current position moves to last child.
   bool TryToMoveToLastChild();
 
@@ -433,10 +469,6 @@ class CORE_EXPORT NGInlineCursor {
                                           const ItemsSpan& items);
   wtf_size_t SpanBeginItemIndex() const;
   wtf_size_t SpanIndexFromItemIndex(unsigned index) const;
-
-  PositionWithAffinity PositionForPointInChild(
-      const PhysicalOffset& point,
-      const NGFragmentItem& child_item) const;
 
   NGInlineCursorPosition current_;
 

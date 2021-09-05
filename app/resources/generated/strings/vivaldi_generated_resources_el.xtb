@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(Ανώνυμη περιήγηση)</translation>
 <translation id="1620510694547887537">Κάμερα</translation>
 <translation id="1627276047960621195">Περιγραφές αρχείων</translation>
-<translation id="1635033183663317347">Εγκαταστάθηκε από τον κηδεμόνα σας.</translation>
 <translation id="1682548588986054654">Νέο παράθυρο ανώνυμης περιήγησης</translation>
 <translation id="1698122934742150150">Μόνο για την τρέχουσα περίοδο λειτουργίας σε κατάσταση ανώνυμης περιήγησης</translation>
 <translation id="1706625117072057435">Επίπεδα εστίασης</translation>
@@ -55,6 +54,7 @@
 <translation id="1886996562706621347">Να επιτρέπεται σε ιστότοπους να ζητούν να γίνονται προεπιλεγμένα προγράμματα χειρισμού για πρωτόκολλα (συνιστάται)</translation>
 <translation id="1901303067676059328">Επιλογή όλ&amp;ων</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Χρησιμοποιήστε έναν αριθμό για να υποδείξετε πόσα αντίγραφα θα εκτυπωθούν (1 έως <ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Κατάργηση όλων</translation>
 <translation id="1994173015038366702">URL ιστότοπου</translation>
 <translation id="2019718679933488176">&amp;Άνοιγμα Ήχου σε Νέα Καρτέλα</translation>
@@ -169,7 +169,6 @@
 <translation id="3678156199662914018">Επέκταση: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Αίτημα κοινής χρήσης οθόνης από την εφαρμογή <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Επικόλληση και μετάβαση στη διεύθυνση <ph name="URL" /></translation>
-<translation id="3725367690636977613">σελίδες</translation>
 <translation id="3727187387656390258">Έλεγχος αναδυόμενου παραθύρου</translation>
 <translation id="3744111561329211289">Συγχρονισμός παρασκηνίου</translation>
 <translation id="3760460896538743390">Έλεγχος &amp;σελίδας παρασκηνίου</translation>
@@ -197,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Αποδοχή για την ομάδα</translation>
-<translation id="4091434297613116013">φύλλα χαρτιού</translation>
 <translation id="4096508467498758490">Απενεργοποίηση επεκτάσεων λειτουργίας προγραμματιστή</translation>
 <translation id="4100839878934973028">Κάποιο άλλο πρόγραμμα στον υπολογιστή σας πρόσθεσε μια εφαρμογή, η οποία ενδέχεται να αλλάξει τον τρόπο λειτουργίας του Vivaldi.</translation>
 <translation id="4109898769411476438">Κλείσιμο Προγράμματος Περιήγησης Πριν από την Εισαγωγή</translation>
@@ -431,7 +429,6 @@
 <translation id="8071432093239591881">Εκτύπωση ως εικόνα</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Διαχείριση επεκτάσεων</translation>
-<translation id="8180239481735238521">σελίδα</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Λήψη σε εξέλιξη}other{Λήψεις σε εξέλιξη}}</translation>
 <translation id="8230134520748321204">Αποθήκευση κωδικού πρόσβασης για <ph name="ORIGIN" />;</translation>
 <translation id="8261378640211443080">Αυτή η επέκταση δεν αναφέρεται στο <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> και ενδέχεται να έχει προστεθεί εν αγνοία σας.</translation>
@@ -463,7 +460,6 @@
 <translation id="8798099450830957504">Προεπιλογή</translation>
 <translation id="8800004011501252845">Εμφάνιση προορισμών για</translation>
 <translation id="8808478386290700967">Ηλεκτρονικό κατάστημα</translation>
-<translation id="8813811964357448561">φύλλο χαρτιού</translation>
 <translation id="8823514049557262177">Αντιγραφή κειμένου συνδέσμου</translation>
 <translation id="8823704566850948458">Πρόταση για κωδικό πρόσβασης…</translation>
 <translation id="8859174528519900719">Υποπλαίσιο: <ph name="SUBFRAME_SITE" /></translation>

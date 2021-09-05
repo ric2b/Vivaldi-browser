@@ -71,10 +71,6 @@ class PLATFORM_EXPORT ResourceError final {
                 const network::CorsErrorStatus& status);
   ResourceError(const WebURLError&);
 
-  // Makes a deep copy. Useful for when you need to use a ResourceError on
-  // another thread.
-  ResourceError Copy() const;
-
   int ErrorCode() const { return error_code_; }
   const String& FailingURL() const { return failing_url_; }
   const String& LocalizedDescription() const { return localized_description_; }
@@ -95,6 +91,8 @@ class PLATFORM_EXPORT ResourceError final {
   bool ShouldCollapseInitiator() const;
   base::Optional<ResourceRequestBlockedReason> GetResourceRequestBlockedReason()
       const;
+  base::Optional<network::mojom::BlockedByResponseReason>
+  GetBlockedByResponseReason() const;
 
   base::Optional<network::CorsErrorStatus> CorsErrorStatus() const {
     return cors_error_status_;

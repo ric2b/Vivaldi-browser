@@ -96,6 +96,12 @@ class CONTENT_EXPORT BrowserAccessibilityDelegate {
   virtual gfx::NativeViewAccessible
   AccessibilityGetNativeViewAccessibleForWindow() = 0;
   virtual WebContents* AccessibilityWebContents() = 0;
+  virtual void AccessibilityHitTest(
+      const gfx::Point& point_in_frame_pixels,
+      ax::mojom::Event opt_event_to_fire,
+      int opt_request_id,
+      base::OnceCallback<void(BrowserAccessibilityManager* hit_manager,
+                              int hit_node_id)> opt_callback) = 0;
 
   // Returns true if this delegate represents the main (topmost) frame in a
   // tree of frames.
@@ -146,6 +152,17 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
   void Initialize(const ui::AXTreeUpdate& initial_tree);
 
   static ui::AXTreeUpdate GetEmptyDocument();
+
+  enum RetargetEventType {
+    RetargetEventTypeGenerated = 0,
+    RetargetEventTypeBlinkGeneral,
+    RetargetEventTypeBlinkHover,
+  };
+
+  // Return |node| by default, but some platforms want to update the target node
+  // based on the event type.
+  virtual BrowserAccessibility* RetargetForEvents(BrowserAccessibility* node,
+                                                  RetargetEventType type) const;
 
   // Subclasses override these methods to send native event notifications.
   virtual void FireFocusEvent(BrowserAccessibility* node);
@@ -202,7 +219,8 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
 
   // WebContentsObserver overrides
   void DidStopLoading() override;
-  void DidActivatePortal(WebContents* predecessor_contents) override;
+  void DidActivatePortal(WebContents* predecessor_contents,
+                         base::TimeTicks activation_time) override;
 
   // Keep track of if this page is hidden by an interstitial, in which case
   // we need to suppress all events.

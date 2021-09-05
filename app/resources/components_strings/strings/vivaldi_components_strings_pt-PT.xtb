@@ -42,6 +42,7 @@
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />A executar diagnósticos de rede<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notificações</translation>
+<translation id="2501278716633472235">Voltar</translation>
 <translation id="2539524384386349900">Detetar</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> enviou uma resposta inválida.</translation>
 <translation id="2586657967955657006">Área de transferência</translation>
@@ -70,6 +71,7 @@
 <translation id="3226128629678568754">Prima o botão de atualização para enviar novamente os dados necessários para carregar a página.</translation>
 <translation id="3227137524299004712">Microfone</translation>
 <translation id="3234666976984236645">Detetar sempre conteúdo importante neste website</translation>
+<translation id="3308738399950580893">anúncios</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> está inacessível de momento.</translation>
 <translation id="3427092606871434483">Permitir (pré-definição)</translation>
 <translation id="3447661539832366887">O proprietário deste equipamento desativou o jogo do dinossauro.</translation>
@@ -85,6 +87,7 @@
 <translation id="3681007416295224113">Informações do certificado</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />A verificar a configuração do proxy, da firewall e de DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Se utilizar um servidor de proxy...</translation>
+<translation id="3894751534882749287">Se, ainda assim, pretende ver esta página, pode mudar o seu nível de proteção contra rastreios no popup do bloqueador de rastreios ou clicando no botão Permitir</translation>
 <translation id="3950820424414687140">Iniciar sessão</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> está bloqueado</translation>
 <translation id="3987940399970879459">Menos de 1 MB</translation>
@@ -111,6 +114,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">A ligação foi interrompida</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />A executar os diagnósticos de rede do Windows<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Bloqueador de rastreios</translation>
 <translation id="4744603770635761495">Caminho do Executável</translation>
 <translation id="4750917950439032686">As suas informações (por exemplo, palavras-passe ou números de cartões de crédito) são privadas quando são enviadas para este website.</translation>
 <translation id="4764776831041365478">A página Web em <ph name="URL" /> poderá estar temporariamente inactiva ou poderá ter sido movida permanentemente para um novo endereço Web.</translation>
@@ -173,10 +177,12 @@
 <translation id="7090678807593890770">Pesquisar <ph name="LINK" /> no Google</translation>
 <translation id="7108819624672055576">Permitida por uma extensão</translation>
 <translation id="7111012039238467737">(Válido)</translation>
+<translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> não respeita os padrões de segurança.</translation>
 <translation id="7219179957768738017">A ligação utiliza <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Revogar acesso</translation>
 <translation id="7353601530677266744">Linha de comandos</translation>
+<translation id="7364115444476960850">Esta página foi bloqueada pelo <ph name="BLOCKER_NAME" /> do Vivaldi</translation>
 <translation id="7419106976560586862">Caminho do Perfil</translation>
 <translation id="7445762425076701745">Não é possível validar totalmente a identidade do servidor ao qual está ligado. Está ligado a um servidor com um nome que apenas é válido na sua rede, que não permite que uma autoridade de certificação externa valide a respetiva propriedade. Ainda assim, algumas autoridades emitem certificados para esses nomes, pelo que não há forma de garantir que está ligado ao website que pretende e não a um website pirata.</translation>
 <translation id="7455133967321480974">Utilizar pré-definição global (Bloquear)</translation>
@@ -200,6 +206,7 @@
 <translation id="8037357227543935929">Pedir (pré-definição)</translation>
 <translation id="8041940743680923270">Utilizar pré-definição global (Perguntar)</translation>
 <translation id="808894953321890993">Alterar palavra-passe</translation>
+<translation id="8119307142152921512">rastreios e anúncios</translation>
 <translation id="8142868475871995937">Visite &lt;strong&gt;vivaldi://policy&lt;/strong&gt; para ver os URLs que foram colocados na lista negra e outras políticas aplicadas pelo administrador do sistema.</translation>
 <translation id="8149426793427495338">O computador entrou em suspensão.</translation>
 <translation id="8150722005171944719">O ficheiro em <ph name="URL" /> não é legível. Pode ter sido removido, movido ou as permissões do ficheiro podem estar a impedir o acesso.</translation>
@@ -217,6 +224,7 @@
 <translation id="8703575177326907206">A sua ligação a <ph name="DOMAIN" /> não está cifrada.</translation>
 <translation id="8740359287975076522">Não foi possível encontrar o &lt;abbr id="dnsDefinition"&gt;endereço DNS&lt;/abbr&gt; de <ph name="HOST_NAME" />. Estamos a diagnosticar o problema.</translation>
 <translation id="8820817407110198400">Favoritos</translation>
+<translation id="8940028675168378100">Bloqueado por <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">O proxy <ph name="DOMAIN" /> necessita de um nome de utilizador e de uma palavra-passe.</translation>
 <translation id="9008201768610948239">Ignorar</translation>
 <translation id="9011424611726486705">Abrir definições do website</translation>
@@ -224,6 +232,7 @@
 <translation id="9039213469156557790">Além disso, esta página inclui outros recursos que não são seguros. Estes recursos podem ser vistos por outros utilizadores em trânsito e modificados por um utilizador mal intencionado com o intuito de alterar o comportamento da página.</translation>
 <translation id="9069693763241529744">Bloqueada por uma extensão</translation>
 <translation id="9169664750068251925">Bloquear sempre neste website</translation>
+<translation id="9180553614777056266">Bloqueador de anúncios</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utiliza um protocolo não suportado.</translation>
 <translation id="9219103736887031265">Imagens</translation>
 <translation id="936602727769022409">Pode perder o acesso à sua Conta Google. O Vivaldi recomenda que altere a sua palavra-passe agora. Ser-lhe-á pedido para iniciar sessão.</translation>

@@ -5,11 +5,16 @@
 #ifndef CHROME_BROWSER_POLICY_POLICY_TEST_UTILS_H_
 #define CHROME_BROWSER_POLICY_POLICY_TEST_UTILS_H_
 
+#include <string>
+
 #include "ash/public/cpp/keyboard/keyboard_types.h"
 #include "base/files/file_path.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/security_interstitials/core/controller_client.h"
+#include "content/public/browser/web_contents.h"
+#include "url/gurl.h"
 
 namespace extensions {
 class Extension;
@@ -35,6 +40,13 @@ class PolicyTest : public InProcessBrowserTest {
   void SetUpOnMainThread() override;
 
   void SetUpCommandLine(base::CommandLine* command_line) override;
+
+  // Verifies that access to the given url |spec| is blocked.
+  void CheckURLIsBlockedInWebContents(content::WebContents* web_contents,
+                                      const GURL& url);
+
+  // Verifies that access to the given url |spec| is blocked.
+  void CheckURLIsBlocked(Browser* browser, const std::string& spec);
 
   void SetScreenshotPolicy(bool enabled);
 
@@ -71,15 +83,11 @@ class PolicyTest : public InProcessBrowserTest {
                               bool expect_safe_search,
                               const std::string& url = "http://google.com/");
 
-  static void CheckYouTubeRestricted(
-      int youtube_restrict_mode,
-      const std::map<GURL, net::HttpRequestHeaders>& urls_requested,
-      const GURL& url);
+  static void CheckYouTubeRestricted(int youtube_restrict_mode,
+                                     const net::HttpRequestHeaders& headers);
 
-  static void CheckAllowedDomainsHeader(
-      const std::string& allowed_domain,
-      const std::map<GURL, net::HttpRequestHeaders>& urls_requested,
-      const GURL& url);
+  static void CheckAllowedDomainsHeader(const std::string& allowed_domain,
+                                        const net::HttpRequestHeaders& headers);
 
   static bool FetchSubresource(content::WebContents* web_contents,
                                const GURL& url);
@@ -93,6 +101,8 @@ class PolicyTest : public InProcessBrowserTest {
   void SendInterstitialCommand(
       content::WebContents* tab,
       security_interstitials::SecurityInterstitialCommand command);
+
+  void FlushBlacklistPolicy();
 
   MockConfigurationPolicyProvider provider_;
 };

@@ -7,7 +7,9 @@
 #include <utility>
 #include "content/renderer/loader/child_url_loader_factory_bundle.h"
 #include "content/renderer/loader/navigation_response_override_parameters.h"
+#include "content/renderer/loader/resource_dispatcher.h"
 #include "content/renderer/loader/web_worker_fetch_context_impl.h"
+#include "content/renderer/render_thread_impl.h"
 #include "content/renderer/service_worker/service_worker_provider_context.h"
 #include "content/renderer/worker/fetch_client_settings_object_helpers.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -39,7 +41,7 @@ void DedicatedWorkerHostFactoryClient::CreateWorkerHostDeprecated(
       browser_interface_broker;
   factory_->CreateWorkerHost(
       browser_interface_broker.InitWithNewPipeAndPassReceiver(),
-      remote_host_.BindNewPipeAndPassReceiver(), std::move(callback));
+      std::move(callback));
   OnWorkerHostCreated(std::move(browser_interface_broker));
 }
 
@@ -47,16 +49,14 @@ void DedicatedWorkerHostFactoryClient::CreateWorkerHost(
     const blink::WebURL& script_url,
     network::mojom::CredentialsMode credentials_mode,
     const blink::WebFetchClientSettingsObject& fetch_client_settings_object,
-    mojo::ScopedMessagePipeHandle blob_url_token) {
+    blink::CrossVariantMojoRemote<blink::mojom::BlobURLTokenInterfaceBase>
+        blob_url_token) {
   DCHECK(base::FeatureList::IsEnabled(blink::features::kPlzDedicatedWorker));
 
   factory_->CreateWorkerHostAndStartScriptLoad(
       script_url, credentials_mode,
       FetchClientSettingsObjectFromWebToMojom(fetch_client_settings_object),
-      mojo::PendingRemote<blink::mojom::BlobURLToken>(
-          std::move(blob_url_token), blink::mojom::BlobURLToken::Version_),
-      receiver_.BindNewPipeAndPassRemote(),
-      remote_host_.BindNewPipeAndPassReceiver());
+      std::move(blob_url_token), receiver_.BindNewPipeAndPassRemote());
 }
 
 scoped_refptr<blink::WebWorkerFetchContext>
@@ -84,12 +84,6 @@ DedicatedWorkerHostFactoryClient::CloneWorkerFetchContext(
   return worker_fetch_context;
 }
 
-void DedicatedWorkerHostFactoryClient::LifecycleStateChanged(
-    blink::mojom::FrameLifecycleState state) {
-  if (remote_host_)
-    remote_host_->LifecycleStateChanged(state);
-}
-
 scoped_refptr<WebWorkerFetchContextImpl>
 DedicatedWorkerHostFactoryClient::CreateWorkerFetchContext(
     blink::mojom::RendererPreferences renderer_preference,
@@ -103,7 +97,10 @@ DedicatedWorkerHostFactoryClient::CreateWorkerFetchContext(
           std::move(renderer_preference), std::move(watcher_receiver),
           subresource_loader_factory_bundle_->Clone(),
           subresource_loader_factory_bundle_->CloneWithoutAppCacheFactory(),
-          std::move(pending_subresource_loader_updater_));
+          std::move(pending_subresource_loader_updater_),
+          RenderThreadImpl::current()
+              ->resource_dispatcher()
+              ->cors_exempt_header_list());
   worker_fetch_context->SetResponseOverrideForMainScript(
       std::move(response_override_for_main_script_));
   return worker_fetch_context;
@@ -112,12 +109,12 @@ DedicatedWorkerHostFactoryClient::CreateWorkerFetchContext(
 void DedicatedWorkerHostFactoryClient::OnWorkerHostCreated(
     mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
         browser_interface_broker) {
-  worker_->OnWorkerHostCreated(browser_interface_broker.PassPipe());
+  worker_->OnWorkerHostCreated(std::move(browser_interface_broker));
 }
 
 void DedicatedWorkerHostFactoryClient::OnScriptLoadStarted(
-    blink::mojom::ServiceWorkerProviderInfoForClientPtr
-        service_worker_provider_info,
+    blink::mojom::ServiceWorkerContainerInfoForClientPtr
+        service_worker_container_info,
     blink::mojom::WorkerMainScriptLoadParamsPtr main_script_load_params,
     std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
         pending_subresource_loader_factory_bundle,
@@ -139,12 +136,12 @@ void DedicatedWorkerHostFactoryClient::OnScriptLoadStarted(
   pending_subresource_loader_updater_ = std::move(subresource_loader_updater);
 
   DCHECK(!service_worker_provider_context_);
-  if (service_worker_provider_info) {
+  if (service_worker_container_info) {
     service_worker_provider_context_ =
         base::MakeRefCounted<ServiceWorkerProviderContext>(
             blink::mojom::ServiceWorkerContainerType::kForDedicatedWorker,
-            std::move(service_worker_provider_info->client_receiver),
-            std::move(service_worker_provider_info->host_remote),
+            std::move(service_worker_container_info->client_receiver),
+            std::move(service_worker_container_info->host_remote),
             std::move(controller_info), subresource_loader_factory_bundle_);
   }
 

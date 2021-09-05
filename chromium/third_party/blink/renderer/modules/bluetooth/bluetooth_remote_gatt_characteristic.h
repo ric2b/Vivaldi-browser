@@ -67,7 +67,7 @@ class BluetoothRemoteGATTCharacteristic final
   bool HasPendingActivity() const override;
 
   // Interface required by garbage collection.
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   // IDL exposed interface:
   BluetoothRemoteGATTService* service() { return service_; }
@@ -83,6 +83,12 @@ class BluetoothRemoteGATTCharacteristic final
                                ExceptionState&);
   ScriptPromise readValue(ScriptState*, ExceptionState&);
   ScriptPromise writeValue(ScriptState*, const DOMArrayPiece&, ExceptionState&);
+  ScriptPromise writeValueWithResponse(ScriptState*,
+                                       const DOMArrayPiece&,
+                                       ExceptionState&);
+  ScriptPromise writeValueWithoutResponse(ScriptState*,
+                                          const DOMArrayPiece&,
+                                          ExceptionState&);
   ScriptPromise startNotifications(ScriptState*, ExceptionState&);
   ScriptPromise stopNotifications(ScriptState*, ExceptionState&);
 
@@ -107,6 +113,11 @@ class BluetoothRemoteGATTCharacteristic final
                           mojom::blink::WebBluetoothResult);
   void NotificationsCallback(ScriptPromiseResolver*,
                              mojom::blink::WebBluetoothResult);
+
+  ScriptPromise WriteCharacteristicValue(ScriptState*,
+                                         const DOMArrayPiece& value,
+                                         mojom::blink::WebBluetoothWriteType,
+                                         ExceptionState&);
 
   ScriptPromise GetDescriptorsImpl(ScriptState*,
                                    ExceptionState&,

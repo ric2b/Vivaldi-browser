@@ -12,6 +12,10 @@
 #include "base/optional.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 
+namespace ash {
+struct AmbientSettings;
+}  // namespace ash
+
 namespace base {
 class ListValue;
 }  // namespace base
@@ -31,34 +35,52 @@ class AmbientModeHandler : public ::settings::SettingsPageUIHandler {
   // settings::SettingsPageUIHandler:
   void RegisterMessages() override;
   void OnJavascriptAllowed() override;
-  void OnJavascriptDisallowed() override {}
+  void OnJavascriptDisallowed() override;
 
  private:
   // WebUI call to signal js side is ready.
   void HandleInitialized(const base::ListValue* args);
 
+  // WebUI call to request photos containers, e.g. personal albums or art
+  // categories.
+  void RequestPhotosContainers(const base::ListValue* args);
+
   // WebUI call to sync topic source with server.
-  void HandleTopicSourceSelectedChanged(const base::ListValue* args);
+  void HandleSetSelectedTopicSource(const base::ListValue* args);
+
+  // WebUI call to sync photos containers with server.
+  void HandleSetSelectedPhotosContainers(const base::ListValue* args);
 
   // Retrieve the initial settings from server.
   void GetSettings();
 
   // Called when the initial settings is retrieved.
-  void OnGetSettings(base::Optional<ash::AmbientModeTopicSource> topic_source);
+  void OnGetSettings(const base::Optional<ash::AmbientSettings>& settings);
 
   // Send the "topic-source-changed" WebUIListener event when the initial
   // settings is retrieved.
   void SendTopicSource();
 
-  // Update the selected topic source to server.
-  void UpdateSettings(ash::AmbientModeTopicSource topic_source);
+  // Send the "photos-containers-changed" WebUIListener event when the personal
+  // albums are retrieved.
+  void SendPhotosContainers();
+
+  // Update the local |settings_| to server.
+  void UpdateSettings();
 
   // Called when the settings is updated.
-  // |topic_source| is the value to retry if the update was failed.
-  void OnUpdateSettings(ash::AmbientModeTopicSource topic_source, bool success);
+  void OnUpdateSettings(bool success);
 
-  // The topic source, i.e. from which category the photos will be displayed.
-  base::Optional<ash::AmbientModeTopicSource> topic_source_;
+  void FetchPersonalAlbums();
+
+  void OnPersonalAlbumsFetched(ash::PersonalAlbums personal_albums);
+
+  // Whether the Javascript is inited from the ambientMode page.
+  bool init_from_ambient_mode_page_ = false;
+
+  base::Optional<ash::AmbientSettings> settings_;
+
+  ash::PersonalAlbums personal_albums_;
 
   base::WeakPtrFactory<AmbientModeHandler> weak_factory_{this};
 };

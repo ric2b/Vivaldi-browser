@@ -20,7 +20,9 @@
 #include "components/sync/model/model_type_sync_bridge.h"
 
 class Profile;
-
+namespace base {
+class Time;
+}
 namespace syncer {
 class MetadataBatch;
 class MetadataChangeList;
@@ -72,7 +74,17 @@ class WebAppSyncBridge : public AppRegistryController,
   void SetAppIsDisabled(const AppId& app_id, bool is_disabled) override;
   void SetAppIsLocallyInstalled(const AppId& app_id,
                                 bool is_locally_installed) override;
+  void SetAppLastLaunchTime(const AppId& app_id,
+                            const base::Time& time) override;
+  void SetAppInstallTime(const AppId& app_id, const base::Time& time) override;
   WebAppSyncBridge* AsWebAppSyncBridge() override;
+
+  // These methods are used by extensions::AppSorting, which manages the sorting
+  // of web apps on chrome://apps.
+  void SetUserPageOrdinal(const AppId& app_id,
+                          syncer::StringOrdinal user_page_ordinal);
+  void SetUserLaunchOrdinal(const AppId& app_id,
+                            syncer::StringOrdinal user_launch_ordinal);
 
   // An access to read-only registry. Does an upcast to read-only type.
   const WebAppRegistrar& registrar() const { return *registrar_; }

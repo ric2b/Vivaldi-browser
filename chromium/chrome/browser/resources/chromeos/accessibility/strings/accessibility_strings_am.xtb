@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">ወደ ቀኝ ይሸብልሉ</translation>
 <translation id="1781173782405573156">የማለፊያ ቁልፍ</translation>
 <translation id="1787176709638001873">የይለፍ ቃል አርትዖት ጽሑፍ</translation>
+<translation id="180203835522132923">+ O፣ ከዚያ Wን ይፈልጉ</translation>
 <translation id="1810107444790159527">የዝርዝር ሳጥን</translation>
 <translation id="1812527064848182527">የመሬት ገጽታ</translation>
 <translation id="1829244130665387512">በዚህ ገጽ ውስጥ የተገኘ</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">ሁለት ጣቶችን ወደ ግራ ያንሸራትቱ</translation>
 <translation id="2998131015536248178">ቀዳሚ ቁምፊ</translation>
 <translation id="2999559350546931576">የድምጽ ቅጥነት ይቀንሱ</translation>
+<translation id="3009352964623081324">+ O፣ ከዚያ Sን ይፈልጉ። ድምፆችን ለመጫን፣ ለማቀናበር እና ብጁ ለማድረግ ይጠቀሙ።</translation>
 <translation id="3014130421870723208">@ed 8dot</translation>
 <translation id="3030432017085518523">የምናሌ ንጥል ሬዲዮ አዝራር</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{ትእምርተ ጭረት}one{# ትእምርተ ጭረቶች}other{# ትእምርተ ጭረቶች}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">ማስገባት</translation>
 <translation id="4511186779140817916">የነጣ አልሞንድ</translation>
 <translation id="451510441928265982">ምንም ቀዳሚ የደረጃ 2 ርዕስ የለም</translation>
+<translation id="4515799157838123044">የጀርባ ይዘት ጥላ</translation>
 <translation id="4517854969512651305">እሴትን ይጨምሩ</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{እዝባር}one{# እዝባሮች}other{# እዝባሮች}}</translation>
 <translation id="4537277403911487429">ቀጣዩ ተመሳሳይ ንጥል</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">ክፍለ አካል</translation>
 <translation id="6637586476836377253">የምዝግብ ማስታወሻ</translation>
 <translation id="6657128831881431364">የሂደት አሞሌ</translation>
+<translation id="6660819301598582123">The quick brown fox jumps over the lazy dog</translation>
 <translation id="667999046851023355">ሰነድ</translation>
 <translation id="6688209025607531203">ሁነታዊ ያልሆነ ማንቂያ</translation>
 <translation id="6689672606256159458">ጠቆር ያለ ሳልመን</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">ምንም ቀጣይ የደረጃ 5 ርዕስ የለም</translation>
 <translation id="6955705049214951590">እርጥብ ጽጌሬዳ</translation>
 <translation id="696356426651109308">ወደ መጀመሪያው ዝለል</translation>
-<translation id="699159175332639490">ፈልግ + O + W</translation>
 <translation id="6994042831499278539">የሙዳየ ቃላት ዋቢ</translation>
 <translation id="6996566555547746822">ቀጣይ ጥምድ ሳጥን</translation>
 <translation id="6997224546856374593">አቢይ ሆሄያትን ስታነብ፦</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">ምሳሌ</translation>
 <translation id="7439060726180460871">ማውጫ</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">የአባልነት ዓይነቶችን በሚናገሩ እና በተጠቀሱ፣ በተሰረዙ፣ በደመቁ፣ በቅንፍ ዉስጥ የተቀመጡ፣ ወይም በትላልቅ ፊደላት የተጻፈ ጽሑፍን በሚናገሩበት ጊዜ ድምፁን ይለውጡ።</translation>
 <translation id="7491962110804786152">TAB</translation>
 <translation id="7505149250476994901">ከፊደል በፊት «cap» ይበሉ</translation>
 <translation id="7518543783849163354">ChromeVoxን ለጊዜው እንዳይናገር ለማስቆም የControl ቁልፉን ይጫኑ።</translation>

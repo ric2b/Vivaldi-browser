@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/format_macros.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "chromeos/dbus/audio/fake_cras_audio_client.h"
@@ -747,6 +748,9 @@ class CrasAudioClientImpl : public CrasAudioClient {
         if (!value_reader.PopUint64(&node->stable_device_id_v2))
           return false;
         node->has_v2_stable_device_id = true;
+      } else if (key == cras::kMaxSupportedChannelsProperty) {
+        if (!value_reader.PopUint32(&node->max_supported_channels))
+          return false;
       }
     }
 

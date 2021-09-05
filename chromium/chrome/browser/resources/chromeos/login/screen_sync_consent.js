@@ -28,8 +28,9 @@ login.createScreen('SyncConsentScreen', 'sync-consent', function() {
      */
     onBeforeShow(data) {
       $('sync-consent-impl').setIsChildAccount(data['isChildAccount']);
-      $('sync-loading').onBeforeShow();
-      $('sync-consent-impl').onBeforeShow();
+      $('sync-consent-impl').setDeviceType(data['deviceType']);
+      cr.ui.login.invokePolymerMethod($('sync-loading'), 'onBeforeShow');
+      cr.ui.login.invokePolymerMethod($('sync-consent-impl'), 'onBeforeShow');
     },
 
     /**

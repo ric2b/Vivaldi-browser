@@ -19,14 +19,14 @@ class SelectType : public GarbageCollected<SelectType> {
   // of |select|.
   static SelectType* Create(HTMLSelectElement& select);
   void WillBeDestroyed();
-  virtual void Trace(Visitor* visitor);
+  virtual void Trace(Visitor* visitor) const;
 
   // Returns true if the event is handled.
   virtual bool DefaultEventHandler(const Event& event) = 0;
 
   virtual void DidSelectOption(HTMLOptionElement* element,
                                HTMLSelectElement::SelectOptionFlags flags,
-                               bool should_update_popup);
+                               bool should_update_popup) = 0;
 
   virtual void OptionRemoved(HTMLOptionElement& option);
   virtual void DidBlur() = 0;
@@ -46,6 +46,9 @@ class SelectType : public GarbageCollected<SelectType> {
   virtual const ComputedStyle* OptionStyle() const;
   virtual void MaximumOptionWidthMightBeChanged() const;
 
+  virtual HTMLOptionElement* SpatialNavigationFocusedOption();
+  virtual HTMLOptionElement* ActiveSelectionEnd() const;
+  virtual void ScrollToSelection();
   virtual void ScrollToOption(HTMLOptionElement* option);
   virtual void SelectAll();
   virtual void SaveListboxActiveSelection();
@@ -55,6 +58,8 @@ class SelectType : public GarbageCollected<SelectType> {
   // This is for ListBoxes.
   virtual void ClearLastOnChangeSelection();
 
+  virtual void CreateShadowSubtree(ShadowRoot& root);
+  virtual Element& InnerElement() const;
   virtual void ShowPopup();
   virtual void HidePopup();
   virtual void PopupDidHide();

@@ -11,6 +11,7 @@
 #include "ash/system/power/battery_notification.h"
 #include "ash/system/power/dual_role_notification.h"
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/devicetype_utils.h"
 #include "ui/message_center/message_center.h"
@@ -142,7 +143,7 @@ bool PowerNotificationController::MaybeShowUsbChargerNotification() {
         message_center::RichNotificationData(),
         new UsbNotificationDelegate(this), kNotificationLowPowerChargerIcon,
         message_center::SystemNotificationWarningLevel::WARNING);
-    notification->set_priority(message_center::SYSTEM_PRIORITY);
+    notification->set_pinned(true);
     message_center_->AddNotification(std::move(notification));
     return true;
   }

@@ -123,6 +123,7 @@ void GetAccessibilityHighlightInfo(
     highlight_info.index_in_page = i;
     highlight_info.bounds = std::move(cur_highlight_info.bounds);
     highlight_info.color = cur_highlight_info.color;
+    highlight_info.note_text = std::move(cur_highlight_info.note_text);
 
     if (!GetEnclosingTextRunRangeForCharRange(
             text_runs, cur_highlight_info.start_char_index,
@@ -163,6 +164,15 @@ void GetAccessibilityTextFieldInfo(
     text_field_info.bounds = std::move(cur_text_field_info.bounds);
     text_fields->push_back(std::move(text_field_info));
   }
+}
+
+void GetAccessibilityFormFieldInfo(
+    PDFEngine* engine,
+    int32_t page_index,
+    uint32_t text_run_count,
+    pp::PDF::PrivateAccessibilityFormFieldInfo* form_fields) {
+  GetAccessibilityTextFieldInfo(engine, page_index, text_run_count,
+                                &form_fields->text_fields);
 }
 
 }  // namespace
@@ -253,8 +263,8 @@ bool GetAccessibilityInfo(
                             &page_objects->images);
   GetAccessibilityHighlightInfo(engine, page_index, *text_runs,
                                 &page_objects->highlights);
-  GetAccessibilityTextFieldInfo(engine, page_index, page_info->text_run_count,
-                                &page_objects->text_fields);
+  GetAccessibilityFormFieldInfo(engine, page_index, page_info->text_run_count,
+                                &page_objects->form_fields);
   return true;
 }
 

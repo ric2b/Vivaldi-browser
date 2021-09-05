@@ -63,7 +63,7 @@
 <translation id="1360699455582016846"><ph name="ROUTING_KEY_NUMBER" /> राउटिंग की मधील आयटम क्लिक करा</translation>
 <translation id="1377925789329510816">हे अंतिम शीर्षक आहे. पहिल्या शीर्षकावर वेष्टन घालण्‍यासाठी Search+H दाबा किंवा या पेजवरील दुसर्‍या शीर्षकावर जाण्यासाठी Search+Shift+H दाबा.</translation>
 <translation id="138218114945450791">फिकट न‍िळा</translation>
-<translation id="1383876407941801731">शोधा</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1396114365388024581">tablst</translation>
 <translation id="1405567553485452995">फिकट हिरवा</translation>
 <translation id="1417889266572670458">गडद निळा</translation>
@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">उजवीकडे स्क्रोल करा</translation>
 <translation id="1781173782405573156">की द्वारे पास करा</translation>
 <translation id="1787176709638001873">पासवर्ड संपादन मजकूर</translation>
+<translation id="180203835522132923">Search + O, त्यानंतर W</translation>
 <translation id="1810107444790159527">सूची बॉक्स</translation>
 <translation id="1812527064848182527">लॅंडस्केप</translation>
 <translation id="1829244130665387512">या पृष्ठामध्ये शोधा</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">दोन बोटांनी डावीकडे स्वाइप करा</translation>
 <translation id="2998131015536248178">मागील वर्ण</translation>
 <translation id="2999559350546931576">पीच कमी करा</translation>
+<translation id="3009352964623081324">Search + O, त्यानंतर S. इंस्टॉल करण्यासाठी, व्यवस्थापित करण्यासाठी आणि व्हॉइस कस्टमाइझ करण्यासाठी वापरा.</translation>
 <translation id="3014130421870723208">@ed 8dot</translation>
 <translation id="3030432017085518523">मेनू आयटम रेडिओ बटण</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{परोक्षसंबोधन}other{# परोक्षसंबोधने}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">घालणे</translation>
 <translation id="4511186779140817916">फिकट बदामी</translation>
 <translation id="451510441928265982">मागील पातळी दोन शीर्षक नाही</translation>
+<translation id="4515799157838123044">आशयाच्या बॅकग्राउंडची रंगछटा</translation>
 <translation id="4517854969512651305">मूल्य वाढवा</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{स्लॅश}other{# स्लॅश}}</translation>
 <translation id="4537277403911487429">पुढील यासारखा आयटम</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">भाग</translation>
 <translation id="6637586476836377253">लॉग</translation>
 <translation id="6657128831881431364">प्रगती बार</translation>
+<translation id="6660819301598582123">चपळ तपकिरी कोल्ह्याने आळशी कुत्र्यावरून उडी मारली.</translation>
 <translation id="667999046851023355">दस्तऐवज</translation>
 <translation id="6688209025607531203">एक मॉडेल नसलेली सूचना</translation>
 <translation id="6689672606256159458">गडद तांबूस पिवळा</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">पुढील पातळी पाच शीर्षक नाही</translation>
 <translation id="6955705049214951590">फिकट गुलाबी</translation>
 <translation id="696356426651109308">थेट सुरुवातीवर जा</translation>
-<translation id="699159175332639490">+ O + W शोधा</translation>
 <translation id="6994042831499278539">शब्दावली संदर्भ</translation>
 <translation id="6996566555547746822">पुढील कॉम्बो बॉक्स</translation>
 <translation id="6997224546856374593">कॅपिटल अक्षरे वाचताना:</translation>
@@ -765,7 +768,7 @@
 <translation id="7137397390322864165">तांबूस पिवळा</translation>
 <translation id="7140168702531682811">सुपरस्क्रिप्ट</translation>
 <translation id="7143034430156387447">6 आणि 8 बिंदू ब्रेलमध्ये टॉगल करा</translation>
-<translation id="7143207342074048698">कनेक्ट करीत आहे</translation>
+<translation id="7143207342074048698">कनेक्ट करत आहे</translation>
 <translation id="7153618581592392745">फिकट जांभळा</translation>
 <translation id="7157306005867877619">अमूर्त</translation>
 <translation id="7161771961008409533">पॉप-अप बटण</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">उदाहरण</translation>
 <translation id="7439060726180460871">डिरेक्टरी</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">घटक प्रकार आणि कोट केलेला, हटवलेला, ठळक केलेला, कंसात लिहिलेला किंवा कॅपिटलाइझ केलेला मजकूर बोलताना पिच बदला.</translation>
 <translation id="7491962110804786152">टॅब</translation>
 <translation id="7505149250476994901">अक्षरापूर्वी "कॅप" म्हणा</translation>
 <translation id="7518543783849163354">तात्पुरते ChromeVox चे बोलणे थांबविण्यासाठी, Control की दाबा.</translation>

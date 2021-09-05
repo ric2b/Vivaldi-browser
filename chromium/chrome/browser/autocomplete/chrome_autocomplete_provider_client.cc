@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <algorithm>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/stl_util.h"
@@ -54,7 +56,11 @@
 #include "chrome/browser/autocomplete/keyword_extensions_delegate_impl.h"
 #endif
 
-#if !defined(OS_ANDROID)
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/tab_android.h"
+#include "chrome/browser/ui/android/tab_model/tab_model.h"
+#include "chrome/browser/ui/android/tab_model/tab_model_list.h"
+#else
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -346,19 +352,21 @@ void ChromeAutocompleteProviderClient::StartServiceWorker(
 bool ChromeAutocompleteProviderClient::IsTabOpenWithURL(
     const GURL& url,
     const AutocompleteInput* input) {
-#if !defined(OS_ANDROID)
-  Browser* active_browser = BrowserList::GetInstance()->GetLastActive();
-  content::WebContents* active_tab = nullptr;
-  if (active_browser)
-    active_tab = active_browser->tab_strip_model()->GetActiveWebContents();
+#if defined(OS_ANDROID)
+  return GetTabOpenWithURL(url, input) != nullptr;
+#else
   const AutocompleteInput empty_input;
   if (!input)
     input = &empty_input;
   const GURL stripped_url = AutocompleteMatch::GURLToStrippedGURL(
       url, *input, GetTemplateURLService(), base::string16());
+  Browser* active_browser = BrowserList::GetInstance()->GetLastActive();
+  content::WebContents* active_tab = nullptr;
+  if (active_browser)
+    active_tab = active_browser->tab_strip_model()->GetActiveWebContents();
   for (auto* browser : *BrowserList::GetInstance()) {
     // Only look at same profile (and anonymity level).
-    if (browser->profile()->IsSameProfileAndType(profile_)) {
+    if (profile_ == browser->profile()) {
       for (int i = 0; i < browser->tab_strip_model()->count(); ++i) {
         content::WebContents* web_contents =
             browser->tab_strip_model()->GetWebContentsAt(i);
@@ -368,8 +376,8 @@ bool ChromeAutocompleteProviderClient::IsTabOpenWithURL(
       }
     }
   }
-#endif  // !defined(OS_ANDROID)
   return false;
+#endif  // defined(OS_ANDROID)
 }
 
 bool ChromeAutocompleteProviderClient::IsBrowserUpdateAvailable() const {
@@ -450,3 +458,43 @@ bool ChromeAutocompleteProviderClient::IsStrippedURLEqualToWebContentsURL(
   }
   return stripped_url == user_data->GetLastCommittedStrippedURL();
 }
+
+#if defined(OS_ANDROID)
+TabAndroid* ChromeAutocompleteProviderClient::GetTabOpenWithURL(
+    const GURL& url,
+    const AutocompleteInput* input) {
+  const AutocompleteInput empty_input;
+  if (!input)
+    input = &empty_input;
+  const GURL stripped_url = AutocompleteMatch::GURLToStrippedGURL(
+      url, *input, GetTemplateURLService(), base::string16());
+
+  for (auto it = TabModelList::begin(); it != TabModelList::end(); ++it) {
+    TabModel* model = *it;
+    if (profile_ != model->GetProfile())
+      continue;
+
+    for (int i = 0; i < model->GetTabCount(); ++i) {
+      TabAndroid* tab = model->GetTabAt(i);
+      if (!tab->IsHidden() || tab->IsCustomTab())
+        continue;
+      content::WebContents* web_contents = tab->web_contents();
+      if (web_contents != nullptr) {
+        if (IsStrippedURLEqualToWebContentsURL(stripped_url, web_contents))
+          return tab;
+      } else {
+        // Browser did not load the tab yet after Chrome started. To avoid
+        // reloading WebContents, we just compare URLs.
+        // TODO(1094056) : Let's TabAndroid to support base::SupportsUserData,
+        // so we can avoid create new url over and over again.
+        const GURL tab_stripped_url = AutocompleteMatch::GURLToStrippedGURL(
+            tab->GetURL(), AutocompleteInput(), GetTemplateURLService(),
+            base::string16());
+        if (tab_stripped_url == stripped_url)
+          return tab;
+      }
+    }
+  }
+  return nullptr;
+}
+#endif  // defined(OS_ANDROID)

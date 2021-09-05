@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">Унос за јапански (за америчку тастатуру)</translation>
 <translation id="1047956942837015229">Брисање ставки (<ph name="COUNT" />)...</translation>
 <translation id="1049926623896334335">Word документ</translation>
+<translation id="1060368002126861100">Да бисте отварали датотеке помоћу апликације <ph name="APP_NAME" />, прво их преместите у директоријум са Windows датотекама.</translation>
 <translation id="1062407476771304334">Замени</translation>
 <translation id="1065449928621190041">Језик тастатуре: француски (Канада)</translation>
 <translation id="1119069657431255176">Bzip2 компримована tar архива</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">Клизач за тражење</translation>
 <translation id="1399648040768741453">Телугу тастатура (фонетска)</translation>
 <translation id="1430915738399379752">Штампај</translation>
+<translation id="1433600251059882049">Овај директоријум се дели са Linux-ом и Windows-ом</translation>
+<translation id="1435838927755162558">Делите директоријум са Parallels Desktop-ом</translation>
 <translation id="1439494416798956626">Премештено у: <ph name="FOLDER_NAME" /></translation>
 <translation id="1441841714100794440">Вијетнамска тастатура (Telex)</translation>
 <translation id="1455548678241328678">Језик тастатуре: норвешки</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">Ова датотека није доступна ван мреже.</translation>
 <translation id="184633654410729720">Тајска тастатура (Kedmanee)</translation>
 <translation id="1847880352285315359">Сачувано је</translation>
+<translation id="1853795129690976061">Овај директоријум се дели са Linux-ом</translation>
 <translation id="1864756863218646478">Није могуће пронаћи датотеку.</translation>
 <translation id="1921986354447415460">турска F тастатура</translation>
 <translation id="1924372192547904021">Форматирање меморијског уређаја <ph name="DRIVE_NAME" /> је успело</translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">Синхалска тастатура</translation>
 <translation id="240770291734945588"><ph name="SPACE_AVAILABLE" /> слободног простора</translation>
 <translation id="2425665904502185219">Укупна величина датотеке</translation>
+<translation id="2428749644083375155">Ставке (<ph name="NUMBER_OF_ITEMS" />) се копирају у директоријум <ph name="FOLDER_NAME" /></translation>
 <translation id="2448312741937722512">Тип</translation>
 <translation id="2453576648990281505">Датотека већ постоји</translation>
 <translation id="2464079411014186876">Сладолед</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">Географија</translation>
 <translation id="3057861065630527966">Направите резервне копије слика и видео снимака</translation>
 <translation id="3064388234319122767">Транслитерација (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Windows датотеке</translation>
 <translation id="3078461028045006476">Дели помоћу додатка <ph name="EXTENSION_NAME" /></translation>
 <translation id="3088034400796962477">Транслитерација (salam ← سلام)</translation>
 <translation id="3116361045094675131">Језик тастатуре: енглески (УК)</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">Опрез: Ове датотеке су привремене и могу да се избришу аутоматски како би се ослободио простор на диску.  <ph name="BEGIN_LINK" />Сазнајте више<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Директоријум</translation>
 <translation id="3549797760399244642">Иди на drive.google.com...</translation>
+<translation id="3553048479571901246">Да бисте отварали датотеке помоћу апликације <ph name="APP_NAME" />, прво их копирајте у директоријум са Windows датотекама.</translation>
 <translation id="357479282490346887">литвански</translation>
 <translation id="3583509704582854624">Алфанумерички унос (за јапанску тастатуру)</translation>
 <translation id="3603385196401704894">канадска француска</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">Верзија</translation>
 <translation id="3801082500826908679">Фарска</translation>
 <translation id="3809272675881623365">Зец</translation>
+<translation id="3810973564298564668">Промени</translation>
 <translation id="3811494700605067549">Изабрана је 1 датотека</translation>
 <translation id="3815016854028376614">Метод уноса џујин</translation>
 <translation id="3825863595139017598">Монголска тастатура</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">Налепи</translation>
 <translation id="3958548648197196644">Киви</translation>
 <translation id="3966388904776714213">Аудио плејер</translation>
+<translation id="3984317463833596033">Дозволите да Parallels Desktop мења датотеке у директоријуму <ph name="FOLDER_NAME" /></translation>
 <translation id="4002066346123236978">Наслов</translation>
-<translation id="4065397611279318371">Да бисте отварали датотеке помоћу апликације <ph name="APP_NAME" />, прво их преместите у директоријум <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Mетод уноса за кантонски</translation>
 <translation id="4072248638558688893">Тамилска тастатура (фонетска)</translation>
 <translation id="4124935795427217608">Једнорог</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">Хангул, 2 реда</translation>
 <translation id="4477219268485577442">бугарска фонетска</translation>
 <translation id="4479812471636796472">Језик тастатуре: енглески (САД дворак)</translation>
+<translation id="4481711095103932593">Овај директоријум се дели са Windows-ом</translation>
 <translation id="4487088045714738411">Језик тастатуре: белгијски</translation>
 <translation id="4522570452068850558">Детаљи</translation>
 <translation id="4552678318981539154">Купи још меморијског простора</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346">Ставка <ph name="ENTRY_NAME" /> је додата у избор.</translation>
 <translation id="4582497162516204941">Инсталирај за Linux (бета)</translation>
 <translation id="4594543368593301662">Приказују се резултати за: <ph name="SEARCH_TERM" />.</translation>
+<translation id="4603392156942865207"><ph name="FILE_NAME" /> се копира у директоријум <ph name="FOLDER_NAME" /></translation>
 <translation id="4631887759990505102">Извођач</translation>
 <translation id="4656293982926141856">Овај рачунар</translation>
 <translation id="4669606053856530811">Чланови из „<ph name="SOURCE_NAME" />“ ће изгубити приступ ако се ове ставке не деле са њима.</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">Аутоматски исправи</translation>
 <translation id="4881695831933465202">Отвори</translation>
 <translation id="4886021172213954916">Тамилска тастатура (писаћа машина)</translation>
-<translation id="4892969127351273348">Отварање помоћу апликације <ph name="APP_NAME" /> није успело</translation>
+<translation id="4900532980794411603">Дели са Parallels Desktop-ом</translation>
 <translation id="4905417359854579806">Све је спремно за прављење резервних копија (<ph name="FILE_COUNT" />)</translation>
 <translation id="4924638091161556692">Фиксирана</translation>
 <translation id="4935975195727477204">Цвет газаније</translation>
 <translation id="4943368462779413526">Фудбалска лопта</translation>
+<translation id="4961158930123534723">1 директоријум се дели са Parallels Desktop-ом</translation>
 <translation id="4969785127455456148">Албум</translation>
 <translation id="497244430928947428">Малајалам тастатура (фонетска)</translation>
 <translation id="4973523518332075481">Користите назив чији је максимални број знакова <ph name="MAX_LENGTH" /></translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">Рачунари</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">Радња траје дуже од очекиваног. Желите ли да је прекинете?</translation>
+<translation id="5036159836254554629">Управљајте дељењем помоћу Parallels Desktop-а</translation>
 <translation id="5038625366300922036">Прикажи више...</translation>
 <translation id="5061708541166515394">Контраст</translation>
 <translation id="5068919226082848014">Пица</translation>
 <translation id="5081517858322016911"><ph name="TOTAL_FILE_SIZE" /> датотека ће се избрисати</translation>
+<translation id="508423945471810158">Ставке (<ph name="NUMBER_OF_ITEMS" />) се премештају у директоријум <ph name="FOLDER_NAME" /></translation>
 <translation id="509429900233858213">Дошло је до грешке.</translation>
 <translation id="5098629044894065541">хебрејски</translation>
 <translation id="5123433949759960244">Кошаркашка лопта</translation>
@@ -453,6 +466,7 @@
 <translation id="6054173164583630569">Језик тастатуре: француски</translation>
 <translation id="6074825444536523002">Google образац</translation>
 <translation id="6096979789310008754">Текст претраге је обрисан, приказују се све датотеке и директоријуми.</translation>
+<translation id="610101264611565198"><ph name="FILE_NAME" /> се премешта у директоријум <ph name="FOLDER_NAME" /></translation>
 <translation id="6111770213269631447">Транслитерација (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">Размак</translation>
 <translation id="6133173853026656527">Премештање датотеке <ph name="FILE_NAME" />...</translation>
@@ -493,6 +507,7 @@
 <translation id="656398493051028875">Брисање „<ph name="FILENAME" />“...</translation>
 <translation id="6581162200855843583">Веза Google диска</translation>
 <translation id="6607272825297743757">Информације о датотеци</translation>
+<translation id="6609332149380188670">Директоријуми (<ph name="NUMBER_OF_ITEMS" />) се деле са Parallels Desktop-ом</translation>
 <translation id="6629841649550503054">Резервне копије свих датотека су направљене на <ph name="BEGIN_LINK" />Google диску!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Обриши</translation>
 <translation id="6650726141019353908">Ружичасти лептир</translation>
@@ -536,6 +551,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Инсталација није успела.</translation>
 <translation id="7040138676081995583">Отвори помоћу апликације...</translation>
+<translation id="7059566040011178088">Мање од <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">Изабраних ставки: <ph name="COUNT" /></translation>
 <translation id="7106346894903675391">Купи још меморијског простора...</translation>
 <translation id="7126604456862387217">„&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;“ – &lt;em&gt;претражи Диск&lt;/em&gt;</translation>
@@ -646,6 +662,7 @@
 <translation id="8193175696669055101">Модел уређаја</translation>
 <translation id="8208580316430297579">Илустрације</translation>
 <translation id="8223479393428528563">Да бисте сачували ове датотеке за офлајн коришћење, повежите се поново на интернет, кликните десним тастером на датотеке и изаберите опцију <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
+<translation id="8231972167769262174">Око <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Откажи</translation>
 <translation id="8261506727792406068">Избриши</translation>
 <translation id="8269755669432358899">Скупи окна за повратне информације о датотекама</translation>
@@ -672,6 +689,7 @@
 <translation id="8475647382427415476">Google диск тренутно није успео да синхронизује „<ph name="FILENAME" />“. Google диск ће покушати поново касније.</translation>
 <translation id="8477649328507734757">Окретање</translation>
 <translation id="8487700953926739672">Доступно ван мреже</translation>
+<translation id="8490342535582768689">Дозволите да Parallels Desktop мења датотеке на Google диску. Промене ће се синхронизовати са другим уређајима.</translation>
 <translation id="8521441079177373948">УК</translation>
 <translation id="8525306231823319788">Цео екран</translation>
 <translation id="8551494947769799688">летонски</translation>

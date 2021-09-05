@@ -35,10 +35,10 @@ base::Optional<ResourceRequestBlockedReason> BaseFetchContext::CanRequest(
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
-    ResourceRequest::RedirectStatus redirect_status) const {
+    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info) const {
   base::Optional<ResourceRequestBlockedReason> blocked_reason =
       CanRequestInternal(type, resource_request, url, options,
-                         reporting_disposition, redirect_status);
+                         reporting_disposition, redirect_info);
   if (blocked_reason &&
       reporting_disposition == ReportingDisposition::kReport) {
     DispatchDidBlockRequest(resource_request, options.initiator_info,
@@ -62,7 +62,7 @@ bool BaseFetchContext::CalculateIfAdSubresource(
 
 bool BaseFetchContext::SendConversionRequestInsteadOfRedirecting(
     const KURL& url,
-    ResourceRequest::RedirectStatus redirect_status,
+    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
     ReportingDisposition reporting_disposition) const {
   return false;
 }
@@ -96,10 +96,11 @@ BaseFetchContext::CheckCSPForRequest(
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
+    const KURL& url_before_redirects,
     ResourceRequest::RedirectStatus redirect_status) const {
   return CheckCSPForRequestInternal(
       request_context, request_destination, url, options, reporting_disposition,
-      redirect_status,
+      url_before_redirects, redirect_status,
       ContentSecurityPolicy::CheckHeaderType::kCheckReportOnly);
 }
 
@@ -110,6 +111,7 @@ BaseFetchContext::CheckCSPForRequestInternal(
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
+    const KURL& url_before_redirects,
     ResourceRequest::RedirectStatus redirect_status,
     ContentSecurityPolicy::CheckHeaderType check_header_type) const {
   if (ShouldBypassMainWorldCSP() ||
@@ -119,11 +121,12 @@ BaseFetchContext::CheckCSPForRequestInternal(
   }
 
   const ContentSecurityPolicy* csp = GetContentSecurityPolicy();
-  if (csp && !csp->AllowRequest(request_context, request_destination, url,
-                                options.content_security_policy_nonce,
-                                options.integrity_metadata,
-                                options.parser_disposition, redirect_status,
-                                reporting_disposition, check_header_type)) {
+  if (csp &&
+      !csp->AllowRequest(request_context, request_destination, url,
+                         options.content_security_policy_nonce,
+                         options.integrity_metadata, options.parser_disposition,
+                         url_before_redirects, redirect_status,
+                         reporting_disposition, check_header_type)) {
     return ResourceRequestBlockedReason::kCSP;
   }
   return base::nullopt;
@@ -136,10 +139,9 @@ BaseFetchContext::CanRequestInternal(
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
-    ResourceRequest::RedirectStatus redirect_status) const {
+    const base::Optional<ResourceRequest::RedirectInfo>& redirect_info) const {
   if (GetResourceFetcherProperties().IsDetached()) {
-    if (!resource_request.GetKeepalive() ||
-        redirect_status == ResourceRequest::RedirectStatus::kNoRedirect) {
+    if (!resource_request.GetKeepalive() || !redirect_info) {
       return ResourceRequestBlockedReason::kOther;
     }
   }
@@ -196,12 +198,17 @@ BaseFetchContext::CanRequestInternal(
   network::mojom::RequestDestination request_destination =
       resource_request.GetRequestDestination();
 
+  const KURL& url_before_redirects =
+      redirect_info ? redirect_info->original_url : url;
+  const ResourceRequestHead::RedirectStatus redirect_status =
+      redirect_info ? ResourceRequestHead::RedirectStatus::kFollowedRedirect
+                    : ResourceRequestHead::RedirectStatus::kNoRedirect;
   // We check the 'report-only' headers before upgrading the request (in
   // populateResourceRequest). We check the enforced headers here to ensure we
   // block things we ought to block.
   if (CheckCSPForRequestInternal(
           request_context, request_destination, url, options,
-          reporting_disposition, redirect_status,
+          reporting_disposition, url_before_redirects, redirect_status,
           ContentSecurityPolicy::CheckHeaderType::kCheckEnforce) ==
       ResourceRequestBlockedReason::kCSP) {
     return ResourceRequestBlockedReason::kCSP;
@@ -242,9 +249,9 @@ BaseFetchContext::CanRequestInternal(
   // Check for mixed content. We do this second-to-last so that when folks block
   // mixed content via CSP, they don't get a mixed content warning, but a CSP
   // warning instead.
-  if (ShouldBlockFetchByMixedContentCheck(
-          request_context, resource_request.GetRedirectStatus(), url,
-          reporting_disposition, resource_request.GetDevToolsId())) {
+  if (ShouldBlockFetchByMixedContentCheck(request_context, redirect_info, url,
+                                          reporting_disposition,
+                                          resource_request.GetDevToolsId())) {
     return ResourceRequestBlockedReason::kMixedContent;
   }
 
@@ -260,7 +267,7 @@ BaseFetchContext::CanRequestInternal(
     return ResourceRequestBlockedReason::kOther;
   }
 
-  if (SendConversionRequestInsteadOfRedirecting(url, redirect_status,
+  if (SendConversionRequestInsteadOfRedirecting(url, redirect_info,
                                                 reporting_disposition)) {
     return ResourceRequestBlockedReason::kOther;
   }
@@ -277,7 +284,7 @@ BaseFetchContext::CanRequestInternal(
   return base::nullopt;
 }
 
-void BaseFetchContext::Trace(Visitor* visitor) {
+void BaseFetchContext::Trace(Visitor* visitor) const {
   visitor->Trace(fetcher_properties_);
   FetchContext::Trace(visitor);
 }

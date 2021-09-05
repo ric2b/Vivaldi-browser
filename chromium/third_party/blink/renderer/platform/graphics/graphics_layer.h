@@ -112,9 +112,6 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   void RemoveAllChildren();
   void RemoveFromParent();
 
-  GraphicsLayer* MaskLayer() const { return mask_layer_; }
-  void SetMaskLayer(GraphicsLayer*);
-
   // The offset is the origin of the layoutObject minus the origin of the
   // graphics layer (so either zero or negative).
   IntSize OffsetFromLayoutObject() const { return offset_from_layout_object_; }
@@ -123,8 +120,6 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   // The size of the layer.
   const gfx::Size& Size() const;
   void SetSize(const gfx::Size&);
-
-  void SetRenderingContext(int id);
 
   bool DrawsContent() const { return draws_content_; }
   void SetDrawsContent(bool);
@@ -151,11 +146,10 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   // Opaque means that we know the layer contents have no alpha.
   bool ContentsOpaque() const;
   void SetContentsOpaque(bool);
+  void SetContentsOpaqueForText(bool);
 
   void SetHitTestable(bool);
   bool GetHitTestable() const { return hit_testable_; }
-
-  void SetFilterQuality(SkFilterQuality);
 
   // Some GraphicsLayers paint only the foreground or the background content
   GraphicsLayerPaintingPhase PaintingPhase() const { return painting_phase_; }
@@ -292,20 +286,14 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   bool hit_testable_ : 1;
   bool needs_check_raster_invalidation_ : 1;
 
-  bool painted_ : 1;
-
   GraphicsLayerPaintingPhase painting_phase_;
 
   Vector<GraphicsLayer*> children_;
   GraphicsLayer* parent_;
 
-  // Reference to mask layer. We don't own this.
-  GraphicsLayer* mask_layer_;
-
   IntRect contents_rect_;
 
   scoped_refptr<cc::PictureLayer> layer_;
-  IntSize image_size_;
   scoped_refptr<cc::Layer> contents_layer_;
 
   SquashingDisallowedReasons squashing_disallowed_reasons_ =
@@ -327,8 +315,6 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
 
   DOMNodeId owner_node_id_ = kInvalidDOMNodeId;
   CompositingReasons compositing_reasons_ = CompositingReason::kNone;
-
-  FRIEND_TEST_ALL_PREFIXES(CompositingLayerPropertyUpdaterTest, MaskLayerState);
 
   DISALLOW_COPY_AND_ASSIGN(GraphicsLayer);
 };

@@ -64,10 +64,12 @@
 <translation id="2522350507219695259">ការ​ក្រិត​​ខ្នាត​ត្រូវបានបញ្ចប់</translation>
 <translation id="252373100621549798">អេក្រង់មិនស្គាល់</translation>
 <translation id="2545651323591713692">ផ្អាក</translation>
+<translation id="2570734079541893434">គ្រប់គ្រង​ការកំណត់</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{1 ម៉ោងទៀត}other{# ម៉ោងទៀត}}</translation>
 <translation id="2583543531130364912">ក្រិត​អេក្រង់​ចុច​របស់​អ្នក</translation>
 <translation id="2666092431469916601">ខាងលើ</translation>
 <translation id="2701330563083355633">បាន​ចែករំលែក​ពី <ph name="DEVICE_NAME" /></translation>
+<translation id="271033894570825754">ថ្មី</translation>
 <translation id="2743387203779672305">ចម្លងទៅផ្ទាំងឃ្លីបបត</translation>
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">បើកថតឯកសារ</translation>
@@ -135,6 +137,7 @@
 <translation id="5463830097259460683">រូប​អារម្មណ៍ និង​និមិត្តសញ្ញា</translation>
 <translation id="5476505524087279545">ដកធីក</translation>
 <translation id="547979256943495781">ធ្នើ​នៅខាង​ស្ដាំ</translation>
+<translation id="5528053674512161860">ការផ្ទុក​ទំព័រ​មិនបានសម្រេច​ទេ ដោយសារ​មិនបានដំឡើង​ម៉ូឌុល UI អ្នកអភិវឌ្ឍន៍ (dev_ui)</translation>
 <translation id="5574202486608032840">ប្រព័ន្ធ <ph name="IDS_SHORT_PRODUCT_OS_NAME" /></translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5613020302032141669">ព្រួញខាងឆ្វេង</translation>
@@ -152,10 +155,12 @@
 <translation id="6040143037577758943">បិទ</translation>
 <translation id="6119846243427417423">ធ្វើសកម្មភាព</translation>
 <translation id="6129953537138746214">ដកឃ្លា</translation>
+<translation id="6134259848159370930">ស្វែងរក​ឧបករណ៍ កម្មវិធី ការកំណត់ និង​បណ្ដាញ​របស់អ្នក​។</translation>
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/វិនាទី</translation>
 <translation id="6156262341071374681">ពង្រីកទៅកម្មវិធីទាំងអស់</translation>
 <translation id="6165508094623778733">ស្វែងយល់​បន្ថែម</translation>
+<translation id="6166852626429024716">ស្វែងរក​ឧបករណ៍ កម្មវិធី ការកំណត់ បណ្ដាញ​របស់អ្នក...</translation>
 <translation id="6264365405983206840">ជ្រើសរើសទាំងអស់</translation>
 <translation id="6351032674660237738">ការណែនាំកម្មវិធី</translation>
 <translation id="6364916375976753737">ទាញទៅឆ្វេង</translation>
@@ -192,7 +197,6 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{នៅសល់ 1 នាទីទៀត}other{នៅសល់ # នាទីទៀត}}</translation>
 <translation id="7319740667687257810">កម្មវិធី​ចាប់ផ្ដើម ទិដ្ឋភាព​ដោយផ្នែក</translation>
-<translation id="7352651011704765696">មានបញ្ហាអ្វីមួយកើតឡើង</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{1 នាទីមុន}other{# នាទីមុន}}</translation>
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{នៅសល់ 1 នាទីទៀត}other{នៅសល់ # នាទីទៀត}}</translation>
@@ -205,6 +209,7 @@
 <translation id="7848989271541991537">បានផ្លាស់ទី​ទៅទំព័រទី <ph name="PAGE_NUMBER" /> ជួរដេកទី <ph name="ROW_NUMBER" /> ជួរឈរទី <ph name="COLUMN_NUMBER" />។</translation>
 <translation id="7879499977785298635">កុំទប់ស្កាត់</translation>
 <translation id="7907591526440419938">បើកឯកសារ</translation>
+<translation id="7952747673138230804">Chrome OS បង្ហាញការណែនាំខ្លឹមសារថ្មី សម្រាប់ធ្វើការរុករក។ ផ្ញើ​ស្ថិតិ ដើម្បីកែលម្អគុណភាព ប្រសិនបើអ្នកបានជ្រើសរើស​ចែករំលែកទិន្នន័យ​ប្រើប្រាស់តែប៉ុណ្ណោះ។ <ph name="MANAGE_SETTINGS" /></translation>
 <translation id="7969046989155602842">បញ្ជា</translation>
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{ការជូនដំណឹង​ដែលមិនទាន់អាន​ច្រើនជាង 1}other{ការជូនដំណឹង​ដែលមិនទាន់អាន​ច្រើនជាង #}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{1 នាទីទៀត}other{# នាទីទៀត}}</translation>
@@ -231,6 +236,7 @@
 <translation id="8602707065186045623"><ph name="SAVEAS_EXTENSION_TYPE" /> ឯកសារ (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8649597172973390955">បង្ហាញធ្នើ​ជានិច្ច</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> KB/វិនាទី</translation>
+<translation id="8685326675965865247">ស្វែងរក​ឧបករណ៍ កម្មវិធី ការកំណត់ និង​បណ្ដាញ​របស់អ្នក។ សូមប្រើ​គ្រាប់ចុច​ព្រួញ ដើម្បីរុករក​កម្មវិធី​របស់អ្នក។</translation>
 <translation id="8725488761726303204">+<ph name="NUMBER" /> ទៀត</translation>
 <translation id="8730621377337864115">រួចរាល់</translation>
 <translation id="8772073294905169192">{HOURS,plural, =1{1 ម៉}other{# ម៉}}</translation>

@@ -16,6 +16,9 @@ namespace {
 std::unique_ptr<JSONObject> GraphicsLayerAsJSON(const GraphicsLayer* layer,
                                                 LayerTreeFlags flags) {
   auto json = CCLayerAsJSON(layer->CcLayer(), flags);
+  // CCLayerAsJSON() doesn't know the name before paint or if the layer is a
+  // legacy GraphicsLayer which doesn't contribute to the cc layer list.
+  json->SetString("name", layer->DebugName());
 
   // Content dumped after this point, down to AppendAdditionalInfoAsJSON, is
   // specific to GraphicsLayer tree dumping when called from one of the methods
@@ -34,14 +37,6 @@ std::unique_ptr<JSONObject> GraphicsLayerAsJSON(const GraphicsLayer* layer,
 
   if (!layer->ContentsAreVisible())
     json->SetBoolean("contentsVisible", false);
-
-  // MaskLayers are output via ForeignLayerDisplayItem iteration in the other
-  // dumping code paths.
-  if (layer->MaskLayer()) {
-    auto mask_layer_json = std::make_unique<JSONArray>();
-    mask_layer_json->PushObject(GraphicsLayerAsJSON(layer->MaskLayer(), flags));
-    json->SetArray("maskLayer", std::move(mask_layer_json));
-  }
 
   if (layer->HasLayerState() && (flags & (kLayerTreeIncludesDebugInfo |
                                           kLayerTreeIncludesPaintRecords))) {

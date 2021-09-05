@@ -10,6 +10,7 @@
 <translation id="1201402288615127009">Tjetra</translation>
 <translation id="1242008676835033345">Integruar në <ph name="WEBSITE_URL" /></translation>
 <translation id="1272079795634619415">Ndalo</translation>
+<translation id="1289742167380433257">Për të ruajtur të dhënat, imazhet e kësaj faqeje janë optimizuar nga Google.</translation>
 <translation id="129382876167171263">Skedarët e ruajtur nga sajtet e uebit shfaqen këtu</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" /> - <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">Sajti <ph name="SITE_NAME" /> u shtua</translation>
@@ -42,6 +43,7 @@
 <translation id="2182457891543959921">Pyet përpara se të lejosh krijimin nga sajtet të një harte 3D të ambientit tënd rrethues ose gjurmimin prej tyre të pozicionit të kamerës (rekomandohet)</translation>
 <translation id="2212565012507486665">Lejo kukit</translation>
 <translation id="2289270750774289114">Pyet kur një sajt dëshiron të zbulojë pajisjet Bluetooth në afërsi (rekomandohet)</translation>
+<translation id="2315043854645842844">Përzgjedhja e certifikatës nga ana e klientit nuk mbështetet nga sistemi operativ.</translation>
 <translation id="2359808026110333948">Vazhdo</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2434158240863470628">Shkarkimi përfundoi <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -61,10 +63,12 @@
 <translation id="2704606927547763573">Kopjuar</translation>
 <translation id="2822354292072154809">Je i sigurt që dëshiron t'i rivendosësh të gjitha lejet e sajtit për <ph name="CHOSEN_OBJECT_NAME" />?</translation>
 <translation id="2870560284913253234">Sajti</translation>
+<translation id="2874939134665556319">Kënga e mëparshme</translation>
 <translation id="2910701580606108292">Pyet përpara se sajtet të lejohen të luajnë përmbajtje të mbrojtura</translation>
 <translation id="2913331724188855103">Lejo faqet të ruajnë dhe lexojnë të dhënat e kukive (rekomandohet)</translation>
 <translation id="2968755619301702150">Shikuesi i certifikatave</translation>
 <translation id="300526633675317032">Kjo do të pastrojë të gjitha <ph name="SIZE_IN_KB" /> të hapësirës ruajtëse të sajtit të uebit.</translation>
+<translation id="301521992641321250">Bllokuar automatikisht</translation>
 <translation id="3115898365077584848">Shfaq informacionin</translation>
 <translation id="3123473560110926937">Bllokuar në disa sajte</translation>
 <translation id="3190152372525844641">Aktivizo lejimet për Chrome te <ph name="BEGIN_LINK" />"Cilësimet" e Android<ph name="END_LINK" />.</translation>
@@ -83,16 +87,19 @@
 <translation id="3744111561329211289">Sinkronizimi në sfond</translation>
 <translation id="3822502789641063741">Të pastrohet hapësira ruajtëse e sajtit?</translation>
 <translation id="385051799172605136">Prapa</translation>
+<translation id="3859306556332390985">Kërko përpara</translation>
 <translation id="3955193568934677022">Lejo që sajtet të luajnë përmbajtje të mbrojtur (rekomandohet)</translation>
 <translation id="3987993985790029246">Kopjo lidhjen</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">Titulli</translation>
 <translation id="4008040567710660924">Lejo kukit për një sajt specifik.</translation>
+<translation id="4046123991198612571">Kënga tjetër</translation>
 <translation id="4165986682804962316">Cilësimet e sajtit</translation>
 <translation id="4226663524361240545">Njoftimet mund të bëjnë që pajisja të dridhet</translation>
 <translation id="4242533952199664413">Hap cilësimet</translation>
 <translation id="4259722352634471385">Lundrimi është bllokuar: <ph name="URL" /></translation>
 <translation id="4278390842282768270">Të lejuara</translation>
+<translation id="429312253194641664">Një sajt po luan media</translation>
 <translation id="4433925000917964731">Faqja e lehtë ofrohet nga Google.</translation>
 <translation id="4434045419905280838">Dritaret kërcyese dhe ridrejtimet</translation>
 <translation id="445467742685312942">Lejo sajtet të luajnë përmbajtje të mbrojtura</translation>
@@ -107,6 +114,7 @@
 <translation id="4962975101802056554">Anulo të gjitha lejet për pajisjen</translation>
 <translation id="4964199952259983386">Për të lejuar që Chrome të përdorë AR, aktivizo gjithashtu kamerën në <ph name="BEGIN_LINK" />Cilësimet e Android<ph name="END_LINK" />.</translation>
 <translation id="497421865427891073">Vazhdo përpara</translation>
+<translation id="4996978546172906250">Ndaje nëpërmjet</translation>
 <translation id="5039804452771397117">Lejo</translation>
 <translation id="5048398596102334565">Lejoju faqeve të të hapin sensorët e lëvizjes (rekomandohet)</translation>
 <translation id="5063480226653192405">Përdorimi</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">Pastro</translation>
 <translation id="6697925417670533197">Shkarkimet aktive</translation>
 <translation id="6746124502594467657">Lëviz poshtë</translation>
+<translation id="6766622839693428701">Rrëshqit shpejt poshtë për ta mbyllur.</translation>
 <translation id="6782111308708962316">Parandalo sajtet e uebit të palëve të treta që të ruajnë dhe lexojnë të dhënat e kukive</translation>
+<translation id="6790428901817661496">Luaj</translation>
 <translation id="6818926723028410516">Zgjidh artikujt</translation>
 <translation id="6864395892908308021">Kjo pajisje nuk mund të lexojë NFC-në</translation>
 <translation id="6910211073230771657">Fshirë</translation>
@@ -197,6 +207,7 @@
 <translation id="7804248752222191302">Një sajt po përdor kamerën tënde</translation>
 <translation id="7817023149356982970">Do të dalësh nga ky sajt.</translation>
 <translation id="7828557259026017104">Kukit janë skedarë të krijuar nga sajtet e uebit që viziton ti. Përdori ato për të kujtuar preferencat e tua. Kukit e palëve të treta krijohen nga sajte të tjera. Këto sajte zotërojnë disa nga përmbajtjet, si p.sh. reklamat ose imazhet që ti shikon në faqen e uebit që viziton.</translation>
+<translation id="7835852323729233924">Po luan media</translation>
 <translation id="7846076177841592234">Anulo zgjedhjen</translation>
 <translation id="7846621471902887024">Do të dalësh nga të gjitha sajtet.</translation>
 <translation id="7882806643839505685">Lejo tingullin për një sajt specifik.</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">Je i sigurt që dëshiron t'i pastrosh të gjitha të dhënat lokale, duke përfshirë kukit, dhe të rivendosësh të gjitha lejet për këtë sajt uebi?</translation>
 <translation id="8007176423574883786">E çaktivizuar për këtë pajisje</translation>
 <translation id="802154636333426148">Shkarkimi dështoi</translation>
+<translation id="8068648041423924542">Nuk mund të zgjidhet certifikata.</translation>
 <translation id="8087000398470557479">Kjo përmbajtje është nga <ph name="DOMAIN_NAME" />, dërguar nga Google.</translation>
 <translation id="8116925261070264013">Zëri i çaktivizuar</translation>
 <translation id="8131740175452115882">Konfirmo</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">Një sajt po përdor kamerën dhe mikrofonin tënd</translation>
 <translation id="8380167699614421159">Ky sajt shfaq reklama ndërhyrëse ose mashtruese</translation>
 <translation id="8394832520002899662">Trokit për t'u kthyer në sajt</translation>
+<translation id="8425213833346101688">Ndrysho</translation>
+<translation id="8441146129660941386">Kërko prapa</translation>
 <translation id="8447861592752582886">Revoko lejen e pajisjes</translation>
 <translation id="8463851957836045671">Sajti është i shpejtë</translation>
 <translation id="851751545965956758">Blloko lidhjen e sajteve me pajisjet</translation>
@@ -236,6 +250,7 @@
 <translation id="8958424370300090006">Blloko kukit për një sajt specifik.</translation>
 <translation id="8959122750345127698">Lundrimi është i paarritshëm: <ph name="URL" /></translation>
 <translation id="9019902583201351841">Menaxhuar nga prindërit e tu</translation>
+<translation id="9074739597929991885">Bluetooth-i</translation>
 <translation id="945632385593298557">Qasu te mikrofoni</translation>
 <translation id="965817943346481315">Blloko nëse sajti shfaq reklama ndërhyrëse ose mashtruese (rekomandohet)</translation>
 </translationbundle>

@@ -82,6 +82,10 @@ config("compiler") {
     # Don't look for includes in %INCLUDE%.
     cflags += [ "/X" ]
 
+    # Required to make the 19041 SDK compatible with clang-cl.
+    # See https://crbug.com/1089996 issue #2 for details.
+    cflags += [ "/D__WRL_ENABLE_FUNCTION_STATICS__" ]
+
     # Tell clang which version of MSVC to emulate.
     cflags += [ "-fmsc-version=1916" ]
 
@@ -121,9 +125,6 @@ config("compiler") {
     if (use_clang_diagnostics_format) {
       cflags += [ "/clang:-fdiagnostics-format=clang" ]
     }
-
-    # Clang runtime libraries, such as the sanitizer runtimes, live here.
-    lib_dirs = [ "$clang_base_path/lib/clang/$clang_version/lib/windows" ]
   }
 
   if (use_lld && !use_thin_lto && (is_clang || !use_goma)) {

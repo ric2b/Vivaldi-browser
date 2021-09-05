@@ -32,7 +32,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/session_manager/session_manager_types.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
-#include "ui/base/ime/ime_bridge.h"
+#include "ui/base/ime/chromeos/ime_bridge.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -130,7 +130,7 @@ class ImeTitleView : public views::View, public views::ButtonListener {
         views::CreateSolidSidedBorder(
             0, 0, kMenuSeparatorWidth, 0,
             AshColorProvider::Get()->GetContentLayerColor(
-                AshColorProvider::ContentLayerType::kSeparator,
+                AshColorProvider::ContentLayerType::kSeparatorColor,
                 AshColorProvider::AshColorMode::kLight)),
         gfx::Insets(kMenuSeparatorVerticalPadding - kMenuSeparatorWidth, 0)));
     auto box_layout = std::make_unique<views::BoxLayout>(
@@ -236,7 +236,7 @@ class ImeButtonsView : public views::View, public views::ButtonListener {
         views::CreateSolidSidedBorder(
             kMenuSeparatorWidth, 0, 0, 0,
             AshColorProvider::Get()->GetContentLayerColor(
-                AshColorProvider::ContentLayerType::kSeparator,
+                AshColorProvider::ContentLayerType::kSeparatorColor,
                 AshColorProvider::AshColorMode::kLight)),
         gfx::Insets(kMenuSeparatorVerticalPadding - kMenuSeparatorWidth,
                     kMenuExtraMarginFromLeftEdge)));
@@ -431,6 +431,16 @@ base::string16 ImeMenuTray::GetAccessibleNameForTray() {
   return l10n_util::GetStringUTF16(IDS_ASH_IME_MENU_ACCESSIBLE_NAME);
 }
 
+void ImeMenuTray::HandleLocaleChange() {
+  if (image_view_) {
+    image_view_->set_tooltip_text(
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_IME));
+  }
+
+  if (label_)
+    label_->SetTooltipText(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_IME));
+}
+
 void ImeMenuTray::HideBubbleWithView(const TrayBubbleView* bubble_view) {
   if (bubble_->bubble_view() == bubble_view)
     CloseBubble();
@@ -532,9 +542,10 @@ void ImeMenuTray::UpdateTrayLabel() {
   if (chromeos::extension_ime_util::IsArcIME(current_ime.id)) {
     CreateImageView();
     image_view_->SetImage(gfx::CreateVectorIcon(
-        kShelfGlobeIcon, AshColorProvider::Get()->GetContentLayerColor(
-                             AshColorProvider::ContentLayerType::kIconPrimary,
-                             AshColorProvider::AshColorMode::kDark)));
+        kShelfGlobeIcon,
+        AshColorProvider::Get()->GetContentLayerColor(
+            AshColorProvider::ContentLayerType::kIconColorPrimary,
+            AshColorProvider::AshColorMode::kDark)));
     return;
   }
 

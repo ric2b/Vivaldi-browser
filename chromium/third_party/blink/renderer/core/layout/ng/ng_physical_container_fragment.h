@@ -187,6 +187,7 @@ class CORE_EXPORT NGPhysicalContainerFragment : public NGPhysicalFragment {
 
   static bool DependsOnPercentageBlockSize(const NGContainerFragmentBuilder&);
 
+  wtf_size_t num_children_;
   scoped_refptr<const NGBreakToken> break_token_;
   const std::unique_ptr<Vector<NGPhysicalOutOfFlowPositionedNode>>
       oof_positioned_descendants_;
@@ -194,7 +195,6 @@ class CORE_EXPORT NGPhysicalContainerFragment : public NGPhysicalFragment {
   // Because flexible arrays need to be the last member in a class, the actual
   // storage is in the subclass and we just keep a pointer to it here.
   const NGLink* buffer_;
-  wtf_size_t num_children_;
 };
 
 template <>

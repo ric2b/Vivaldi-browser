@@ -24,12 +24,9 @@
 #include "media/gpu/media_gpu_export.h"
 #include "media/video/video_decode_accelerator.h"
 
-namespace gpu {
-class GpuMemoryBufferFactory;
-}  // namespace gpu
-
 namespace media {
 
+class MediaLog;
 class VideoFrame;
 
 // Implements the VideoDecodeAccelerator backed by a VideoDecoder.
@@ -52,7 +49,7 @@ class MEDIA_GPU_EXPORT VdVideoDecodeAccelerator
           scoped_refptr<base::SequencedTaskRunner>,
           std::unique_ptr<DmabufVideoFramePool>,
           std::unique_ptr<VideoFrameConverter>,
-          gpu::GpuMemoryBufferFactory* const)>;
+          std::unique_ptr<MediaLog>)>;
 
   // Create VdVideoDecodeAccelerator instance, and call Initialize().
   // Return nullptr if Initialize() failed.

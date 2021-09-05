@@ -468,6 +468,8 @@ void OverviewItem::AnimateAndCloseWindow(bool up) {
 }
 
 void OverviewItem::CloseWindow() {
+  SetShadowBounds(base::nullopt);
+
   gfx::RectF inset_bounds(target_bounds_);
   inset_bounds.Inset(target_bounds_.width() * kPreCloseScale,
                      target_bounds_.height() * kPreCloseScale);
@@ -479,6 +481,9 @@ void OverviewItem::CloseWindow() {
 
   // Fade out the window and the label, effectively hiding them.
   AnimateOpacity(0.0, OVERVIEW_ANIMATION_CLOSE_OVERVIEW_ITEM);
+
+  // |transform_window_| will delete |this| by deleting the widget associated
+  // with |this|.
   transform_window_.Close();
 }
 
@@ -1017,8 +1022,11 @@ void OverviewItem::OnWindowBoundsChanged(aura::Window* window,
       overview_item_view_->RefreshPreviewView();
     } else {
       // Transient window is repositioned. The new position within the
-      // overview item needs to be recomputed.
-      SetBounds(target_bounds_, OVERVIEW_ANIMATION_NONE);
+      // overview item needs to be recomputed. No need to recompute if the
+      // transient is invisible. It will get placed properly when it reshows on
+      // overview end.
+      if (window->IsVisible())
+        SetBounds(target_bounds_, OVERVIEW_ANIMATION_NONE);
     }
   }
 

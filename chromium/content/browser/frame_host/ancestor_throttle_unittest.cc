@@ -89,7 +89,7 @@ TEST_F(AncestorThrottleTest, ParsingXFrameOptions) {
         GetAncestorHeaders(test.header, nullptr);
     std::string header_value;
     EXPECT_EQ(test.expected,
-              throttle.ParseHeader(headers.get(), &header_value));
+              throttle.ParseXFrameOptionsHeader(headers.get(), &header_value));
     EXPECT_EQ(test.value, header_value);
   }
 }
@@ -124,68 +124,8 @@ TEST_F(AncestorThrottleTest, ErrorsParsingXFrameOptions) {
         GetAncestorHeaders(test.header, nullptr);
     std::string header_value;
     EXPECT_EQ(test.expected,
-              throttle.ParseHeader(headers.get(), &header_value));
+              throttle.ParseXFrameOptionsHeader(headers.get(), &header_value));
     EXPECT_EQ(test.failure, header_value);
-  }
-}
-
-TEST_F(AncestorThrottleTest, IgnoreWhenFrameAncestorsPresent) {
-  // When OutOfBlinkFrameAncestors is enabled frame-ancestors is processed in
-  // the AncestorThrottle and XFO will not be parsed.
-  if (base::FeatureList::IsEnabled(
-          network::features::kOutOfBlinkFrameAncestors)) {
-    return;
-  }
-
-  struct TestCase {
-    const char* csp;
-    AncestorThrottle::HeaderDisposition expected;
-  } cases[] = {
-      {"", HeaderDisposition::DENY},
-      {"frame-ancestors 'none'", HeaderDisposition::BYPASS},
-      {"frame-ancestors *", HeaderDisposition::BYPASS},
-      {"frame-ancestors 'self'", HeaderDisposition::BYPASS},
-      {"frame-ancestors https://example.com", HeaderDisposition::BYPASS},
-      {"fRaMe-AnCeStOrS *", HeaderDisposition::BYPASS},
-      {"directive1; frame-ancestors 'none'", HeaderDisposition::BYPASS},
-      {"directive1; frame-ancestors *", HeaderDisposition::BYPASS},
-      {"directive1; frame-ancestors 'self'", HeaderDisposition::BYPASS},
-      {"directive1; frame-ancestors https://example.com",
-       HeaderDisposition::BYPASS},
-      {"directive1; fRaMe-AnCeStOrS *", HeaderDisposition::BYPASS},
-      {"policy, frame-ancestors 'none'", HeaderDisposition::BYPASS},
-      {"policy, frame-ancestors *", HeaderDisposition::BYPASS},
-      {"policy, frame-ancestors 'self'", HeaderDisposition::BYPASS},
-      {"policy, frame-ancestors https://example.com",
-       HeaderDisposition::BYPASS},
-      {"policy, frame-ancestors 'none'", HeaderDisposition::BYPASS},
-      {"policy, directive1; frame-ancestors *", HeaderDisposition::BYPASS},
-      {"policy, directive1; frame-ancestors 'self'", HeaderDisposition::BYPASS},
-      {"policy, directive1; frame-ancestors https://example.com",
-       HeaderDisposition::BYPASS},
-      {"policy, directive1; fRaMe-AnCeStOrS *", HeaderDisposition::BYPASS},
-      {"policy, directive1; fRaMe-AnCeStOrS *", HeaderDisposition::BYPASS},
-
-      {"not-frame-ancestors *", HeaderDisposition::DENY},
-      {"frame-ancestors-are-lovely", HeaderDisposition::DENY},
-      {"directive1; not-frame-ancestors *", HeaderDisposition::DENY},
-      {"directive1; frame-ancestors-are-lovely", HeaderDisposition::DENY},
-      {"policy, not-frame-ancestors *", HeaderDisposition::DENY},
-      {"policy, frame-ancestors-are-lovely", HeaderDisposition::DENY},
-      {"policy, directive1; not-frame-ancestors *", HeaderDisposition::DENY},
-      {"policy, directive1; frame-ancestors-are-lovely",
-       HeaderDisposition::DENY},
-  };
-
-  AncestorThrottle throttle(nullptr);
-  for (const auto& test : cases) {
-    SCOPED_TRACE(test.csp);
-    scoped_refptr<net::HttpResponseHeaders> headers =
-        GetAncestorHeaders("DENY", test.csp);
-    std::string header_value;
-    EXPECT_EQ(test.expected,
-              throttle.ParseHeader(headers.get(), &header_value));
-    EXPECT_EQ("DENY", header_value);
   }
 }
 

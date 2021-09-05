@@ -27,7 +27,6 @@
 <translation id="1601560923496285236">Öbernäh</translation>
 <translation id="1603914832182249871">(Privat)</translation>
 <translation id="1620510694547887537">Kamera</translation>
-<translation id="1635033183663317347">Vo dim Erziehigsberechtigte installiert.</translation>
 <translation id="1698122934742150150">Nome aktuelli privati Setzig</translation>
 <translation id="1706625117072057435">Vergrösserigsstufe</translation>
 <translation id="1708338024780164500">(ned verwendet)</translation>
@@ -118,7 +117,6 @@
 <translation id="3668823961463113931">Handhaber</translation>
 <translation id="3678156199662914018">Erwiterig: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Ahfrog zor Beldschermfreigab dörr <ph name="APP_NAME" /></translation>
-<translation id="3725367690636977613">Site</translation>
 <translation id="3744111561329211289">Abgliche im Hentergrond</translation>
 <translation id="3797900183766075808">&amp;Met <ph name="SEARCH_ENGINE" /> nach "<ph name="SEARCH_TERMS" />" sueche</translation>
 <translation id="3800806661949714323">Alli ahzeige (empfohle)</translation>
@@ -141,7 +139,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">För Groppe ahnäh</translation>
-<translation id="4091434297613116013">Blätter Papier</translation>
 <translation id="4096508467498758490">Erwiiterige im Entwecklermodus deaktiviere</translation>
 <translation id="4100839878934973028">Es anders Programm uf Ehrem Computer hed es App dezue doh, wo sech vellecht ofd Fonktionswiis vo Viwaldi uswerkt.</translation>
 <translation id="4115080753528843955">Einigi Inhaltsdienst verwendet eidütigi Identifikatore, om dä Zuegreff uf gschützi Inhält z'autorisiere</translation>
@@ -296,7 +293,6 @@ Speicheret Sie Ehri Schlösseldatei amene sechere Ort. Sie bruchet die Datei om 
 <translation id="8032244173881942855">Riter chan ned öbertreiht werde.</translation>
 <translation id="8071432093239591881">Als Beld drocke</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
-<translation id="8180239481735238521">Site</translation>
 <translation id="8261378640211443080">Die Erwiiterig esch ned im <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> ufgfüehrt ond esch vellecht ohni Ehres Wösse dezue gfüegt worde.</translation>
 <translation id="8270242299912238708">PDF-Dokument</translation>
 <translation id="8339059274628563283">För <ph name="SITE" /> lokal gspeicherti Date</translation>
@@ -315,7 +311,6 @@ Speicheret Sie Ehri Schlösseldatei amene sechere Ort. Sie bruchet die Datei om 
 <translation id="8798099450830957504">Standardihstellig</translation>
 <translation id="8800004011501252845">Ziel werdet ahzeigt för</translation>
 <translation id="8808478386290700967">Web Store</translation>
-<translation id="8813811964357448561">Blatt Papier</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8910146161325739742">Beldscherm freigäh</translation>
 <translation id="8915370057835397490">Vorschläg wirdet glade</translation>

@@ -66,17 +66,6 @@ class WindowOpenApiTest : public ExtensionApiTest {
   }
 };
 
-// The test uses the chrome.browserAction.openPopup API, which requires that the
-// window can automatically be activated.
-// See comments at BrowserActionInteractiveTest::ShouldRunPopupTest
-// Fails flakily on all platforms. https://crbug.com/477691
-IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, DISABLED_WindowOpen) {
-  extensions::ResultCatcher catcher;
-  ASSERT_TRUE(LoadExtensionIncognito(test_data_dir_
-      .AppendASCII("window_open").AppendASCII("spanning")));
-  EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
-}
-
 bool WaitForTabsPopupsApps(Browser* browser,
                            int num_tabs,
                            int num_popups,
@@ -228,19 +217,13 @@ IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, WindowArgumentsOverflow) {
   ASSERT_TRUE(RunExtensionTest("window_open/argument_overflow")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, DISABLED_WindowOpener) {
+IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, WindowOpener) {
   ASSERT_TRUE(RunExtensionTest("window_open/opener")) << message_;
 }
 
-#if defined(OS_MACOSX)
-// Extension popup windows are incorrectly sized on OSX, crbug.com/225601
-#define MAYBE_WindowOpenSized DISABLED_WindowOpenSized
-#else
-#define MAYBE_WindowOpenSized WindowOpenSized
-#endif
 // Ensure that the width and height properties of a window opened with
 // chrome.windows.create match the creation parameters. See crbug.com/173831.
-IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, MAYBE_WindowOpenSized) {
+IN_PROC_BROWSER_TEST_F(WindowOpenApiTest, WindowOpenSized) {
   ASSERT_TRUE(RunExtensionTest("window_open/window_size")) << message_;
   EXPECT_TRUE(WaitForTabsPopupsApps(browser(), 0, 0, 1));
 }

@@ -35,6 +35,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "build/build_config.h"
 #include "cc/test/fake_layer_tree_frame_sink.h"
 #include "cc/test/test_ukm_recorder_factory.h"
 #include "cc/trees/layer_tree_host.h"
@@ -45,6 +46,7 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
+#include "third_party/blink/public/mojom/page/widget.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_data.h"
@@ -69,6 +71,7 @@
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
+#include "ui/base/ime/mojom/text_input_state.mojom-blink.h"
 
 namespace blink {
 namespace frame_test_helpers {
@@ -94,7 +97,7 @@ namespace {
 void RunServeAsyncRequestsTask(scoped_refptr<base::TaskRunner> task_runner) {
   // TODO(kinuko,toyoshim): Create a mock factory and use it instead of
   // getting the platform's one. (crbug.com/751425)
-  Platform::Current()->GetURLLoaderMockFactory()->ServeAsynchronousRequests();
+  WebURLLoaderMockFactory::GetSingletonInstance()->ServeAsynchronousRequests();
   if (TestWebFrameClient::IsLoading()) {
     task_runner->PostTask(FROM_HERE,
                           WTF::Bind(&RunServeAsyncRequestsTask, task_runner));
@@ -122,6 +125,9 @@ cc::LayerTreeSettings GetSynchronousSingleThreadLayerTreeSettings() {
   // test makes progress.
   settings.single_thread_proxy_scheduler = false;
   settings.use_layer_lists = true;
+#if defined(OS_MACOSX)
+  settings.enable_elastic_overscroll = true;
+#endif
   return settings;
 }
 
@@ -197,7 +203,7 @@ void FillNavigationParamsResponse(WebNavigationParams* params) {
   // Empty documents and srcdoc will be handled by DocumentLoader.
   if (DocumentLoader::WillLoadUrlAsEmpty(kurl) || kurl.IsAboutSrcdocURL())
     return;
-  Platform::Current()->GetURLLoaderMockFactory()->FillNavigationParamsResponse(
+  WebURLLoaderMockFactory::GetSingletonInstance()->FillNavigationParamsResponse(
       params);
 }
 
@@ -259,6 +265,10 @@ WebLocalFrameImpl* CreateProvisional(WebRemoteFrame& old_frame,
       frame_widget_host_receiver =
           frame_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting();
 
+  mojo::AssociatedRemote<mojom::blink::Widget> widget_remote;
+  mojo::PendingAssociatedReceiver<mojom::blink::Widget> widget_receiver =
+      widget_remote.BindNewEndpointAndPassDedicatedReceiverForTesting();
+
   // Create a local root, if necessary.
   if (!frame->Parent()) {
     widget_client = std::make_unique<TestWebWidgetClient>();
@@ -266,9 +276,8 @@ WebLocalFrameImpl* CreateProvisional(WebRemoteFrame& old_frame,
     // Eliminate this once WebView is no longer a WebWidget.
     WebFrameWidget* frame_widget = WebFrameWidget::CreateForMainFrame(
         widget_client.get(), frame, frame_widget_host.Unbind(),
-        std::move(frame_widget_receiver),
-        CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>(),
-        CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase>());
+        std::move(frame_widget_receiver), widget_client->BindNewWidgetHost(),
+        std::move(widget_receiver));
     widget_client->SetFrameWidget(frame_widget);
     // The WebWidget requires the compositor to be set before it is used.
     widget_client->set_layer_tree_host(frame_widget->InitializeCompositing(
@@ -281,9 +290,8 @@ WebLocalFrameImpl* CreateProvisional(WebRemoteFrame& old_frame,
 
     WebFrameWidget* frame_widget = WebFrameWidget::CreateForChildLocalRoot(
         widget_client.get(), frame, frame_widget_host.Unbind(),
-        std::move(frame_widget_receiver),
-        CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>(),
-        CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase>());
+        std::move(frame_widget_receiver), widget_client->BindNewWidgetHost(),
+        std::move(widget_receiver));
     widget_client->SetFrameWidget(frame_widget);
     // The WebWidget requires the compositor to be set before it is used.
     widget_client->set_layer_tree_host(frame_widget->InitializeCompositing(
@@ -304,7 +312,7 @@ WebRemoteFrameImpl* CreateRemote(TestWebRemoteFrameClient* client) {
   auto* frame = MakeGarbageCollected<WebRemoteFrameImpl>(
       mojom::blink::TreeScopeType::kDocument, client,
       InterfaceRegistry::GetEmptyInterfaceRegistry(),
-      client->GetAssociatedInterfaceProvider(),
+      client->GetRemoteAssociatedInterfaces(),
       base::UnguessableToken::Create());
   client->Bind(frame, std::move(owned_client));
   return frame;
@@ -340,11 +348,14 @@ WebLocalFrameImpl* CreateLocalChild(WebRemoteFrame& parent,
       frame_widget_host_receiver =
           frame_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting();
 
+  mojo::AssociatedRemote<mojom::blink::Widget> widget_remote;
+  mojo::PendingAssociatedReceiver<mojom::blink::Widget> widget_receiver =
+      widget_remote.BindNewEndpointAndPassDedicatedReceiverForTesting();
+
   WebFrameWidget* frame_widget = WebFrameWidget::CreateForChildLocalRoot(
       widget_client, frame, frame_widget_host.Unbind(),
-      std::move(frame_widget_receiver),
-      CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>(),
-      CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase>());
+      std::move(frame_widget_receiver), widget_client->BindNewWidgetHost(),
+      std::move(widget_receiver));
   // The WebWidget requires the compositor to be set before it is used.
   widget_client->SetFrameWidget(frame_widget);
   widget_client->set_layer_tree_host(frame_widget->InitializeCompositing(
@@ -370,8 +381,8 @@ WebRemoteFrameImpl* CreateRemoteChild(
       mojom::blink::TreeScopeType::kDocument, name, FramePolicy(),
       mojom::blink::FrameOwnerElementType::kIframe, client,
       InterfaceRegistry::GetEmptyInterfaceRegistry(),
-      client->GetAssociatedInterfaceProvider(),
-      base::UnguessableToken::Create(), nullptr));
+      client->GetRemoteAssociatedInterfaces(), base::UnguessableToken::Create(),
+      nullptr));
   client->Bind(frame, std::move(owned_client));
   if (!security_origin)
     security_origin = SecurityOrigin::CreateUniqueOpaque();
@@ -421,13 +432,16 @@ WebViewImpl* WebViewHelper::InitializeWithOpener(
       frame_widget_host_receiver =
           frame_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting();
 
+  mojo::AssociatedRemote<mojom::blink::Widget> widget_remote;
+  mojo::PendingAssociatedReceiver<mojom::blink::Widget> widget_receiver =
+      widget_remote.BindNewEndpointAndPassDedicatedReceiverForTesting();
+
   // TODO(dcheng): The main frame widget currently has a special case.
   // Eliminate this once WebView is no longer a WebWidget.
   WebFrameWidget* widget = blink::WebFrameWidget::CreateForMainFrame(
       test_web_widget_client_, frame, frame_widget_host.Unbind(),
       std::move(frame_widget_receiver),
-      CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>(),
-      CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase>());
+      test_web_widget_client_->BindNewWidgetHost(), std::move(widget_receiver));
   // The WebWidget requires the compositor to be set before it is used.
   test_web_widget_client_->SetFrameWidget(widget);
   test_web_widget_client_->set_layer_tree_host(widget->InitializeCompositing(
@@ -505,7 +519,7 @@ WebViewImpl* WebViewHelper::InitializeRemoteWithOpener(
   WebRemoteFrameImpl* frame = WebRemoteFrameImpl::CreateMainFrame(
       web_view_, web_remote_frame_client,
       InterfaceRegistry::GetEmptyInterfaceRegistry(),
-      web_remote_frame_client->GetAssociatedInterfaceProvider(),
+      web_remote_frame_client->GetRemoteAssociatedInterfaces(),
       base::UnguessableToken::Create(), opener);
   web_remote_frame_client->Bind(frame,
                                 std::move(owned_web_remote_frame_client));
@@ -644,8 +658,7 @@ void TestWebFrameClient::BeginNavigation(
     return;
   }
 
-  if (!frame_->WillStartNavigation(
-          *info, false /* is_history_navigation_in_new_child_frame */))
+  if (!frame_->WillStartNavigation(*info))
     return;
 
   navigation_callback_.Reset(
@@ -715,6 +728,12 @@ void TestWebWidgetClient::SetFrameWidget(WebFrameWidget* widget) {
   frame_widget_ = widget;
 }
 
+mojo::PendingAssociatedRemote<mojom::blink::WidgetHost>
+TestWebWidgetClient::BindNewWidgetHost() {
+  receiver_.reset();
+  return receiver_.BindNewEndpointAndPassDedicatedRemoteForTesting();
+}
+
 void TestWebWidgetClient::SetPageScaleStateAndLimits(
     float page_scale_factor,
     bool is_pinch_gesture_active,
@@ -724,15 +743,9 @@ void TestWebWidgetClient::SetPageScaleStateAndLimits(
                                                  maximum);
 }
 
-void TestWebWidgetClient::InjectGestureScrollEvent(
-    WebGestureDevice device,
-    const gfx::Vector2dF& delta,
-    ScrollGranularity granularity,
-    cc::ElementId scrollable_area_element_id,
-    WebInputEvent::Type injected_type) {
-  InjectedScrollGestureData data{delta, granularity, scrollable_area_element_id,
-                                 injected_type};
-  injected_scroll_gesture_data_.push_back(data);
+void TestWebWidgetClient::QueueSyntheticEvent(
+    std::unique_ptr<blink::WebCoalescedInputEvent> event) {
+  injected_scroll_events_.push_back(std::move(event));
 }
 
 bool TestWebWidgetClient::HaveScrollEventHandlers() const {
@@ -764,6 +777,22 @@ void TestWebWidgetClient::RequestNewLayerTreeFrameSink(
   // frames.
   std::move(callback).Run(cc::FakeLayerTreeFrameSink::Create3d(), nullptr);
 }
+
+void TestWebWidgetClient::SetCursor(const ui::Cursor& cursor) {}
+
+void TestWebWidgetClient::SetToolTipText(
+    const String& tooltip_text,
+    base::i18n::TextDirection text_direction_hint) {}
+
+void TestWebWidgetClient::TextInputStateChanged(
+    ui::mojom::blink::TextInputStatePtr state) {}
+
+void TestWebWidgetClient::SelectionBoundsChanged(
+    const gfx::Rect& anchor_rect,
+    base::i18n::TextDirection anchor_dir,
+    const gfx::Rect& focus_rect,
+    base::i18n::TextDirection focus_dir,
+    bool is_anchor_first) {}
 
 void TestWebViewClient::DestroyChildViews() {
   child_web_views_.clear();

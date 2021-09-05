@@ -4,12 +4,10 @@
 
 #include "components/exo/keyboard.h"
 
-#include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/keyboard/ui/keyboard_util.h"
 #include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/keyboard/keyboard_controller.h"
-#include "ash/shell.h"
 #include "base/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/exo/input_trace.h"
@@ -224,12 +222,7 @@ bool Keyboard::AreKeyboardKeyAcksNeeded() const {
   // While the spoken feedback is enabled, a key event is sent to both of a
   // wayland client and Chrome to give a chance to work to Chrome OS's
   // shortcuts.
-  return are_keyboard_key_acks_needed_
-         // TODO(yhanada): Remove this once ARC++ can send ack with a serial
-         // correctly while ChromeVox is on.
-         && !ash::Shell::Get()
-                 ->accessibility_controller()
-                 ->spoken_feedback_enabled();
+  return are_keyboard_key_acks_needed_;
 }
 
 void Keyboard::AckKeyboardKey(uint32_t serial, bool handled) {
@@ -279,7 +272,12 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
   // When IME ate a key event, we use the event only for tracking key states and
   // ignore for further processing. Otherwise it is handled in two places (IME
   // and client) and causes undesired behavior.
-  bool consumed_by_ime = ConsumedByIme(focus_, event);
+  // If the window should receive a key event before IME, Exo should send any
+  // key events to a client. The client will send back the events to IME if
+  // needed.
+  const bool consumed_by_ime =
+      !focus_->window()->GetProperty(aura::client::kSkipImeProcessing) &&
+      ConsumedByIme(focus_, event);
 
   // Always update modifiers.
   int modifier_flags = event->flags() & kModifierMask;

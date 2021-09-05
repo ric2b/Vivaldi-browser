@@ -460,7 +460,7 @@ ActivityLog* ActivityLog::GetInstance(content::BrowserContext* context) {
 
 // Use GetInstance instead of directly creating an ActivityLog.
 ActivityLog::ActivityLog(content::BrowserContext* context)
-    : database_policy_(NULL),
+    : database_policy_(nullptr),
       database_policy_type_(ActivityLogPolicy::POLICY_INVALID),
       profile_(Profile::FromBrowserContext(context)),
       extension_system_(ExtensionSystem::Get(context)),
@@ -785,7 +785,7 @@ void ActivityLog::CheckActive(bool use_cached) {
            content::RenderProcessHost::AllHostsIterator());
        !iter.IsAtEnd(); iter.Advance()) {
     content::RenderProcessHost* host = iter.GetCurrentValue();
-    if (profile_->IsSameProfile(
+    if (profile_->IsSameOrParent(
             Profile::FromBrowserContext(host->GetBrowserContext()))) {
       host->Send(new ExtensionMsg_SetActivityLoggingEnabled(is_active_));
     }

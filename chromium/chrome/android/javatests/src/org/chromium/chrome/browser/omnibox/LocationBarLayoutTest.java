@@ -4,21 +4,23 @@
 
 package org.chromium.chrome.browser.omnibox;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
 import static android.view.View.GONE;
 import static android.view.View.VISIBLE;
 
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+
 import static org.hamcrest.Matchers.not;
 
-import android.support.test.filters.MediumTest;
-import android.support.test.filters.SmallTest;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+
+import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -29,6 +31,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Matchers;
 import org.chromium.base.test.util.Restriction;
@@ -80,7 +83,6 @@ public class LocationBarLayoutTest {
         private String mCurrentUrl;
         private String mEditingText;
         private String mDisplayText;
-        private String mDisplaySearchTerms;
         private Integer mSecurityLevel;
 
         public TestLocationBarModel() {
@@ -92,10 +94,6 @@ public class LocationBarLayoutTest {
             mCurrentUrl = url;
         }
 
-        void setDisplaySearchTerms(String terms) {
-            mDisplaySearchTerms = terms;
-        }
-
         void setSecurityLevel(@ConnectionSecurityLevel int securityLevel) {
             mSecurityLevel = securityLevel;
         }
@@ -104,12 +102,6 @@ public class LocationBarLayoutTest {
         public String getCurrentUrl() {
             if (mCurrentUrl == null) return super.getCurrentUrl();
             return mCurrentUrl;
-        }
-
-        @Override
-        public String getDisplaySearchTerms() {
-            if (mDisplaySearchTerms == null) return super.getDisplaySearchTerms();
-            return mDisplaySearchTerms;
         }
 
         @Override
@@ -208,6 +200,7 @@ public class LocationBarLayoutTest {
     @Test
     @SmallTest
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @DisabledTest(message = "Flaky. See https://crbug.com/1091646")
     public void testShowingVoiceSearchButtonIfUrlBarIsEmpty() throws ExecutionException {
         // When there's no text, the mic button should be visible.
         setUrlBarTextAndFocus("");
@@ -225,25 +218,6 @@ public class LocationBarLayoutTest {
         CriteriaHelper.pollUiThread(
                 () -> Assert.assertThat(getDeleteButton().getVisibility(), Matchers.not(VISIBLE)));
         Assert.assertEquals("", getUrlText(getUrlBar()));
-    }
-
-    @Test
-    @SmallTest
-    @EnableFeatures(ChromeFeatureList.QUERY_IN_OMNIBOX)
-    @Feature({"QueryInOmnibox"})
-    public void testIsViewShowingModelSearchTerms() {
-        final UrlBar urlBar = getUrlBar();
-        final LocationBarLayout locationBar = getLocationBar();
-
-        mTestLocationBarModel.setCurrentUrl(GOOGLE_SRP_URL);
-        mTestLocationBarModel.setSecurityLevel(ConnectionSecurityLevel.SECURE);
-        mTestLocationBarModel.setDisplaySearchTerms(null);
-        setUrlToPageUrl(locationBar);
-        Assert.assertNotEquals(SEARCH_TERMS, getUrlText(urlBar));
-
-        mTestLocationBarModel.setDisplaySearchTerms(SEARCH_TERMS);
-        setUrlToPageUrl(locationBar);
-        Assert.assertEquals(SEARCH_TERMS, getUrlText(urlBar));
     }
 
     @Test
@@ -278,28 +252,6 @@ public class LocationBarLayoutTest {
     @SmallTest
     @EnableFeatures({ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO})
     @Feature({"OmniboxSearchEngineLogo"})
-    public void testOmniboxSearchEngineLogo_unfocusedOnSRP_withQIO() {
-        final LocationBarLayout locationBar = getLocationBar();
-        final View statusIconView = getStatusIconView();
-        updateSearchEngineLogoWithGoogle(locationBar);
-
-        mTestLocationBarModel.setCurrentUrl(GOOGLE_SRP_URL);
-        mTestLocationBarModel.setSecurityLevel(ConnectionSecurityLevel.SECURE);
-        mTestLocationBarModel.setDisplaySearchTerms(SEARCH_TERMS);
-        setUrlToPageUrl(locationBar);
-
-        onView(withId(R.id.location_bar_status)).check((view, e) -> {
-            Assert.assertEquals(statusIconView.getVisibility(), VISIBLE);
-            Assert.assertEquals(R.drawable.ic_logo_googleg_20dp,
-                    locationBar.getStatusViewCoordinatorForTesting()
-                            .getSecurityIconResourceIdForTesting());
-        });
-    }
-
-    @Test
-    @SmallTest
-    @EnableFeatures({ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO})
-    @Feature({"OmniboxSearchEngineLogo"})
     public void testOmniboxSearchEngineLogo_unfocusedOnSRP() {
         final LocationBarLayout locationBar = getLocationBar();
         final ImageView iconView = (ImageView) locationBar.getSecurityIconView();
@@ -318,17 +270,14 @@ public class LocationBarLayoutTest {
 
     @Test
     @SmallTest
-    @EnableFeatures(
-            {ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO, ChromeFeatureList.QUERY_IN_OMNIBOX})
+    @EnableFeatures({ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO})
     @Feature({"OmniboxSearchEngineLogo"})
-    public void
-    testOmniboxSearchEngineLogo_focusedOnSRP() throws ExecutionException {
+    public void testOmniboxSearchEngineLogo_focusedOnSRP() throws ExecutionException {
         final LocationBarLayout locationBar = getLocationBar();
         final View statusIconView = getStatusIconView();
         updateSearchEngineLogoWithGoogle(locationBar);
         mTestLocationBarModel.setCurrentUrl(GOOGLE_SRP_URL);
         mTestLocationBarModel.setSecurityLevel(ConnectionSecurityLevel.SECURE);
-        mTestLocationBarModel.setDisplaySearchTerms(null);
         setUrlToPageUrl(locationBar);
         setUrlBarTextAndFocus("");
 

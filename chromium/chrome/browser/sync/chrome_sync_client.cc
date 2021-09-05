@@ -12,7 +12,6 @@
 #include "base/feature_list.h"
 #include "base/path_service.h"
 #include "base/syslog_logging.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/consent_auditor/consent_auditor_factory.h"
@@ -110,6 +109,7 @@
 #if BUILDFLAG(ENABLE_SPELLCHECK)
 #include "chrome/browser/spellchecker/spellcheck_factory.h"
 #include "chrome/browser/spellchecker/spellcheck_service.h"
+#include "components/spellcheck/browser/pref_names.h"
 #endif  // BUILDFLAG(ENABLE_SPELLCHECK)
 
 #if defined(OS_ANDROID)
@@ -214,10 +214,9 @@ ChromeSyncClient::ChromeSyncClient(Profile* profile) : profile_(profile) {
 
   component_factory_ = std::make_unique<ProfileSyncComponentsFactoryImpl>(
       this, chrome::GetChannel(), prefs::kSavingBrowserHistoryDisabled,
-      base::CreateSequencedTaskRunner({content::BrowserThread::UI}),
-      web_data_service_thread_, profile_web_data_service_,
-      account_web_data_service_, profile_password_store_,
-      account_password_store_,
+      content::GetUIThreadTaskRunner({}), web_data_service_thread_,
+      profile_web_data_service_, account_web_data_service_,
+      profile_password_store_, account_password_store_,
       BookmarkSyncServiceFactory::GetForProfile(profile_),
       vivaldi::NoteSyncServiceFactory::GetForProfile(profile_));
 
@@ -455,7 +454,8 @@ ChromeSyncClient::CreateDataTypeControllers(syncer::SyncService* sync_service) {
 // custom dictionary on platforms that typically don't provide one.
 #if defined(OS_LINUX) || defined(OS_WIN)
   // Dictionary sync is enabled by default.
-  if (!disabled_types.Has(syncer::DICTIONARY)) {
+  if (!disabled_types.Has(syncer::DICTIONARY) &&
+      GetPrefService()->GetBoolean(spellcheck::prefs::kSpellCheckEnable)) {
     controllers.push_back(
         std::make_unique<syncer::SyncableServiceBasedModelTypeController>(
             syncer::DICTIONARY, model_type_store_factory,

@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_uint8_array.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_bidirectional_stream.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_quic_transport_options.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 #include "third_party/blink/renderer/core/streams/readable_stream_default_reader.h"
@@ -72,6 +73,7 @@ class StubQuicTransport : public network::mojom::blink::QuicTransport {
   }
 
   bool WasSendFinCalled() const { return was_send_fin_called_; }
+  bool WasAbortStreamCalled() const { return was_abort_stream_called_; }
 
   // Responds to an earlier call to AcceptBidirectionalStream with a new stream
   // as if it was created by the remote server. The remote handles can be
@@ -146,6 +148,11 @@ class StubQuicTransport : public network::mojom::blink::QuicTransport {
     was_send_fin_called_ = true;
   }
 
+  void AbortStream(uint32_t stream_id, uint64_t code) override {
+    EXPECT_EQ(stream_id, kDefaultStreamId);
+    was_abort_stream_called_ = true;
+  }
+
  private:
   base::OnceCallback<void(uint32_t,
                           mojo::ScopedDataPipeConsumerHandle,
@@ -157,6 +164,7 @@ class StubQuicTransport : public network::mojom::blink::QuicTransport {
   mojo::ScopedDataPipeConsumerHandle output_consumer_;
   mojo::ScopedDataPipeProducerHandle input_producer_;
   bool was_send_fin_called_ = false;
+  bool was_abort_stream_called_ = false;
 };
 
 // This class sets up a connected blink::QuicTransport object using a
@@ -174,9 +182,9 @@ class ScopedQuicTransport : public mojom::blink::QuicTransportConnector {
         mojom::blink::QuicTransportConnector::Name_,
         base::BindRepeating(&ScopedQuicTransport::BindConnector,
                             weak_ptr_factory_.GetWeakPtr()));
-    quic_transport_ = QuicTransport::Create(scope.GetScriptState(),
-                                            "quic-transport://example.com/",
-                                            ASSERT_NO_EXCEPTION);
+    quic_transport_ = QuicTransport::Create(
+        scope.GetScriptState(), "quic-transport://example.com/",
+        MakeGarbageCollected<QuicTransportOptions>(), ASSERT_NO_EXCEPTION);
 
     test::RunPendingTasks();
   }
@@ -224,6 +232,8 @@ class ScopedQuicTransport : public mojom::blink::QuicTransportConnector {
   // Implementation of mojom::blink::QuicTransportConnector.
   void Connect(
       const KURL&,
+      Vector<network::mojom::blink::QuicTransportCertificateFingerprintPtr>
+          fingerprints,
       mojo::PendingRemote<network::mojom::blink::QuicTransportHandshakeClient>
           pending_handshake_client) override {
     mojo::Remote<network::mojom::blink::QuicTransportHandshakeClient>
@@ -404,6 +414,10 @@ TEST(BidirectionalStreamTest, OutgoingStreamAbort) {
                              bidirectional_stream->readingAborted());
   tester.WaitUntilSettled();
   EXPECT_TRUE(tester.IsFulfilled());
+
+  const auto* const stub = scoped_quic_transport.Stub();
+  EXPECT_FALSE(stub->WasSendFinCalled());
+  EXPECT_TRUE(stub->WasAbortStreamCalled());
 }
 
 TEST(BidirectionalStreamTest, OutgoingStreamCleanClose) {
@@ -429,6 +443,10 @@ TEST(BidirectionalStreamTest, OutgoingStreamCleanClose) {
                              bidirectional_stream->readingAborted());
   tester.WaitUntilSettled();
   EXPECT_TRUE(tester.IsFulfilled());
+
+  const auto* const stub = scoped_quic_transport.Stub();
+  EXPECT_TRUE(stub->WasSendFinCalled());
+  EXPECT_FALSE(stub->WasAbortStreamCalled());
 }
 
 TEST(BidirectionalStreamTest, AbortBothOutgoingFirst) {

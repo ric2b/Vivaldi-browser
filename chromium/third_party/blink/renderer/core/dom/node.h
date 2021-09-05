@@ -67,6 +67,7 @@ class NodeOrStringOrTrustedScript;
 class NodeRareData;
 class QualifiedName;
 class RegisteredEventListener;
+class ScrollTimeline;
 class SVGQualifiedName;
 class ScrollState;
 class ScrollStateCallback;
@@ -930,7 +931,10 @@ class CORE_EXPORT Node : public EventTarget {
   // If the node is a plugin, then this returns its WebPluginContainer.
   WebPluginContainerImpl* GetWebPluginContainer() const;
 
-  void Trace(Visitor*) override;
+  void RegisterScrollTimeline(ScrollTimeline*);
+  void UnregisterScrollTimeline(ScrollTimeline*);
+
+  void Trace(Visitor*) const override;
 
  private:
   enum NodeFlags : uint32_t {

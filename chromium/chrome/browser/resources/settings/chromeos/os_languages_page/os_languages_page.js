@@ -217,8 +217,32 @@ cr.define('settings', function() {
      * @param {!{model: !{item: chrome.languageSettingsPrivate.InputMethod}}} e
      * @private
      */
-    onInputMethodOptionsTap_(e) {
+    openExtensionOptionsPage_(e) {
       this.languageHelper.openInputMethodOptions(e.model.item.id);
+    },
+
+
+    /**
+     * @param {string} id Input method ID.
+     * @return {boolean} True if there is a options page in ChromeOS settings
+     *     for the input method ID.
+     * @private
+     */
+    hasOptionsPageInSettings_(id) {
+      return loadTimeData.getBoolean('imeOptionsInSettings') &&
+          settings.input_method_util.hasOptionsPageInSettings(id);
+    },
+
+    /**
+     * Navigate to the input method options page in ChromeOS settings.
+     * @param {!{model: !{item: chrome.languageSettingsPrivate.InputMethod}}} e
+     * @private
+     */
+    navigateToOptionsPageInSettings_(e) {
+      const params = new URLSearchParams;
+      params.append('id', e.model.item.id);
+      settings.Router.getInstance().navigateTo(
+          settings.routes.OS_LANGUAGES_INPUT_METHOD_OPTIONS, params);
     },
 
     /**

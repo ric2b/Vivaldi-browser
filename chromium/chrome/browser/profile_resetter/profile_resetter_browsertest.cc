@@ -16,6 +16,7 @@
 #include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_util.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 
@@ -40,10 +41,10 @@ class RemoveCookieTester {
                  const std::string& value);
 
  private:
-  void GetCookieListCallback(const net::CookieStatusList& cookies,
-                             const net::CookieStatusList& excluded_cookies);
-  void SetCanonicalCookieCallback(
-      net::CanonicalCookie::CookieInclusionStatus result);
+  void GetCookieListCallback(
+      const net::CookieAccessResultList& cookies,
+      const net::CookieAccessResultList& excluded_cookies);
+  void SetCanonicalCookieCallback(net::CookieInclusionStatus result);
 
   void BlockUntilNotified();
   void Notify();
@@ -108,14 +109,14 @@ void RemoveCookieTester::AddCookie(const std::string& host,
 }
 
 void RemoveCookieTester::GetCookieListCallback(
-    const net::CookieStatusList& cookies,
-    const net::CookieStatusList& excluded_cookies) {
-  last_cookies_ = net::cookie_util::StripStatuses(cookies);
+    const net::CookieAccessResultList& cookies,
+    const net::CookieAccessResultList& excluded_cookies) {
+  last_cookies_ = net::cookie_util::StripAccessResults(cookies);
   Notify();
 }
 
 void RemoveCookieTester::SetCanonicalCookieCallback(
-    net::CanonicalCookie::CookieInclusionStatus result) {
+    net::CookieInclusionStatus result) {
   ASSERT_TRUE(result.IsInclude());
   Notify();
 }

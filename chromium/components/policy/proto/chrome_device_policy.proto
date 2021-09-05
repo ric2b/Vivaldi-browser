@@ -124,6 +124,9 @@ message DeviceReportingProto {
   optional bool report_memory_info = 19 [default = false];
   optional bool report_backlight_info = 20 [default = false];
   optional bool report_app_info = 21 [default = false];
+  optional bool report_bluetooth_info = 22 [default = false];
+  optional bool report_fan_info = 23 [default = false];
+  optional bool report_vpd_info = 24 [default = false];
 
   // Frequency to report device status, default to 3 hours.
   optional int64 device_status_frequency = 9 [default = 10800000];
@@ -303,6 +306,9 @@ message AutoUpdateSettingsProto {
 
   // This token is forwarded to omaha by update_engine. If it is set, omaha may
   // serve a quick fix build identified by the token.
+  //
+  // This field is primarily used for quick fixes, but it is also used by the
+  // Hotrod team to subdivide the Stable channel into cohorts.
   optional string device_quick_fix_build_token = 15;
 }
 
@@ -425,6 +431,7 @@ message DeviceLocalAccountInfoProto {
   // configured accounts on a device must have unique identifiers.
   optional string account_id = 2;
 
+  // LINT.IfChange
   // Indicates the type of device-local account.
   enum AccountType {
     // A login-less, policy-configured browsing session.
@@ -440,6 +447,9 @@ message DeviceLocalAccountInfoProto {
     // Web App.
     ACCOUNT_TYPE_WEB_KIOSK_APP = 4;
   }
+  // Should keep ChromeServletUtil.toDimensionAccountType logic in sync with
+  // AccountType enum.
+  // LINT.ThenChange(//depot/google3/java/com/google/chrome/cros/dmserver/chrome/ChromeServletUtil.java)
 
   // The account type.
   optional AccountType type = 3;
@@ -486,6 +496,15 @@ message DeviceLocalAccountsProto {
   // If the device is offline at startup then the network configuration screen
   // is always shown, before auto-login kicks in.
   optional bool prompt_for_network_when_offline = 5 [default = true];
+}
+
+message ManagedGuestSessionPrivacyWarningsProto {
+  // Enable the privacy warnings on both; the login screen of the managed-guest
+  // session & inside the auto-launched managed-guest sessions.
+  // If this policy is set to false, all the privacy warnings are deactivated.
+  // If it's set to true or not set, then the privacy warnings will be shown by
+  // default.
+  optional bool enabled = 1 [default = true];
 }
 
 message AllowRedeemChromeOsRegistrationOffersProto {
@@ -1361,22 +1380,22 @@ message DeviceUserPolicyLoopbackProcessingModeProto {
 
 // Specifies a list of origins. Each of the specified origins will run in its
 // own process on the sign-in screen.
-message DeviceLoginScreenIsolateOriginsProto {
+message OBSOLETE_DeviceLoginScreenIsolateOriginsProto {
   // A comma-separated list of the origins to be run in a separate process on
   // the sign-in screen.
   // If the value of this policy does not match the value of the user policy
   // IsolateOrigins, the chrome process will be restarted on user sign-in to
   // apply the value specified by the user policy.
-  optional string isolate_origins = 1;
+  optional string OBSOLETE_isolate_origins = 1 [deprecated = true];
 }
 
 // Specifies if each site should run in its own process on the sign-in screen.
-message DeviceLoginScreenSitePerProcessProto {
+message OBSOLETE_DeviceLoginScreenSitePerProcessProto {
   // If true, each site will run in its own process on the sign-in screen.
   // If the value of this policy does not match the value of the user policy
   // SitePerProcess, the chrome process will be restarted on user sign-in to
   // apply the value specified by the user policy.
-  optional bool site_per_process = 1;
+  optional bool OBSOLETE_site_per_process = 1 [deprecated = true];
 }
 
 // Setting to control if running virtual machines on Chrome OS is allowed.
@@ -1682,10 +1701,10 @@ message ChromeDeviceSettingsProto {
       65;
   optional DeviceUserPolicyLoopbackProcessingModeProto
       device_user_policy_loopback_processing_mode = 66;
-  optional DeviceLoginScreenIsolateOriginsProto
-      device_login_screen_isolate_origins = 67;
-  optional DeviceLoginScreenSitePerProcessProto
-      device_login_screen_site_per_process = 68;
+  optional OBSOLETE_DeviceLoginScreenIsolateOriginsProto
+      device_login_screen_isolate_origins = 67 [deprecated = true];
+  optional OBSOLETE_DeviceLoginScreenSitePerProcessProto
+      device_login_screen_site_per_process = 68 [deprecated = true];
   optional VirtualMachinesAllowedProto virtual_machines_allowed = 69;
   optional DeviceMachinePasswordChangeRateProto
       device_machine_password_change_rate = 70;
@@ -1728,4 +1747,7 @@ message ChromeDeviceSettingsProto {
       required_client_certificate_for_device = 101;
   optional DeviceCrostiniArcAdbSideloadingAllowedProto
       device_crostini_arc_adb_sideloading_allowed = 102;
+  optional StringPolicyProto minimum_chrome_version_eol_message = 103;
+  optional ManagedGuestSessionPrivacyWarningsProto
+      managed_guest_session_privacy_warnings = 104;
 }

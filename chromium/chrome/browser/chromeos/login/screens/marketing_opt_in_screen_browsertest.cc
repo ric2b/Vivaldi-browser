@@ -45,16 +45,16 @@ namespace chromeos {
 
 namespace {
 
-const std::initializer_list<base::StringPiece> kChromebookEmailToggle = {
-    "marketing-opt-in", "chromebookUpdatesOption"};
-const std::initializer_list<base::StringPiece> kChromebookEmailToggleDiv = {
-    "marketing-opt-in", "marketing-opt-in-toggle"};
-const std::initializer_list<base::StringPiece> kMarketingA11yButton = {
+const test::UIPath kChromebookEmailToggle = {"marketing-opt-in",
+                                             "chromebookUpdatesOption"};
+const test::UIPath kChromebookEmailToggleDiv = {"marketing-opt-in",
+                                                "marketing-opt-in-toggle"};
+const test::UIPath kMarketingA11yButton = {
     "marketing-opt-in", "marketing-opt-in-accessibility-button"};
-const std::initializer_list<base::StringPiece> kMarketingFinalA11yPage = {
-    "marketing-opt-in", "finalAccessibilityPage"};
-const std::initializer_list<base::StringPiece> kMarketingA11yButtonToggle = {
-    "marketing-opt-in", "a11yNavButtonToggle"};
+const test::UIPath kMarketingFinalA11yPage = {"marketing-opt-in",
+                                              "finalAccessibilityPage"};
+const test::UIPath kMarketingA11yButtonToggle = {"marketing-opt-in",
+                                                 "a11yNavButtonToggle"};
 
 // Parameter to be used in tests.
 struct RegionToCodeMap {

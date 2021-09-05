@@ -32,9 +32,6 @@ FileManagerPrivateGetStringsFunction::~FileManagerPrivateGetStringsFunction() =
 ExtensionFunction::ResponseAction FileManagerPrivateGetStringsFunction::Run() {
   auto dict = GetFileManagerStrings();
 
-  dict->SetBoolean("VIDEO_PLAYER_NATIVE_CONTROLS_ENABLED",
-                   base::FeatureList::IsEnabled(
-                       chromeos::features::kVideoPlayerNativeControls));
   dict->SetBoolean("HIDE_SPACE_INFO",
                    chromeos::DemoSession::IsDeviceInDemoMode());
   dict->SetBoolean("ARC_USB_STORAGE_UI_ENABLED",
@@ -50,6 +47,9 @@ ExtensionFunction::ResponseAction FileManagerPrivateGetStringsFunction::Run() {
   dict->SetBoolean(
       "UNIFIED_MEDIA_VIEW_ENABLED",
       base::FeatureList::IsEnabled(chromeos::features::kUnifiedMediaView));
+  dict->SetBoolean(
+      "FILES_TRANSFER_DETAILS_ENABLED",
+      base::FeatureList::IsEnabled(chromeos::features::kFilesTransferDetails));
   dict->SetBoolean("ZIP_NO_NACL", base::FeatureList::IsEnabled(
                                       chromeos::features::kFilesZipNoNaCl));
 

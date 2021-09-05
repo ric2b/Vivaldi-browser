@@ -35,8 +35,8 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
                                    public ToolbarActionView::Delegate,
                                    public views::WidgetObserver {
  public:
-  using ToolbarIconMap = std::map<ToolbarActionsModel::ActionId,
-                                  std::unique_ptr<ToolbarActionView>>;
+  using ToolbarIcons =
+      std::map<ToolbarActionsModel::ActionId, ToolbarActionView*>;
 
   // Determines how the container displays - specifically whether the menu and
   // popped out action can be hidden.
@@ -59,7 +59,7 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
   ExtensionsToolbarButton* extensions_button() const {
     return extensions_button_;
   }
-  const ToolbarIconMap& icons_for_testing() const { return icons_; }
+  const ToolbarIcons& icons_for_testing() const { return icons_; }
   ToolbarActionViewController* popup_owner_for_testing() {
     return popup_owner_;
   }
@@ -120,6 +120,7 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
   // ToolbarActionView::Delegate:
   content::WebContents* GetCurrentWebContents() override;
   bool ShownInsideMenu() const override;
+  bool CanShowIconInToolbar() const override;
   void OnToolbarActionViewDragDone() override;
   views::LabelButton* GetOverflowReferenceView() const override;
   gfx::Size GetToolbarActionSize() override;
@@ -221,7 +222,7 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
   // Actions for all extensions.
   std::vector<std::unique_ptr<ToolbarActionViewController>> actions_;
   // View for every action, does not imply pinned or currently shown.
-  ToolbarIconMap icons_;
+  ToolbarIcons icons_;
   // Popped-out extension, if any.
   ToolbarActionViewController* popped_out_action_ = nullptr;
   // The action that triggered the current popup, if any.

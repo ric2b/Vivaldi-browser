@@ -415,7 +415,7 @@ struct ClientHintsExtendedData {
   url::Origin resource_origin;
   bool is_main_frame = false;
   GURL main_frame_url;
-  blink::FeaturePolicy* feature_policy = nullptr;
+  const blink::FeaturePolicy* feature_policy = nullptr;
   bool is_1p_origin = false;
 };
 
@@ -470,7 +470,7 @@ void UpdateNavigationRequestClientUaHeadersImpl(
   bool disable_due_to_custom_ua = false;
   if (override_ua) {
     NavigatorDelegate* nav_delegate =
-        frame_tree_node->navigator()->GetDelegate();
+        frame_tree_node->navigator().GetDelegate();
     ua_metadata =
         nav_delegate ? nav_delegate->GetUserAgentOverride().ua_metadata_override
                      : base::nullopt;

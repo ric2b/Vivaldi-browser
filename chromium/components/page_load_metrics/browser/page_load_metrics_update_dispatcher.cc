@@ -194,6 +194,16 @@ internal::PageLoadTimingStatus IsValidPageLoadTiming(
     return internal::INVALID_NULL_FIRST_INPUT_DELAY;
   }
 
+  if (timing.interactive_timing->first_scroll_delay.has_value() &&
+      !timing.interactive_timing->first_scroll_timestamp.has_value()) {
+    return internal::INVALID_NULL_FIRST_SCROLL_TIMESTAMP;
+  }
+
+  if (!timing.interactive_timing->first_scroll_delay.has_value() &&
+      timing.interactive_timing->first_scroll_timestamp.has_value()) {
+    return internal::INVALID_NULL_FIRST_SCROLL_DELAY;
+  }
+
   if (timing.interactive_timing->longest_input_delay.has_value() &&
       !timing.interactive_timing->longest_input_timestamp.has_value()) {
     return internal::INVALID_NULL_LONGEST_INPUT_TIMESTAMP;
@@ -252,6 +262,9 @@ class PageLoadTimingMerger {
     MergeInteractiveTiming(navigation_start_offset,
                            *new_page_load_timing.interactive_timing,
                            is_main_frame);
+    MergeBackForwardCacheTiming(navigation_start_offset,
+                                new_page_load_timing.back_forward_cache_timings,
+                                is_main_frame);
   }
 
   // Whether we merged a new value.
@@ -327,16 +340,14 @@ class PageLoadTimingMerger {
       target_paint_timing->first_meaningful_paint =
           new_paint_timing.first_meaningful_paint;
 
-      target_paint_timing->largest_image_paint =
-          new_paint_timing.largest_image_paint;
-      target_paint_timing->largest_image_paint_size =
-          new_paint_timing.largest_image_paint_size;
-      target_paint_timing->largest_text_paint =
-          new_paint_timing.largest_text_paint;
-      target_paint_timing->largest_text_paint_size =
-          new_paint_timing.largest_text_paint_size;
+      target_paint_timing->largest_contentful_paint =
+          new_paint_timing.largest_contentful_paint->Clone();
+      target_paint_timing->experimental_largest_contentful_paint =
+          new_paint_timing.experimental_largest_contentful_paint.Clone();
       target_paint_timing->first_input_or_scroll_notified_timestamp =
           new_paint_timing.first_input_or_scroll_notified_timestamp;
+      target_paint_timing->portal_activated_paint =
+          new_paint_timing.portal_activated_paint;
     }
   }
 
@@ -354,6 +365,10 @@ class PageLoadTimingMerger {
       // associated first input delay.
       target_interactive_timing->first_input_delay =
           new_interactive_timing.first_input_delay;
+      if (new_interactive_timing.first_input_processing_time.has_value()) {
+        target_interactive_timing->first_input_processing_time =
+            new_interactive_timing.first_input_processing_time;
+      }
     }
 
     if (new_interactive_timing.longest_input_delay.has_value()) {
@@ -368,6 +383,28 @@ class PageLoadTimingMerger {
         target_interactive_timing->longest_input_timestamp =
             new_longest_input_timestamp;
       }
+    }
+
+    // Update First Scroll Delay.
+    if (MaybeUpdateTimeDelta(&target_interactive_timing->first_scroll_timestamp,
+                             navigation_start_offset,
+                             new_interactive_timing.first_scroll_timestamp)) {
+      target_interactive_timing->first_scroll_delay =
+          new_interactive_timing.first_scroll_delay;
+    }
+  }
+
+  void MergeBackForwardCacheTiming(
+      base::TimeDelta navigation_start_offset,
+      const std::vector<mojo::StructPtr<mojom::BackForwardCacheTiming>>&
+          new_back_forward_cache_timings,
+      bool is_main_frame) {
+    if (is_main_frame) {
+      target_->back_forward_cache_timings.clear();
+      target_->back_forward_cache_timings.reserve(
+          new_back_forward_cache_timings.size());
+      for (const auto& timing : new_back_forward_cache_timings)
+        target_->back_forward_cache_timings.push_back(timing.Clone());
     }
   }
 
@@ -470,6 +507,18 @@ void PageLoadMetricsUpdateDispatcher::UpdateFeatures(
   client_->UpdateFeaturesUsage(render_frame_host, new_features);
 }
 
+void PageLoadMetricsUpdateDispatcher::UpdateThroughput(
+    content::RenderFrameHost* render_frame_host,
+    mojom::ThroughputUkmDataPtr throughput_data) {
+  if (embedder_interface_->IsExtensionUrl(
+          render_frame_host->GetLastCommittedURL())) {
+    // Extensions can inject child frames into a page. We don't want to track
+    // these as they could skew metrics. See http://crbug.com/761037
+    return;
+  }
+  client_->UpdateThroughput(std::move(throughput_data));
+}
+
 void PageLoadMetricsUpdateDispatcher::DidFinishSubFrameNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->HasCommitted())
@@ -488,6 +537,12 @@ void PageLoadMetricsUpdateDispatcher::DidFinishSubFrameNavigation(
       navigation_handle->NavigationStart() - navigation_start_;
   subframe_navigation_start_offset_.insert(std::make_pair(
       navigation_handle->GetFrameTreeNodeId(), navigation_delta));
+}
+
+void PageLoadMetricsUpdateDispatcher::OnFrameDeleted(
+    content::RenderFrameHost* render_frame_host) {
+  subframe_navigation_start_offset_.erase(
+      render_frame_host->GetFrameTreeNodeId());
 }
 
 void PageLoadMetricsUpdateDispatcher::UpdateSubFrameTiming(

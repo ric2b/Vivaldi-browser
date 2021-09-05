@@ -155,14 +155,17 @@ gfx::Image AvatarToolbarButtonDelegate::GetProfileAvatarImage(
 }
 
 int AvatarToolbarButtonDelegate::GetIncognitoWindowsCount() const {
-  return BrowserList::GetIncognitoSessionsActiveForProfile(profile_);
+  return BrowserList::GetOffTheRecordBrowsersActiveForProfile(profile_);
 }
 
 AvatarToolbarButton::State AvatarToolbarButtonDelegate::GetState() const {
-  if (profile_->IsIncognitoProfile())
-    return AvatarToolbarButton::State::kIncognitoProfile;
   if (profile_->IsGuestSession())
     return AvatarToolbarButton::State::kGuestSession;
+
+  // Return |kIncognitoProfile| state for all OffTheRecord profile types except
+  // guest mode.
+  if (profile_->IsOffTheRecord())
+    return AvatarToolbarButton::State::kIncognitoProfile;
 
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(profile_);

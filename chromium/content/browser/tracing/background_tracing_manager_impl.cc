@@ -14,10 +14,10 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/tracing/common/trace_startup_config.h"
 #include "content/browser/tracing/background_memory_tracing_observer.h"
 #include "content/browser/tracing/background_startup_tracing_observer.h"
@@ -39,6 +39,10 @@
 #include "services/tracing/public/cpp/perfetto/trace_event_data_source.h"
 #include "services/tracing/public/cpp/trace_event_agent.h"
 #include "services/tracing/public/cpp/tracing_features.h"
+
+#if defined(OS_ANDROID)
+#include "content/browser/tracing/background_reached_code_tracing_observer_android.h"
+#endif
 
 namespace content {
 
@@ -70,8 +74,8 @@ void BackgroundTracingManagerImpl::ActivateForProcess(
   child_process->GetBackgroundTracingAgentProvider(
       pending_provider.InitWithNewPipeAndPassReceiver());
 
-  base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(&BackgroundTracingManagerImpl::AddPendingAgent,
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&BackgroundTracingManagerImpl::AddPendingAgent,
                                 child_process_id, std::move(pending_provider)));
 }
 
@@ -80,6 +84,9 @@ BackgroundTracingManagerImpl::BackgroundTracingManagerImpl()
       trigger_handle_ids_(0) {
   AddEnabledStateObserver(BackgroundMemoryTracingObserver::GetInstance());
   AddEnabledStateObserver(BackgroundStartupTracingObserver::GetInstance());
+#if defined(OS_ANDROID)
+  AddEnabledStateObserver(&BackgroundReachedCodeTracingObserver::GetInstance());
+#endif
 }
 
 BackgroundTracingManagerImpl::~BackgroundTracingManagerImpl() = default;
@@ -120,6 +127,10 @@ bool BackgroundTracingManagerImpl::SetActiveScenario(
       static_cast<BackgroundTracingConfigImpl*>(config.release()));
   config_impl = BackgroundStartupTracingObserver::GetInstance()
                     ->IncludeStartupConfigIfNeeded(std::move(config_impl));
+#if defined(OS_ANDROID)
+  config_impl = BackgroundReachedCodeTracingObserver::GetInstance()
+                    .IncludeReachedCodeConfigIfNeeded(std::move(config_impl));
+#endif
   if (BackgroundStartupTracingObserver::GetInstance()
           ->enabled_in_current_session()) {
     // Anonymize data for startup tracing by default. We currently do not
@@ -322,8 +333,8 @@ void BackgroundTracingManagerImpl::TriggerNamedEvent(
     BackgroundTracingManagerImpl::TriggerHandle handle,
     StartedFinalizingCallback callback) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&BackgroundTracingManagerImpl::TriggerNamedEvent,
                        base::Unretained(this), handle, std::move(callback)));
     return;

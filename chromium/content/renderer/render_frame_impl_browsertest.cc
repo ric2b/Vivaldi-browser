@@ -128,7 +128,7 @@ class RenderFrameImplTest : public RenderViewTest {
     RenderFrameImpl::CreateFrame(
         kSubframeRouteId, std::move(stub_interface_provider),
         std::move(stub_browser_interface_broker), MSG_ROUTING_NONE,
-        MSG_ROUTING_NONE, kFrameProxyRouteId, MSG_ROUTING_NONE,
+        base::UnguessableToken(), kFrameProxyRouteId, MSG_ROUTING_NONE,
         base::UnguessableToken::Create(), base::UnguessableToken::Create(),
         frame_replication_state, &compositor_deps_, std::move(widget_params),
         blink::mojom::FrameOwnerProperties::New(),
@@ -379,17 +379,15 @@ TEST_F(RenderViewImplDownloadURLTest, DownloadUrlLimit) {
   EXPECT_CALL(*download_url_mock_local_frame_host(), DownloadURL(testing::_))
       .Times(10);
   for (int i = 0; i < 10; ++i) {
-    frame()->GetWebFrame()->DownloadURL(request,
-                                        network::mojom::RedirectMode::kManual,
-                                        mojo::ScopedMessagePipeHandle());
+    frame()->GetWebFrame()->DownloadURL(
+        request, network::mojom::RedirectMode::kManual, mojo::NullRemote());
     base::RunLoop().RunUntilIdle();
   }
 
   EXPECT_CALL(*download_url_mock_local_frame_host(), DownloadURL(testing::_))
       .Times(0);
-  frame()->GetWebFrame()->DownloadURL(request,
-                                      network::mojom::RedirectMode::kManual,
-                                      mojo::ScopedMessagePipeHandle());
+  frame()->GetWebFrame()->DownloadURL(
+      request, network::mojom::RedirectMode::kManual, mojo::NullRemote());
   base::RunLoop().RunUntilIdle();
 }
 
@@ -399,7 +397,7 @@ TEST_F(RenderViewImplDownloadURLTest, DownloadUrlLimit) {
 TEST_F(RenderFrameImplTest, NoCrashWhenDeletingFrameDuringFind) {
   frame()->GetWebFrame()->FindForTesting(
       1, "foo", true /* match_case */, true /* forward */,
-      false /* find_next */, true /* force */, false /* wrap_within_frame */);
+      true /* new_session */, true /* force */, false /* wrap_within_frame */);
 
   UnfreezableFrameMsg_Delete delete_message(
       0, FrameDeleteIntention::kNotMainFrame);
@@ -725,11 +723,12 @@ class FrameHostTestInterfaceRequestIssuer : public RenderFrameObserver {
     RequestTestInterfaceOnFrameEvent(kFrameEventReadyToCommitNavigation);
   }
 
-  void DidCommitProvisionalLoad(bool is_same_document_navigation,
-                                ui::PageTransition transition) override {
-    RequestTestInterfaceOnFrameEvent(is_same_document_navigation
-                                         ? kFrameEventDidCommitSameDocumentLoad
-                                         : kFrameEventDidCommitProvisionalLoad);
+  void DidCommitProvisionalLoad(ui::PageTransition transition) override {
+    RequestTestInterfaceOnFrameEvent(kFrameEventDidCommitProvisionalLoad);
+  }
+
+  void DidFinishSameDocumentNavigation() override {
+    RequestTestInterfaceOnFrameEvent(kFrameEventDidCommitSameDocumentLoad);
   }
 
   DISALLOW_COPY_AND_ASSIGN(FrameHostTestInterfaceRequestIssuer);
@@ -751,8 +750,7 @@ class FrameCommitWaiter : public RenderFrameObserver {
   // RenderFrameObserver:
   void OnDestruct() override {}
 
-  void DidCommitProvisionalLoad(bool is_same_document_navigation,
-                                ui::PageTransition transition) override {
+  void DidCommitProvisionalLoad(ui::PageTransition transition) override {
     did_commit_ = true;
     run_loop_.Quit();
   }

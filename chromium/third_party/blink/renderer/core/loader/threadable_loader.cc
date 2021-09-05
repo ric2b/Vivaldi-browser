@@ -122,7 +122,7 @@ class ThreadableLoader::DetachedClient final
   }
   void DidFail(const ResourceError&) override { self_keep_alive_.Clear(); }
   void DidFailRedirectCheck() override { self_keep_alive_.Clear(); }
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(loader_);
     ThreadableLoaderClient::Trace(visitor);
   }
@@ -682,7 +682,6 @@ bool ThreadableLoader::RedirectReceived(
 
   ResourceRequest cross_origin_request;
   cross_origin_request.CopyFrom(new_request);
-  cross_origin_request.SetInitialUrlForResourceTiming(initial_request_url_);
 
   // Remove any headers that may have been added by the network layer that cause
   // access control to fail.
@@ -1071,7 +1070,7 @@ LocalFrame* ThreadableLoader::GetFrame() const {
   return window ? window->GetFrame() : nullptr;
 }
 
-void ThreadableLoader::Trace(Visitor* visitor) {
+void ThreadableLoader::Trace(Visitor* visitor) const {
   visitor->Trace(execution_context_);
   visitor->Trace(client_);
   visitor->Trace(resource_fetcher_);

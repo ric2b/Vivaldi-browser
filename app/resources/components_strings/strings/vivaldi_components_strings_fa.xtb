@@ -21,7 +21,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />از عیب‌یابی شبکه‌ی ویندوز استفاده کنید<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">این سایت حاوی برنامه‌های مضر است</translation>
 <translation id="1916770123977586577">برای اعمال تنظیمات خود در این سایت، این صفحه را دوباره بارگذاری نمایید</translation>
-<translation id="1919345977826869612">آگهی‌ها</translation>
+<translation id="1919345977826869612">تبلیغات</translation>
 <translation id="194030505837763158">رفتن به <ph name="LINK" /></translation>
 <translation id="1974060860693918893">پیشرفته</translation>
 <translation id="2030481566774242610">منظورتان <ph name="LINK" /> بود؟</translation>
@@ -42,6 +42,7 @@
 <translation id="2359808026110333948">ادامه</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />راه‌اندازی عیب‌یابی شبکه<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">اعلان‌ها</translation>
+<translation id="2501278716633472235">بازگشت</translation>
 <translation id="2539524384386349900">تشخیص</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> پاسخی نامعتبر ارسال کرد.</translation>
 <translation id="2586657967955657006">کلیپ‌بورد</translation>
@@ -70,6 +71,7 @@
 <translation id="3226128629678568754">دکمه تازه‌سازی را فشار دهید تا داده‌های مورد نیاز برای بارگذاری صفحه مجدداً ارسال شود.</translation>
 <translation id="3227137524299004712">میکروفن</translation>
 <translation id="3234666976984236645">همیشه محتوای مهم در این سایت شناسایی شود</translation>
+<translation id="3308738399950580893">تبلیغات</translation>
 <translation id="3422472998109090673">دسترسی به <ph name="HOST_NAME" /> درحال حاضر امکان‌پذیر نیست.</translation>
 <translation id="3427092606871434483">اجازه (پیش‌فرض)</translation>
 <translation id="3447661539832366887">مالک این دستگاه بازی دایناسور را خاموش کرده است.</translation>
@@ -85,6 +87,7 @@
 <translation id="3681007416295224113">اطلاعات گواهی‌نامه</translation>
 <translation id="3717027428350673159">‏<ph name="BEGIN_LINK" />بررسی پروکسی، دیوار آتش و پیکربندی DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">اگر از سرور پراکسی استفاده می‌کنید...</translation>
+<translation id="3894751534882749287">اگر به هر صورت مایل به مشاهده‌ی این صفحه هستید، می‌توانید از طریق پنجره‌ی مسدودساز ردیاب و یا کلیک بر روی دکمه‌ی اجازه، سطح محافظت از ردیابی آن را تغییر دهید</translation>
 <translation id="3950820424414687140">ورود به سیستم</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> مسدود است</translation>
 <translation id="3987940399970879459">کمتر از ۱ مگابایت</translation>
@@ -111,6 +114,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /><ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">اتصال شما قطع شد</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />راه‌اندازی عیب‌یابی شبکه‌ی ویندوز<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">مسدودساز ردیاب</translation>
 <translation id="4744603770635761495">مسیر قابل اجرا</translation>
 <translation id="4750917950439032686">اطلاعات شما (به‌عنوان مثال، رمزهای عبور یا شماره‌ کارت‌های اعتباری) وقتی به این سایت ارسال می‌شوند، خصوصی هستند.</translation>
 <translation id="4764776831041365478">ممکن است صفحهٔ وب <ph name="URL" /> موقتاً خراب باشد یا ممکن است برای همیشه به آدرس وب جدید منتقل شده باشد.</translation>
@@ -173,10 +177,12 @@
 <translation id="7090678807593890770">جستجوی گوگل برای <ph name="LINK" /></translation>
 <translation id="7108819624672055576">توسط یک افزونه مجاز شده است</translation>
 <translation id="7111012039238467737">(معتبر)</translation>
+<translation id="7113310725918019676">اجازه به <ph name="BLOCKED_TYPE" /> از <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> از استانداردهای امنیتی پیروی نمی‌کند.</translation>
 <translation id="7219179957768738017">اتصال از <ph name="SSL_VERSION" /> استفاده می‌کند.</translation>
 <translation id="7260504762447901703">لغو دسترسی</translation>
 <translation id="7353601530677266744">خط فرمان</translation>
+<translation id="7364115444476960850">صفحه‌ای که مایل به مشاهده‌ی آن هستید، توسط <ph name="BLOCKER_NAME" /> در ویوالدی مسدود شده</translation>
 <translation id="7419106976560586862">مسیر پروفایل</translation>
 <translation id="7445762425076701745">هویت سروری که به آن متصل شده‌اید به‌طور کامل تأیید نمی‌شود. شما با استفاده از نامی به سرور متصل شده‌اید که فقط در شبکه‌ی خودتان معتبر است و ارائه دهنده مجوز خارجی قادر به راستی‌آزمایی مالکیت آن نیست. به دلیل آنکه برخی از ارائه دهندگان مجوز بدون توجه به هر موردی، مجوزهایی را برای این نام‌ها ارائه می‌کنند، روشی برای اطمینان از این امر وجود ندارد که آیا شما به سایت مورد نظر خود متصل شده‌اید یا یک سایت مضر.</translation>
 <translation id="7455133967321480974">استفاده از پیش‌فرض سراسری (مسدود)</translation>
@@ -200,6 +206,7 @@
 <translation id="8037357227543935929">درخواست (پیش‌فرض)</translation>
 <translation id="8041940743680923270">استفاده از پیش‌فرض سراسری (سؤال شود)</translation>
 <translation id="808894953321890993">تغییر رمز عبور</translation>
+<translation id="8119307142152921512">ردیاب‌ها و تبلیغات</translation>
 <translation id="8142868475871995937">‏برای مشاهده فهرست نشانی‌های وب ممنوع و سایر خط‌مشی‌های اجباری براساس تصمیم سرپرست سیستم خود از &lt;strong&gt;vivaldi://policy&lt;/strong&gt; بازدید نمایید.</translation>
 <translation id="8149426793427495338">رایانه‌تان به حالت خواب رفته است.</translation>
 <translation id="8150722005171944719">این فایل در <ph name="URL" /> قابل خواندن نیست. ممکن است حذف شده، جابجا شده باشد و یا مجوزهای فایل از دسترسی جلوگیری می‌کنند.</translation>
@@ -217,6 +224,7 @@
 <translation id="8703575177326907206">اتصال شما به <ph name="DOMAIN" /> رمزگذاری نشده است.</translation>
 <translation id="8740359287975076522">‏<ph name="HOST_NAME" />’s &lt;abbr id="dnsDefinition"&gt;آدرس DNS&lt;/abbr&gt; پیدا نشد. درحال بررسی برای تشخیص مشکل.</translation>
 <translation id="8820817407110198400">نشانک‌ها</translation>
+<translation id="8940028675168378100">مسدود شده توسط <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">پروکسی <ph name="DOMAIN" /> نیاز به یک نام کاربری و رمز عبور دارد.</translation>
 <translation id="9008201768610948239">نادیده گرفتن</translation>
 <translation id="9011424611726486705">باز کردن تنظیمات سایت</translation>
@@ -224,6 +232,7 @@
 <translation id="9039213469156557790">علاوه بر این، این صفحه دارای منابع دیگری است که امن نیستند. این منابع در حین انتقال، توسط دیگران قابل مشاهده بوده و نیز می‌توانند برای تغییر رفتار صفحه، توسط یک مهاجم تغییر داده شوند.</translation>
 <translation id="9069693763241529744">توسط یک افزونه مسدود شده است</translation>
 <translation id="9169664750068251925">همیشه مسدود در این سایت</translation>
+<translation id="9180553614777056266">مسدودساز تبلیغات</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> از یک پروتکل پشتیبانی‌نشده استفاده می‌کند.</translation>
 <translation id="9219103736887031265">تصاویر</translation>
 <translation id="936602727769022409">‏ممکن است دسترسی به حساب گوگل خود را از دست بدهید. کرومیوم توصیه می‌کند هم‌اکنون رمزعبورتان را تغییر دهید. از شما خواسته می‌شود به سیستم وارد شوید.</translation>

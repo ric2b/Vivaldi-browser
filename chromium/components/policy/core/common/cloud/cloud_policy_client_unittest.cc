@@ -30,10 +30,15 @@
 #include "components/policy/core/common/cloud/realtime_reporting_job_configuration.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/version_info/version_info.h"
+#include "google_apis/gaia/gaia_urls.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if defined(OS_CHROMEOS)
+#include "chromeos/system/fake_statistics_provider.h"
+#endif
 
 using testing::_;
 using testing::DoAll;
@@ -88,6 +93,8 @@ const char kGcmID[] = "fake-gcm-id";
 const char kPolicyToken[] = "fake-policy-token";
 const char kPolicyName[] = "fake-policy-name";
 const char kValueValidationMessage[] = "fake-value-validation-message";
+const char kRobotAuthCode[] = "fake-robot-auth-code";
+const char kApiAuthScope[] = "fake-api-auth-scope";
 
 const int64_t kAgeOfCommand = 123123123;
 const int64_t kLastCommandId = 123456789;
@@ -100,7 +107,7 @@ MATCHER_P(MatchProto, expected, "matches protobuf") {
 // A mock class to allow us to set expectations on upload callbacks.
 class MockStatusCallbackObserver {
  public:
-  MockStatusCallbackObserver() {}
+  MockStatusCallbackObserver() = default;
 
   MOCK_METHOD1(OnCallbackComplete, void(bool));
 };
@@ -109,7 +116,7 @@ class MockStatusCallbackObserver {
 // callbacks.
 class MockRemoteCommandsObserver {
  public:
-  MockRemoteCommandsObserver() {}
+  MockRemoteCommandsObserver() = default;
 
   MOCK_METHOD3(OnRemoteCommandsFetched,
                void(DeviceManagementStatus,
@@ -119,10 +126,18 @@ class MockRemoteCommandsObserver {
 
 class MockDeviceDMTokenCallbackObserver {
  public:
-  MockDeviceDMTokenCallbackObserver() {}
+  MockDeviceDMTokenCallbackObserver() = default;
 
   MOCK_METHOD1(OnDeviceDMTokenRequested,
                std::string(const std::vector<std::string>&));
+};
+
+class MockRobotAuthCodeCallbackObserver {
+ public:
+  MockRobotAuthCodeCallbackObserver() = default;
+
+  MOCK_METHOD2(OnRobotAuthCodeFetched,
+               void(DeviceManagementStatus, const std::string&));
 };
 
 }  // namespace
@@ -270,8 +285,6 @@ class CloudPolicyClientTest : public testing::Test {
 
     gcm_id_update_request_.mutable_gcm_id_update_request()->set_gcm_id(kGcmID);
 
-    upload_app_install_report_response_.mutable_app_install_report_response();
-
     em::PolicyValidationReportRequest* policy_validation_report_request =
         upload_policy_validation_report_request_
             .mutable_policy_validation_report_request();
@@ -287,6 +300,21 @@ class CloudPolicyClientTest : public testing::Test {
         em::PolicyValueValidationIssue::
             VALUE_VALIDATION_ISSUE_SEVERITY_WARNING);
     policy_value_validation_issue->set_debug_message(kValueValidationMessage);
+
+    em::DeviceServiceApiAccessRequest* api_request =
+        robot_auth_code_fetch_request_.mutable_service_api_access_request();
+    api_request->set_oauth2_client_id(
+        GaiaUrls::GetInstance()->oauth2_chrome_client_id());
+    api_request->add_auth_scopes(kApiAuthScope);
+    api_request->set_device_type(em::DeviceServiceApiAccessRequest::CHROME_OS);
+    em::DeviceServiceApiAccessResponse* api_response =
+        robot_auth_code_fetch_response_.mutable_service_api_access_response();
+    api_response->set_auth_code(kRobotAuthCode);
+
+#if defined(OS_CHROMEOS)
+    fake_statistics_provider_.SetMachineStatistic(
+        chromeos::system::kSerialNumberKeyForTest, "fake_serial_number");
+#endif
   }
 
   void SetUp() override {
@@ -324,6 +352,25 @@ class CloudPolicyClientTest : public testing::Test {
             base::Unretained(&device_dmtoken_callback_observer_)));
     client_->AddPolicyTypeToFetch(policy_type_, std::string());
     client_->AddObserver(&observer_);
+  }
+
+  base::Value MakeDefaultRealtimeReport() {
+    base::Value context(base::Value::Type::DICTIONARY);
+    context.SetStringPath("profile.gaiaEmail", "name@gmail.com");
+    context.SetStringPath("browser.userAgent", "User-Agent");
+    context.SetStringPath("profile.profileName", "Profile 1");
+    context.SetStringPath("profile.profilePath", "C:\\User Data\\Profile 1");
+
+    base::Value event;
+    event.SetStringPath("time", "2019-05-22T13:01:45Z");
+    event.SetStringPath("foo.prop1", "value1");
+    event.SetStringPath("foo.prop2", "value2");
+    event.SetStringPath("foo.prop3", "value3");
+
+    base::Value event_list(base::Value::Type::LIST);
+    event_list.Append(std::move(event));
+    return policy::RealtimeReportingJobConfiguration::BuildReport(
+        std::move(event_list), std::move(context));
   }
 
   void ExpectRegistration(const std::string& oauth_token) {
@@ -506,6 +553,16 @@ class CloudPolicyClientTest : public testing::Test {
                                    gcm_id_update_response_)));
   }
 
+  void ExpectRobotAuthCodeFetch() {
+    EXPECT_CALL(service_, StartJob(_))
+        .WillOnce(DoAll(
+            service_.CaptureJobType(&job_type_),
+            service_.CaptureQueryParams(&query_params_),
+            service_.CaptureRequest(&job_request_),
+            service_.StartJobAsync(net::OK, DeviceManagementService::kSuccess,
+                                   robot_auth_code_fetch_response_)));
+  }
+
   void CheckPolicyResponse() {
     ASSERT_TRUE(client_->GetPolicyFor(policy_type_, std::string()));
     EXPECT_THAT(*client_->GetPolicyFor(policy_type_, std::string()),
@@ -537,6 +594,7 @@ class CloudPolicyClientTest : public testing::Test {
   em::DeviceManagementRequest attribute_update_request_;
   em::DeviceManagementRequest gcm_id_update_request_;
   em::DeviceManagementRequest upload_policy_validation_report_request_;
+  em::DeviceManagementRequest robot_auth_code_fetch_request_;
 
   // Protobufs used in successful responses.
   em::DeviceManagementResponse registration_response_;
@@ -550,8 +608,8 @@ class CloudPolicyClientTest : public testing::Test {
   em::DeviceManagementResponse attribute_update_permission_response_;
   em::DeviceManagementResponse attribute_update_response_;
   em::DeviceManagementResponse gcm_id_update_response_;
-  em::DeviceManagementResponse upload_app_install_report_response_;
   em::DeviceManagementResponse upload_policy_validation_report_response_;
+  em::DeviceManagementResponse robot_auth_code_fetch_response_;
 
   base::test::SingleThreadTaskEnvironment task_environment_;
   DeviceManagementService::JobConfiguration::JobType job_type_;
@@ -565,10 +623,15 @@ class CloudPolicyClientTest : public testing::Test {
   StrictMock<MockStatusCallbackObserver> callback_observer_;
   StrictMock<MockDeviceDMTokenCallbackObserver>
       device_dmtoken_callback_observer_;
+  StrictMock<MockRobotAuthCodeCallbackObserver>
+      robot_auth_code_callback_observer_;
   FakeSigningService fake_signing_service_;
   std::unique_ptr<CloudPolicyClient> client_;
   network::TestURLLoaderFactory url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
+#if defined(OS_CHROMEOS)
+  chromeos::system::ScopedFakeStatisticsProvider fake_statistics_provider_;
+#endif
 };
 
 TEST_F(CloudPolicyClientTest, Init) {
@@ -1442,8 +1505,7 @@ TEST_F(CloudPolicyClientTest, UploadChromeOsUserReport) {
   EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
 }
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || \
-    defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
 TEST_F(CloudPolicyClientTest, UploadRealtimeReport) {
   RegisterClient();
 
@@ -1453,25 +1515,8 @@ TEST_F(CloudPolicyClientTest, UploadRealtimeReport) {
       base::BindOnce(&MockStatusCallbackObserver::OnCallbackComplete,
                      base::Unretained(&callback_observer_));
 
-  base::Value context(base::Value::Type::DICTIONARY);
-  context.SetStringPath("profile.gaiaEmail", "name@gmail.com");
-  context.SetStringPath("browser.userAgent", "User-Agent");
-  context.SetStringPath("profile.profileName", "Profile 1");
-  context.SetStringPath("profile.profilePath", "C:\\User Data\\Profile 1");
-
-  base::Value event;
-  event.SetStringPath("time", "2019-05-22T13:01:45Z");
-  event.SetStringPath("foo.prop1", "value1");
-  event.SetStringPath("foo.prop2", "value2");
-  event.SetStringPath("foo.prop3", "value3");
-
-  base::Value event_list(base::Value::Type::LIST);
-  event_list.Append(std::move(event));
-
-  client_->UploadRealtimeReport(
-      policy::RealtimeReportingJobConfiguration::BuildReport(
-          std::move(event_list), std::move(context)),
-      std::move(callback));
+  client_->UploadRealtimeReport(MakeDefaultRealtimeReport(),
+                                std::move(callback));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(
       DeviceManagementService::JobConfiguration::TYPE_UPLOAD_REAL_TIME_REPORT,
@@ -1497,6 +1542,10 @@ TEST_F(CloudPolicyClientTest, UploadRealtimeReport) {
   EXPECT_EQ(policy::GetOSVersion(),
             *payload->FindStringPath(
                 RealtimeReportingJobConfiguration::kOsVersionKey));
+  EXPECT_FALSE(policy::GetDeviceName().empty());
+  EXPECT_EQ(policy::GetDeviceName(),
+            *payload->FindStringPath(
+                RealtimeReportingJobConfiguration::kDeviceNameKey));
 
   base::Value* events =
       payload->FindPath(RealtimeReportingJobConfiguration::kEventsKey);
@@ -1507,6 +1556,7 @@ TEST_F(CloudPolicyClientTest, UploadRealtimeReport) {
 TEST_F(CloudPolicyClientTest, RealtimeReportMerge) {
   auto config = std::make_unique<RealtimeReportingJobConfiguration>(
       client_.get(), DMAuth::FromDMToken(kDMToken),
+      service_.configuration()->GetReportingServerUrl(), false,
       RealtimeReportingJobConfiguration::Callback());
 
   // Add one report to the config.
@@ -1577,6 +1627,86 @@ TEST_F(CloudPolicyClientTest, RealtimeReportMerge) {
                 ->GetList()
                 .size());
 }
+
+TEST_F(CloudPolicyClientTest, UploadAppInstallReport) {
+  RegisterClient();
+
+  ExpectRealtimeReport();
+  EXPECT_CALL(callback_observer_, OnCallbackComplete(true)).Times(1);
+  CloudPolicyClient::StatusCallback callback =
+      base::BindOnce(&MockStatusCallbackObserver::OnCallbackComplete,
+                     base::Unretained(&callback_observer_));
+
+  client_->UploadAppInstallReport(MakeDefaultRealtimeReport(),
+                                  std::move(callback));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(
+      DeviceManagementService::JobConfiguration::TYPE_UPLOAD_REAL_TIME_REPORT,
+      job_type_);
+  EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
+}
+
+TEST_F(CloudPolicyClientTest, CancelUploadAppInstallReport) {
+  RegisterClient();
+
+  ExpectRealtimeReport();
+  EXPECT_CALL(callback_observer_, OnCallbackComplete(true)).Times(0);
+
+  CloudPolicyClient::StatusCallback callback =
+      base::BindOnce(&MockStatusCallbackObserver::OnCallbackComplete,
+                     base::Unretained(&callback_observer_));
+
+  em::AppInstallReportRequest app_install_report;
+  client_->UploadAppInstallReport(MakeDefaultRealtimeReport(),
+                                  std::move(callback));
+  EXPECT_EQ(1, client_->GetActiveRequestCountForTest());
+
+  // The job expected by the call to ExpectUploadAppInstallReport() completes
+  // when base::RunLoop().RunUntilIdle() is called.  To simulate a cancel
+  // before the response for the request is processed, make sure to cancel it
+  // before running a loop.
+  client_->CancelAppInstallReportUpload();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(0, client_->GetActiveRequestCountForTest());
+  EXPECT_EQ(
+      DeviceManagementService::JobConfiguration::TYPE_UPLOAD_REAL_TIME_REPORT,
+      job_type_);
+}
+
+TEST_F(CloudPolicyClientTest, UploadAppInstallReportSupersedesPending) {
+  RegisterClient();
+
+  ExpectRealtimeReport();
+  EXPECT_CALL(callback_observer_, OnCallbackComplete(true)).Times(0);
+  CloudPolicyClient::StatusCallback callback =
+      base::BindOnce(&MockStatusCallbackObserver::OnCallbackComplete,
+                     base::Unretained(&callback_observer_));
+
+  client_->UploadAppInstallReport(MakeDefaultRealtimeReport(),
+                                  std::move(callback));
+
+  EXPECT_EQ(1, client_->GetActiveRequestCountForTest());
+  Mock::VerifyAndClearExpectations(&service_);
+  Mock::VerifyAndClearExpectations(&callback_observer_);
+
+  // Starting another app push-install report upload should cancel the pending
+  // one.
+  ExpectRealtimeReport();
+  EXPECT_CALL(callback_observer_, OnCallbackComplete(true)).Times(1);
+  callback = base::BindOnce(&MockStatusCallbackObserver::OnCallbackComplete,
+                            base::Unretained(&callback_observer_));
+  client_->UploadAppInstallReport(MakeDefaultRealtimeReport(),
+                                  std::move(callback));
+  EXPECT_EQ(1, client_->GetActiveRequestCountForTest());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(
+      DeviceManagementService::JobConfiguration::TYPE_UPLOAD_REAL_TIME_REPORT,
+      job_type_);
+  EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
+  EXPECT_EQ(0, client_->GetActiveRequestCountForTest());
+}
+
 #endif
 
 TEST_F(CloudPolicyClientTest, MultipleActiveRequests) {
@@ -1909,6 +2039,67 @@ TEST_F(CloudPolicyClientTest, PolicyReregistrationFailsWithNonMatchingDMToken) {
   EXPECT_EQ(DM_STATUS_SERVICE_MANAGEMENT_TOKEN_INVALID, client_->status());
 }
 
+TEST_F(CloudPolicyClientTest, RequestFetchRobotAuthCodes) {
+  RegisterClient();
+  ExpectRobotAuthCodeFetch();
+  EXPECT_CALL(robot_auth_code_callback_observer_,
+              OnRobotAuthCodeFetched(_, kRobotAuthCode));
+
+  em::DeviceServiceApiAccessRequest::DeviceType device_type =
+      em::DeviceServiceApiAccessRequest::CHROME_OS;
+  std::set<std::string> oauth_scopes = {kApiAuthScope};
+  client_->FetchRobotAuthCodes(
+      DMAuth::FromDMToken(kDMToken), device_type, oauth_scopes,
+      base::BindOnce(&MockRobotAuthCodeCallbackObserver::OnRobotAuthCodeFetched,
+                     base::Unretained(&robot_auth_code_callback_observer_)));
+
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(DeviceManagementService::JobConfiguration::TYPE_API_AUTH_CODE_FETCH,
+            job_type_);
+  EXPECT_EQ(robot_auth_code_fetch_request_.SerializePartialAsString(),
+            job_request_.SerializePartialAsString());
+  EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
+}
+
+TEST_F(CloudPolicyClientTest,
+       RequestFetchRobotAuthCodesNotInterruptedByPolicyFetch) {
+  // Expect a robot auth code fetch request that never runs its callback to
+  // simulate something happening while we wait for the request to return.
+  DeviceManagementService::JobControl* robot_job = nullptr;
+  DeviceManagementService::JobConfiguration::JobType robot_job_type;
+  EXPECT_CALL(service_, StartJob(_))
+      .WillOnce(DoAll(service_.StartJobFullControl(&robot_job),
+                      service_.CaptureJobType(&robot_job_type)));
+
+  RegisterClient();
+  EXPECT_CALL(robot_auth_code_callback_observer_,
+              OnRobotAuthCodeFetched(_, kRobotAuthCode));
+
+  em::DeviceServiceApiAccessRequest::DeviceType device_type =
+      em::DeviceServiceApiAccessRequest::CHROME_OS;
+  std::set<std::string> oauth_scopes = {kApiAuthScope};
+  client_->FetchRobotAuthCodes(
+      DMAuth::FromDMToken(kDMToken), device_type, oauth_scopes,
+      base::BindOnce(&MockRobotAuthCodeCallbackObserver::OnRobotAuthCodeFetched,
+                     base::Unretained(&robot_auth_code_callback_observer_)));
+  base::RunLoop().RunUntilIdle();
+
+  ExpectPolicyFetch(kDMToken);
+  EXPECT_CALL(observer_, OnPolicyFetched(_));
+
+  client_->FetchPolicy();
+  base::RunLoop().RunUntilIdle();
+
+  // Try to manually finish the robot auth code fetch job.
+  service_.DoURLCompletion(&robot_job, net::OK,
+                           DeviceManagementService::kSuccess,
+                           robot_auth_code_fetch_response_);
+
+  EXPECT_EQ(DeviceManagementService::JobConfiguration::TYPE_API_AUTH_CODE_FETCH,
+            robot_job_type);
+  EXPECT_EQ(DeviceManagementService::JobConfiguration::TYPE_POLICY_FETCH,
+            job_type_);
+}
 class MockClientCertProvisioningStartCsrCallbackObserver {
  public:
   MockClientCertProvisioningStartCsrCallbackObserver() = default;

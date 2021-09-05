@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/optional.h"
 #include "base/unguessable_token.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/test/web_contents_tester.h"
@@ -109,6 +110,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   void SetLastCommittedURL(const GURL& url) override;
   void SetTitle(const base::string16& new_title) override;
   void SetMainFrameMimeType(const std::string& mime_type) override;
+  const std::string& GetContentsMimeType() override;
   void SetIsCurrentlyAudible(bool audible) override;
   void TestDidReceiveInputEvent(blink::WebInputEvent::Type type) override;
   void TestDidFinishLoad(const GURL& url) override;
@@ -120,11 +122,8 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   // Prevent interaction with views.
   bool CreateRenderViewForRenderManager(
       RenderViewHost* render_view_host,
-      int opener_frame_routing_id,
-      int proxy_routing_id,
-      const base::UnguessableToken& frame_token,
-      const base::UnguessableToken& devtools_frame_token,
-      const FrameReplicationState& replicated_frame_state) override;
+      const base::Optional<base::UnguessableToken>& opener_frame_token,
+      int proxy_routing_id) override;
 
   // Returns a clone of this TestWebContents. The returned object is also a
   // TestWebContents. The caller owns the returned object.
@@ -151,10 +150,6 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   void SetHistoryOffsetAndLength(int history_offset,
                                  int history_length) override;
 
-  // Records that this was called and returns and empty vector.
-  std::vector<mojo::Remote<blink::mojom::PauseSubresourceLoadingHandle>>
-  PauseSubresourceLoading() override;
-
   bool GetPauseSubresourceLoadingCalled() override;
 
   void ResetPauseSubresourceLoadingCalled() override;
@@ -165,6 +160,10 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   void TestDecrementBluetoothConnectedDeviceCount() override;
 
   base::UnguessableToken GetAudioGroupId() override;
+
+  const base::UnguessableToken& CreatePortal(
+      std::unique_ptr<WebContents> portal_web_contents) override;
+  WebContents* GetPortalContents(const base::UnguessableToken&) override;
 
  protected:
   // The deprecated WebContentsTester still needs to subclass this.
@@ -180,7 +179,6 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       SessionStorageNamespace* session_storage_namespace) override;
   void CreateNewWidget(int32_t render_process_id,
                        int32_t route_id,
-                       mojo::PendingRemote<mojom::Widget> widget,
                        mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
                            blink_widget_host,
                        mojo::PendingAssociatedRemote<blink::mojom::Widget>
@@ -188,7 +186,6 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   void CreateNewFullscreenWidget(
       int32_t render_process_id,
       int32_t route_id,
-      mojo::PendingRemote<mojom::Widget> widget,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget)
@@ -206,6 +203,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
                             const Referrer& referrer,
                             const std::string& headers,
                             const base::string16& suggested_filename) override;
+  void ReattachToOuterWebContentsFrame() override {}
 
   RenderViewHostDelegateView* delegate_view_override_;
 

@@ -23,6 +23,9 @@ class AppIconManager {
   AppIconManager() = default;
   virtual ~AppIconManager() = default;
 
+  virtual void Start() = 0;
+  virtual void Shutdown() = 0;
+
   // Returns false if any icon in |icon_sizes_in_px| is missing from downloaded
   // icons for a given app. |icon_sizes_in_px| must be sorted in ascending
   // order.
@@ -42,16 +45,16 @@ class AppIconManager {
                          const std::vector<SquareSizePx>& icon_sizes_in_px,
                          ReadIconsCallback callback) const = 0;
 
-  using ReadShortcutIconsCallback = base::OnceCallback<void(
-      std::vector<std::map<SquareSizePx, SkBitmap>> shortcut_icons_bitmaps)>;
+  using ReadShortcutsMenuIconsCallback = base::OnceCallback<void(
+      ShortcutsMenuIconsBitmaps shortcuts_menu_icons_bitmaps)>;
 
-  // Reads bitmaps for all shortcut icons for an app. Returns a vector of
+  // Reads bitmaps for all shortcuts menu icons for an app. Returns a vector of
   // map<SquareSizePx, SkBitmap>. The index of a map in the vector is the same
   // as that of its corresponding shortcut in the manifest's shortcuts vector.
   // Returns empty vector in |callback| if we hit any error.
-  virtual void ReadAllShortcutIcons(
+  virtual void ReadAllShortcutsMenuIcons(
       const AppId& app_id,
-      ReadShortcutIconsCallback callback) const = 0;
+      ReadShortcutsMenuIconsCallback callback) const = 0;
 
   // Reads all icon bitmaps for an app. Returns empty |icon_bitmaps| in
   // |callback| if IO error.
@@ -73,6 +76,8 @@ class AppIconManager {
       const AppId& app_id,
       SquareSizePx icon_size_in_px,
       ReadCompressedIconCallback callback) const = 0;
+
+  virtual SkBitmap GetFavicon(const AppId& app_id) const = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(AppIconManager);

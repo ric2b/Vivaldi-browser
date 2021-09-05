@@ -35,6 +35,11 @@ ConversionManager* ConversionManagerProviderImpl::GetManager(
 }
 
 // static
+void ConversionManagerImpl::RunInMemoryForTesting() {
+  ConversionStorageSql::RunInMemoryForTesting();
+}
+
+// static
 std::unique_ptr<ConversionManagerImpl> ConversionManagerImpl::CreateForTesting(
     std::unique_ptr<ConversionReporter> reporter,
     std::unique_ptr<ConversionPolicy> policy,
@@ -93,9 +98,6 @@ ConversionManagerImpl::~ConversionManagerImpl() = default;
 
 void ConversionManagerImpl::HandleImpression(
     const StorableImpression& impression) {
-  if (!storage_)
-    return;
-
   // Add the impression to storage.
   storage_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&ConversionStorage::StoreImpression,
@@ -104,9 +106,6 @@ void ConversionManagerImpl::HandleImpression(
 
 void ConversionManagerImpl::HandleConversion(
     const StorableConversion& conversion) {
-  if (!storage_)
-    return;
-
   // TODO(https://crbug.com/1043345): Add UMA for the number of conversions we
   // are logging to storage, and the number of new reports logged to storage.
   // Unretained is safe because any task to delete |storage_| will be posted
@@ -166,8 +165,11 @@ void ConversionManagerImpl::ClearData(
 }
 
 void ConversionManagerImpl::OnInitCompleted(bool success) {
+  // The storage layer is robust to initialization failures, so ignore the case
+  // where it failed to setup.
   if (!success) {
-    storage_.reset();
+    // TODO(https://crbug.com/1099812): Log metrics on storage initialization
+    // success.
     return;
   }
 

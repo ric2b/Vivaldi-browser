@@ -8,6 +8,8 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.ContextUtils;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.components.embedder_support.util.UrlUtilities;
@@ -16,14 +18,18 @@ import org.chromium.components.external_intents.ExternalNavigationDelegate.Start
 import org.chromium.components.external_intents.ExternalNavigationHandler;
 import org.chromium.components.external_intents.ExternalNavigationHandler.OverrideUrlLoadingResult;
 import org.chromium.components.external_intents.ExternalNavigationParams;
+import org.chromium.components.webapk.lib.client.ChromeWebApkHostSignature;
+import org.chromium.components.webapk.lib.client.WebApkValidator;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.url.Origin;
 
 /**
  * WebLayer's implementation of the {@link ExternalNavigationDelegate}.
  */
 public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegate {
+    private static boolean sWebApkValidatorInitialized;
     private final TabImpl mTab;
     private boolean mTabDestroyed;
 
@@ -154,7 +160,8 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
     @Override
     // This is relevant only if the intent ends up being handled by this app, which does not happen
     // for WebLayer.
-    public void maybeSetUserGesture(Intent intent) {}
+    public void maybeSetRequestMetadata(Intent intent, boolean hasUserGesture,
+            boolean isRendererInitiated, @Nullable Origin initiatorOrigin) {}
 
     @Override
     // This is relevant only if the intent ends up being handled by this app, which does not happen
@@ -205,8 +212,12 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
 
     @Override
     public boolean isValidWebApk(String packageName) {
-        // TODO(crbug.com/1063874): Determine whether to refine this.
-        return false;
+        if (!sWebApkValidatorInitialized) {
+            WebApkValidator.init(ChromeWebApkHostSignature.EXPECTED_SIGNATURE,
+                    ChromeWebApkHostSignature.PUBLIC_KEY);
+            sWebApkValidatorInitialized = true;
+        }
+        return WebApkValidator.isValidWebApk(ContextUtils.getApplicationContext(), packageName);
     }
 
     @Override

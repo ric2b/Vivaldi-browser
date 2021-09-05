@@ -6,6 +6,7 @@
 
 #include "cc/paint/paint_record.h"
 #include "printing/common/metafile_utils.h"
+#include "printing/mojom/print.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
 
@@ -31,7 +32,7 @@ TEST(MetafileSkiaTest, TestFrameContent) {
   SkSize page_size = SkSize::Make(kPageSideLen, kPageSideLen);
 
   // Finish creating the entire metafile.
-  MetafileSkia metafile(SkiaDocumentType::MSKP, 1);
+  MetafileSkia metafile(mojom::SkiaDocumentType::kMSKP, 1);
   metafile.AppendPage(page_size, std::move(record));
   metafile.AppendSubframeInfo(content_id, 2, std::move(pic_holder));
   metafile.FinishFrameContent();
@@ -43,7 +44,7 @@ TEST(MetafileSkiaTest, TestFrameContent) {
   SkPictureRecorder recorder;
   SkCanvas* canvas = recorder.beginRecording(kPictureSideLen, kPictureSideLen);
   SkPaint paint;
-  paint.setStyle(SkPaint::kStrokeAndFill_Style);
+  paint.setStyle(SkPaint::kFill_Style);
   paint.setColor(SK_ColorRED);
   paint.setAlpha(SK_AlphaOPAQUE);
   canvas->drawRect(SkRect::MakeXYWH(0, 0, kPictureSideLen, kPictureSideLen),
@@ -52,7 +53,7 @@ TEST(MetafileSkiaTest, TestFrameContent) {
   EXPECT_TRUE(picture);
 
   // Get the complete picture by replacing the placeholder.
-  DeserializationContext subframes;
+  PictureDeserializationContext subframes;
   subframes[content_id] = picture;
   SkDeserialProcs procs = DeserializationProcs(&subframes);
   sk_sp<SkPicture> pic = SkPicture::MakeFromStream(metafile_stream, &procs);

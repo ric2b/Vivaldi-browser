@@ -87,10 +87,6 @@ buildflag_header("buildflags") {
 config("net_internal_config") {
   defines = [ "NET_IMPLEMENTATION" ]
 
-  if (use_kerberos && is_android) {
-    include_dirs = [ "/usr/include/kerberosV" ]
-  }
-
   if (enable_built_in_dns) {
     defines += [ "ENABLE_BUILT_IN_DNS" ]
   }
@@ -546,12 +542,16 @@ component("net") {
       "cookies/canonical_cookie.h",
       "cookies/cookie_access_delegate.cc",
       "cookies/cookie_access_delegate.h",
+      "cookies/cookie_access_result.cc",
+      "cookies/cookie_access_result.h",
       "cookies/cookie_change_dispatcher.cc",
       "cookies/cookie_change_dispatcher.h",
       "cookies/cookie_constants.cc",
       "cookies/cookie_constants.h",
       "cookies/cookie_deletion_info.cc",
       "cookies/cookie_deletion_info.h",
+      "cookies/cookie_inclusion_status.cc",
+      "cookies/cookie_inclusion_status.h",
       "cookies/cookie_monster.cc",
       "cookies/cookie_monster.h",
       "cookies/cookie_monster_change_dispatcher.cc",
@@ -667,8 +667,6 @@ component("net") {
       "http/bidirectional_stream_request_info.h",
       "http/broken_alternative_services.cc",
       "http/broken_alternative_services.h",
-      "http/failing_http_transaction_factory.cc",
-      "http/failing_http_transaction_factory.h",
       "http/http_auth.cc",
       "http/http_auth.h",
       "http/http_auth_cache.cc",
@@ -916,6 +914,8 @@ component("net") {
       "quic/quic_clock_skew_detector.h",
       "quic/quic_connection_logger.cc",
       "quic/quic_connection_logger.h",
+      "quic/quic_connectivity_monitor.cc",
+      "quic/quic_connectivity_monitor.h",
       "quic/quic_connectivity_probing_manager.cc",
       "quic/quic_connectivity_probing_manager.h",
       "quic/quic_context.cc",
@@ -941,8 +941,8 @@ component("net") {
       "quic/quic_stream_factory.h",
       "quic/quic_transport_client.cc",
       "quic/quic_transport_client.h",
-      "quic/quic_utils_chromium.cc",
-      "quic/quic_utils_chromium.h",
+      "quic/quic_transport_error.cc",
+      "quic/quic_transport_error.h",
       "quiche/common/platform/impl/quiche_arraysize_impl.h",
       "quiche/common/platform/impl/quiche_endian_impl.h",
       "quiche/common/platform/impl/quiche_export_impl.h",
@@ -953,6 +953,8 @@ component("net") {
       "quiche/common/platform/impl/quiche_str_cat_impl.h",
       "quiche/common/platform/impl/quiche_string_piece_impl.h",
       "quiche/common/platform/impl/quiche_text_utils_impl.h",
+      "quiche/common/platform/impl/quiche_time_utils_impl.cc",
+      "quiche/common/platform/impl/quiche_time_utils_impl.h",
       "quiche/common/platform/impl/quiche_unordered_containers_impl.h",
       "socket/client_socket_factory.cc",
       "socket/client_socket_factory.h",
@@ -1413,8 +1415,8 @@ component("net") {
       ]
     }
 
-    # Use getifaddrs() on POSIX platforms, except Linux and Android.
-    if (is_posix && !is_linux && !is_android) {
+    # Use getifaddrs() on POSIX platforms, except Linux.
+    if (is_posix && !is_linux) {
       sources += [
         "base/network_interfaces_getifaddrs.cc",
         "base/network_interfaces_getifaddrs.h",
@@ -1430,18 +1432,15 @@ component("net") {
         "cert/known_roots_nss.h",
         "cert/nss_cert_database.cc",
         "cert/nss_cert_database.h",
+        "cert/test_root_certs_builtin.cc",
+        "cert/x509_util_nss.cc",
+        "cert/x509_util_nss.h",
         "third_party/mozilla_security_manager/nsNSSCertificateDB.cpp",
         "third_party/mozilla_security_manager/nsNSSCertificateDB.h",
         "third_party/mozilla_security_manager/nsPKCS12Blob.cpp",
         "third_party/mozilla_security_manager/nsPKCS12Blob.h",
         "third_party/nss/ssl/cmpcert.cc",
         "third_party/nss/ssl/cmpcert.h",
-
-        # These files are part of the partial implementation of NSS for
-        # cert verification, so keep them in that case.
-        "cert/test_root_certs_nss.cc",
-        "cert/x509_util_nss.cc",
-        "cert/x509_util_nss.h",
       ]
       if (!is_chromecast) {
         sources += [
@@ -1461,7 +1460,7 @@ component("net") {
         "base/network_interfaces_fuchsia.cc",
         "base/network_interfaces_fuchsia.h",
         "base/platform_mime_util_fuchsia.cc",
-        "cert/test_root_certs_fuchsia.cc",
+        "cert/test_root_certs_builtin.cc",
       ]
     }
 
@@ -1868,6 +1867,9 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/2048-rsa-ee-by-prime256v1-ecdsa-intermediate.pem",
     "data/ssl/certificates/2048-rsa-intermediate.pem",
     "data/ssl/certificates/2048-rsa-root.pem",
+    "data/ssl/certificates/398_days_1_second_after_2020_09_01.pem",
+    "data/ssl/certificates/398_days_after_2020_09_01.pem",
+    "data/ssl/certificates/399_days_after_2020_09_01.pem",
     "data/ssl/certificates/39_months_after_2015_04.pem",
     "data/ssl/certificates/39_months_based_on_last_day.pem",
     "data/ssl/certificates/40_months_after_2015_04.pem",
@@ -1928,6 +1930,7 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/crlset_by_leaf_spki.raw",
     "data/ssl/certificates/crlset_by_leaf_subject_no_spki.raw",
     "data/ssl/certificates/crlset_by_root_serial.raw",
+    "data/ssl/certificates/crlset_by_root_spki.raw",
     "data/ssl/certificates/crlset_by_root_subject.raw",
     "data/ssl/certificates/crlset_by_root_subject_no_spki.raw",
     "data/ssl/certificates/crlset_known_interception_by_root.raw",
@@ -2029,6 +2032,7 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/quic-leaf-cert.key.pkcs8.pem",
     "data/ssl/certificates/quic-leaf-cert.key.sct",
     "data/ssl/certificates/quic-root.pem",
+    "data/ssl/certificates/quic-short-lived.pem",
     "data/ssl/certificates/redundant-server-chain.pem",
     "data/ssl/certificates/redundant-validated-chain-root.pem",
     "data/ssl/certificates/redundant-validated-chain.pem",
@@ -2196,8 +2200,6 @@ static_library("test_support") {
     "test/url_request/url_request_hanging_read_job.h",
     "test/url_request/url_request_mock_data_job.cc",
     "test/url_request/url_request_mock_data_job.h",
-    "test/url_request/url_request_slow_download_job.cc",
-    "test/url_request/url_request_slow_download_job.h",
     "url_request/test_url_fetcher_factory.cc",
     "url_request/test_url_fetcher_factory.h",
     "url_request/url_request_test_util.cc",
@@ -3112,6 +3114,7 @@ bundle_data("net_unittests_bundle_data") {
     "data/url_request_unittest/308-without-location-header",
     "data/url_request_unittest/308-without-location-header.mock-http-headers",
     "data/url_request_unittest/BullRunSpeech.txt",
+    "data/url_request_unittest/BullRunSpeech.txt.deflate",
     "data/url_request_unittest/content-type-normalization.html",
     "data/url_request_unittest/content-type-normalization.html.mock-http-headers",
     "data/url_request_unittest/expect-ct-header-multiple.html",
@@ -4205,6 +4208,7 @@ test("net_unittests") {
     "cookies/canonical_cookie_unittest.cc",
     "cookies/cookie_constants_unittest.cc",
     "cookies/cookie_deletion_info_unittest.cc",
+    "cookies/cookie_inclusion_status_unittest.cc",
     "cookies/cookie_monster_unittest.cc",
     "cookies/cookie_util_unittest.cc",
     "cookies/parsed_cookie_unittest.cc",
@@ -4280,6 +4284,8 @@ test("net_unittests") {
     "http/mock_allow_http_auth_preferences.h",
     "http/structured_headers_generated_unittest.cc",
     "http/structured_headers_unittest.cc",
+    "http/test_upload_data_stream_not_allow_http1.cc",
+    "http/test_upload_data_stream_not_allow_http1.h",
     "http/transport_security_persister_unittest.cc",
     "http/transport_security_state_unittest.cc",
     "http/url_security_manager_unittest.cc",
@@ -4344,7 +4350,6 @@ test("net_unittests") {
     "quic/quic_test_packet_maker.cc",
     "quic/quic_test_packet_maker.h",
     "quic/quic_transport_end_to_end_test.cc",
-    "quic/quic_utils_chromium_test.cc",
     "quic/test_quic_crypto_client_config_handle.cc",
     "quic/test_quic_crypto_client_config_handle.h",
     "socket/client_socket_pool_base_unittest.cc",
@@ -4799,6 +4804,9 @@ test("net_unittests") {
       "//testing/android/native_test:native_test_native_code",
     ]
     android_manifest = "//net/android/unittest_support/AndroidManifest.xml"
+
+    # Cronet still supports kitkat.
+    min_sdk_version = 19
     sources += [
       "base/address_tracker_linux_unittest.cc",
       "base/network_interfaces_linux_unittest.cc",

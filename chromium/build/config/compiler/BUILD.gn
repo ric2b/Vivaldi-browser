@@ -121,9 +121,6 @@ declare_args() {
   thin_lto_enable_optimizations =
       (is_chromeos || is_android || is_win) && is_official_build
 
-  # By default only the binaries in official builds get build IDs.
-  force_local_build_id = false
-
   # Initialize all local variables with a pattern. This flag will fill
   # uninitialized floating-point types (and 32-bit pointers) with 0xFF and the
   # rest with 0xAA. This makes behavior of uninitialized memory bugs consistent,
@@ -143,6 +140,15 @@ declare_args() {
   # reduce TLB misses which gives performance improvement on cpu usage.
   # The gold linker by default has text section splitting enabled.
   use_text_section_splitting = false
+
+  # Token limits may not be accurate for build configs not covered by the CQ,
+  # so only enable them by default for mainstream build configs.
+  enable_wmax_tokens =
+      !is_official_build &&
+      (is_mac || (is_linux && !is_chromeos && target_cpu == "x64") ||
+       (is_win && target_cpu == "x86") || (is_win && target_cpu == "x64") ||
+       (is_android && target_cpu == "arm") ||
+       (is_android && target_cpu == "arm64"))
 }
 
 declare_args() {
@@ -323,14 +329,16 @@ config("compiler") {
       }
     }
 
-    if (is_official_build || force_local_build_id) {
-      # Explicitly pass --build-id to ld. Compilers used to always pass this
-      # implicitly but don't any more (in particular clang when built without
-      # ENABLE_LINKER_BUILD_ID=ON). The crash infrastructure does need a build
-      # id, so explicitly enable it in official builds. It's not needed in
-      # unofficial builds and computing it does slow down the link, so go with
-      # faster links in unofficial builds.
+    # Explicitly pass --build-id to ld. Compilers used to always pass this
+    # implicitly but don't any more (in particular clang when built without
+    # ENABLE_LINKER_BUILD_ID=ON).
+    if (is_official_build) {
+      # The sha1 build id has lower risk of collision but is more expensive to
+      # compute, so only use it in the official build to avoid slowing down
+      # links.
       ldflags += [ "-Wl,--build-id=sha1" ]
+    } else if (current_os != "aix") {
+      ldflags += [ "-Wl,--build-id" ]
     }
 
     if (!is_android) {
@@ -541,6 +549,23 @@ config("compiler") {
     } else {
       cflags_cc += [ "-std=c++14" ]
     }
+  }
+
+  # C++17 removes trigraph support, so preemptively disable trigraphs. This is
+  # especially useful given the collision with ecmascript's logical assignment
+  # operators: https://github.com/tc39/proposal-logical-assignment
+  if (is_clang) {
+    # clang-cl disables trigraphs by default
+    if (!is_win) {
+      # The gnu variants of C++11 and C++14 already disable trigraph support,
+      # but when building with clang, we use -std=c++11 / -std=c++14, which
+      # enables trigraph support: override that here.
+      cflags_cc += [ "-fno-trigraphs" ]
+    }
+
+    # Don't warn that trigraphs are ignored, since trigraphs are disabled
+    # anyway.
+    cflags_cc += [ "-Wno-trigraphs" ]
   }
 
   if (is_mac) {
@@ -1468,14 +1493,6 @@ config("default_warnings") {
         cflags += [ "-Wno-nonportable-include-path" ]
       }
 
-      if (target_os == "chromeos") {
-        # Disable clang warnings of "-Wmax-tokens" because CQ doesn't cover all CrOS use
-        # cases, so it's too late to fix when the error goes to CrOS side.
-        # Also nacl toolchain doesn't recognize the flag, so avoid passing to nacl clang
-        # See crbug.com/1079053 for more details.
-        cflags += [ "-Wno-max-tokens" ]
-      }
-
       if (current_toolchain == host_toolchain || !use_xcode_clang) {
         # Flags NaCl (Clang 3.7) and Xcode 9.2 (Clang clang-900.0.39.2) do not
         # recognize.
@@ -1504,6 +1521,13 @@ config("default_warnings") {
           # TODO(https://crbug.com/995993): Clean up and enable.
           "-Wno-implicit-fallthrough",
         ]
+
+        if (enable_wmax_tokens) {
+          cflags += [ "-Wmax-tokens" ]
+        } else {
+          # TODO(https://crbug.com/1049569): Remove after Clang 87b235db.
+          cflags += [ "-Wno-max-tokens" ]
+        }
       }
     }
   }
@@ -1970,6 +1994,14 @@ config("optimize") {
     } else {
       cflags = [ "-Os" ] + common_optimize_on_cflags
     }
+  } else if (is_chromeos) {
+    # TODO(gbiv): This is partially favoring size over speed. CrOS exclusively
+    # uses clang, and -Os in clang is more of a size-conscious -O2 than "size at
+    # any cost" (AKA -Oz). It'd be nice to:
+    # - Make `optimize_for_size` apply to all platforms where we're optimizing
+    #   for size by default (so, also Windows)
+    # - Investigate -Oz here, maybe just for ARM?
+    cflags = [ "-Os" ] + common_optimize_on_cflags
   } else {
     cflags = [ "-O2" ] + common_optimize_on_cflags
   }
@@ -1997,6 +2029,12 @@ config("no_optimize") {
       cflags = [ "-Oz" ] + common_optimize_on_cflags
     } else {
       cflags = [ "-Os" ] + common_optimize_on_cflags
+    }
+
+    if (!is_component_build) {
+      # Required for library partitions. Without this all symbols just end up
+      # in the base partition.
+      ldflags = [ "-Wl,--gc-sections" ]
     }
   } else if (is_fuchsia) {
     # On Fuchsia, we optimize for size here to reduce the size of debug build
@@ -2249,7 +2287,8 @@ config("symbols") {
       cflags += [ "-g2" ]
     }
 
-    if (is_clang && !is_nacl && !use_xcode_clang) {
+    # TODO(https://crbug.com/1050118): Investigate missing debug info on mac.
+    if (is_clang && !is_nacl && !use_xcode_clang && !is_mac && !is_ios) {
       cflags += [
         "-Xclang",
         "-debug-info-kind=constructor",

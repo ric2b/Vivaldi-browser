@@ -32,6 +32,7 @@ import org.chromium.weblayer_private.interfaces.IWebLayerClient;
 import org.chromium.weblayer_private.interfaces.IWebLayerFactory;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
 import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
+import org.chromium.weblayer_private.interfaces.WebLayerVersionConstants;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -179,6 +180,14 @@ public class WebLayer {
         return mImpl;
     }
 
+    static WebLayer getLoadedWebLayer(@NonNull Context appContext)
+            throws UnsupportedVersionException {
+        ThreadCheck.ensureOnUiThread();
+        appContext = appContext.getApplicationContext();
+        checkAvailable(appContext);
+        return getWebLayerLoader(appContext).getLoadedWebLayer();
+    }
+
     /**
      * Returns the supported version. Using any functions defined in a newer version than
      * returned by {@link getSupportedMajorVersion} result in throwing an
@@ -270,17 +279,20 @@ public class WebLayer {
                 }
                 Class factoryClass = remoteClassLoader.loadClass(
                         "org.chromium.weblayer_private.WebLayerFactoryImpl");
-                // NOTE: the 20 comes from the previous scheme of incrementing versioning. It must
-                // remain at 20 for Chrome version 79.
-                // TODO(https://crbug.com/1031830): change 20 to -1 when 83 goes to stable.
                 mFactory = IWebLayerFactory.Stub.asInterface(
                         (IBinder) factoryClass
                                 .getMethod("create", String.class, int.class, int.class)
                                 .invoke(null, WebLayerClientVersionConstants.PRODUCT_VERSION,
-                                        WebLayerClientVersionConstants.PRODUCT_MAJOR_VERSION, 20));
+                                        WebLayerClientVersionConstants.PRODUCT_MAJOR_VERSION, -1));
                 available = mFactory.isClientSupported();
                 majorVersion = mFactory.getImplementationMajorVersion();
                 version = mFactory.getImplementationVersion();
+                // See comment in WebLayerFactoryImpl.isClientSupported() for details on this.
+                if (available
+                        && WebLayerClientVersionConstants.PRODUCT_MAJOR_VERSION > majorVersion) {
+                    available = WebLayerClientVersionConstants.PRODUCT_MAJOR_VERSION - majorVersion
+                            <= WebLayerVersionConstants.MAX_SKEW;
+                }
             } catch (Exception e) {
                 Log.e(TAG, "Unable to create WebLayerFactory", e);
             }
@@ -358,6 +370,10 @@ public class WebLayer {
             } catch (Exception e) {
                 throw new APICallException(e);
             }
+        }
+
+        WebLayer getLoadedWebLayer() {
+            return mWebLayer;
         }
 
         @Nullable
@@ -667,6 +683,19 @@ public class WebLayer {
             // broadcast receiver that will handle them. The broadcast receiver needs to be in the
             // client library because it's referenced in the manifest.
             return new Intent(WebLayer.getAppContext(), BroadcastReceiver.class);
+        }
+
+        @Override
+        public Intent createMediaSessionServiceIntent() {
+            StrictModeWorkaround.apply();
+            return new Intent(WebLayer.getAppContext(), MediaSessionService.class);
+        }
+
+        @Override
+        public int getMediaSessionNotificationId() {
+            StrictModeWorkaround.apply();
+            // The id is part of the public library to avoid conflicts.
+            return R.id.weblayer_media_session_notification;
         }
     }
 }

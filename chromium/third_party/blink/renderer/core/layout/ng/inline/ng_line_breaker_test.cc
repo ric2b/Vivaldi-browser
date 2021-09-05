@@ -22,8 +22,7 @@ String ToString(NGInlineItemResults line, NGInlineNode node) {
   const String& text = node.ItemsData(false).text_content;
   for (const auto& item_result : line) {
     builder.Append(
-        StringView(text, item_result.start_offset,
-                   item_result.end_offset - item_result.start_offset));
+        StringView(text, item_result.StartOffset(), item_result.Length()));
   }
   return builder.ToString();
 }
@@ -535,11 +534,12 @@ TEST_F(NGLineBreakerTest, MinMaxWithTrailingSpaces) {
     <div id=container>12345 6789 </div>
   )HTML");
 
-  auto sizes = node.ComputeMinMaxSizes(
-                       WritingMode::kHorizontalTb,
-                       MinMaxSizesInput(/* percentage_resolution_block_size */ (
-                           LayoutUnit())))
-                   .sizes;
+  auto sizes =
+      node.ComputeMinMaxSizes(
+              WritingMode::kHorizontalTb,
+              MinMaxSizesInput(/* percentage_resolution_block_size */
+                               LayoutUnit(), MinMaxSizesType::kContent))
+          .sizes;
   EXPECT_EQ(sizes.min_size, LayoutUnit(60));
   EXPECT_EQ(sizes.max_size, LayoutUnit(110));
 }
@@ -563,8 +563,36 @@ TEST_F(NGLineBreakerTest, TableCellWidthCalculationQuirkOutOfFlow) {
 
   node.ComputeMinMaxSizes(
       WritingMode::kHorizontalTb,
-      MinMaxSizesInput(/* percentage_resolution_block_size */ LayoutUnit()));
+      MinMaxSizesInput(/* percentage_resolution_block_size */ LayoutUnit(),
+                       MinMaxSizesType::kContent));
   // Pass if |ComputeMinMaxSize| doesn't hit DCHECK failures.
+}
+
+// crbug.com/1091359
+TEST_F(NGLineBreakerTest, RewindRubyRun) {
+  NGInlineNode node = CreateInlineNode(R"HTML(
+<div id="container">
+<style>
+* {
+  -webkit-text-security:square;
+  font-size:16px;
+}
+</style>
+<big style="word-wrap: break-word">a
+<ruby dir="rtl">
+<rt>
+B AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+<svg></svg>
+<b>
+</rt>
+</ruby>
+  )HTML");
+
+  node.ComputeMinMaxSizes(
+      WritingMode::kHorizontalTb,
+      MinMaxSizesInput(/* percentage_resolution_block_size */ LayoutUnit(),
+                       MinMaxSizesType::kContent));
+  // This test passes if no CHECK failures.
 }
 
 #undef MAYBE_OverflowAtomicInline

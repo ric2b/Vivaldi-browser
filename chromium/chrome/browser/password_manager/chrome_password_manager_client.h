@@ -84,7 +84,7 @@ class ChromePasswordManagerClient
   bool IsFillingEnabled(const GURL& url) const override;
   bool IsFillingFallbackEnabled(const GURL& url) const override;
   void PostHSTSQueryForHost(
-      const GURL& origin,
+      const url::Origin& origin,
       password_manager::HSTSCallback callback) const override;
   bool PromptUserToSaveOrUpdatePassword(
       std::unique_ptr<password_manager::PasswordFormManagerForUI> form_to_save,
@@ -105,7 +105,7 @@ class ChromePasswordManagerClient
       autofill::mojom::FocusedFieldType focused_field_type) override;
   bool PromptUserToChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-      const GURL& origin,
+      const url::Origin& origin,
       const CredentialsCallback& callback) override;
   void ShowTouchToFill(
       password_manager::PasswordManagerDriver* driver) override;
@@ -117,7 +117,7 @@ class ChromePasswordManagerClient
   void GeneratePassword() override;
   void NotifyUserAutoSignin(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
-      const GURL& origin) override;
+      const url::Origin& origin) override;
   void NotifyUserCouldBeAutoSignedIn(
       std::unique_ptr<autofill::PasswordForm> form) override;
   void NotifySuccessfulLoginWithExistingPassword(
@@ -125,7 +125,7 @@ class ChromePasswordManagerClient
           submitted_manager) override;
   void NotifyStorePasswordCalled() override;
   void UpdateCredentialCache(
-      const GURL& origin,
+      const url::Origin& origin,
       const std::vector<const autofill::PasswordForm*>& best_matches,
       bool is_blacklisted) override;
   void AutomaticPasswordSave(
@@ -133,7 +133,7 @@ class ChromePasswordManagerClient
           saved_form_manager) override;
   void PasswordWasAutofilled(
       const std::vector<const autofill::PasswordForm*>& best_matches,
-      const GURL& origin,
+      const url::Origin& origin,
       const std::vector<const autofill::PasswordForm*>* federated_matches)
       override;
   void AutofillHttpAuth(
@@ -144,6 +144,7 @@ class ChromePasswordManagerClient
       const GURL& origin,
       const base::string16& username) override;
   void TriggerReauthForPrimaryAccount(
+      signin_metrics::ReauthAccessPoint access_point,
       base::OnceCallback<void(ReauthSucceeded)> reauth_callback) override;
   void TriggerSignIn(signin_metrics::AccessPoint access_point) override;
   PrefService* GetPrefs() const override;
@@ -165,9 +166,9 @@ class ChromePasswordManagerClient
       const override;
   password_manager::HttpAuthManager* GetHttpAuthManager() override;
   autofill::AutofillDownloadManager* GetAutofillDownloadManager() override;
-  const GURL& GetMainFrameURL() const override;
-  bool IsMainFrameSecure() const override;
-  const GURL& GetLastCommittedEntryURL() const override;
+  bool IsCommittedMainFrameSecure() const override;
+  const GURL& GetLastCommittedURL() const override;
+  url::Origin GetLastCommittedOrigin() const override;
   const password_manager::CredentialsFilter* GetStoreResultFilter()
       const override;
   const autofill::LogManager* GetLogManager() const override;
@@ -286,6 +287,7 @@ class ChromePasswordManagerClient
       content::NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
+  void WebContentsDestroyed() override;
 // TODO(crbug.com/1006430): Paste event is not captured on Android.
 #if !defined(OS_ANDROID)
   void OnPaste() override;
@@ -353,7 +355,7 @@ class ChromePasswordManagerClient
   base::string16 last_composing_text_;
 
   // Whether a leak warning was shown. Used only for tests or when
-  // ENABLE_PASSWORD_CHANGE is defined.
+  // kPasswordChange feature is enabled.
   bool was_leak_dialog_shown_ = false;
 #endif
 

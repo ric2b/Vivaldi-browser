@@ -90,7 +90,7 @@ struct TrustedUrlRequestParams {
   // Observer which should be notified when this URLRequest reads or writes
   // a cookie. If this is set to non-null, the observer passed to
   // URLLoaderFactory will be ignored.
-  CookieAccessObserver? cookie_observer;
+  pending_remote<CookieAccessObserver>? cookie_observer;
 };
 
 // Typemapped to network::ResourceRequest.
@@ -355,7 +355,7 @@ struct URLRequest {
   // practical terms, it's empty for requests that didn't go through a service
   // worker, or if the original requestor is not a window. When the request
   // goes through a service worker, the id is
-  // ServiceWorkerProviderHost::fetch_request_window_id.
+  // ServiceWorkerContainerHost::fetch_request_window_id.
   mojo_base.mojom.UnguessableToken? fetch_window_id;
 
   // The ID that DevTools uses to track network requests. It is generated in the
@@ -402,6 +402,10 @@ struct URLRequestBody {
   // Indicates whether the post data contains sensitive information like
   // passwords.
   bool contains_sensitive_info;
+
+  // Indicates whether fetch upload streaming is allowed/rejected over H/1.
+  // Even if this is false but there is a QUIC/H2 stream, the upload is allowed.
+  bool allow_http1_for_streaming_upload;
 };
 
 // Represents part of an upload body. This could be either one of bytes, file or
@@ -429,7 +433,13 @@ struct DataElement {
   mojo_base.mojom.Time expected_modification_time;
 };
 
+// URLLoader is an interface for performing a single request to a URL.
+//
 // Destroying a URLLoader will cancel the associated request.
+//
+// A URLLoader is normally created and started using
+// URLLoaderFactory::CreateLoaderAndStart(). The result of the load is
+// communicated to the URLLoaderClient provided to that function.
 interface URLLoader {
   // If a disconnection is initiated by the client side, it may send the
   // following disconnection reason, along with an application-defined string
@@ -480,6 +490,7 @@ interface URLLoader {
   ResumeReadingBodyFromNet();
 };
 
+// Receives messages from a single URLLoader.
 interface URLLoaderClient {
   // Called when the response head is received.
   OnReceiveResponse(URLResponseHead head);

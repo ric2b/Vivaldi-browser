@@ -359,7 +359,7 @@ class PreloadJavaScriptDialogPresenter : public web::JavaScriptDialogPresenter {
   DCHECK(![self isWebStatePrerendered:webState.get()]);
 
   webState->RemoveObserver(_webStateObserver.get());
-  breakpad::StopMonitoringURLsForWebState(webState.get());
+  breakpad::StopMonitoringURLsForPreloadWebState(webState.get());
   webState->SetDelegate(nullptr);
   _policyDeciderBridge.reset();
   HistoryTabHelper::FromWebState(webState.get())
@@ -416,6 +416,10 @@ class PreloadJavaScriptDialogPresenter : public web::JavaScriptDialogPresenter {
   if (handler) {
     handler(nil, nil);
   }
+}
+
+- (UIView*)webViewContainerForWebState:(web::WebState*)webState {
+  return [self.delegate webViewContainer];
 }
 
 #pragma mark - CRWWebStateObserver
@@ -553,7 +557,7 @@ class PreloadJavaScriptDialogPresenter : public web::JavaScriptDialogPresenter {
 
   _webState->SetDelegate(_webStateDelegate.get());
   _webState->AddObserver(_webStateObserver.get());
-  breakpad::MonitorURLsForWebState(_webState.get());
+  breakpad::MonitorURLsForPreloadWebState(_webState.get());
   _webState->SetWebUsageEnabled(true);
 
   if (AccountConsistencyService* accountConsistencyService =
@@ -568,10 +572,6 @@ class PreloadJavaScriptDialogPresenter : public web::JavaScriptDialogPresenter {
   web::NavigationManager::WebLoadParams loadParams(self.prerenderedURL);
   loadParams.referrer = request->referrer();
   loadParams.transition_type = request->transition();
-  if ([self.delegate preloadShouldUseDesktopUserAgent]) {
-    loadParams.user_agent_override_option =
-        web::NavigationManager::UserAgentOverrideOption::DESKTOP;
-  }
   _webState->SetKeepRenderProcessAlive(true);
   _webState->GetNavigationManager()->LoadURLWithParams(loadParams);
 
@@ -597,7 +597,7 @@ class PreloadJavaScriptDialogPresenter : public web::JavaScriptDialogPresenter {
                             PRERENDER_FINAL_STATUS_MAX);
 
   _webState->RemoveObserver(_webStateObserver.get());
-  breakpad::StopMonitoringURLsForWebState(_webState.get());
+  breakpad::StopMonitoringURLsForPreloadWebState(_webState.get());
   _webState->SetDelegate(nullptr);
   _webState.reset();
 

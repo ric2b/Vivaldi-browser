@@ -167,7 +167,8 @@ class _TargetHost(object):
             forwarding_flags += ['-R', '%d:localhost:%d' % (port, port)]
         self._proxy = self._target.RunCommandPiped([],
                                                    ssh_args=forwarding_flags,
-                                                   stderr=subprocess.PIPE)
+                                                   stdout=subprocess.PIPE,
+                                                   stderr=subprocess.STDOUT)
 
         self._listener = self._target.RunCommandPiped(['log_listener'],
                                                       stdout=subprocess.PIPE,
@@ -277,11 +278,11 @@ class FuchsiaPort(base.Port):
         # Run a single qemu instance.
         return min(MAX_WORKERS, requested_num_workers)
 
-    def default_timeout_ms(self):
+    def _default_timeout_ms(self):
         # Use 20s timeout instead of the default 6s. This is necessary because
         # the tests are executed in qemu, so they run slower compared to other
         # platforms.
-        return 20 * 1000
+        return 20000
 
     def requires_http_server(self):
         """HTTP server is always required to avoid copying the tests to the VM.

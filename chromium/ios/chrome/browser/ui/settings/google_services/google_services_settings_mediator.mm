@@ -452,8 +452,8 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
       needsUpdate = YES;
     }
     needsUpdate =
-        needsUpdate || self.manageSyncItem.enabled != !self.isSyncDisabled;
-    self.manageSyncItem.enabled = !self.isSyncDisabled;
+        needsUpdate || self.manageSyncItem.enabled != self.isSyncEnabled;
+    self.manageSyncItem.enabled = self.isSyncEnabled;
     self.manageSyncItem.textColor =
         self.manageSyncItem.enabled ? nil : UIColor.cr_secondaryLabelColor;
     return needsUpdate;
@@ -483,15 +483,9 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
           toSectionWithIdentifier:SyncSectionIdentifier];
       needsUpdate = YES;
     }
-    // Sync is not active when |syncSetupService->IsFirstSetupComplete()| is
-    // false. Show sync being turned off in the UI in this cases.
-    BOOL isSyncEnabled =
-        self.syncSetupService->IsSyncEnabled() &&
-        (self.syncSetupService->IsFirstSetupComplete() ||
-         self.mode == GoogleServicesSettingsModeAdvancedSigninSettings);
     needsUpdate =
-        needsUpdate || isSyncEnabled != self.syncChromeDataSwitchItem.on;
-    self.syncChromeDataSwitchItem.on = isSyncEnabled;
+        needsUpdate || self.isSyncEnabled != self.syncChromeDataSwitchItem.on;
+    self.syncChromeDataSwitchItem.on = self.isSyncEnabled;
     return needsUpdate;
   }
   if (!self.syncChromeDataSwitchItem)
@@ -570,8 +564,12 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
       syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
 }
 
-- (BOOL)isSyncDisabled {
-  return !self.syncService->GetDisableReasons().Empty();
+- (BOOL)isSyncEnabled {
+  // Sync is not active when |syncSetupService->IsFirstSetupComplete()| is
+  // false. Show sync being turned off in the UI in this cases.
+  return self.syncSetupService->IsSyncEnabled() &&
+         (self.syncSetupService->IsFirstSetupComplete() ||
+          self.mode == GoogleServicesSettingsModeAdvancedSigninSettings);
 }
 
 - (BOOL)isSyncCanBeAvailable {

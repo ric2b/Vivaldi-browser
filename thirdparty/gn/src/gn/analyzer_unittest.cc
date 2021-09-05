@@ -35,6 +35,9 @@ class MockLoader : public Loader {
   const Settings* GetToolchainSettings(const Label& label) const override {
     return nullptr;
   }
+  SourceFile BuildFileForLabel(const Label& label) const override {
+    return SourceFile(label.dir().value() + "BUILD.gn");
+  }
 
  private:
   ~MockLoader() override = default;
@@ -45,18 +48,32 @@ class AnalyzerTest : public testing::Test {
   AnalyzerTest()
       : loader_(new MockLoader),
         builder_(loader_.get()),
-        settings_(&build_settings_, std::string()) {
+        settings_(&build_settings_, std::string()),
+        other_settings_(&build_settings_, std::string()) {
     build_settings_.SetBuildDir(SourceDir("//out/"));
+
     settings_.set_toolchain_label(Label(SourceDir("//tc/"), "default"));
     settings_.set_default_toolchain_label(settings_.toolchain_label());
     tc_dir_ = settings_.toolchain_label().dir();
     tc_name_ = settings_.toolchain_label().name();
+
+    other_settings_.set_toolchain_label(Label(SourceDir("//other/"), "tc"));
+    other_settings_.set_default_toolchain_label(
+        other_settings_.toolchain_label());
+    tc_other_dir_ = other_settings_.toolchain_label().dir();
+    tc_other_name_ = other_settings_.toolchain_label().name();
   }
 
   std::unique_ptr<Target> MakeTarget(const std::string& dir,
                                      const std::string& name) {
     Label label(SourceDir(dir), name, tc_dir_, tc_name_);
     return std::make_unique<Target>(&settings_, label);
+  }
+
+  std::unique_ptr<Target> MakeTargetOtherToolchain(const std::string& dir,
+                                                   const std::string& name) {
+    Label label(SourceDir(dir), name, tc_other_dir_, tc_other_name_);
+    return std::make_unique<Target>(&other_settings_, label);
   }
 
   std::unique_ptr<Config> MakeConfig(const std::string& dir,
@@ -87,9 +104,14 @@ class AnalyzerTest : public testing::Test {
   scoped_refptr<MockLoader> loader_;
   Builder builder_;
   BuildSettings build_settings_;
+
   Settings settings_;
   SourceDir tc_dir_;
   std::string tc_name_;
+
+  Settings other_settings_;
+  SourceDir tc_other_dir_;
+  std::string tc_other_name_;
 };
 
 // Tests that a target is marked as affected if its sources are modified.
@@ -595,6 +617,104 @@ TEST_F(AnalyzerTest, BuildArgsDependencyFileWasModified) {
       R"("compile_targets":["//dir:target_name"],)"
       R"/("status":"Found dependency (all)",)/"
       R"("test_targets":["//dir:target_name"])"
+      "}");
+}
+
+// Tests that targets in explicitly labelled with the default toolchain are
+// included when their sources change.
+// change.
+TEST_F(AnalyzerTest, TargetToolchainSpecifiedRefersToSources) {
+  std::unique_ptr<Target> t = MakeTarget("//dir", "target_name");
+  Target* t_raw = t.get();
+  builder_.ItemDefined(std::move(t));
+
+  RunAnalyzerTest(
+      R"/({
+       "files": [ "//dir/file_name.cc" ],
+       "additional_compile_targets": ["all"],
+       "test_targets": [ "//dir:target_name(//tc:default)" ]
+       })/",
+      "{"
+      R"("compile_targets":[],)"
+      R"/("status":"No dependency",)/"
+      R"("test_targets":[])"
+      "}");
+
+  t_raw->sources().push_back(SourceFile("//dir/file_name.cc"));
+
+  RunAnalyzerTest(
+      R"*({
+       "files": [ "//dir/file_name.cc" ],
+       "additional_compile_targets": [],
+       "test_targets": [ "//dir:target_name(//tc:default)" ]
+       })*",
+      "{"
+      R"("compile_targets":[],)"
+      R"/("status":"Found dependency",)/"
+      R"/("test_targets":["//dir:target_name"])/"
+      "}");
+}
+
+// Tests that targets in alternate toolchains are affected when their sources
+// change.
+TEST_F(AnalyzerTest, TargetAlternateToolchainRefersToSources) {
+  std::unique_ptr<Target> t = MakeTarget("//dir", "target_name");
+  std::unique_ptr<Target> t_alt =
+      MakeTargetOtherToolchain("//dir", "target_name");
+  Target* t_raw = t.get();
+  Target* t_alt_raw = t_alt.get();
+  builder_.ItemDefined(std::move(t));
+  builder_.ItemDefined(std::move(t_alt));
+
+  RunAnalyzerTest(
+      R"/({
+       "files": [ "//dir/file_name.cc" ],
+       "additional_compile_targets": ["all"],
+       "test_targets": [ "//dir:target_name", "//dir:target_name(//other:tc)" ]
+       })/",
+      "{"
+      R"("compile_targets":[],)"
+      R"/("status":"No dependency",)/"
+      R"("test_targets":[])"
+      "}");
+
+  t_raw->sources().push_back(SourceFile("//dir/file_name.cc"));
+  t_alt_raw->sources().push_back(SourceFile("//dir/alt_file_name.cc"));
+
+  RunAnalyzerTest(
+      R"*({
+       "files": [ "//dir/file_name.cc" ],
+       "additional_compile_targets": [],
+       "test_targets": [ "//dir:target_name", "//dir:target_name(//other:tc)" ]
+       })*",
+      "{"
+      R"("compile_targets":[],)"
+      R"/("status":"Found dependency",)/"
+      R"("test_targets":["//dir:target_name"])"
+      "}");
+
+  RunAnalyzerTest(
+      R"*({
+       "files": [ "//dir/alt_file_name.cc" ],
+       "additional_compile_targets": [],
+       "test_targets": [ "//dir:target_name", "//dir:target_name(//other:tc)" ]
+       })*",
+      "{"
+      R"("compile_targets":[],)"
+      R"/("status":"Found dependency",)/"
+      R"/("test_targets":["//dir:target_name(//other:tc)"])/"
+      "}");
+
+  RunAnalyzerTest(
+      R"*({
+       "files": [ "//dir/file_name.cc", "//dir/alt_file_name.cc" ],
+       "additional_compile_targets": [],
+       "test_targets": [ "//dir:target_name", "//dir:target_name(//other:tc)" ]
+       })*",
+      "{"
+      R"("compile_targets":[],)"
+      R"/("status":"Found dependency",)/"
+      R"/("test_targets":["//dir:target_name","//dir:target_name(//other:tc)"])/"
       "}");
 }
 

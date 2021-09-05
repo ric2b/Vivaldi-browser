@@ -58,7 +58,7 @@ constexpr int64_t kCid = 123;
 
 StartParams GetPopulatedStartParams() {
   StartParams params;
-  params.native_bridge_experiment = true;
+  params.native_bridge_experiment = false;
   params.lcd_density = 240;
   params.arc_file_picker_experiment = true;
   params.play_store_auto_update =
@@ -483,6 +483,10 @@ TEST_F(ArcVmClientAdapterTest, StartMiniArc) {
   StartMiniArc();
   // Confirm that no VM is started. ARCVM doesn't support mini ARC yet.
   EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+
+  // TODO(wvk): Once mini VM is supported, call StopArcInstance() and
+  // SendVmStoppedSignal() here, then verify arc_instance_stopped_called()
+  // becomes true. See StopArcInstance test for more details.
 }
 
 // Tests that StartMiniArc() still succeeds even when Upstart fails to stop
@@ -494,6 +498,10 @@ TEST_F(ArcVmClientAdapterTest, StartMiniArc_StopArcVmServerProxyJobFail) {
   StartMiniArc();
   // Confirm that no VM is started. ARCVM doesn't support mini ARC yet.
   EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+
+  // TODO(wvk): Once mini VM is supported, call StopArcInstance() here,
+  // then verify arc_instance_stopped_called() never becomes true. Same
+  // for other StartMiniArc_...Fail tests.
 }
 
 // Tests that StartMiniArc() fails if Upstart fails to start arc-keymasterd.
@@ -517,7 +525,7 @@ TEST_F(ArcVmClientAdapterTest, StartMiniArc_StopArcKeymasterJobFail) {
 }
 
 // Tests that StartMiniArc() fails when Upstart fails to start the job.
-TEST_F(ArcVmClientAdapterTest, StartMiniArc_Fail) {
+TEST_F(ArcVmClientAdapterTest, StartMiniArc_StartArcVmPerBoardFeaturesJobFail) {
   // Inject failure to FakeUpstartClient.
   InjectUpstartStartJobFailure(kArcVmPerBoardFeaturesJobName);
 
@@ -1011,11 +1019,11 @@ TEST_F(ArcVmClientAdapterTest, VmStartedSignal) {
   run_loop()->RunUntilIdle();
 }
 
-// Tests that ConciergeServiceRestarted() doesn't crash.
-TEST_F(ArcVmClientAdapterTest, TestConciergeServiceRestarted) {
+// Tests that ConciergeServiceStarted() doesn't crash.
+TEST_F(ArcVmClientAdapterTest, TestConciergeServiceStarted) {
   StartMiniArc();
   for (auto& observer : GetTestConciergeClient()->observer_list())
-    observer.ConciergeServiceRestarted();
+    observer.ConciergeServiceStarted();
 }
 
 // Tests that the kernel parameter does not include "rw" by default.
@@ -1090,8 +1098,8 @@ TEST_F(ArcVmClientAdapterTest, BintaryTranslationTypeNone) {
                      "androidboot.native_bridge=0"));
 }
 
-// Tests that the binary translation type is set to Houdini when only Houdini
-// library is enabled by USE flags.
+// Tests that the binary translation type is set to Houdini when only 32-bit
+// Houdini library is enabled by USE flags.
 TEST_F(ArcVmClientAdapterTest, BintaryTranslationTypeHoudini) {
   base::CommandLine::ForCurrentProcess()->InitFromArgv(
       {"", "--enable-houdini"});
@@ -1104,8 +1112,8 @@ TEST_F(ArcVmClientAdapterTest, BintaryTranslationTypeHoudini) {
                      "androidboot.native_bridge=libhoudini.so"));
 }
 
-// Tests that the binary translation type is set to Houdini when only Houdini
-// 64-bit library is enabled by USE flags.
+// Tests that the binary translation type is set to Houdini when only 64-bit
+// Houdini library is enabled by USE flags.
 TEST_F(ArcVmClientAdapterTest, BintaryTranslationTypeHoudini64) {
   base::CommandLine::ForCurrentProcess()->InitFromArgv(
       {"", "--enable-houdini64"});
@@ -1119,7 +1127,7 @@ TEST_F(ArcVmClientAdapterTest, BintaryTranslationTypeHoudini64) {
 }
 
 // Tests that the binary translation type is set to NDK translation when only
-// NDK translation library is enabled by USE flags.
+// 32-bit NDK translation library is enabled by USE flags.
 TEST_F(ArcVmClientAdapterTest, BintaryTranslationTypeNdkTranslation) {
   base::CommandLine::ForCurrentProcess()->InitFromArgv(
       {"", "--enable-ndk-translation"});
@@ -1132,13 +1140,28 @@ TEST_F(ArcVmClientAdapterTest, BintaryTranslationTypeNdkTranslation) {
                      "androidboot.native_bridge=libndk_translation.so"));
 }
 
+// Tests that the binary translation type is set to NDK translation when only
+// 64-bit NDK translation library is enabled by USE flags.
+TEST_F(ArcVmClientAdapterTest, BintaryTranslationTypeNdkTranslation64) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--enable-ndk-translation64"});
+  StartParams start_params(GetPopulatedStartParams());
+  SetValidUserInfo();
+  StartMiniArcWithParams(true, std::move(start_params));
+  UpgradeArc(true);
+  EXPECT_TRUE(
+      base::Contains(GetTestConciergeClient()->start_arc_vm_request().params(),
+                     "androidboot.native_bridge=libndk_translation.so"));
+}
+
 // Tests that the binary translation type is set to NDK translation when both
 // Houdini and NDK translation libraries are enabled by USE flags, and the
-// parameter start_params.native_bridge_experiment is set.
+// parameter start_params.native_bridge_experiment is set to true.
 TEST_F(ArcVmClientAdapterTest, BintaryTranslationTypeNativeBridgeExperiment) {
   base::CommandLine::ForCurrentProcess()->InitFromArgv(
       {"", "--enable-houdini", "--enable-ndk-translation"});
   StartParams start_params(GetPopulatedStartParams());
+  start_params.native_bridge_experiment = true;
   SetValidUserInfo();
   StartMiniArcWithParams(true, std::move(start_params));
   UpgradeArc(true);
@@ -1149,7 +1172,7 @@ TEST_F(ArcVmClientAdapterTest, BintaryTranslationTypeNativeBridgeExperiment) {
 
 // Tests that the binary translation type is set to Houdini when both Houdini
 // and NDK translation libraries are enabled by USE flags, and the parameter
-// start_params.native_bridge_experiment is not set.
+// start_params.native_bridge_experiment is set to false.
 TEST_F(ArcVmClientAdapterTest, BintaryTranslationTypeNoNativeBridgeExperiment) {
   base::CommandLine::ForCurrentProcess()->InitFromArgv(
       {"", "--enable-houdini", "--enable-ndk-translation"});

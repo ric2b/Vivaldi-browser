@@ -23,7 +23,6 @@
 <translation id="1601560923496285236">Apply</translation>
 <translation id="1603914832182249871">(Incognito)</translation>
 <translation id="1620510694547887537">Camera</translation>
-<translation id="1635033183663317347">Installed by your custodian.</translation>
 <translation id="1682548588986054654">New Incognito Window</translation>
 <translation id="1698122934742150150">Current incognito session only</translation>
 <translation id="1706625117072057435">Zoom levels</translation>
@@ -108,7 +107,6 @@
 <translation id="3668823961463113931">Handlers</translation>
 <translation id="3678156199662914018">Extension: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Screen Sharing Request</translation>
-<translation id="3725367690636977613">pages</translation>
 <translation id="3744111561329211289">Background sync</translation>
 <translation id="3797900183766075808">&amp;Search <ph name="SEARCH_ENGINE" /> for “<ph name="SEARCH_TERMS" />”</translation>
 <translation id="3800806661949714323">Show all (recommended)</translation>
@@ -129,7 +127,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Accept for group</translation>
-<translation id="4091434297613116013">sheets of paper</translation>
 <translation id="4096508467498758490">Disable developer mode extensions</translation>
 <translation id="4100839878934973028">Another programme on your computer added an app that may change the way Vivaldi works.</translation>
 <translation id="4109898769411476438">Close Browser Before Importing</translation>
@@ -286,7 +283,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8032244173881942855">Unable to cast tab.</translation>
 <translation id="8071432093239591881">Print as image</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
-<translation id="8180239481735238521">page</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Download is in progress} other {Downloads are in progress}}</translation>
 <translation id="8230134520748321204">Save password for <ph name="ORIGIN" />?</translation>
@@ -306,7 +302,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8798099450830957504">Default</translation>
 <translation id="8800004011501252845">Showing destinations for</translation>
 <translation id="8808478386290700967">Web Store</translation>
-<translation id="8813811964357448561">sheet of paper</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8910146161325739742">Share your screen</translation>
 <translation id="8915370057835397490">Loading suggestion</translation>

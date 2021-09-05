@@ -5,8 +5,9 @@
 #ifndef SERVICES_VIZ_PUBLIC_CPP_COMPOSITING_QUADS_MOJOM_TRAITS_H_
 #define SERVICES_VIZ_PUBLIC_CPP_COMPOSITING_QUADS_MOJOM_TRAITS_H_
 
+#include "base/check.h"
 #include "base/containers/span.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/unguessable_token.h"
 #include "components/viz/common/quads/debug_border_draw_quad.h"
 #include "components/viz/common/quads/picture_draw_quad.h"
@@ -197,7 +198,7 @@ struct StructTraits<viz::mojom::DebugBorderQuadStateDataView, viz::DrawQuad> {
 
 template <>
 struct StructTraits<viz::mojom::RenderPassQuadStateDataView, viz::DrawQuad> {
-  static int32_t render_pass_id(const viz::DrawQuad& input) {
+  static uint64_t render_pass_id(const viz::DrawQuad& input) {
     const viz::RenderPassDrawQuad* quad =
         viz::RenderPassDrawQuad::MaterialCast(&input);
     DCHECK(quad->render_pass_id);

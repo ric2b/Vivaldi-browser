@@ -49,9 +49,13 @@ void RemoveEvent(std::set<AXEventGenerator::EventParams>* node_events,
 
 }  // namespace
 
-AXEventGenerator::EventParams::EventParams(Event event,
-                                           ax::mojom::EventFrom event_from)
-    : event(event), event_from(event_from) {}
+AXEventGenerator::EventParams::EventParams(
+    Event event,
+    ax::mojom::EventFrom event_from,
+    const std::vector<AXEventIntent>& event_intents)
+    : event(event), event_from(event_from), event_intents(event_intents) {}
+
+AXEventGenerator::EventParams::~EventParams() = default;
 
 AXEventGenerator::TargetedEvent::TargetedEvent(AXNode* node,
                                                const EventParams& event_params)
@@ -138,7 +142,8 @@ void AXEventGenerator::AddEvent(AXNode* node, AXEventGenerator::Event event) {
     return;
 
   std::set<EventParams>& node_events = tree_events_[node];
-  node_events.emplace(event, ax::mojom::EventFrom::kNone);
+  node_events.emplace(event, ax::mojom::EventFrom::kNone,
+                      tree_->event_intents());
 }
 
 void AXEventGenerator::OnNodeDataChanged(AXTree* tree,
@@ -154,7 +159,8 @@ void AXEventGenerator::OnNodeDataChanged(AXTree* tree,
       new_node_data.role != ax::mojom::Role::kStaticText) {
     AXNode* node = tree_->GetFromId(new_node_data.id);
     tree_events_[node].emplace(Event::CHILDREN_CHANGED,
-                               ax::mojom::EventFrom::kNone);
+                               ax::mojom::EventFrom::kNone,
+                               tree_->event_intents());
   }
 }
 
@@ -543,7 +549,7 @@ void AXEventGenerator::FireLiveRegionEvents(AXNode* node) {
              .GetStringAttribute(ax::mojom::StringAttribute::kName)
              .empty())
       AddEvent(node, Event::LIVE_REGION_NODE_CHANGED);
-    // Fire LIVE_REGION_CHANGED on the root of the live region.
+    // Fire LIVE_REGION_NODE_CHANGED on the root of the live region.
     AddEvent(live_root, Event::LIVE_REGION_CHANGED);
   }
 }
@@ -610,6 +616,9 @@ void AXEventGenerator::FireRelationSourceEvents(AXTree* tree,
 // Attempts to suppress load-related events that we presume no AT will be
 // interested in under any circumstances, such as pages which have no size.
 bool AXEventGenerator::ShouldFireLoadEvents(AXNode* node) {
+  if (always_fire_load_complete_)
+    return true;
+
   const AXNodeData& data = node->data();
   return data.relative_bounds.bounds.width() ||
          data.relative_bounds.bounds.height();

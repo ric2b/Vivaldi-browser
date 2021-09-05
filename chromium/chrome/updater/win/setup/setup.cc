@@ -27,8 +27,8 @@
 #include "chrome/installer/util/install_service_work_item.h"
 #include "chrome/installer/util/self_cleaning_temp_dir.h"
 #include "chrome/installer/util/work_item_list.h"
+#include "chrome/updater/app/server/win/updater_idl.h"
 #include "chrome/updater/constants.h"
-#include "chrome/updater/server/win/updater_idl.h"
 #include "chrome/updater/util.h"
 #include "chrome/updater/win/constants.h"
 #include "chrome/updater/win/setup/setup_util.h"
@@ -193,9 +193,9 @@ int Setup(bool is_machine) {
     LOG(ERROR) << "GetTempDir failed.";
     return -1;
   }
-  base::FilePath product_dir;
-  if (!GetProductDirectory(&product_dir)) {
-    LOG(ERROR) << "GetProductDirectory failed.";
+  base::FilePath versioned_dir;
+  if (!GetVersionedDirectory(&versioned_dir)) {
+    LOG(ERROR) << "GetVersionedDirectory failed.";
     return -1;
   }
   base::FilePath exe_path;
@@ -218,13 +218,13 @@ int Setup(bool is_machine) {
   }
 
   // All source files are installed in a flat directory structure inside the
-  // install directory, hence the BaseName function call below.
+  // versioned directory, hence the BaseName function call below.
   std::unique_ptr<WorkItemList> install_list(WorkItem::CreateWorkItemList());
   for (const auto& file : setup_files) {
-    const base::FilePath target_path = product_dir.Append(file.BaseName());
+    const base::FilePath target_path = versioned_dir.Append(file.BaseName());
     const base::FilePath source_path = source_dir.Append(file);
-    install_list->AddCopyTreeWorkItem(source_path.value(), target_path.value(),
-                                      temp_dir.value(), WorkItem::ALWAYS);
+    install_list->AddCopyTreeWorkItem(source_path, target_path, temp_dir,
+                                      WorkItem::ALWAYS);
   }
 
   for (const auto& key_path :
@@ -241,27 +241,29 @@ int Setup(bool is_machine) {
 
   static constexpr base::FilePath::StringPieceType kUpdaterExe =
       FILE_PATH_LITERAL("updater.exe");
-  AddComServerWorkItems(key, product_dir.Append(kUpdaterExe),
+  AddComServerWorkItems(key, versioned_dir.Append(kUpdaterExe),
                         install_list.get());
 
-  if (is_machine)
-    AddComServiceWorkItems(product_dir.Append(kUpdaterExe), install_list.get());
+  if (is_machine) {
+    AddComServiceWorkItems(versioned_dir.Append(kUpdaterExe),
+                           install_list.get());
+  }
 
-  AddComInterfacesWorkItems(key, product_dir.Append(kUpdaterExe),
+  AddComInterfacesWorkItems(key, versioned_dir.Append(kUpdaterExe),
                             install_list.get());
 
-  base::CommandLine run_updater_ua_command(product_dir.Append(kUpdaterExe));
-  run_updater_ua_command.AppendSwitch(kUpdateAppsSwitch);
+  base::CommandLine run_updater_wake_command(versioned_dir.Append(kUpdaterExe));
+  run_updater_wake_command.AppendSwitch(kWakeSwitch);
 
 #if !defined(NDEBUG)
-  run_updater_ua_command.AppendSwitch(kEnableLoggingSwitch);
-  run_updater_ua_command.AppendSwitchASCII(kLoggingModuleSwitch,
-                                           "*/chrome/updater/*=2");
+  run_updater_wake_command.AppendSwitch(kEnableLoggingSwitch);
+  run_updater_wake_command.AppendSwitchASCII(kLoggingModuleSwitch,
+                                             "*/chrome/updater/*=2");
 #endif
-  if (!install_list->Do() || !RegisterUpdateAppsTask(run_updater_ua_command)) {
+  if (!install_list->Do() || !RegisterWakeTask(run_updater_wake_command)) {
     LOG(ERROR) << "Install failed, rolling back...";
     install_list->Rollback();
-    UnregisterUpdateAppsTask();
+    UnregisterWakeTask();
     LOG(ERROR) << "Rollback complete.";
     return -1;
   }

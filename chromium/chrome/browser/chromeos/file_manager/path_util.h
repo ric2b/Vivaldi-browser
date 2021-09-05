@@ -28,6 +28,9 @@ extern const base::FilePath::CharType kAndroidFilesPath[];
 // Absolute path for the folder containing font files.
 extern const base::FilePath::CharType kSystemFontsPath[];
 
+// Absolute path for the folder containing archive mounts.
+extern const base::FilePath::CharType kArchiveMountPath[];
+
 // Gets the absolute path for the 'Downloads' folder for the |profile|.
 base::FilePath GetDownloadsFolderForProfile(Profile* profile);
 
@@ -94,6 +97,14 @@ std::vector<std::string> GetCrostiniMountOptions(
     const std::string& hostname,
     const std::string& host_private_key,
     const std::string& container_public_key);
+
+// Convert a cracked url to a path inside a VM mounted at |vm_mount|.
+bool ConvertFileSystemURLToPathInsideVM(
+    Profile* profile,
+    const storage::FileSystemURL& file_system_url,
+    const base::FilePath& vm_mount,
+    base::FilePath* inside,
+    bool map_crostini_home = false);
 
 // Convert a cracked url to a path inside the Crostini VM.
 bool ConvertFileSystemURLToPathInsideCrostini(

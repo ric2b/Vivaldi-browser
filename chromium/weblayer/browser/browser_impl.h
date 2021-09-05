@@ -34,6 +34,9 @@ class TabImpl;
 
 class BrowserImpl : public Browser {
  public:
+  // Prefix used for storing persistence state.
+  static constexpr char kPersistenceFilePrefix[] = "State";
+
   BrowserImpl(const BrowserImpl&) = delete;
   BrowserImpl& operator=(const BrowserImpl&) = delete;
   ~BrowserImpl() override;
@@ -47,6 +50,7 @@ class BrowserImpl : public Browser {
   TabImpl* CreateTabForSessionRestore(
       std::unique_ptr<content::WebContents> web_contents,
       const std::string& guid);
+  TabImpl* CreateTab(std::unique_ptr<content::WebContents> web_contents);
 
 #if defined(OS_ANDROID)
   bool CompositorHasSurface();
@@ -74,6 +78,10 @@ class BrowserImpl : public Browser {
           j_minimal_persistence_state);
   void WebPreferencesChanged(JNIEnv* env);
   void OnFragmentStart(JNIEnv* env);
+  void OnFragmentResume(JNIEnv* env);
+  void OnFragmentPause(JNIEnv* env);
+
+  bool fragment_resumed() { return fragment_resumed_; }
 #endif
 
   // Used in tests to specify a non-default max (0 means use the default).
@@ -90,11 +98,12 @@ class BrowserImpl : public Browser {
   void SetWebPreferences(content::WebPreferences* prefs);
 
   // Browser:
-  Tab* AddTab(std::unique_ptr<Tab> tab) override;
-  std::unique_ptr<Tab> RemoveTab(Tab* tab) override;
+  void AddTab(Tab* tab) override;
+  void DestroyTab(Tab* tab) override;
   void SetActiveTab(Tab* tab) override;
   Tab* GetActiveTab() override;
   std::vector<Tab*> GetTabs() override;
+  Tab* CreateTab() override;
   void PrepareForShutdown() override;
   std::string GetPersistenceId() override;
   std::vector<uint8_t> GetMinimalPersistenceState() override;
@@ -116,10 +125,16 @@ class BrowserImpl : public Browser {
 
   void RestoreStateIfNecessary(const PersistenceInfo& persistence_info);
 
+  TabImpl* AddTab(std::unique_ptr<Tab> tab);
+  std::unique_ptr<Tab> RemoveTab(Tab* tab);
+
   // Returns the path used by |browser_persister_|.
   base::FilePath GetBrowserPersisterDataPath();
 
 #if defined(OS_ANDROID)
+  void UpdateFragmentResumedState(bool state);
+
+  bool fragment_resumed_ = false;
   base::android::ScopedJavaGlobalRef<jobject> java_impl_;
 #endif
   base::ObserverList<BrowserObserver> browser_observers_;
@@ -129,7 +144,6 @@ class BrowserImpl : public Browser {
   std::string persistence_id_;
   std::unique_ptr<BrowserPersister> browser_persister_;
   base::OnceClosure visible_security_state_changed_callback_for_tests_;
-  static int browser_count_;
 };
 
 }  // namespace weblayer

@@ -259,9 +259,12 @@ Microsoft::WRL::ComPtr<ID3D11Texture2D> SwapChainPresenter::UploadVideoImages(
     copy_texture_.Reset();
     HRESULT hr =
         d3d11_device_->CreateTexture2D(&desc, nullptr, &staging_texture_);
+    base::UmaHistogramSparse(
+        "GPU.DirectComposition.UploadVideoImages.CreateStagingTexture", hr);
     if (FAILED(hr)) {
       DLOG(ERROR) << "Creating D3D11 video staging texture failed: " << std::hex
                   << hr;
+      DirectCompositionSurfaceWin::DisableOverlays();
       return nullptr;
     }
     DCHECK(staging_texture_);
@@ -311,9 +314,12 @@ Microsoft::WRL::ComPtr<ID3D11Texture2D> SwapChainPresenter::UploadVideoImages(
     desc.BindFlags = D3D11_BIND_DECODER;
     desc.CPUAccessFlags = 0;
     HRESULT hr = d3d11_device_->CreateTexture2D(&desc, nullptr, &copy_texture_);
+    base::UmaHistogramSparse(
+        "GPU.DirectComposition.UploadVideoImages.CreateCopyTexture", hr);
     if (FAILED(hr)) {
       DLOG(ERROR) << "Creating D3D11 video upload texture failed: " << std::hex
                   << hr;
+      DirectCompositionSurfaceWin::DisableOverlays();
       return nullptr;
     }
     DCHECK(copy_texture_);
@@ -587,7 +593,11 @@ bool SwapChainPresenter::PresentToDecodeSwapChain(
     DCHECK(media_factory);
 
     DXGI_DECODE_SWAP_CHAIN_DESC desc = {};
-    desc.Flags = 0;
+    // Set the DXGI_SWAP_CHAIN_FLAG_FULLSCREEN_VIDEO flag to mark this surface
+    // as a candidate for full screen video optimizations. If the surface
+    // does not qualify as fullscreen by DWM's logic then the flag will have
+    // no effects.
+    desc.Flags = DXGI_SWAP_CHAIN_FLAG_FULLSCREEN_VIDEO;
     HRESULT hr =
         media_factory->CreateDecodeSwapChainForCompositionSurfaceHandle(
             d3d11_device_.Get(), swap_chain_handle_.Get(), &desc,
@@ -606,8 +616,8 @@ bool SwapChainPresenter::PresentToDecodeSwapChain(
     dcomp_device_.As(&desktop_device);
     DCHECK(desktop_device);
 
-    desktop_device->CreateSurfaceFromHandle(swap_chain_handle_.Get(),
-                                            &decode_surface_);
+    hr = desktop_device->CreateSurfaceFromHandle(swap_chain_handle_.Get(),
+                                                 &decode_surface_);
     if (FAILED(hr)) {
       DLOG(ERROR) << "CreateSurfaceFromHandle failed with error 0x" << std::hex
                   << hr;

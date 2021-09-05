@@ -18,12 +18,24 @@
   }
 
   #oneGoogleBar {
-    clip-path: url(#oneGoogleBarClipPath);
     height: 100%;
     position: absolute;
     top: 0;
     width: 100%;
-    z-index: 1000;
+  }
+
+  #oneGoogleBarOverlayBackdrop {
+    background: rgba(0, 0, 0, .6);
+    display: none;
+    height: 100%;
+    position: fixed;
+    top: 0;
+    width: 100%;
+    z-index: 999;
+  }
+
+  #oneGoogleBarOverlayBackdrop[show] {
+    display: block;
   }
 
   #content {
@@ -223,20 +235,19 @@
         --ntp-theme-shortcut-background-color:
               [[rgbaOrInherit_(theme_.shortcutBackgroundColor)]];
         --ntp-logo-color: [[rgbaOrInherit_(logoColor_)]];">
-  <dom-if if="[[showIframedOneGoogleBar_]]">
-    <template>
-      <ntp-untrusted-iframe id="oneGoogleBar" path="[[oneGoogleBarIframePath_]]"
-          hidden$="[[!oneGoogleBarLoaded_]]">
-      </ntp-untrusted-iframe>
-    </template>
-  </dom-if>
+  <template is="dom-if" if="[[showIframedOneGoogleBar_]]">
+    <ntp-iframe id="oneGoogleBar" src="[[oneGoogleBarIframePath_]]"
+        hidden$="[[!oneGoogleBarLoaded_]]">
+    </ntp-iframe>
+  </template>
   <ntp-logo id="logo" doodle-allowed$="[[doodleAllowed_]]"
-      single-colored$="[[singleColoredLogo_]]">
+      single-colored$="[[singleColoredLogo_]]" dark="[[theme_.isDark]]"
+      background-color="[[backgroundColor_]]">
   </ntp-logo>
-  <ntp-fakebox id="fakebox" on-open-voice-search="onVoiceSearchClick_"
+  <ntp-fakebox id="fakebox" on-open-voice-search="onOpenVoiceSearch_"
       hidden$="[[realboxEnabled_]]">
   </ntp-fakebox>
-  <ntp-realbox id="realbox" on-open-voice-search="onVoiceSearchClick_"
+  <ntp-realbox id="realbox" on-open-voice-search="onOpenVoiceSearch_"
       theme="[[theme_.searchBox]]" shown$="[[realboxShown_]]"
       hidden$="[[!realboxEnabled_]]">
   </ntp-realbox>
@@ -246,8 +257,9 @@
   </ntp-most-visited>
   <dom-if if="[[lazyRender_]]">
     <template>
-      <ntp-untrusted-iframe id="promo" path="promo" hidden$="[[!promoLoaded_]]">
-      </ntp-untrusted-iframe>
+      <ntp-iframe id="promo" hidden$="[[!promoLoaded_]]"
+          src="chrome-untrusted://new-tab-page/promo">
+      </ntp-iframe>
       <a id="backgroundImageAttribution"
           href="[[backgroundImageAttributionUrl_]]"
           hidden="[[!backgroundImageAttribution1_]]">
@@ -297,10 +309,9 @@
     </ntp-customize-dialog>
   </template>
 </dom-if>
+<div id="oneGoogleBarOverlayBackdrop"></div>
 <svg>
   <defs>
-    <clipPath id="oneGoogleBarClipPath">
-      <rect x="0" y="0" width="100vw" height="56"></rect>
-    </clipPath>
+    <clipPath id="oneGoogleBarClipPath"></clipPath>
   </defs>
 </svg>

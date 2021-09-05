@@ -132,8 +132,6 @@ void NinjaToolchainWriter::WriteCommandRulePattern(
     const SubstitutionPattern& command,
     const EscapeOptions& options) {
   CHECK(!command.empty()) << "Command should not be empty";
-  if (command.empty())
-    return;
   out_ << kIndent << name << " = " ;
   if (!launcher.empty())
     out_ << launcher << " ";

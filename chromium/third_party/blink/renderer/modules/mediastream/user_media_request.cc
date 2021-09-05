@@ -40,7 +40,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_stream_constraints.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_track_constraints.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/space_split_string.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
@@ -305,7 +304,7 @@ class UserMediaRequest::V8Callbacks final : public UserMediaRequest::Callbacks {
       : success_callback_(success_callback), error_callback_(error_callback) {}
   ~V8Callbacks() override = default;
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(success_callback_);
     visitor->Trace(error_callback_);
     UserMediaRequest::Callbacks::Trace(visitor);
@@ -472,7 +471,7 @@ bool UserMediaRequest::IsSecureContextUse(String& error_message) {
 
   if (window->IsSecureContext(error_message)) {
     UseCounter::Count(window, WebFeature::kGetUserMediaSecureOrigin);
-    window->document()->CountUseOnlyInCrossOriginIframe(
+    window->CountUseOnlyInCrossOriginIframe(
         WebFeature::kGetUserMediaSecureOriginIframe);
 
     // Feature policy deprecation messages.
@@ -500,7 +499,7 @@ bool UserMediaRequest::IsSecureContextUse(String& error_message) {
   Deprecation::CountDeprecation(window,
                                 WebFeature::kGetUserMediaInsecureOrigin);
   Deprecation::CountDeprecationCrossOriginIframe(
-      *window->document(), WebFeature::kGetUserMediaInsecureOriginIframe);
+      window, WebFeature::kGetUserMediaInsecureOriginIframe);
   return false;
 }
 
@@ -513,13 +512,14 @@ void UserMediaRequest::Start() {
     controller_->RequestUserMedia(this);
 }
 
-void UserMediaRequest::Succeed(MediaStreamDescriptor* stream_descriptor) {
+void UserMediaRequest::Succeed(MediaStreamDescriptor* stream_descriptor,
+                               bool pan_tilt_zoom_allowed) {
   DCHECK(!is_resolved_);
   if (!GetExecutionContext())
     return;
 
-  MediaStream* stream =
-      MediaStream::Create(GetExecutionContext(), stream_descriptor);
+  MediaStream* stream = MediaStream::Create(
+      GetExecutionContext(), stream_descriptor, pan_tilt_zoom_allowed);
 
   MediaStreamTrackVector audio_tracks = stream->getAudioTracks();
   for (MediaStreamTrackVector::iterator iter = audio_tracks.begin();
@@ -612,7 +612,7 @@ void UserMediaRequest::ContextDestroyed() {
   }
 }
 
-void UserMediaRequest::Trace(Visitor* visitor) {
+void UserMediaRequest::Trace(Visitor* visitor) const {
   visitor->Trace(controller_);
   visitor->Trace(callbacks_);
   ExecutionContextLifecycleObserver::Trace(visitor);

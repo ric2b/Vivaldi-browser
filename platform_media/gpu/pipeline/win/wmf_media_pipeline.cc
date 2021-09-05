@@ -22,6 +22,7 @@
 #include <unordered_map>
 
 #include "base/callback_helpers.h"
+#include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/task_runner_util.h"

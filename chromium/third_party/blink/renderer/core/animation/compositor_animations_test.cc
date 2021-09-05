@@ -332,7 +332,7 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
       return property_specific_;  // We know a shortcut.
     }
 
-    void Trace(Visitor* visitor) override {
+    void Trace(Visitor* visitor) const override {
       visitor->Trace(property_specific_);
       StringKeyframe::Trace(visitor);
     }
@@ -371,7 +371,7 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
         return nullptr;
       }
 
-      void Trace(Visitor* visitor) override {
+      void Trace(Visitor* visitor) const override {
         visitor->Trace(compositor_keyframe_value_);
         PropertySpecificKeyframe::Trace(visitor);
       }
@@ -1953,9 +1953,6 @@ TEST_P(AnimationCompositorAnimationsTest, CompositedTransformAnimation) {
   EXPECT_EQ(CheckCanStartElementOnCompositor(*target),
             CompositorAnimations::kNoFailure);
   EXPECT_EQ(document->Timeline().AnimationsNeedingUpdateCount(), 1u);
-  cc::AnimationHost* host = document->View()->GetCompositorAnimationHost();
-  EXPECT_EQ(host->MainThreadAnimationsCount(), 0u);
-  EXPECT_EQ(host->CompositedAnimationsCount(), 1u);
 }
 
 TEST_P(AnimationCompositorAnimationsTest, CompositedScaleAnimation) {
@@ -1990,9 +1987,6 @@ TEST_P(AnimationCompositorAnimationsTest, CompositedScaleAnimation) {
   EXPECT_EQ(CheckCanStartElementOnCompositor(*target),
             CompositorAnimations::kNoFailure);
   EXPECT_EQ(document->Timeline().AnimationsNeedingUpdateCount(), 1u);
-  cc::AnimationHost* host = document->View()->GetCompositorAnimationHost();
-  EXPECT_EQ(host->MainThreadAnimationsCount(), 0u);
-  EXPECT_EQ(host->CompositedAnimationsCount(), 1u);
 }
 
 TEST_P(AnimationCompositorAnimationsTest,
@@ -2025,9 +2019,6 @@ TEST_P(AnimationCompositorAnimationsTest,
   EXPECT_TRUE(cc_transform->is_currently_animating);
   // Make sure the animation is started on the compositor.
   EXPECT_EQ(document->Timeline().AnimationsNeedingUpdateCount(), 1u);
-  cc::AnimationHost* host = document->View()->GetCompositorAnimationHost();
-  EXPECT_EQ(host->MainThreadAnimationsCount(), 0u);
-  EXPECT_EQ(host->CompositedAnimationsCount(), 1u);
   // Make sure the backface-visibility is correctly set, both in blink and on
   // the cc::Layer.
   EXPECT_FALSE(transform->Matrix().IsIdentity());  // Rotated
@@ -2075,9 +2066,6 @@ TEST_P(AnimationCompositorAnimationsTest,
   EXPECT_TRUE(CheckCanStartElementOnCompositor(*target) &
               CompositorAnimations::kTargetHasInvalidCompositingState);
   EXPECT_EQ(document->Timeline().AnimationsNeedingUpdateCount(), 4u);
-  cc::AnimationHost* host = document->View()->GetCompositorAnimationHost();
-  EXPECT_EQ(host->MainThreadAnimationsCount(), 4u);
-  EXPECT_EQ(host->CompositedAnimationsCount(), 0u);
 }
 
 // Regression test for https://crbug.com/999333. We were relying on the Document
@@ -2091,7 +2079,7 @@ TEST_P(AnimationCompositorAnimationsTest,
 
   // Move the target element to another Document, that does not have a frame
   // (and thus no Settings).
-  Document* another_document = MakeGarbageCollected<Document>();
+  Document* another_document = Document::CreateForTest();
   ASSERT_FALSE(another_document->GetSettings());
 
   another_document->adoptNode(target, ASSERT_NO_EXCEPTION);

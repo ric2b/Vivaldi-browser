@@ -69,7 +69,8 @@ class CastWebContentsScopes {
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
             layout.addView(contentViewRenderView, matchParent);
 
-            ContentView contentView = ContentView.createContentView(context, webContents);
+            ContentView contentView = ContentView.createContentView(
+                    context, null /* eventOffsetHandler */, webContents);
             WebContentsRegistry.initializeWebContents(webContents, contentView, window);
 
             // Enable display of current webContents.
@@ -93,7 +94,8 @@ class CastWebContentsScopes {
     public static Observer<WebContents> withoutLayout(Context context) {
         return (WebContents webContents) -> {
             WindowAndroid window = new WindowAndroid(context);
-            ContentView contentView = ContentView.createContentView(context, webContents);
+            ContentView contentView = ContentView.createContentView(
+                    context, null /* eventOffsetHandler */, webContents);
             WebContentsRegistry.initializeWebContents(webContents, contentView, window);
             // Enable display of current webContents.
             webContents.onShow();
@@ -102,7 +104,12 @@ class CastWebContentsScopes {
                     // WebContents can be destroyed by the app before CastWebContentsComponent
                     // unbinds, which is why we need this check.
                     webContents.onHide();
+
+                    if (webContents.getTopLevelNativeWindow() == window) {
+                        webContents.setTopLevelNativeWindow(null);
+                    }
                 }
+                window.destroy();
             };
         };
     }

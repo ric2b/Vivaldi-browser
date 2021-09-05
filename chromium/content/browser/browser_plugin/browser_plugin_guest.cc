@@ -35,8 +35,6 @@
 #include "content/common/content_constants_internal.h"
 #include "content/common/drag_messages.h"
 #include "content/common/frame_visual_properties.h"
-#include "content/common/input/ime_text_span_conversions.h"
-#include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
 #include "content/common/widget_messages.h"
 #include "content/public/browser/browser_context.h"
@@ -383,9 +381,10 @@ void BrowserPluginGuest::RenderProcessGone(base::TerminationStatus status) {
 void BrowserPluginGuest::DidSetHasTouchEventHandlers(bool accept) {
 }
 
-void BrowserPluginGuest::DidTextInputStateChange(const TextInputState& params) {
+void BrowserPluginGuest::DidTextInputStateChange(
+    const ui::mojom::TextInputState& params) {
   // Save the state of text input so we can restore it on focus.
-  last_text_input_state_ = std::make_unique<TextInputState>(params);
+  last_text_input_state_ = params.Clone();
 
   SendTextInputTypeChangedToView(static_cast<RenderWidgetHostViewBase*>(
       web_contents()->GetRenderWidgetHostView()));
@@ -463,28 +462,25 @@ void BrowserPluginGuest::OnDragStatusUpdate(int browser_plugin_instance_id,
 
 void BrowserPluginGuest::OnExecuteEditCommand(int browser_plugin_instance_id,
                                               const std::string& name) {
-  RenderFrameHostImpl* focused_frame =
-      static_cast<RenderFrameHostImpl*>(web_contents()->GetFocusedFrame());
-  if (!focused_frame || !focused_frame->GetFrameInputHandler())
+  blink::mojom::FrameWidgetInputHandler* focused_frame_widget_input_handler =
+      GetWebContents()->GetFocusedFrameWidgetInputHandler();
+  if (!focused_frame_widget_input_handler)
     return;
 
-  focused_frame->GetFrameInputHandler()->ExecuteEditCommand(name,
-                                                            base::nullopt);
+  focused_frame_widget_input_handler->ExecuteEditCommand(name, base::nullopt);
 }
 
 void BrowserPluginGuest::OnImeCommitText(
     int browser_plugin_instance_id,
     const base::string16& text,
-    const std::vector<blink::WebImeTextSpan>& ime_text_spans,
+    const std::vector<ui::ImeTextSpan>& ime_text_spans,
     const gfx::Range& replacement_range,
     int relative_cursor_pos) {
-  std::vector<ui::ImeTextSpan> ui_ime_text_spans =
-      ConvertBlinkImeTextSpansToUiImeTextSpans(ime_text_spans);
   GetWebContents()
       ->GetRenderViewHost()
       ->GetWidget()
       ->GetWidgetInputHandler()
-      ->ImeCommitText(text, ui_ime_text_spans, replacement_range,
+      ->ImeCommitText(text, ime_text_spans, replacement_range,
                       relative_cursor_pos, base::OnceClosure());
 }
 
@@ -503,10 +499,11 @@ void BrowserPluginGuest::OnExtendSelectionAndDelete(
     int browser_plugin_instance_id,
     int before,
     int after) {
-  RenderFrameHostImpl* rfh = static_cast<RenderFrameHostImpl*>(
-      web_contents()->GetFocusedFrame());
-  if (rfh && rfh->GetFrameInputHandler())
-    rfh->GetFrameInputHandler()->ExtendSelectionAndDelete(before, after);
+  blink::mojom::FrameWidgetInputHandler* focused_frame_widget_input_handler =
+      GetWebContents()->GetFocusedFrameWidgetInputHandler();
+  if (!focused_frame_widget_input_handler)
+    return;
+  focused_frame_widget_input_handler->ExtendSelectionAndDelete(before, after);
 }
 
 void BrowserPluginGuest::OnSetFocus(int browser_plugin_instance_id,

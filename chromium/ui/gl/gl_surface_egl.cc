@@ -35,6 +35,7 @@
 #include "ui/gl/gl_surface_presentation_helper.h"
 #include "ui/gl/gl_surface_stub.h"
 #include "ui/gl/gl_utils.h"
+#include "ui/gl/gpu_switching_manager.h"
 #include "ui/gl/scoped_make_current.h"
 #include "ui/gl/sync_control_vsync_provider.h"
 
@@ -87,6 +88,12 @@
 #define EGL_PLATFORM_ANGLE_DEVICE_TYPE_D3D_WARP_ANGLE 0x320B
 #define EGL_PLATFORM_ANGLE_DEVICE_TYPE_D3D_REFERENCE_ANGLE 0x320C
 #endif /* EGL_ANGLE_platform_angle_d3d */
+
+#ifndef EGL_ANGLE_platform_angle_d3d_luid
+#define EGL_ANGLE_platform_angle_d3d_luid 1
+#define EGL_PLATFORM_ANGLE_D3D_LUID_HIGH_ANGLE 0x34A0
+#define EGL_PLATFORM_ANGLE_D3D_LUID_LOW_ANGLE 0x34A1
+#endif /* EGL_ANGLE_platform_angle_d3d_luid */
 
 #ifndef EGL_ANGLE_platform_angle_d3d11on12
 #define EGL_ANGLE_platform_angle_d3d11on12 1
@@ -160,6 +167,8 @@ bool GLSurfaceEGL::initialized_ = false;
 
 namespace {
 
+class EGLGpuSwitchingObserver;
+
 EGLDisplay g_egl_display = EGL_NO_DISPLAY;
 EGLDisplayPlatform g_native_display(EGL_DEFAULT_DISPLAY);
 
@@ -184,6 +193,7 @@ bool g_egl_android_native_fence_sync_supported = false;
 bool g_egl_ext_pixel_format_float_supported = false;
 bool g_egl_angle_feature_control_supported = false;
 bool g_egl_angle_power_preference_supported = false;
+EGLGpuSwitchingObserver* g_egl_gpu_switching_observer = nullptr;
 
 constexpr const char kSwapEventTraceCategories[] = "gpu";
 
@@ -248,6 +258,14 @@ class EGLSyncControlVSyncProvider : public SyncControlVSyncProvider {
   DISALLOW_COPY_AND_ASSIGN(EGLSyncControlVSyncProvider);
 };
 
+class EGLGpuSwitchingObserver final : public ui::GpuSwitchingObserver {
+ public:
+  void OnGpuSwitched(gl::GpuPreference active_gpu_heuristic) override {
+    DCHECK(GLSurfaceEGL::IsANGLEPowerPreferenceSupported());
+    eglHandleGPUSwitchANGLE(g_egl_display);
+  }
+};
+
 std::vector<const char*> GetAttribArrayFromStringVector(
     const std::vector<std::string>& strings) {
   std::vector<const char*> attribs;
@@ -276,6 +294,30 @@ EGLDisplay GetPlatformANGLEDisplay(
 
   display_attribs.push_back(EGL_PLATFORM_ANGLE_TYPE_ANGLE);
   display_attribs.push_back(static_cast<EGLAttrib>(platform_type));
+
+  if (platform_type == EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE) {
+    base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+    if (command_line->HasSwitch(switches::kUseAdapterLuid)) {
+      // If the LUID is specified, the format is <high part>,<low part>. Split
+      // and add them to the EGL_ANGLE_platform_angle_d3d_luid ext attributes.
+      std::string luid =
+          command_line->GetSwitchValueASCII(switches::kUseAdapterLuid);
+      size_t comma = luid.find(',');
+      if (comma != std::string::npos) {
+        int32_t high;
+        uint32_t low;
+        if (!base::StringToInt(luid.substr(0, comma), &high) ||
+            !base::StringToUint(luid.substr(comma + 1), &low))
+          return EGL_NO_DISPLAY;
+
+        display_attribs.push_back(EGL_PLATFORM_ANGLE_D3D_LUID_HIGH_ANGLE);
+        display_attribs.push_back(high);
+
+        display_attribs.push_back(EGL_PLATFORM_ANGLE_D3D_LUID_LOW_ANGLE);
+        display_attribs.push_back(low);
+      }
+    }
+  }
 
   GLDisplayEglUtil::GetInstance()->GetPlatformExtraDisplayAttribs(
       platform_type, &display_attribs);
@@ -963,6 +1005,12 @@ bool GLSurfaceEGL::InitializeOneOffCommon() {
   g_egl_angle_power_preference_supported =
       HasEGLExtension("EGL_ANGLE_power_preference");
 
+  if (g_egl_angle_power_preference_supported) {
+    g_egl_gpu_switching_observer = new EGLGpuSwitchingObserver();
+    ui::GpuSwitchingManager::GetInstance()->AddObserver(
+        g_egl_gpu_switching_observer);
+  }
+
   initialized_ = true;
   return true;
 }
@@ -979,6 +1027,13 @@ bool GLSurfaceEGL::InitializeExtensionSettingsOneOff() {
 
 // static
 void GLSurfaceEGL::ShutdownOneOff() {
+  if (g_egl_gpu_switching_observer) {
+    ui::GpuSwitchingManager::GetInstance()->RemoveObserver(
+        g_egl_gpu_switching_observer);
+    delete g_egl_gpu_switching_observer;
+    g_egl_gpu_switching_observer = nullptr;
+  }
+
   angle::ResetPlatform(g_egl_display);
 
   if (g_egl_display != EGL_NO_DISPLAY) {

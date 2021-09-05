@@ -27,7 +27,6 @@
 
 #include "third_party/blink/public/mojom/appcache/appcache.mojom-blink.h"
 #include "third_party/blink/public/mojom/appcache/appcache_info.mojom-blink.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event_listener.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -48,7 +47,7 @@ ApplicationCache::ApplicationCache(LocalFrame* frame)
     cache_host->SetApplicationCache(this);
 }
 
-void ApplicationCache::Trace(Visitor* visitor) {
+void ApplicationCache::Trace(Visitor* visitor) const {
   EventTargetWithInlineData::Trace(visitor);
   ExecutionContextClient::Trace(visitor);
 }
@@ -150,14 +149,9 @@ const AtomicString& ApplicationCache::ToEventType(mojom::AppCacheEventID id) {
 void ApplicationCache::RecordAPIUseType() const {
   if (!GetFrame())
     return;
-
-  Document* document = GetFrame()->GetDocument();
-
-  if (!document)
-    return;
-
-  CHECK(document->IsSecureContext());
-  Deprecation::CountDeprecation(document,
+  LocalDOMWindow* window = GetFrame()->DomWindow();
+  CHECK(GetFrame()->DomWindow()->IsSecureContext());
+  Deprecation::CountDeprecation(window,
                                 WebFeature::kApplicationCacheAPISecureOrigin);
 }
 

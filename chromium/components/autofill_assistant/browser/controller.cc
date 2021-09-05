@@ -12,7 +12,6 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/time/tick_clock.h"
 #include "base/values.h"
 #include "components/autofill_assistant/browser/actions/collect_user_data_action.h"
@@ -23,6 +22,7 @@
 #include "components/autofill_assistant/browser/service_impl.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/user_data.h"
+#include "components/autofill_assistant/browser/view_layout.pb.h"
 #include "components/google/core/common/google_util.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/strings/grit/components_strings.h"
@@ -43,14 +43,16 @@ namespace {
 static constexpr int kAutostartInitialProgress = 5;
 
 // Parameter that allows setting the color of the overlay.
-static const char* const kOverlayColorParameterName = "OVERLAY_COLORS";
+const char kOverlayColorParameterName[] = "OVERLAY_COLORS";
 
 // Parameter that contains the current session username. Should be synced with
 // |SESSION_USERNAME_PARAMETER| from
 // .../password_manager/PasswordChangeLauncher.java
 // TODO(b/151401974): Eliminate duplicate parameter definitions.
-static const char* const kPasswordChangeUsernameParameterName =
-    "PASSWORD_CHANGE_USERNAME";
+const char kPasswordChangeUsernameParameterName[] = "PASSWORD_CHANGE_USERNAME";
+
+// Experiment for toggling the new progress bar.
+const char kProgressBarExperiment[] = "4400697";
 
 // Returns true if the state requires a UI to be shown.
 //
@@ -241,6 +243,15 @@ int Controller::GetProgress() const {
   return progress_;
 }
 
+base::Optional<int> Controller::GetProgressActiveStep() const {
+  return progress_active_step_;
+}
+
+base::Optional<ShowProgressBarProto::StepProgressBarConfiguration>
+Controller::GetStepProgressBarConfiguration() const {
+  return step_progress_bar_configuration_;
+}
+
 void Controller::SetInfoBox(const InfoBox& info_box) {
   if (!info_box_) {
     info_box_ = std::make_unique<InfoBox>();
@@ -273,6 +284,18 @@ void Controller::SetProgress(int progress) {
   }
 }
 
+void Controller::SetProgressActiveStep(int active_step) {
+  // Step can only increase.
+  if (progress_active_step_ >= active_step) {
+    return;
+  }
+
+  progress_active_step_ = active_step;
+  for (ControllerObserver& observer : observers_) {
+    observer.OnProgressActiveStepChanged(active_step);
+  }
+}
+
 void Controller::SetProgressVisible(bool visible) {
   if (progress_visible_ == visible)
     return;
@@ -285,6 +308,38 @@ void Controller::SetProgressVisible(bool visible) {
 
 bool Controller::GetProgressVisible() const {
   return progress_visible_;
+}
+
+void Controller::SetStepProgressBarConfiguration(
+    const ShowProgressBarProto::StepProgressBarConfiguration& configuration) {
+  step_progress_bar_configuration_ = configuration;
+  if (!configuration.step_icons().empty() &&
+      progress_active_step_.has_value() &&
+      configuration.step_icons().size() < *progress_active_step_) {
+    progress_active_step_ = configuration.step_icons().size();
+  }
+  for (ControllerObserver& observer : observers_) {
+    observer.OnStepProgressBarConfigurationChanged(configuration);
+    if (progress_active_step_.has_value()) {
+      observer.OnProgressActiveStepChanged(*progress_active_step_);
+    }
+    observer.OnProgressBarErrorStateChanged(progress_bar_error_state_);
+  }
+}
+
+void Controller::SetProgressBarErrorState(bool error) {
+  if (progress_bar_error_state_ == error) {
+    return;
+  }
+
+  progress_bar_error_state_ = error;
+  for (ControllerObserver& observer : observers_) {
+    observer.OnProgressBarErrorStateChanged(error);
+  }
+}
+
+bool Controller::GetProgressBarErrorState() const {
+  return progress_bar_error_state_;
 }
 
 const std::vector<UserAction>& Controller::GetUserActions() const {
@@ -321,10 +376,13 @@ void Controller::RequireUI() {
 
 void Controller::SetGenericUi(
     std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-    base::OnceCallback<void(bool, ProcessedActionStatusProto, const UserModel*)>
-        end_action_callback) {
+    base::OnceCallback<void(const ClientStatus&)> end_action_callback,
+    base::OnceCallback<void(const ClientStatus&)>
+        view_inflation_finished_callback) {
   generic_user_interface_ = std::move(generic_ui);
   basic_interactions_.SetEndActionCallback(std::move(end_action_callback));
+  basic_interactions_.SetViewInflationFinishedCallback(
+      std::move(view_inflation_finished_callback));
   for (ControllerObserver& observer : observers_) {
     observer.OnGenericUserInterfaceChanged(generic_user_interface_.get());
   }
@@ -332,7 +390,7 @@ void Controller::SetGenericUi(
 
 void Controller::ClearGenericUi() {
   generic_user_interface_.reset();
-  basic_interactions_.ClearEndActionCallback();
+  basic_interactions_.ClearCallbacks();
   for (ControllerObserver& observer : observers_) {
     observer.OnGenericUserInterfaceChanged(nullptr);
   }
@@ -699,10 +757,11 @@ void Controller::StartPeriodicScriptChecks() {
   if (periodic_script_check_scheduled_)
     return;
   periodic_script_check_scheduled_ = true;
-  base::PostDelayedTask(FROM_HERE, {content::BrowserThread::UI},
-                        base::BindOnce(&Controller::OnPeriodicScriptCheck,
-                                       weak_ptr_factory_.GetWeakPtr()),
-                        settings_.periodic_script_check_interval);
+  content::GetUIThreadTaskRunner({})->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&Controller::OnPeriodicScriptCheck,
+                     weak_ptr_factory_.GetWeakPtr()),
+      settings_.periodic_script_check_interval);
 }
 
 void Controller::StopPeriodicScriptChecks() {
@@ -732,10 +791,11 @@ void Controller::OnPeriodicScriptCheck() {
   }
 
   script_tracker()->CheckScripts();
-  base::PostDelayedTask(FROM_HERE, {content::BrowserThread::UI},
-                        base::BindOnce(&Controller::OnPeriodicScriptCheck,
-                                       weak_ptr_factory_.GetWeakPtr()),
-                        settings_.periodic_script_check_interval);
+  content::GetUIThreadTaskRunner({})->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&Controller::OnPeriodicScriptCheck,
+                     weak_ptr_factory_.GetWeakPtr()),
+      settings_.periodic_script_check_interval);
 }
 
 void Controller::OnGetScripts(const GURL& url,
@@ -980,6 +1040,12 @@ void Controller::InitFromParameters() {
     user_data_->selected_login_.emplace(web_contents()->GetLastCommittedURL(),
                                         *password_change_username);
   }
+
+  if (trigger_context_->HasExperimentId(kProgressBarExperiment)) {
+    ShowProgressBarProto::StepProgressBarConfiguration mock_configuration;
+    mock_configuration.set_use_step_progress_bar(true);
+    SetStepProgressBarConfiguration(mock_configuration);
+  }
 }
 
 void Controller::Track(std::unique_ptr<TriggerContext> trigger_context,
@@ -1043,12 +1109,21 @@ void Controller::ShowFirstMessageAndStart() {
   SetStatusMessage(
       l10n_util::GetStringFUTF8(IDS_AUTOFILL_ASSISTANT_LOADING,
                                 base::UTF8ToUTF16(GetCurrentURL().host())));
-  SetProgress(kAutostartInitialProgress);
+  if (step_progress_bar_configuration_.has_value() &&
+      step_progress_bar_configuration_->use_step_progress_bar()) {
+    SetProgressActiveStep(0);
+  } else {
+    SetProgress(kAutostartInitialProgress);
+  }
   EnterState(AutofillAssistantState::STARTING);
 }
 
 AutofillAssistantState Controller::GetState() {
   return state_;
+}
+
+int64_t Controller::GetErrorCausingNavigationId() const {
+  return error_causing_navigation_id_;
 }
 
 void Controller::OnScriptSelected(const ScriptHandle& handle,
@@ -1435,6 +1510,7 @@ void Controller::OnScriptError(const std::string& error_message,
 
   RequireUI();
   SetStatusMessage(error_message);
+  SetProgressBarErrorState(true);
   EnterStoppedState();
 
   if (tracking_) {
@@ -1454,6 +1530,7 @@ void Controller::OnFatalError(const std::string& error_message,
     return;
 
   SetStatusMessage(error_message);
+  SetProgressBarErrorState(true);
   EnterStoppedState();
 
   // If we haven't managed to check the set of scripts yet at this point, we
@@ -1588,15 +1665,15 @@ void Controller::OnRunnableScriptsChanged(
   SetUserActions(std::move(user_actions));
 }
 
-void Controller::DidAttachInterstitialPage() {
-  client_->Shutdown(Metrics::DropOutReason::INTERSTITIAL_PAGE);
-}
-
 void Controller::DidFinishLoad(content::RenderFrameHost* render_frame_host,
                                const GURL& validated_url) {
   // validated_url might not be the page URL. Ignore it and always check the
   // last committed url.
   OnUrlChange();
+}
+
+void Controller::ExpectNavigation() {
+  expect_navigation_ = true;
 }
 
 void Controller::DidStartNavigation(
@@ -1609,6 +1686,12 @@ void Controller::DidStartNavigation(
   if (!navigating_to_new_document_) {
     navigating_to_new_document_ = true;
     ReportNavigationStateChanged();
+  }
+
+  // The navigation is expected, do not check for errors below.
+  if (expect_navigation_) {
+    expect_navigation_ = false;
+    return;
   }
 
   // The following types of navigations are allowed for the main frame, when
@@ -1627,19 +1710,38 @@ void Controller::DidStartNavigation(
   // Everything else, such as going back to a previous page, or refreshing the
   // page is considered an end condition. If going back to a previous page is
   // required, consider using the BROWSE state instead.
-  // Note that BROWSE state end conditions are in DidFinishNavigation, in order
-  // to be able to properly evaluate the committed url.
   if (state_ == AutofillAssistantState::PROMPT &&
       web_contents()->GetLastCommittedURL().is_valid() &&
       !navigation_handle->WasServerRedirect() &&
       !navigation_handle->IsRendererInitiated()) {
+    error_causing_navigation_id_ = navigation_handle->GetNavigationId();
     OnScriptError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_GIVE_UP),
                   Metrics::DropOutReason::NAVIGATION);
+    return;
   }
+
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillAssistantBreakOnRunningNavigation)) {
+    // When in RUNNING state, all renderer initiated navigation is allowed,
+    // user initiated navigation will cause an error.
+    if (state_ == AutofillAssistantState::RUNNING &&
+        !navigation_handle->WasServerRedirect() &&
+        !navigation_handle->IsRendererInitiated()) {
+      error_causing_navigation_id_ = navigation_handle->GetNavigationId();
+      OnScriptError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_GIVE_UP),
+                    Metrics::DropOutReason::NAVIGATION_WHILE_RUNNING);
+      return;
+    }
+  }
+
+  // Note that BROWSE state end conditions are in DidFinishNavigation, in order
+  // to be able to properly evaluate the committed url.
 }
 
 void Controller::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
+  // TODO(b/159871774): Rethink how we handle navigation events. The early
+  // return here may prevent us from updating |navigating_to_new_document_|.
   if (!navigation_handle->IsInMainFrame() ||
       navigation_handle->IsSameDocument() ||
       !navigation_handle->HasCommitted() || !IsNavigatingToNewDocument()) {
@@ -1756,11 +1858,6 @@ void Controller::WriteUserData(
   for (ControllerObserver& observer : observers_) {
     observer.OnUserDataChanged(user_data_.get(), field_change);
   }
-}
-
-void Controller::WriteUserModel(
-    base::OnceCallback<void(UserModel*)> write_callback) {
-  std::move(write_callback).Run(&user_model_);
 }
 
 ElementArea* Controller::touchable_element_area() {

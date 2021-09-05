@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -29,7 +30,6 @@
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/platform_thread.h"
@@ -49,7 +49,8 @@
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/metrics/network_quality_estimator_provider_impl.h"
 #include "chrome/browser/metrics/sampling_metrics_provider.h"
-#include "chrome/browser/metrics/subprocess_metrics_provider.h"
+#include "chrome/browser/privacy_budget/privacy_budget_prefs.h"
+#include "chrome/browser/privacy_budget/privacy_budget_ukm_entry_filter.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/safe_browsing/certificate_reporting_metrics_provider.h"
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
@@ -66,13 +67,13 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
 #include "components/metrics/component_metrics_provider.h"
+#include "components/metrics/content/gpu_metrics_provider.h"
+#include "components/metrics/content/rendering_perf_metrics_provider.h"
+#include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/metrics/cpu_metrics_provider.h"
 #include "components/metrics/demographic_metrics_provider.h"
 #include "components/metrics/drive_metrics_provider.h"
 #include "components/metrics/entropy_state_provider.h"
-#include "components/metrics/field_trials_provider.h"
-#include "components/metrics/gpu/gpu_metrics_provider.h"
-#include "components/metrics/gpu/rendering_perf_metrics_provider.h"
 #include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_reporting_default_state.h"
@@ -95,6 +96,7 @@
 #include "components/sync/driver/passphrase_type_metrics_provider.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync_device_info/device_count_metrics_provider.h"
+#include "components/ukm/field_trials_provider_helper.h"
 #include "components/ukm/ukm_service.h"
 #include "components/version_info/version_info.h"
 #include "content/browser/accessibility/accessibility_metrics_provider.h"
@@ -107,6 +109,7 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "ui/base/buildflags.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/metrics/chrome_android_metrics_provider.h"
@@ -133,6 +136,10 @@
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/metrics/plugin_metrics_provider.h"
+#endif
+
+#if BUILDFLAG(LACROS)
+#include "chrome/browser/metrics/lacros_metrics_provider.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -242,8 +249,7 @@ void RegisterOrRemovePreviousRunMetricsFile(
         FROM_HERE,
         {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
          base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-        base::BindOnce(base::IgnoreResult(&base::DeleteFile), metrics_file,
-                       /*recursive=*/false));
+        base::BindOnce(base::GetDeleteFileCallback(), metrics_file));
   }
 }
 
@@ -296,9 +302,8 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
           FROM_HERE,
           {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-          base::BindOnce(base::IgnoreResult(&base::DeleteFile),
-                         std::move(browser_metrics_upload_dir),
-                         /*recursive=*/true));
+          base::BindOnce(base::GetDeletePathRecursivelyCallback(),
+                         std::move(browser_metrics_upload_dir)));
     }
   }
 
@@ -332,9 +337,8 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
           FROM_HERE,
           {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-          base::BindOnce(base::IgnoreResult(&base::DeleteFile),
-                         std::move(notification_helper_metrics_upload_dir),
-                         /*recursive=*/true));
+          base::BindOnce(base::GetDeletePathRecursivelyCallback(),
+                         std::move(notification_helper_metrics_upload_dir)));
     }
   }
 #endif
@@ -418,9 +422,6 @@ MakeDemographicMetricsProvider(
 
 }  // namespace
 
-// UKM suffix for field trial recording.
-const char kUKMFieldTrialSuffix[] = "UKM";
-
 ChromeMetricsServiceClient::ChromeMetricsServiceClient(
     metrics::MetricsStateManager* state_manager)
     : metrics_state_manager_(state_manager) {
@@ -452,6 +453,7 @@ void ChromeMetricsServiceClient::RegisterPrefs(PrefRegistrySimple* registry) {
   metrics::MetricsService::RegisterPrefs(registry);
   ukm::UkmService::RegisterPrefs(registry);
   metrics::StabilityMetricsHelper::RegisterPrefs(registry);
+  prefs::RegisterPrivacyBudgetPrefs(registry);
 
   RegisterFileMetricsPreferences(registry);
 
@@ -581,15 +583,18 @@ void ChromeMetricsServiceClient::Initialize() {
 
   if (IsMetricsReportingForceEnabled() ||
       base::FeatureList::IsEnabled(ukm::kUkmFeature)) {
-    // We only need to restrict to whitelisted Entries if metrics reporting
-    // is not forced.
-    bool restrict_to_whitelist_entries = !IsMetricsReportingForceEnabled();
-    ukm_service_.reset(new ukm::UkmService(
-        local_state, this, restrict_to_whitelist_entries,
+    identifiability_study_state_ =
+        std::make_unique<IdentifiabilityStudyState>(local_state);
+    ukm_service_ = std::make_unique<ukm::UkmService>(
+        local_state, this,
         MakeDemographicMetricsProvider(
-            metrics::MetricsLogUploader::MetricServiceType::UKM)));
+            metrics::MetricsLogUploader::MetricServiceType::UKM));
     ukm_service_->SetIsWebstoreExtensionCallback(
         base::BindRepeating(&IsWebstoreExtension));
+    ukm_service_->RegisterEventFilter(
+        std::make_unique<PrivacyBudgetUkmEntryFilter>(
+            identifiability_study_state_.get()));
+
     RegisterUKMProviders();
   }
 
@@ -604,7 +609,7 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
 
   // Gets access to persistent metrics shared by sub-processes.
   metrics_service_->RegisterMetricsProvider(
-      std::make_unique<SubprocessMetricsProvider>());
+      std::make_unique<metrics::SubprocessMetricsProvider>());
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   metrics_service_->RegisterMetricsProvider(
@@ -692,6 +697,11 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       std::unique_ptr<metrics::MetricsProvider>(plugin_metrics_provider_));
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
+#if BUILDFLAG(LACROS)
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<LacrosMetricsProvider>());
+#endif  // BUILDFLAG(LACROS)
+
 #if defined(OS_CHROMEOS)
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<ChromeOSMetricsProvider>(
@@ -753,6 +763,8 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
 }
 
 void ChromeMetricsServiceClient::RegisterUKMProviders() {
+  // Note: if you make changes here please also consider whether they should go
+  // in AndroidMetricsServiceClient::CreateUkmService().
   ukm_service_->RegisterMetricsProvider(
       std::make_unique<metrics::NetworkMetricsProvider>(
           content::CreateNetworkConnectionTrackerAsyncGetter(),
@@ -773,10 +785,7 @@ void ChromeMetricsServiceClient::RegisterUKMProviders() {
   ukm_service_->RegisterMetricsProvider(
       std::make_unique<metrics::ScreenInfoMetricsProvider>());
 
-  // TODO(crbug.com/754877): Support synthetic trials for UKM.
-  ukm_service_->RegisterMetricsProvider(
-      std::make_unique<variations::FieldTrialsProvider>(nullptr,
-                                                        kUKMFieldTrialSuffix));
+  ukm_service_->RegisterMetricsProvider(ukm::CreateFieldTrialsProviderForUkm());
 }
 
 void ChromeMetricsServiceClient::CollectFinalHistograms() {
@@ -832,8 +841,8 @@ void ChromeMetricsServiceClient::OnMemoryDetailCollectionDone() {
 #endif
 
   // Merge histograms from metrics providers into StatisticsRecorder.
-  base::PostTaskAndReply(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTaskAndReply(
+      FROM_HERE,
       base::BindOnce(&base::StatisticsRecorder::ImportProvidedHistograms),
       callback);
 

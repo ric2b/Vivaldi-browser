@@ -33,6 +33,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/context_menu_params.h"
+#include "ui/display/scoped_display_for_new_windows.h"
 #include "ui/gfx/vector_icon_types.h"
 
 namespace {
@@ -91,6 +92,9 @@ void AppServiceContextMenu::GetMenuModel(GetMenuModelCallback callback) {
 }
 
 void AppServiceContextMenu::ExecuteCommand(int command_id, int event_flags) {
+  // Place new windows on the same display as the context menu.
+  display::ScopedDisplayForNewWindows scoped_display(
+      controller()->GetAppListDisplayId());
   switch (command_id) {
     case ash::LAUNCH_NEW:
       delegate()->ExecuteLaunchCommand(event_flags);
@@ -110,7 +114,8 @@ void AppServiceContextMenu::ExecuteCommand(int command_id, int event_flags) {
 
     case ash::SETTINGS:
       if (app_id() == crostini::GetTerminalId())
-        crostini::LaunchTerminalSettings(profile());
+        crostini::LaunchTerminalSettings(profile(),
+                                         controller()->GetAppListDisplayId());
       break;
 
     case ash::APP_CONTEXT_MENU_NEW_WINDOW:
@@ -125,7 +130,7 @@ void AppServiceContextMenu::ExecuteCommand(int command_id, int event_flags) {
       if (app_id() == crostini::GetTerminalId()) {
         crostini::CrostiniManager::GetForProfile(profile())->StopVm(
             crostini::kCrostiniDefaultVmName, base::DoNothing());
-      } else if (app_id() == plugin_vm::kPluginVmAppId) {
+      } else if (app_id() == plugin_vm::kPluginVmShelfAppId) {
         plugin_vm::PluginVmManagerFactory::GetForProfile(profile())
             ->StopPluginVm(plugin_vm::kPluginVmName, /*force=*/false);
       } else {

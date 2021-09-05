@@ -6,34 +6,51 @@ package org.chromium.chrome.browser.feed.v2;
 
 import android.app.Activity;
 import android.content.Context;
+import android.view.ContextThemeWrapper;
 import android.view.View;
+import android.widget.TextView;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.AppHooks;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.native_page.NativePageNavigationDelegate;
+import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.offlinepages.RequestCoordinatorBridge;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.signin.IdentityServicesProvider;
+import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.xsurface.FeedActionsHandler;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.ProcessScope;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler;
 import org.chromium.chrome.browser.xsurface.SurfaceDependencyProvider;
 import org.chromium.chrome.browser.xsurface.SurfaceScope;
+import org.chromium.chrome.feed.R;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.feed.proto.FeedUiProto.SharedState;
 import org.chromium.components.feed.proto.FeedUiProto.Slice;
-import org.chromium.components.feed.proto.FeedUiProto.Slice.SliceDataCase;
 import org.chromium.components.feed.proto.FeedUiProto.StreamUpdate;
 import org.chromium.components.feed.proto.FeedUiProto.StreamUpdate.SliceUpdate;
-import org.chromium.components.feed.proto.FeedUiProto.StreamUpdate.SliceUpdate.UpdateCase;
+import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.common.Referrer;
+import org.chromium.network.mojom.ReferrerPolicy;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.ui.mojom.WindowOpenDisposition;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -48,27 +65,94 @@ import java.util.List;
 @JNINamespace("feed")
 public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHandler {
     private static final String TAG = "FeedStreamSurface";
+
+    private static final int SNACKBAR_DURATION_MS_SHORT = 4000;
+    private static final int SNACKBAR_DURATION_MS_LONG = 10000;
+
     private final long mNativeFeedStreamSurface;
     private final FeedListContentManager mContentManager;
-    private final TabModelSelector mTabModelSelector;
-    private final Supplier<Tab> mTabProvider;
     private final SurfaceScope mSurfaceScope;
     private final View mRootView;
     private final HybridListRenderer mHybridListRenderer;
+    private final SnackbarManager mSnackbarManager;
+    private final Activity mActivity;
+    private final BottomSheetController mBottomSheetController;
+    @Nullable
+    private FeedSliceViewTracker mSliceViewTracker;
+    private final NativePageNavigationDelegate mPageNavigationDelegate;
+
+    private int mHeaderCount;
+    private BottomSheetContent mBottomSheetContent;
 
     private static ProcessScope sXSurfaceProcessScope;
 
     public static ProcessScope xSurfaceProcessScope() {
         if (sXSurfaceProcessScope == null) {
-            sXSurfaceProcessScope =
-                    AppHooks.get().getExternalSurfaceProcessScope(new SurfaceDependencyProvider() {
-                        @Override
-                        public Context getContext() {
-                            return ContextUtils.getApplicationContext();
-                        }
-                    });
+            sXSurfaceProcessScope = AppHooks.get().getExternalSurfaceProcessScope(
+                    new FeedSurfaceDependencyProvider());
         }
         return sXSurfaceProcessScope;
+    }
+
+    // We avoid attaching surfaces until after |startup()| is called. This ensures that
+    // the correct sign-in state is used if attaching the surface triggers a fetch.
+
+    private static boolean sStartupCalled;
+    private static HashSet<FeedStreamSurface> sWaitingSurfaces;
+
+    public static void startup() {
+        if (sStartupCalled) return;
+        sStartupCalled = true;
+        FeedServiceBridge.startup();
+        xSurfaceProcessScope();
+        if (sWaitingSurfaces != null) {
+            for (FeedStreamSurface surface : sWaitingSurfaces) {
+                surface.surfaceOpened();
+            }
+            sWaitingSurfaces = null;
+        }
+    }
+
+    private static void openSurfaceAtStartup(FeedStreamSurface surface) {
+        if (sWaitingSurfaces == null) {
+            sWaitingSurfaces = new HashSet<FeedStreamSurface>();
+        }
+        sWaitingSurfaces.add(surface);
+    }
+
+    private static void cancelOpenSurfaceAtStartup(FeedStreamSurface surface) {
+        if (sWaitingSurfaces != null) {
+            sWaitingSurfaces.remove(surface);
+        }
+    }
+
+    /**
+     * Provides logging and context for all surfaces.
+     *
+     * TODO(rogerm): Find a more global home for this.
+     * TODO(rogerm): implement getClientInstanceId.
+     */
+    private static class FeedSurfaceDependencyProvider implements SurfaceDependencyProvider {
+        FeedSurfaceDependencyProvider() {}
+
+        @Override
+        public Context getContext() {
+            return ContextUtils.getApplicationContext();
+        }
+
+        @Override
+        public String getAccountName() {
+            CoreAccountInfo primaryAccount =
+                    IdentityServicesProvider.get()
+                            .getIdentityManager(Profile.getLastUsedRegularProfile())
+                            .getPrimaryAccountInfo(ConsentLevel.NOT_REQUIRED);
+            return primaryAccount == null ? "" : primaryAccount.getEmail();
+        }
+
+        @Override
+        public int[] getExperimentIds() {
+            return FeedStreamSurfaceJni.get().getExperimentIds();
+        }
     }
 
     /**
@@ -111,17 +195,24 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
      * Creates a {@link FeedStreamSurface} for creating native side bridge to access native feed
      * client implementation.
      */
-    public FeedStreamSurface(TabModelSelector tabModelSelector, Supplier<Tab> tabProvider,
-            Activity activityContext) {
+    public FeedStreamSurface(Activity activity, boolean isBackgroundDark,
+            SnackbarManager snackbarManager, NativePageNavigationDelegate pageNavigationDelegate,
+            BottomSheetController bottomSheetController) {
         mNativeFeedStreamSurface = FeedStreamSurfaceJni.get().init(FeedStreamSurface.this);
-        mTabModelSelector = tabModelSelector;
-        mTabProvider = tabProvider;
+        mSnackbarManager = snackbarManager;
+        mActivity = activity;
+
+        mPageNavigationDelegate = pageNavigationDelegate;
+        mBottomSheetController = bottomSheetController;
 
         mContentManager = new FeedListContentManager(this, this);
 
+        Context context = new ContextThemeWrapper(
+                activity, (isBackgroundDark ? R.style.Dark : R.style.Light));
+
         ProcessScope processScope = xSurfaceProcessScope();
         if (processScope != null) {
-            mSurfaceScope = xSurfaceProcessScope().obtainSurfaceScope(activityContext);
+            mSurfaceScope = processScope.obtainSurfaceScope(context);
         } else {
             mSurfaceScope = null;
         }
@@ -129,14 +220,67 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         if (mSurfaceScope != null) {
             mHybridListRenderer = mSurfaceScope.provideListRenderer();
         } else {
-            mHybridListRenderer = new NativeViewListRenderer(mTabProvider.get().getContext());
+            mHybridListRenderer = new NativeViewListRenderer(context);
         }
 
         if (mHybridListRenderer != null) {
             mRootView = mHybridListRenderer.bind(mContentManager);
+            // XSurface returns a View, but it should be a RecyclerView.
+            assert (mRootView instanceof RecyclerView);
+
+            mSliceViewTracker = new FeedSliceViewTracker(
+                    (RecyclerView) mRootView, mContentManager, (String sliceId) -> {
+                        FeedStreamSurfaceJni.get().reportSliceViewed(
+                                mNativeFeedStreamSurface, FeedStreamSurface.this, sliceId);
+                    });
         } else {
             mRootView = null;
         }
+    }
+
+    /**
+     * Performs all necessary cleanups.
+     */
+    public void destroy() {
+        if (mSliceViewTracker != null) {
+            mSliceViewTracker.destroy();
+            mSliceViewTracker = null;
+        }
+        mHybridListRenderer.unbind();
+        surfaceClosed();
+    }
+
+    /**
+     * Puts a list of header views at the beginning.
+     */
+    public void setHeaderViews(List<View> headerViews) {
+        ArrayList<FeedListContentManager.FeedContent> newContentList =
+                new ArrayList<FeedListContentManager.FeedContent>();
+
+        // First add new header contents. Some of them may appear in the existing list.
+        for (int i = 0; i < headerViews.size(); ++i) {
+            View view = headerViews.get(i);
+            String key = "Header" + view.hashCode();
+            FeedListContentManager.NativeViewContent headerContent =
+                    new FeedListContentManager.NativeViewContent(key, view);
+            newContentList.add(headerContent);
+        }
+
+        // Then add all existing feed stream contents.
+        for (int i = mHeaderCount; i < mContentManager.getItemCount(); ++i) {
+            newContentList.add(mContentManager.getContent(i));
+        }
+
+        updateContentsInPlace(newContentList);
+
+        mHeaderCount = headerViews.size();
+    }
+
+    /**
+     * @return The android {@link View} that the surface is supposed to show.
+     */
+    public View getView() {
+        return mRootView;
     }
 
     @VisibleForTesting
@@ -157,7 +301,43 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
             return;
         }
 
-        // 1) Builds the hash map of existing content list for fast look up by slice id.
+        // Update using shared states.
+        for (SharedState state : streamUpdate.getNewSharedStatesList()) {
+            mHybridListRenderer.update(state.getXsurfaceSharedState().toByteArray());
+        }
+
+        // Builds the new list containing:
+        // * existing headers
+        // * both new and existing contents
+        ArrayList<FeedListContentManager.FeedContent> newContentList =
+                new ArrayList<FeedListContentManager.FeedContent>();
+        for (int i = 0; i < mHeaderCount; ++i) {
+            newContentList.add(mContentManager.getContent(i));
+        }
+        for (SliceUpdate sliceUpdate : streamUpdate.getUpdatedSlicesList()) {
+            if (sliceUpdate.hasSlice()) {
+                newContentList.add(createContentFromSlice(sliceUpdate.getSlice()));
+            } else {
+                String existingSliceId = sliceUpdate.getSliceId();
+                int position = mContentManager.findContentPositionByKey(existingSliceId);
+                if (position != -1) {
+                    newContentList.add(mContentManager.getContent(position));
+                }
+            }
+        }
+
+        updateContentsInPlace(newContentList);
+    }
+
+    private void updateContentsInPlace(
+            ArrayList<FeedListContentManager.FeedContent> newContentList) {
+        // 1) Builds the hash set based on keys of new contents.
+        HashSet<String> newContentKeySet = new HashSet<String>();
+        for (int i = 0; i < newContentList.size(); ++i) {
+            newContentKeySet.add(newContentList.get(i).getKey());
+        }
+
+        // 2) Builds the hash map of existing content list for fast look up by key.
         HashMap<String, FeedListContentManager.FeedContent> existingContentMap =
                 new HashMap<String, FeedListContentManager.FeedContent>();
         for (int i = 0; i < mContentManager.getItemCount(); ++i) {
@@ -165,32 +345,12 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
             existingContentMap.put(content.getKey(), content);
         }
 
-        // 2) Builds the new list containing both new and existing contents.
-        ArrayList<FeedListContentManager.FeedContent> newContentList =
-                new ArrayList<FeedListContentManager.FeedContent>();
-        HashSet<String> existingIdsInNewContentList = new HashSet<String>();
-        for (SliceUpdate sliceUpdate : streamUpdate.getUpdatedSlicesList()) {
-            if (sliceUpdate.getUpdateCase() == UpdateCase.SLICE) {
-                newContentList.add(createContentFromSlice(sliceUpdate.getSlice()));
-            } else {
-                String existingSliceId = sliceUpdate.getSliceId();
-                FeedListContentManager.FeedContent content =
-                        existingContentMap.get(existingSliceId);
-                if (content != null) {
-                    newContentList.add(content);
-                    existingIdsInNewContentList.add(existingSliceId);
-                }
-            }
-        }
-
-        // 3) Removes those contents that do not appear in the new list as the existing contents.
-        //    Sometimes we may add new content with same id as the one in current list. In this
-        //    case, we will remove it from current list and add it again later as new content.
+        // 3) Removes those existing contents that do not appear in the new list.
         for (int i = mContentManager.getItemCount() - 1; i >= 0; --i) {
-            String id = mContentManager.getContent(i).getKey();
-            if (!existingIdsInNewContentList.contains(id)) {
+            String key = mContentManager.getContent(i).getKey();
+            if (!newContentKeySet.contains(key)) {
                 mContentManager.removeContents(i, 1);
-                existingContentMap.remove(id);
+                existingContentMap.remove(key);
             }
         }
 
@@ -220,34 +380,58 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
 
     private FeedListContentManager.FeedContent createContentFromSlice(Slice slice) {
         String sliceId = slice.getSliceId();
-        if (slice.getSliceDataCase() == SliceDataCase.XSURFACE_SLICE) {
+        if (slice.hasXsurfaceSlice()) {
             return new FeedListContentManager.ExternalViewContent(
                     sliceId, slice.getXsurfaceSlice().getXsurfaceFrame().toByteArray());
+        } else if (slice.hasLoadingSpinnerSlice()) {
+            return new FeedListContentManager.NativeViewContent(sliceId, R.layout.feed_spinner);
+        } else if (slice.hasZeroStateSlice()) {
+            // TODO(iwells): Settle on a final layout for zero-state.
+            return new FeedListContentManager.NativeViewContent(sliceId, R.layout.no_content);
         } else {
-            // TODO(jianli): Create native view for ZeroStateSlice.
-            View view = null;
+            TextView view = new TextView(mActivity);
+            view.setText(sliceId);
             return new FeedListContentManager.NativeViewContent(sliceId, view);
         }
     }
 
     @Override
     public void navigateTab(String url) {
-        LoadUrlParams loadUrlParams = new LoadUrlParams(url);
-        loadUrlParams.setTransitionType(PageTransition.AUTO_BOOKMARK);
-        mTabProvider.get().loadUrl(loadUrlParams);
-        FeedStreamSurfaceJni.get().reportNavigationStarted(
-                mNativeFeedStreamSurface, FeedStreamSurface.this, url, false /*inNewTab*/);
-        mTabProvider.get().addObserver(new FeedTabNavigationObserver(false));
+        openUrl(url, WindowOpenDisposition.CURRENT_TAB);
     }
 
     @Override
     public void navigateNewTab(String url) {
-        Tab tab = mTabProvider.get();
-        Tab newTab = mTabModelSelector.openNewTab(
-                new LoadUrlParams(url), TabLaunchType.FROM_CHROME_UI, tab, tab.isIncognito());
-        FeedStreamSurfaceJni.get().reportNavigationStarted(
-                mNativeFeedStreamSurface, FeedStreamSurface.this, url, true /*inNewTab*/);
-        newTab.addObserver(new FeedTabNavigationObserver(true));
+        openUrl(url, WindowOpenDisposition.NEW_FOREGROUND_TAB);
+    }
+
+    @Override
+    public void navigateIncognitoTab(String url) {
+        openUrl(url, WindowOpenDisposition.OFF_THE_RECORD);
+    }
+
+    @Override
+    public void downloadLink(String url) {
+        RequestCoordinatorBridge.getForProfile(Profile.getLastUsedRegularProfile())
+                .savePageLater(url, OfflinePageBridge.SUGGESTED_ARTICLES_NAMESPACE,
+                        true /* user requested*/);
+    }
+
+    @Override
+    public void showBottomSheet(View view) {
+        dismissBottomSheet();
+
+        // Make a sheetContent with the view.
+        mBottomSheetContent = new CardMenuBottomSheetContent(view);
+        mBottomSheetController.requestShowContent(mBottomSheetContent, true);
+    }
+
+    @Override
+    public void dismissBottomSheet() {
+        if (mBottomSheetContent != null) {
+            mBottomSheetController.hideContent(mBottomSheetContent, true);
+        }
+        mBottomSheetContent = null;
     }
 
     @Override
@@ -262,12 +446,9 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
     }
 
     @Override
-    public int requestDismissal() {
-        // TODO(jianli): may need to pass parameters from UI.
-        List<byte[]> serializedDataOperations = new ArrayList<byte[]>();
-        // TODO(jianli): append data to serializedDataOperations.
+    public int requestDismissal(byte[] data) {
         return FeedStreamSurfaceJni.get().executeEphemeralChange(
-                mNativeFeedStreamSurface, FeedStreamSurface.this, serializedDataOperations);
+                mNativeFeedStreamSurface, FeedStreamSurface.this, data);
     }
 
     @Override
@@ -282,29 +463,86 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
                 mNativeFeedStreamSurface, FeedStreamSurface.this, changeId);
     }
 
+    @Override
+    public void showSnackbar(String text, String actionLabel,
+            FeedActionsHandler.SnackbarDuration duration,
+            FeedActionsHandler.SnackbarController controller) {
+        int durationMs = SNACKBAR_DURATION_MS_SHORT;
+        if (duration == FeedActionsHandler.SnackbarDuration.LONG) {
+            durationMs = SNACKBAR_DURATION_MS_LONG;
+        }
+
+        mSnackbarManager.showSnackbar(
+                Snackbar.make(text,
+                                new SnackbarManager.SnackbarController() {
+                                    @Override
+                                    public void onAction(Object actionData) {
+                                        controller.onAction();
+                                    }
+                                    @Override
+                                    public void onDismissNoAction(Object actionData) {
+                                        controller.onDismissNoAction();
+                                    }
+                                },
+                                Snackbar.TYPE_ACTION, Snackbar.UMA_FEED_NTP_STREAM)
+                        .setDuration(durationMs));
+    }
+
     /**
      * Informs that the surface is opened. We can request the initial set of content now. Once
      * the content is available, onStreamUpdated will be called.
      */
     public void surfaceOpened() {
-        FeedStreamSurfaceJni.get().surfaceOpened(mNativeFeedStreamSurface, FeedStreamSurface.this);
+        if (!sStartupCalled) {
+            openSurfaceAtStartup(this);
+        } else {
+            FeedStreamSurfaceJni.get().surfaceOpened(
+                    mNativeFeedStreamSurface, FeedStreamSurface.this);
+        }
     }
 
     /**
-     * Informs that the surface is closed. Any cleanup can be performed now.
+     * Informs that the surface is closed.
      */
     public void surfaceClosed() {
-        FeedStreamSurfaceJni.get().surfaceClosed(mNativeFeedStreamSurface, FeedStreamSurface.this);
+        int feedCount = mContentManager.getItemCount() - mHeaderCount;
+        if (feedCount > 0) {
+            mContentManager.removeContents(mHeaderCount, feedCount);
+        }
+
+        if (!sStartupCalled) {
+            cancelOpenSurfaceAtStartup(this);
+        } else {
+            FeedStreamSurfaceJni.get().surfaceClosed(
+                    mNativeFeedStreamSurface, FeedStreamSurface.this);
+        }
+    }
+
+    private void openUrl(String url, int disposition) {
+        LoadUrlParams params = new LoadUrlParams(url, PageTransition.AUTO_BOOKMARK);
+        params.setReferrer(
+                new Referrer(SuggestionsConfig.getReferrerUrl(ChromeFeatureList.INTEREST_FEED_V2),
+                        ReferrerPolicy.ALWAYS));
+        Tab tab = mPageNavigationDelegate.openUrl(disposition, params);
+
+        boolean inNewTab = (disposition == WindowOpenDisposition.NEW_BACKGROUND_TAB
+                || disposition == WindowOpenDisposition.OFF_THE_RECORD);
+
+        FeedStreamSurfaceJni.get().reportNavigationStarted(
+                mNativeFeedStreamSurface, FeedStreamSurface.this);
+        if (tab != null) {
+            tab.addObserver(new FeedTabNavigationObserver(inNewTab));
+        }
     }
 
     @NativeMethods
     interface Natives {
         long init(FeedStreamSurface caller);
+        int[] getExperimentIds();
         // TODO(jianli): Call this function at the appropriate time.
         void reportSliceViewed(
                 long nativeFeedStreamSurface, FeedStreamSurface caller, String sliceId);
-        void reportNavigationStarted(long nativeFeedStreamSurface, FeedStreamSurface caller,
-                String url, boolean inNewTab);
+        void reportNavigationStarted(long nativeFeedStreamSurface, FeedStreamSurface caller);
         // TODO(jianli): Call this function at the appropriate time.
         void reportPageLoaded(long nativeFeedStreamSurface, FeedStreamSurface caller, String url,
                 boolean inNewTab);
@@ -334,11 +572,13 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         // TODO(jianli): Call this function at the appropriate time.
         void reportStreamScrolled(
                 long nativeFeedStreamSurface, FeedStreamSurface caller, int distanceDp);
+        // TODO(jianli): Call this function at the appropriate time.
+        void reportStreamScrollStart(long nativeFeedStreamSurface, FeedStreamSurface caller);
         void loadMore(long nativeFeedStreamSurface, FeedStreamSurface caller);
         void processThereAndBackAgain(
                 long nativeFeedStreamSurface, FeedStreamSurface caller, byte[] data);
-        int executeEphemeralChange(long nativeFeedStreamSurface, FeedStreamSurface caller,
-                List<byte[]> serializedDataOperations);
+        int executeEphemeralChange(
+                long nativeFeedStreamSurface, FeedStreamSurface caller, byte[] data);
         void commitEphemeralChange(
                 long nativeFeedStreamSurface, FeedStreamSurface caller, int changeId);
         void discardEphemeralChange(

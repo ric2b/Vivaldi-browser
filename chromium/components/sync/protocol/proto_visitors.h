@@ -38,6 +38,7 @@
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync/protocol/sharing_message_specifics.pb.h"
 #include "components/sync/protocol/sync.pb.h"
+#include "components/sync/protocol/sync_invalidations_payload.pb.h"
 #include "components/sync/protocol/theme_specifics.pb.h"
 #include "components/sync/protocol/typed_url_specifics.pb.h"
 #include "components/sync/protocol/unique_position.pb.h"
@@ -87,11 +88,9 @@
 #define VISIT_REP(field) \
   visitor.Visit(proto, #field, proto.field());
 
-// NOLINT(runtime/references) is necessary to avoid a presubmit warning about
-// V& not being const.
 #define VISIT_PROTO_FIELDS(proto) \
   template <class V>              \
-  void VisitProtoFields(V& visitor, proto)  // NOLINT(runtime/references)
+  void VisitProtoFields(V& visitor, proto)
 
 namespace syncer {
 
@@ -330,6 +329,7 @@ VISIT_PROTO_FIELDS(const sync_pb::DeviceInfoSpecifics& proto) {
   VISIT(last_updated_timestamp);
   VISIT(feature_fields);
   VISIT(sharing_fields);
+  VISIT(invalidation_fields);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::FeatureSpecificFields& proto) {
@@ -531,6 +531,10 @@ VISIT_PROTO_FIELDS(const sync_pb::HistoryDeleteDirectiveSpecifics& proto) {
 
 VISIT_PROTO_FIELDS(const sync_pb::HistoryDeleteDirectives& proto) {
   VISIT(enabled);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::InvalidationSpecificFields& proto) {
+  VISIT(instance_id_token);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::KeystoreEncryptionFlags& proto) {
@@ -817,7 +821,6 @@ VISIT_PROTO_FIELDS(const sync_pb::SyncCycleCompletedEventInfo& proto) {
 VISIT_PROTO_FIELDS(const sync_pb::SyncEntity& proto) {
   VISIT(id_string);
   VISIT(parent_id_string);
-  VISIT(old_parent_id);
   VISIT(version);
   VISIT(mtime);
   VISIT(ctime);
@@ -834,6 +837,16 @@ VISIT_PROTO_FIELDS(const sync_pb::SyncEntity& proto) {
   VISIT(folder);
   VISIT(client_defined_unique_tag);
   VISIT_BYTES(ordinal_in_parent);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::SyncInvalidationsPayload& proto) {
+  VISIT_REP(data_type_invalidations);
+  VISIT_BYTES(hint);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::SyncInvalidationsPayload::DataTypeInvalidation& proto) {
+  VISIT(data_type_id);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::SecurityEventSpecifics& proto) {

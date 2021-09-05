@@ -24,6 +24,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ObserverList;
+import org.chromium.base.TraceEvent;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.ThemeColorProvider.ThemeColorObserver;
@@ -327,6 +328,27 @@ public abstract class ToolbarLayout
         }
     }
 
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        try (TraceEvent e = TraceEvent.scoped("ToolbarLayout.onMeasure")) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        try (TraceEvent e = TraceEvent.scoped("ToolbarLayout.onLayout")) {
+            super.onLayout(changed, left, top, right, bottom);
+        }
+    }
+
+    @Override
+    public void draw(Canvas canvas) {
+        try (TraceEvent e = TraceEvent.scoped("ToolbarLayout.draw")) {
+            super.draw(canvas);
+        }
+    }
+
     /**
      * Quick getter for LayoutParams for a View inside a FrameLayout.
      * @param view {@link View} to fetch the layout params for.
@@ -361,6 +383,11 @@ public abstract class ToolbarLayout
      */
     View getMenuButtonWrapper() {
         return mMenuButtonWrapper;
+    }
+
+    @VisibleForTesting
+    void setMenuButtonWrapperForTesting(MenuButton menuButton) {
+        mMenuButtonWrapper = menuButton;
     }
 
     /**

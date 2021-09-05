@@ -64,6 +64,8 @@
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_manager_utils.h"
+#include "chrome/browser/federated_learning/floc_id_provider.h"
+#include "chrome/browser/federated_learning/floc_id_provider_factory.h"
 #include "chrome/browser/heavy_ad_intervention/heavy_ad_service.h"
 #include "chrome/browser/heavy_ad_intervention/heavy_ad_service_factory.h"
 #include "chrome/browser/media/media_device_id_salt.h"
@@ -96,7 +98,6 @@
 #include "chrome/browser/sharing/sharing_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_ui_util.h"
-#include "chrome/browser/site_isolation/site_isolation_policy.h"
 #include "chrome/browser/ssl/stateful_ssl_host_state_delegate_factory.h"
 #include "chrome/browser/startup_data.h"
 #include "chrome/browser/storage/storage_notification_service_factory.h"
@@ -139,6 +140,7 @@
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/site_isolation/site_isolation_policy.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/user_prefs/user_prefs.h"
@@ -724,7 +726,7 @@ void ProfileImpl::DoFinalInit() {
   signin_ui_util::InitializePrefsForProfile(this);
 #endif
 
-  SiteIsolationPolicy::ApplyPersistedIsolatedOrigins(this);
+  site_isolation::SiteIsolationPolicy::ApplyPersistedIsolatedOrigins(this);
 
   InitializeDataReductionProxy();
 
@@ -750,6 +752,10 @@ void ProfileImpl::DoFinalInit() {
   // Ensure that the SharingService is initialized now that io_data_ is
   // initialized. https://crbug.com/171406
   SharingServiceFactory::GetForBrowserContext(this);
+
+  // The creation of FlocIdProvider should align with the start of a browser
+  // profile session, so initialize it here.
+  federated_learning::FlocIdProviderFactory::GetForProfile(this);
 
   content::NotificationService::current()->Notify(
       chrome::NOTIFICATION_PROFILE_CREATED, content::Source<Profile>(this),
@@ -789,7 +795,7 @@ ProfileImpl::~ProfileImpl() {
   bool primary_otr_available = false;
 
   // Get a list of existing OTR profiles since |off_the_record_profile_| might
-  // be modified after the call to |DestroyOffTheRecordProfileNow|.
+  // be modified after the call to |DestroyProfileNow|.
   for (auto& otr_profile : otr_profiles_) {
     raw_otr_profiles.push_back(otr_profile.second.get());
     primary_otr_available |= (otr_profile.first == OTRProfileID::PrimaryID());
@@ -837,10 +843,6 @@ std::string ProfileImpl::GetProfileUserName() const {
     return identity_manager->GetPrimaryAccountInfo().email;
 
   return std::string();
-}
-
-Profile::ProfileType ProfileImpl::GetProfileType() const {
-  return REGULAR_PROFILE;
 }
 
 #if !defined(OS_ANDROID)
@@ -1348,10 +1350,7 @@ ProfileImpl::GetNativeFileSystemPermissionContext() {
   return NativeFileSystemPermissionContextFactory::GetForProfile(this);
 }
 
-bool ProfileImpl::IsSameProfile(Profile* profile) {
-  if (profile == static_cast<Profile*>(this))
-    return true;
-
+bool ProfileImpl::IsSameOrParent(Profile* profile) {
   return profile && profile->GetOriginalProfile() == this;
 }
 
@@ -1407,6 +1406,13 @@ void ProfileImpl::ChangeAppLocale(const std::string& new_locale,
     case APP_LOCALE_CHANGED_VIA_PUBLIC_SESSION_LOGIN: {
       if (!pref_locale.empty()) {
         DCHECK(LocaleNotChanged(pref_locale, new_locale));
+
+        if (!locale_change_guard_) {
+          locale_change_guard_ =
+              std::make_unique<chromeos::LocaleChangeGuard>(this);
+        }
+        locale_change_guard_->set_locale_changed_during_login(true);
+
         std::string accepted_locale =
             GetPrefs()->GetString(prefs::kApplicationLocaleAccepted);
         if (accepted_locale == new_locale) {
@@ -1419,8 +1425,6 @@ void ProfileImpl::ChangeAppLocale(const std::string& new_locale,
           // Back up locale of login screen.
           std::string cur_locale = g_browser_process->GetApplicationLocale();
           GetPrefs()->SetString(prefs::kApplicationLocaleBackup, cur_locale);
-          if (locale_change_guard_ == NULL)
-            locale_change_guard_.reset(new chromeos::LocaleChangeGuard(this));
           locale_change_guard_->PrepareChangingLocale(cur_locale, new_locale);
         }
       } else {
@@ -1466,8 +1470,8 @@ void ProfileImpl::ChangeAppLocale(const std::string& new_locale,
 }
 
 void ProfileImpl::OnLogin() {
-  if (locale_change_guard_ == NULL)
-    locale_change_guard_.reset(new chromeos::LocaleChangeGuard(this));
+  if (!locale_change_guard_)
+    locale_change_guard_ = std::make_unique<chromeos::LocaleChangeGuard>(this);
   locale_change_guard_->OnLogin();
 }
 

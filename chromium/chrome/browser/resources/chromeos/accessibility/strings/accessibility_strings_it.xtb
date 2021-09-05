@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Scorri a destra</translation>
 <translation id="1781173782405573156">Tasto pass through</translation>
 <translation id="1787176709638001873">Testo di modifica della password</translation>
+<translation id="180203835522132923">Tasto per la ricerca + O, poi W</translation>
 <translation id="1810107444790159527">Casella di riepilogo</translation>
 <translation id="1812527064848182527">orizzontale</translation>
 <translation id="1829244130665387512">Trova nella pagina</translation>
@@ -194,7 +195,7 @@
 <translation id="2523609930580546572">Tutorial di ChromeVox</translation>
 <translation id="2525706221823668172">Scorciatoie da tastiera di Chromebook</translation>
 <translation id="2553108862507765288">grammatical mistake</translation>
-<translation id="257674075312929031">Gruppo</translation>
+<translation id="257674075312929031">Raggruppa</translation>
 <translation id="2582407057977008361">Di lato</translation>
 <translation id="2592212930811759050">Tocca due volte per iniziare la modifica</translation>
 <translation id="2598495320872286378">Errore grammaticale</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Scorri verso sinistra con due dita</translation>
 <translation id="2998131015536248178">Carattere precedente</translation>
 <translation id="2999559350546931576">Abbassa tono</translation>
+<translation id="3009352964623081324">Tasto per la ricerca + O, poi S. Usa questa scorciatoia per installare, gestire e personalizzare voci.</translation>
 <translation id="3014130421870723208">@ed 8dot</translation>
 <translation id="3030432017085518523">Pulsante di opzione voce di menu</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apostrofo}other{# apostrofi}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Inserimento</translation>
 <translation id="4511186779140817916">Mandorla sbiancata</translation>
 <translation id="451510441928265982">Nessuna intestazione di livello 2 precedente</translation>
+<translation id="4515799157838123044">Sfuma i contenuti in background</translation>
 <translation id="4517854969512651305">Aumenta il valore</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{barra}other{# barre}}</translation>
 <translation id="4537277403911487429">Elemento simile successivo</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Parte</translation>
 <translation id="6637586476836377253">log</translation>
 <translation id="6657128831881431364">Barra di avanzamento</translation>
+<translation id="6660819301598582123">Pranzo d'acqua fa volti sghembi.</translation>
 <translation id="667999046851023355">Documento</translation>
 <translation id="6688209025607531203">Un avviso non modale</translation>
 <translation id="6689672606256159458">Salmone scuro</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">Nessuna intestazione di livello 5 successiva</translation>
 <translation id="6955705049214951590">Rosa nebbia</translation>
 <translation id="696356426651109308">Vai all'inizio</translation>
-<translation id="699159175332639490">Cerca + O + W</translation>
 <translation id="6994042831499278539">Riferimento glossario</translation>
 <translation id="6996566555547746822">Casella combinata successiva</translation>
 <translation id="6997224546856374593">Durante la lettura delle lettere maiuscole:</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">Esempio</translation>
 <translation id="7439060726180460871">Directory</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Modifica il tono quando vengono letti tipi di elementi e testi tra virgolette, eliminati, in grassetto, tra parentesi o in maiuscolo.</translation>
 <translation id="7491962110804786152">Tab</translation>
 <translation id="7505149250476994901">Di' "maiuscola" dopo la lettera</translation>
 <translation id="7518543783849163354">Per interrompere temporaneamente le funzioni vocali di ChromeVox, premi il tasto CTRL.</translation>

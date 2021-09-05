@@ -103,7 +103,12 @@ void FakeScriptExecutorDelegate::ClearInfoBox() {
 
 void FakeScriptExecutorDelegate::SetProgress(int progress) {}
 
+void FakeScriptExecutorDelegate::SetProgressActiveStep(int active_step) {}
+
 void FakeScriptExecutorDelegate::SetProgressVisible(bool visible) {}
+
+void FakeScriptExecutorDelegate::SetStepProgressBarConfiguration(
+    const ShowProgressBarProto::StepProgressBarConfiguration& configuration) {}
 
 void FakeScriptExecutorDelegate::SetUserActions(
     std::unique_ptr<std::vector<UserAction>> user_actions) {
@@ -124,11 +129,6 @@ void FakeScriptExecutorDelegate::WriteUserData(
 
   UserData::FieldChange field_change = UserData::FieldChange::NONE;
   std::move(write_callback).Run(payment_request_info_.get(), &field_change);
-}
-
-void FakeScriptExecutorDelegate::WriteUserModel(
-    base::OnceCallback<void(UserModel*)> write_callback) {
-  std::move(write_callback).Run(user_model_);
 }
 
 void FakeScriptExecutorDelegate::SetViewportMode(ViewportMode mode) {
@@ -157,6 +157,8 @@ void FakeScriptExecutorDelegate::CollapseBottomSheet() {
   expand_or_collapse_updated_ = true;
   expand_or_collapse_value_ = false;
 }
+
+void FakeScriptExecutorDelegate::ExpectNavigation() {}
 
 bool FakeScriptExecutorDelegate::HasNavigationError() {
   return navigation_error_;
@@ -204,8 +206,9 @@ EventHandler* FakeScriptExecutorDelegate::GetEventHandler() {
 
 void FakeScriptExecutorDelegate::SetGenericUi(
     std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-    base::OnceCallback<void(bool, ProcessedActionStatusProto, const UserModel*)>
-        end_action_callback) {}
+    base::OnceCallback<void(const ClientStatus&)> end_action_callback,
+    base::OnceCallback<void(const ClientStatus&)>
+        view_inflation_finished_callback) {}
 
 void FakeScriptExecutorDelegate::ClearGenericUi() {}
 

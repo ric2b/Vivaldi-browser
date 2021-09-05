@@ -24,6 +24,8 @@
 
 namespace syncer {
 
+namespace {
+
 class ModelTypeRegistryTest : public ::testing::Test {
  public:
   void SetUp() override {
@@ -37,8 +39,6 @@ class ModelTypeRegistryTest : public ::testing::Test {
 
     registry_ = std::make_unique<ModelTypeRegistry>(
         workers_, test_user_share_.user_share(), &mock_nudge_handler_,
-        base::BindRepeating(&ModelTypeRegistryTest::MigrateDirectory,
-                            base::Unretained(this)),
         &cancelation_signal_, test_user_share_.keystore_keys_handler());
   }
 
@@ -66,38 +66,17 @@ class ModelTypeRegistryTest : public ::testing::Test {
     return context;
   }
 
-  void MarkInitialSyncEndedForDirectoryType(ModelType type) {
-    syncable::ModelNeutralWriteTransaction trans(FROM_HERE, syncable::SYNCER,
-                                                 directory());
-    syncable::ModelNeutralMutableEntry entry(
-        &trans, syncable::CREATE_NEW_TYPE_ROOT, type);
-    ASSERT_TRUE(entry.good());
-    entry.PutServerIsDir(true);
-    entry.PutUniqueServerTag(ModelTypeToRootTag(type));
-    directory()->MarkInitialSyncEndedForType(&trans, type);
-  }
-
   void SetDummyProgressMarkerForType(ModelType type) {
     sync_pb::DataTypeProgressMarker progress_marker;
     progress_marker.set_token("dummy");
     directory()->SetDownloadProgress(type, progress_marker);
   }
 
-  bool migration_attempted() { return migration_attempted_; }
-
   syncable::MetahandleSet metahandles_to_purge() {
     return directory()->kernel()->metahandles_to_purge;
   }
 
  private:
-  bool MigrateDirectory(ModelType type,
-                        UserShare* user_share,
-                        ModelTypeWorker* worker,
-                        int* migrated_entity_count) {
-    migration_attempted_ = true;
-    return true;
-  }
-
   syncable::Directory* directory() {
     return test_user_share_.user_share()->directory.get();
   }
@@ -109,7 +88,6 @@ class ModelTypeRegistryTest : public ::testing::Test {
   std::vector<scoped_refptr<ModelSafeWorker>> workers_;
   std::unique_ptr<ModelTypeRegistry> registry_;
   MockNudgeHandler mock_nudge_handler_;
-  bool migration_attempted_ = false;
 };
 
 TEST_F(ModelTypeRegistryTest, NonBlockingTypes) {
@@ -132,83 +110,22 @@ TEST_F(ModelTypeRegistryTest, NonBlockingTypes) {
   // Sessions' ModelTypeSyncWorker.
 }
 
-TEST_F(ModelTypeRegistryTest, NonBlockingTypesWithDirectoryTypes) {
-  ModelTypeSet directory_types(NIGORI, BOOKMARKS, AUTOFILL);
-
-  ModelTypeSet current_types;
-  EXPECT_TRUE(registry()->GetEnabledTypes().Empty());
-
-  // Add the themes non-blocking type.
-  registry()->ConnectNonBlockingType(
-      THEMES,
-      MakeDataTypeActivationResponse(MakeInitialModelTypeState(THEMES)));
-  current_types.Put(THEMES);
-  EXPECT_EQ(current_types, registry()->GetEnabledTypes());
-
-  // Add some directory types.
-  for (ModelType type : directory_types)
-    registry()->RegisterDirectoryType(type, GROUP_PASSIVE);
-  current_types.PutAll(directory_types);
-  EXPECT_EQ(current_types, registry()->GetEnabledTypes());
-
-  // Add sessions non-blocking type.
-  registry()->ConnectNonBlockingType(
-      SESSIONS,
-      MakeDataTypeActivationResponse(MakeInitialModelTypeState(SESSIONS)));
-  current_types.Put(SESSIONS);
-  EXPECT_EQ(current_types, registry()->GetEnabledTypes());
-
-  // Remove themes non-blocking type.
-  registry()->DisconnectNonBlockingType(THEMES);
-  current_types.Remove(THEMES);
-  EXPECT_EQ(current_types, registry()->GetEnabledTypes());
-
-  // Clear all directory types.
-  for (ModelType type : directory_types)
-    registry()->UnregisterDirectoryType(type);
-  current_types.RemoveAll(directory_types);
-  EXPECT_EQ(current_types, registry()->GetEnabledTypes());
-}
-
 // Tests correct result returned from GetInitialSyncEndedTypes.
 TEST_F(ModelTypeRegistryTest, GetInitialSyncEndedTypes) {
-  // Add two directory types.
-  registry()->RegisterDirectoryType(AUTOFILL, GROUP_PASSIVE);
-  registry()->RegisterDirectoryType(BOOKMARKS, GROUP_PASSIVE);
-
-  // Only Autofill and Themes types finished initial sync.
-  MarkInitialSyncEndedForDirectoryType(AUTOFILL);
-
-  // Add two non-blocking type.
+  // Themes has finished initial sync.
   sync_pb::ModelTypeState model_type_state = MakeInitialModelTypeState(THEMES);
   model_type_state.set_initial_sync_done(true);
   registry()->ConnectNonBlockingType(
       THEMES, MakeDataTypeActivationResponse(model_type_state));
 
+  // SESSIONS has NOT finished initial sync.
   registry()->ConnectNonBlockingType(
       SESSIONS,
       MakeDataTypeActivationResponse(MakeInitialModelTypeState(SESSIONS)));
 
-  EXPECT_EQ(ModelTypeSet(AUTOFILL, THEMES),
-            registry()->GetInitialSyncEndedTypes());
+  EXPECT_EQ(ModelTypeSet(THEMES), registry()->GetInitialSyncEndedTypes());
 }
 
-// Tests that when directory data is present for type ConnectNonBlockingType
-// triggers USS migration and purges old directory data.
-TEST_F(ModelTypeRegistryTest, UssMigration) {
-  EXPECT_FALSE(migration_attempted());
-
-  MarkInitialSyncEndedForDirectoryType(THEMES);
-  // Purge only proceeds in the presence of a progress marker for the type(s)
-  // being purged.
-  SetDummyProgressMarkerForType(THEMES);
-  EXPECT_EQ(0u, metahandles_to_purge().size());
-  registry()->ConnectNonBlockingType(
-      THEMES,
-      MakeDataTypeActivationResponse(MakeInitialModelTypeState(THEMES)));
-
-  EXPECT_TRUE(migration_attempted());
-  EXPECT_NE(0u, metahandles_to_purge().size());
-}
+}  // namespace
 
 }  // namespace syncer

@@ -7,7 +7,6 @@
 #include "chrome/browser/themes/theme_service_aura_linux.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/views/theme_profile_key.h"
-#include "ui/base/buildflags.h"
 #include "ui/display/screen.h"
 #include "ui/views/linux_ui/linux_ui.h"
 
@@ -16,11 +15,17 @@
 #include "ui/gtk/gtk_ui_delegate.h"
 #endif
 
-#if defined(USE_X11)
-#include "ui/gfx/x/x11_types.h"            // nogncheck
-#include "ui/gtk/gtk_ui_delegate.h"        // nogncheck
-#include "ui/gtk/x/gtk_ui_delegate_x11.h"  // nogncheck
+#if defined(USE_OZONE)
+#include "ui/base/cursor/cursor_factory.h"
 #endif
+
+#if defined(USE_X11)
+#include "ui/base/ui_base_features.h"
+#include "ui/gfx/x/x11_types.h"            // nogncheck
+#if BUILDFLAG(USE_GTK)
+#include "ui/gtk/x/gtk_ui_delegate_x11.h"  // nogncheck
+#endif  // BUILDFLAG(USE_GTK)
+#endif  // defined(USE_X11)
 
 namespace {
 
@@ -48,12 +53,16 @@ ChromeBrowserMainExtraPartsViewsLinux::
 }
 
 void ChromeBrowserMainExtraPartsViewsLinux::ToolkitInitialized() {
-#if defined(USE_X11)
-  // In Aura/X11, Gtk-based LinuxUI implementation is used, so we instantiate
-  // and inject the GtkUiDelegate before ChromeBrowserMainExtraPartsViewsLinux,
-  // so it can properly initialize GtkUi on its |ToolkitInitialized| override.
-  gtk_ui_delegate_ = std::make_unique<ui::GtkUiDelegateX11>(gfx::GetXDisplay());
-  ui::GtkUiDelegate::SetInstance(gtk_ui_delegate_.get());
+#if defined(USE_X11) && BUILDFLAG(USE_GTK)
+  if (!features::IsUsingOzonePlatform()) {
+    // In Aura/X11, Gtk-based LinuxUI implementation is used, so we instantiate
+    // and inject the GtkUiDelegate before
+    // ChromeBrowserMainExtraPartsViewsLinux, so it can properly initialize
+    // GtkUi on its |ToolkitInitialized| override.
+    gtk_ui_delegate_ =
+        std::make_unique<ui::GtkUiDelegateX11>(gfx::GetXDisplay());
+    ui::GtkUiDelegate::SetInstance(gtk_ui_delegate_.get());
+  }
 #endif
 
   ChromeBrowserMainExtraPartsViews::ToolkitInitialized();
@@ -76,6 +85,10 @@ void ChromeBrowserMainExtraPartsViewsLinux::ToolkitInitialized() {
 
   views::LinuxUI::SetInstance(linux_ui);
   linux_ui->Initialize();
+
+#if defined(USE_OZONE)
+  ui::CursorFactory::GetInstance()->ObserveThemeChanges();
+#endif
 
   DCHECK(ui::LinuxInputMethodContextFactory::instance())
       << "LinuxUI must set LinuxInputMethodContextFactory instance.";

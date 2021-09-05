@@ -9,14 +9,13 @@
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
-#include "third_party/blink/renderer/core/feature_policy/feature_policy_parser_delegate.h"
+#include "third_party/blink/renderer/core/feature_policy/policy_helper.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
-class Agent;
 class ContentSecurityPolicy;
 class Document;
 class DocumentInit;
@@ -30,9 +29,7 @@ class CORE_EXPORT SecurityContextInit : public FeaturePolicyParserDelegate {
 
  public:
   SecurityContextInit();
-  SecurityContextInit(scoped_refptr<SecurityOrigin>,
-                      OriginTrialContext*,
-                      Agent*);
+  SecurityContextInit(scoped_refptr<SecurityOrigin>, OriginTrialContext*);
   explicit SecurityContextInit(const DocumentInit&);
 
   const scoped_refptr<SecurityOrigin>& GetSecurityOrigin() const {
@@ -63,53 +60,36 @@ class CORE_EXPORT SecurityContextInit : public FeaturePolicyParserDelegate {
 
   OriginTrialContext* GetOriginTrialContext() const { return origin_trials_; }
 
-  Agent* GetAgent() const { return agent_; }
   SecureContextMode GetSecureContextMode() const {
     DCHECK(secure_context_mode_.has_value());
     return secure_context_mode_.value();
   }
 
-  void CountFeaturePolicyUsage(mojom::WebFeature feature) override {
-    feature_count_.insert(feature);
-  }
-
+  void CountFeaturePolicyUsage(mojom::blink::WebFeature feature) override;
   bool FeaturePolicyFeatureObserved(
       mojom::blink::FeaturePolicyFeature) override;
   bool FeatureEnabled(OriginTrialFeature feature) const override;
 
-  void ApplyPendingDataToDocument(Document&) const;
-
-  bool BindCSPImmediately() const { return bind_csp_immediately_; }
-
  private:
-  void InitializeContentSecurityPolicy(const DocumentInit&);
-  void InitializeOrigin(const DocumentInit&);
-  void InitializeSandboxFlags(const DocumentInit&);
   void InitializeDocumentPolicy(const DocumentInit&);
   void InitializeFeaturePolicy(const DocumentInit&);
   void InitializeSecureContextMode(const DocumentInit&);
   void InitializeOriginTrials(const DocumentInit&);
-  void InitializeAgent(const DocumentInit&);
 
-  scoped_refptr<SecurityOrigin> security_origin_;
+  ExecutionContext* execution_context_ = nullptr;
+  ContentSecurityPolicy* csp_ = nullptr;
   network::mojom::blink::WebSandboxFlags sandbox_flags_ =
       network::mojom::blink::WebSandboxFlags::kNone;
+  scoped_refptr<SecurityOrigin> security_origin_;
   DocumentPolicy::ParsedDocumentPolicy document_policy_;
   DocumentPolicy::ParsedDocumentPolicy report_only_document_policy_;
   bool initialized_feature_policy_state_ = false;
-  Vector<String> feature_policy_parse_messages_;
-  Vector<String> report_only_feature_policy_parse_messages_;
   ParsedFeaturePolicy feature_policy_header_;
   ParsedFeaturePolicy report_only_feature_policy_header_;
   LocalFrame* frame_for_opener_feature_state_ = nullptr;
   Frame* parent_frame_ = nullptr;
   ParsedFeaturePolicy container_policy_;
-  ContentSecurityPolicy* csp_ = nullptr;
   OriginTrialContext* origin_trials_ = nullptr;
-  Agent* agent_ = nullptr;
-  HashSet<mojom::blink::FeaturePolicyFeature> parsed_feature_policies_;
-  HashSet<mojom::WebFeature> feature_count_;
-  bool bind_csp_immediately_ = false;
   base::Optional<SecureContextMode> secure_context_mode_;
 };
 

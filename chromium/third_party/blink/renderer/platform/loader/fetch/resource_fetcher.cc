@@ -98,6 +98,10 @@ namespace {
 constexpr base::TimeDelta kKeepaliveLoadersTimeout =
     base::TimeDelta::FromSeconds(30);
 
+// Timeout for link preloads to be used after window.onload
+static constexpr base::TimeDelta kUnusedPreloadTimeout =
+    base::TimeDelta::FromSeconds(3);
+
 #define RESOURCE_HISTOGRAM_PREFIX "Blink.MemoryCache.RevalidationPolicy."
 
 #define DEFINE_SINGLE_RESOURCE_HISTOGRAM(prefix, name)                         \
@@ -315,9 +319,9 @@ void PopulateAndAddResourceTimingInfo(Resource* resource,
                                       base::TimeTicks response_end,
                                       int64_t encoded_data_length) {
   info->SetInitialURL(
-      resource->GetResourceRequest().GetInitialUrlForResourceTiming().IsNull()
-          ? resource->GetResourceRequest().Url()
-          : resource->GetResourceRequest().GetInitialUrlForResourceTiming());
+      resource->GetResourceRequest().GetRedirectInfo().has_value()
+          ? resource->GetResourceRequest().GetRedirectInfo()->original_url
+          : resource->GetResourceRequest().Url());
   info->SetFinalResponse(resource->GetResponse());
   info->SetLoadResponseEnd(response_end);
   // encodedDataLength == -1 means "not available".
@@ -647,12 +651,12 @@ void ResourceFetcher::DidLoadResourceFromMemoryCache(
     scoped_refptr<ResourceTimingInfo> info = ResourceTimingInfo::Create(
         resource->Options().initiator_info.name, base::TimeTicks::Now(),
         request.GetRequestContext(), request.GetRequestDestination());
-    // TODO(yoav): GetInitialUrlForResourceTiming() is only needed until
-    // Out-of-Blink CORS lands: https://crbug.com/736308
+    // TODO(yoav): Getting the original URL before redirects here is only needed
+    // until Out-of-Blink CORS lands: https://crbug.com/736308
     info->SetInitialURL(
-        resource->GetResourceRequest().GetInitialUrlForResourceTiming().IsNull()
-            ? resource->GetResourceRequest().Url()
-            : resource->GetResourceRequest().GetInitialUrlForResourceTiming());
+        resource->GetResourceRequest().GetRedirectInfo().has_value()
+            ? resource->GetResourceRequest().GetRedirectInfo()->original_url
+            : resource->GetResourceRequest().Url());
     ResourceResponse final_response = resource->GetResponse();
     final_response.SetResourceLoadTiming(nullptr);
     info->SetFinalResponse(final_response);
@@ -837,24 +841,33 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
           ? ReportingDisposition::kSuppressReporting
           : ReportingDisposition::kReport;
 
-  // Note that resource_request.GetRedirectStatus() may return kFollowedRedirect
-  // here since e.g. ThreadableLoader may create a new Resource from
-  // a ResourceRequest that originates from the ResourceRequest passed to
-  // the redirect handling callback.
+  // Note that resource_request.GetRedirectInfo() may be non-null here since
+  // e.g. ThreadableLoader may create a new Resource from a ResourceRequest that
+  // originates from the ResourceRequest passed to the redirect handling
+  // callback.
 
   // Before modifying the request for CSP, evaluate report-only headers. This
   // allows site owners to learn about requests that are being modified
   // (e.g. mixed content that is being upgraded by upgrade-insecure-requests).
+  const base::Optional<ResourceRequest::RedirectInfo>& redirect_info =
+      resource_request.GetRedirectInfo();
+  const KURL& url_before_redirects =
+      redirect_info ? redirect_info->original_url : params.Url();
+  const ResourceRequestHead::RedirectStatus redirect_status =
+      redirect_info ? ResourceRequestHead::RedirectStatus::kFollowedRedirect
+                    : ResourceRequestHead::RedirectStatus::kNoRedirect;
   Context().CheckCSPForRequest(
       resource_request.GetRequestContext(),
       resource_request.GetRequestDestination(),
       MemoryCache::RemoveFragmentIdentifierIfNeeded(params.Url()), options,
-      reporting_disposition, resource_request.GetRedirectStatus());
+      reporting_disposition,
+      MemoryCache::RemoveFragmentIdentifierIfNeeded(url_before_redirects),
+      redirect_status);
 
   // This may modify params.Url() (via the resource_request argument).
   Context().PopulateResourceRequest(
       resource_type, params.GetClientHintsPreferences(),
-      params.GetResourceWidth(), resource_request);
+      params.GetResourceWidth(), resource_request, options.initiator_info);
 
   if (!params.Url().IsValid())
     return ResourceRequestBlockedReason::kOther;
@@ -911,7 +924,7 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
   base::Optional<ResourceRequestBlockedReason> blocked_reason =
       Context().CanRequest(resource_type, resource_request, url, options,
                            reporting_disposition,
-                           resource_request.GetRedirectStatus());
+                           resource_request.GetRedirectInfo());
 
   if (Context().CalculateIfAdSubresource(resource_request, resource_type,
                                          options.initiator_info))
@@ -1557,7 +1570,7 @@ ResourceFetcher::DetermineRevalidationPolicyInternal(
   // Don't reuse resources with Cache-control: no-store.
   if (existing_resource.HasCacheControlNoStoreHeader()) {
     return {RevalidationPolicy::kReload,
-            "Reload due to cache-control: no-sotre."};
+            "Reload due to cache-control: no-store."};
   }
 
   // During the initial load, avoid loading the same resource multiple times for
@@ -1715,6 +1728,8 @@ void ResourceFetcher::ClearContext() {
   console_logger_->Detach();
   loader_factory_ = nullptr;
 
+  unused_preloads_timer_.Cancel();
+
   // Make sure the only requests still going are keepalive requests.
   // Callers of ClearContext() should be calling StopFetching() prior
   // to this, but it's possible for additional requests to start during
@@ -1777,14 +1792,32 @@ void ResourceFetcher::ClearPreloads(ClearPreloadsPolicy policy) {
   matched_preloads_.clear();
 }
 
-Vector<KURL> ResourceFetcher::GetUrlsOfUnusedPreloads() {
-  Vector<KURL> urls;
+void ResourceFetcher::ScheduleWarnUnusedPreloads() {
+  // If preloads_ is not empty here, it's full of link
+  // preloads, as speculative preloads should have already been cleared when
+  // parsing finished.
+  if (preloads_.IsEmpty())
+    return;
+  unused_preloads_timer_ = PostDelayedCancellableTask(
+      *task_runner_, FROM_HERE,
+      WTF::Bind(&ResourceFetcher::WarnUnusedPreloads, WrapWeakPersistent(this)),
+      kUnusedPreloadTimeout);
+}
+
+void ResourceFetcher::WarnUnusedPreloads() {
   for (const auto& pair : preloads_) {
     Resource* resource = pair.value;
-    if (resource && resource->IsLinkPreload() && resource->IsUnusedPreload())
-      urls.push_back(resource->Url());
+    if (!resource || !resource->IsLinkPreload() || !resource->IsUnusedPreload())
+      continue;
+    String message =
+        "The resource " + resource->Url().GetString() + " was preloaded " +
+        "using link preload but not used within a few seconds from the " +
+        "window's load event. Please make sure it has an appropriate `as` " +
+        "value and it is preloaded intentionally.";
+    console_logger_->AddConsoleMessage(
+        mojom::blink::ConsoleMessageSource::kJavaScript,
+        mojom::blink::ConsoleMessageLevel::kWarning, message);
   }
-  return urls;
 }
 
 void ResourceFetcher::HandleLoaderFinish(Resource* resource,
@@ -2092,7 +2125,7 @@ void ResourceFetcher::EmulateLoadStartedForInspector(
   Context().CanRequest(resource->GetType(), last_resource_request,
                        last_resource_request.Url(), params.Options(),
                        ReportingDisposition::kReport,
-                       last_resource_request.GetRedirectStatus());
+                       last_resource_request.GetRedirectInfo());
   DidLoadResourceFromMemoryCache(resource, params.GetResourceRequest(),
                                  false /* is_static_data */);
 }
@@ -2172,7 +2205,7 @@ FrameOrWorkerScheduler* ResourceFetcher::GetFrameOrWorkerScheduler() {
   return frame_or_worker_scheduler_.get();
 }
 
-void ResourceFetcher::Trace(Visitor* visitor) {
+void ResourceFetcher::Trace(Visitor* visitor) const {
   visitor->Trace(context_);
   visitor->Trace(properties_);
   visitor->Trace(resource_load_observer_);

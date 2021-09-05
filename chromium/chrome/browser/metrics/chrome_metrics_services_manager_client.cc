@@ -259,7 +259,7 @@ std::unique_ptr<rappor::RapporServiceImpl>
 ChromeMetricsServicesManagerClient::CreateRapporServiceImpl() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return std::make_unique<rappor::RapporServiceImpl>(
-      local_state_, base::Bind(&chrome::IsIncognitoSessionActive));
+      local_state_, base::Bind(&chrome::IsOffTheRecordSessionActive));
 }
 
 std::unique_ptr<variations::VariationsService>
@@ -304,7 +304,7 @@ bool ChromeMetricsServicesManagerClient::IsMetricsConsentGiven() {
   return enabled_state_provider_->IsConsentGiven();
 }
 
-bool ChromeMetricsServicesManagerClient::IsIncognitoSessionActive() {
+bool ChromeMetricsServicesManagerClient::IsOffTheRecordSessionActive() {
 #if defined(OS_ANDROID)
   // This differs from TabModelList::IsOffTheRecordSessionActive in that it
   // does not ignore TabModels that have no open tabs, because it may be checked
@@ -312,6 +312,7 @@ bool ChromeMetricsServicesManagerClient::IsIncognitoSessionActive() {
   // conservative in case unused TabModels are not cleaned up, but it seems to
   // work correctly.
   // TODO(crbug/741888): Check if TabModelList's version can be updated safely.
+  // TODO(crbug/1023759): This function should return true for Incognito CCTs.
   for (TabModelList::const_iterator i = TabModelList::begin();
        i != TabModelList::end(); i++) {
     if ((*i)->IsOffTheRecord())
@@ -322,7 +323,7 @@ bool ChromeMetricsServicesManagerClient::IsIncognitoSessionActive() {
 #else
   // Depending directly on BrowserList, since that is the implementation
   // that we get correct notifications for.
-  return BrowserList::IsIncognitoSessionActive();
+  return BrowserList::IsOffTheRecordBrowserActive();
 #endif
 }
 

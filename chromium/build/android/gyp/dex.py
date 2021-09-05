@@ -62,6 +62,9 @@ def _ParseArgs(args):
       '--multi-dex',
       action='store_true',
       help='Allow multiple dex files within output.')
+  parser.add_argument('--library',
+                      action='store_true',
+                      help='Allow numerous dex files within output.')
   parser.add_argument('--r8-jar-path', required=True, help='Path to R8 jar.')
   parser.add_argument('--desugar', action='store_true')
   parser.add_argument(
@@ -159,9 +162,18 @@ def _RunD8(dex_cmd, input_paths, output_path):
     output = re.sub(r'^Warning in .*?:\n(?!  )', '', output, flags=re.MULTILINE)
     return output
 
-  # stdout sometimes spams with things like:
-  # Stripped invalid locals information from 1 method.
-  build_utils.CheckOutput(dex_cmd, stderr_filter=stderr_filter)
+  with tempfile.NamedTemporaryFile() as flag_file:
+    # Chosen arbitrarily. Needed to avoid command-line length limits.
+    MAX_ARGS = 50
+    if len(dex_cmd) > MAX_ARGS:
+      flag_file.write('\n'.join(dex_cmd[MAX_ARGS:]))
+      flag_file.flush()
+      dex_cmd = dex_cmd[:MAX_ARGS]
+      dex_cmd.append('@' + flag_file.name)
+
+    # stdout sometimes spams with things like:
+    # Stripped invalid locals information from 1 method.
+    build_utils.CheckOutput(dex_cmd, stderr_filter=stderr_filter)
 
 
 def _EnvWithArtLibPath(binary_path):
@@ -325,13 +337,15 @@ def _PerformDexlayout(tmp_dir, tmp_dex_output, options):
 
 def _CreateFinalDex(d8_inputs, output, tmp_dir, dex_cmd, options=None):
   tmp_dex_output = os.path.join(tmp_dir, 'tmp_dex_output.zip')
-  if (output.endswith('.dex')
-      or not all(f.endswith('.dex') for f in d8_inputs)):
+  needs_dexing = not all(f.endswith('.dex') for f in d8_inputs)
+  needs_dexmerge = output.endswith('.dex') or not (options and options.library)
+  if needs_dexing or needs_dexmerge:
     if options:
       if options.main_dex_list_path:
         dex_cmd = dex_cmd + ['--main-dex-list', options.main_dex_list_path]
-      elif options.multi_dex and int(options.min_api or 1) < 21:
-        # When dexing library targets, it doesn't matter what's in the main dex.
+      elif options.library and int(options.min_api or 1) < 21:
+        # When dexing D8 requires a main dex list pre-21. For library targets,
+        # it doesn't matter what's in the main dex, so just use a dummy one.
         tmp_main_dex_list_path = os.path.join(tmp_dir, 'main_list.txt')
         with open(tmp_main_dex_list_path, 'w') as f:
           f.write('Foo.class\n')
@@ -420,7 +434,7 @@ def _CreateIntermediateDexFiles(changes, options, tmp_dir, dex_cmd):
   # If the only change is deleting a file, class_files will be empty.
   if class_files:
     # Dex necessary classes into intermediate dex files.
-    dex_cmd = dex_cmd + ['--intermediate', '--file-per-class']
+    dex_cmd = dex_cmd + ['--intermediate', '--file-per-class-file']
     _RunD8(dex_cmd, class_files, options.incremental_dir)
     logging.debug('Dexed class files.')
 
@@ -444,9 +458,9 @@ def _OnStaleMd5(changes, options, final_dex_inputs, dex_cmd):
 def MergeDexForIncrementalInstall(r8_jar_path, src_paths, dest_dex_jar):
   dex_cmd = [
       build_utils.JAVA_PATH,
-      '-jar',
+      '-cp',
       r8_jar_path,
-      'd8',
+      'com.android.tools.r8.D8',
   ]
   with build_utils.TempDir() as tmp_dir:
     _CreateFinalDex(src_paths, dest_dex_jar, tmp_dir, dex_cmd)
@@ -479,7 +493,10 @@ def main(args):
   final_dex_inputs += options.dex_inputs
 
   dex_cmd = [
-      build_utils.JAVA_PATH, '-jar', options.r8_jar_path, 'd8',
+      build_utils.JAVA_PATH,
+      '-cp',
+      options.r8_jar_path,
+      'com.android.tools.r8.D8',
   ]
   if options.release:
     dex_cmd += ['--release']

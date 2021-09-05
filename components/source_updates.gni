@@ -114,6 +114,9 @@ if (!is_android) {
     sources += [
       "//vivaldi/components/guest_view/vivaldi_guest_view_base.cc",
     ]
+    deps += [
+      "//components/paint_preview/buildflags",
+    ]
   }
 
   update_target("//components/guest_view/browser:test_support") {
@@ -173,7 +176,8 @@ if (is_mac) {
 
   update_target("//components/remote_cocoa/app_shim:app_shim") {
     sources += [
-      "//vivaldi/components/remote_cocoa/app_shim/vivaldi_native_widget_ns_window_bridge.mm",
+      "//vivaldi/components/remote_cocoa/app_shim/vivaldi_window_size_helper.h",
+      "//vivaldi/components/remote_cocoa/app_shim/vivaldi_window_size_helper.mm",
       "//vivaldi/components/remote_cocoa/app_shim/vivaldi_native_widget_mac_frameless_nswindow.h",
       "//vivaldi/components/remote_cocoa/app_shim/vivaldi_native_widget_mac_frameless_nswindow.mm",
     ]
@@ -184,7 +188,14 @@ if (!is_android) {
   update_target("//components:components_unittests") {
       deps += [
         "//vivaldi/components/request_filter/adblock_filter:unit_tests",
+        "//vivaldi/components/datasource:dataurl_unit_tests",
       ]
+  }
+
+  update_target("//components/content_settings/browser:test_support") {
+    sources += [
+      "//vivaldi/components/content/vivaldi_test_tab_specific_content_settings_delegate.cc",
+    ]
   }
 }
 

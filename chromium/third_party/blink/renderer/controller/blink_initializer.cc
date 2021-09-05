@@ -48,13 +48,13 @@
 #include "third_party/blink/renderer/controller/dev_tools_frontend_impl.h"
 #include "third_party/blink/renderer/core/animation/animation_clock.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/frame/display_cutout_client_impl.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/disk_data_allocator.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -112,11 +112,6 @@ void InitializeCommon(Platform* platform, mojo::BinderMap* binders) {
     const size_t kMB = 1024 * 1024;
     for (size_t size = 512 * kMB; size >= 32 * kMB; size -= 16 * kMB) {
       if (base::ReserveAddressSpace(size)) {
-        // Report successful reservation.
-        DEFINE_STATIC_LOCAL(CustomCountHistogram, reservation_size_histogram,
-                            ("Renderer4.ReservedMemory", 32, 512, 32));
-        reservation_size_histogram.Count(size / kMB);
-
         break;
       }
     }
@@ -176,6 +171,11 @@ void CreateMainThreadAndInitialize(Platform* platform,
   DCHECK(binders);
   Platform::CreateMainThreadAndInitialize(platform);
   InitializeCommon(platform, binders);
+}
+
+// Function defined in third_party/blink/public/web/blink.h.
+void SetIsCrossOriginIsolated(bool value) {
+  Agent::SetIsCrossOriginIsolated(value);
 }
 
 void BlinkInitializer::RegisterInterfaces(mojo::BinderMap& binders) {

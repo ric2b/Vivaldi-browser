@@ -4,28 +4,30 @@
 
 package org.chromium.chrome.browser.autofill_assistant;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.action.ViewActions.replaceText;
-import static android.support.test.espresso.assertion.PositionAssertions.isLeftAlignedWith;
-import static android.support.test.espresso.assertion.ViewAssertions.doesNotExist;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.contrib.PickerActions.setDate;
-import static android.support.test.espresso.matcher.RootMatchers.isDialog;
-import static android.support.test.espresso.matcher.ViewMatchers.assertThat;
-import static android.support.test.espresso.matcher.ViewMatchers.hasSibling;
-import static android.support.test.espresso.matcher.ViewMatchers.isChecked;
-import static android.support.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.isEnabled;
-import static android.support.test.espresso.matcher.ViewMatchers.withClassName;
-import static android.support.test.espresso.matcher.ViewMatchers.withContentDescription;
-import static android.support.test.espresso.matcher.ViewMatchers.withTagValue;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
 import static android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO;
 import static android.view.View.IMPORTANT_FOR_ACCESSIBILITY_YES;
 
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.action.ViewActions.replaceText;
+import static androidx.test.espresso.assertion.PositionAssertions.isLeftAlignedWith;
+import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.contrib.PickerActions.setDate;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
+import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
+import static androidx.test.espresso.matcher.ViewMatchers.hasSibling;
+import static androidx.test.espresso.matcher.ViewMatchers.isChecked;
+import static androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.isEnabled;
+import static androidx.test.espresso.matcher.ViewMatchers.withClassName;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
+import static androidx.test.espresso.matcher.ViewMatchers.withTagValue;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
+
 import static org.hamcrest.CoreMatchers.allOf;
+import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -36,18 +38,22 @@ import static org.hamcrest.Matchers.iterableWithSize;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.hasTypefaceSpan;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.isImportantForAccessibility;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.startAutofillAssistant;
+import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.tapElement;
+import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilViewAssertionTrue;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilViewMatchesCondition;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.withMinimumSize;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.withTextGravity;
+import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL;
 
 import android.graphics.Typeface;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.espresso.Espresso;
-import android.support.test.filters.MediumTest;
 import android.view.Gravity;
 import android.widget.CheckBox;
 import android.widget.DatePicker;
 import android.widget.RadioButton;
+
+import androidx.test.espresso.Espresso;
+import androidx.test.filters.MediumTest;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -60,24 +66,34 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.autofill_assistant.R;
 import org.chromium.chrome.browser.autofill_assistant.generic_ui.AssistantDimension;
 import org.chromium.chrome.browser.autofill_assistant.proto.ActionProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.AutofillFormatProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.BooleanAndProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.BooleanList;
 import org.chromium.chrome.browser.autofill_assistant.proto.BooleanNotProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.CallbackProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ChipProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ChipType;
+import org.chromium.chrome.browser.autofill_assistant.proto.ClearViewContainerProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ClientDimensionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.CollectUserDataProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.CollectUserDataResultProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ColorProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ComputeValueProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.CreateCreditCardResponseProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.CreateNestedGenericUiProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.CreditCardResponseProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.DateFormatProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.DateList;
 import org.chromium.chrome.browser.autofill_assistant.proto.DateProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.DividerViewProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.DrawableProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.ElementAreaProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.ElementAreaProto.Rectangle;
+import org.chromium.chrome.browser.autofill_assistant.proto.ElementConditionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.EndActionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.EventProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.FocusElementProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.ForEachProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.GenericUserInterfaceProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ImageViewProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.InfoPopupProto;
@@ -94,6 +110,7 @@ import org.chromium.chrome.browser.autofill_assistant.proto.OnViewClickedEventPr
 import org.chromium.chrome.browser.autofill_assistant.proto.ProcessedActionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ProcessedActionStatusProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.SelectorProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SetModelValueProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SetUserActionsProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SetViewEnabledProto;
@@ -102,6 +119,8 @@ import org.chromium.chrome.browser.autofill_assistant.proto.ShapeDrawableProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowCalendarPopupProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowGenericUiPopupProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowGenericUiProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.ShowGenericUiProto.PeriodicElementChecks;
+import org.chromium.chrome.browser.autofill_assistant.proto.ShowGenericUiProto.PeriodicElementChecks.ElementCheck;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowInfoPopupProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowListPopupProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.StringList;
@@ -142,16 +161,19 @@ public class AutofillAssistantGenericUiTest {
     @Rule
     public CustomTabActivityTestRule mTestRule = new CustomTabActivityTestRule();
 
+    private AutofillAssistantCollectUserDataTestHelper mHelper;
+
     private static final String TEST_PAGE = "/components/test/data/autofill_assistant/html/"
             + "autofill_assistant_target_website.html";
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         AutofillAssistantPreferencesUtil.setInitialPreferences(true);
         mTestRule.startCustomTabActivityWithIntent(CustomTabsTestUtils.createMinimalCustomTabIntent(
                 InstrumentationRegistry.getTargetContext(),
                 mTestRule.getTestServer().getURL(TEST_PAGE)));
         mTestRule.getActivity().getScrim().disableAnimationForTesting(true);
+        mHelper = new AutofillAssistantCollectUserDataTestHelper();
     }
 
     private ViewProto createTestImage(String resourceId, String identifier) {
@@ -238,6 +260,44 @@ public class AutofillAssistantGenericUiTest {
                                 .setLayoutWidth(ViewLayoutParamsProto.Size.MATCH_PARENT_VALUE)
                                 .setLayoutHeight(ViewLayoutParamsProto.Size.WRAP_CONTENT_VALUE))
                 .setIdentifier(identifier)
+                .build();
+    }
+
+    private ViewProto createSimpleTextView(String identifier, String text) {
+        return (ViewProto) ViewProto.newBuilder()
+                .setIdentifier(identifier)
+                .setTextView(TextViewProto.newBuilder().setText(text))
+                .build();
+    }
+
+    // A simple view that takes its text from the provided model identifier.
+    private ViewProto createTextModelView(String identifier, String modelIdentifier) {
+        return (ViewProto) ViewProto.newBuilder()
+                .setIdentifier(identifier)
+                .setTextView(TextViewProto.newBuilder().setModelIdentifier(modelIdentifier))
+                .build();
+    }
+
+    private CallbackProto createAutofillToStringCallback(
+            String inputModelIdentifier, String resultModelIdentifier, String autofillFormat) {
+        return (CallbackProto) CallbackProto.newBuilder()
+                .setComputeValue(
+                        ComputeValueProto.newBuilder()
+                                .setResultModelIdentifier(resultModelIdentifier)
+                                .setToString(
+                                        ToStringProto.newBuilder()
+                                                .setValue(ValueReferenceProto.newBuilder()
+                                                                  .setModelIdentifier(
+                                                                          inputModelIdentifier))
+                                                .setAutofillFormat(
+                                                        AutofillFormatProto.newBuilder().setPattern(
+                                                                autofillFormat))))
+                .build();
+    }
+
+    private ValueReferenceProto createValueReference(String modelIdentifier) {
+        return (ValueReferenceProto) ValueReferenceProto.newBuilder()
+                .setModelIdentifier(modelIdentifier)
                 .build();
     }
 
@@ -335,6 +395,7 @@ public class AutofillAssistantGenericUiTest {
     @Test
     @MediumTest
     @DisableIf.Build(sdk_is_less_than = 21)
+    @DisabledTest(message = "crbug.com/1087042")
     public void testOnViewClickedWriteToModel() {
         ViewProto clickableView1 = (ViewProto) ViewProto.newBuilder()
                                            .setTextView(TextViewProto.newBuilder().setText(
@@ -2485,5 +2546,611 @@ public class AutofillAssistantGenericUiTest {
         onView(withText("default-aligned text"))
                 .check(matches(withTextGravity(Gravity.START | Gravity.TOP)));
         onView(withText("center-aligned text")).check(matches(withTextGravity(Gravity.CENTER)));
+    }
+
+    /**
+     * Creates and deletes nested UIs. Also tests startup events for nested UIs.
+     */
+    @Test
+    @MediumTest
+    public void testCreateNestedUi() {
+        GenericUserInterfaceProto nestedUi =
+                (GenericUserInterfaceProto) GenericUserInterfaceProto.newBuilder()
+                        .setRootView(
+                                ViewProto.newBuilder()
+                                        .setIdentifier("nested_text_view")
+                                        .setTextView(TextViewProto.newBuilder().setModelIdentifier(
+                                                "nested_text")))
+                        .build();
+
+        List<InteractionProto> interactions = new ArrayList<>();
+        interactions.add(
+                (InteractionProto) InteractionProto.newBuilder()
+                        .setTriggerEvent(EventProto.newBuilder().setOnViewClicked(
+                                OnViewClickedEventProto.newBuilder().setViewIdentifier(
+                                        "text_view_create_nested_on_click")))
+                        .addCallbacks(CallbackProto.newBuilder().setCreateNestedUi(
+                                CreateNestedGenericUiProto.newBuilder()
+                                        .setGenericUiIdentifier("nested_ui_identifier")
+                                        .setGenericUi(nestedUi)
+                                        .setParentViewIdentifier("nested_ui_container")))
+                        .addCallbacks(CallbackProto.newBuilder().setSetValue(
+                                SetModelValueProto.newBuilder()
+                                        .setModelIdentifier("nested_text")
+                                        .setValue(ValueReferenceProto.newBuilder().setValue(
+                                                ValueProto.newBuilder().setStrings(
+                                                        StringList.newBuilder().addValues(
+                                                                "Hello World"))))))
+                        .build());
+        interactions.add((InteractionProto) InteractionProto.newBuilder()
+                                 .setTriggerEvent(EventProto.newBuilder().setOnViewClicked(
+                                         OnViewClickedEventProto.newBuilder().setViewIdentifier(
+                                                 "text_view_delete_nested_on_click")))
+                                 .addCallbacks(CallbackProto.newBuilder().setClearViewContainer(
+                                         ClearViewContainerProto.newBuilder().setViewIdentifier(
+                                                 "nested_ui_container")))
+                                 .build());
+
+        ViewProto nestedUiContainer =
+                (ViewProto) ViewProto.newBuilder()
+                        .setIdentifier("nested_ui_container")
+                        .setViewContainer(ViewContainerProto.newBuilder().setLinearLayout(
+                                LinearLayoutProto.newBuilder().setOrientation(
+                                        LinearLayoutProto.Orientation.VERTICAL)))
+                        .build();
+        ViewProto rootView =
+                (ViewProto) ViewProto.newBuilder()
+                        .setViewContainer(
+                                ViewContainerProto.newBuilder()
+                                        .setLinearLayout(
+                                                LinearLayoutProto.newBuilder().setOrientation(
+                                                        LinearLayoutProto.Orientation.VERTICAL))
+                                        .addViews(createSimpleTextView(/*identifier = */
+                                                "text_view_create_nested_on_click",
+                                                /*text = */ "click me to create nested UI"))
+                                        .addViews(createSimpleTextView(/*identifier = */
+                                                "text_view_delete_nested_on_click",
+                                                /*text = */ "click me to delete nested UI"))
+                                        .addViews(nestedUiContainer))
+                        .build();
+
+        GenericUserInterfaceProto genericUserInterface =
+                (GenericUserInterfaceProto) GenericUserInterfaceProto.newBuilder()
+                        .setRootView(rootView)
+                        .setInteractions(
+                                InteractionsProto.newBuilder().addAllInteractions(interactions))
+                        .build();
+
+        ArrayList<ActionProto> list = new ArrayList<>();
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setShowGenericUi(ShowGenericUiProto.newBuilder().setGenericUserInterface(
+                                 genericUserInterface))
+                         .build());
+        AutofillAssistantTestScript script = new AutofillAssistantTestScript(
+                (SupportedScriptProto) SupportedScriptProto.newBuilder()
+                        .setPath("autofill_assistant_target_website.html")
+                        .setPresentation(PresentationProto.newBuilder().setAutostart(true).setChip(
+                                ChipProto.newBuilder().setText("Autostart")))
+                        .build(),
+                list);
+
+        AutofillAssistantTestService testService =
+                new AutofillAssistantTestService(Collections.singletonList(script));
+        startAutofillAssistant(mTestRule.getActivity(), testService);
+
+        // Create/delete UI multiple times, to ensure that everything is cleaned up properly.
+        for (int i = 0; i < 2; ++i) {
+            waitUntilViewMatchesCondition(
+                    withText("click me to create nested UI"), isCompletelyDisplayed());
+            onView(withText("click me to create nested UI")).perform(click());
+
+            waitUntilViewMatchesCondition(withText("Hello World"), isCompletelyDisplayed());
+            onView(withText("click me to delete nested UI")).perform(click());
+            waitUntilViewAssertionTrue(
+                    withText("Hello World"), doesNotExist(), DEFAULT_MAX_TIME_TO_POLL);
+        }
+    }
+
+    /**
+     * Sets a precondition on the DOM and triggers it.
+     */
+    @Test
+    @MediumTest
+    public void testElementCondition() throws Exception {
+        List<InteractionProto> interactions = new ArrayList<>();
+
+        // When touch_area_one_present becomes false, end the action
+        interactions.add(
+                (InteractionProto) InteractionProto.newBuilder()
+                        .setTriggerEvent(EventProto.newBuilder().setOnValueChanged(
+                                OnModelValueChangedEventProto.newBuilder().setModelIdentifier(
+                                        "touch_area_one_present")))
+                        .addCallbacks(CallbackProto.newBuilder().setComputeValue(
+                                ComputeValueProto.newBuilder()
+                                        .setBooleanNot(BooleanNotProto.newBuilder().setValue(
+                                                ValueReferenceProto.newBuilder().setModelIdentifier(
+                                                        "touch_area_one_present")))
+                                        .setResultModelIdentifier("end_action")))
+                        .build());
+        interactions.add(
+                (InteractionProto) InteractionProto.newBuilder()
+                        .setTriggerEvent(EventProto.newBuilder().setOnValueChanged(
+                                OnModelValueChangedEventProto.newBuilder().setModelIdentifier(
+                                        "end_action")))
+                        .addCallbacks(CallbackProto.newBuilder()
+                                              .setEndAction(EndActionProto.newBuilder().setStatus(
+                                                      ProcessedActionStatusProto.ACTION_APPLIED))
+                                              .setConditionModelIdentifier("end_action"))
+                        .build());
+
+        GenericUserInterfaceProto genericUserInterface =
+                (GenericUserInterfaceProto) GenericUserInterfaceProto.newBuilder()
+                        .setRootView(
+                                ViewProto.newBuilder()
+                                        .setTextView(TextViewProto.newBuilder().setText("Text"))
+                                        .setIdentifier("textView"))
+                        .setInteractions(
+                                InteractionsProto.newBuilder().addAllInteractions(interactions))
+                        .setModel(ModelProto.newBuilder())
+                        .build();
+
+        SelectorProto touch_area_one =
+                (SelectorProto) SelectorProto.newBuilder()
+                        .addFilters(
+                                SelectorProto.Filter.newBuilder().setCssSelector("#touch_area_one"))
+                        .build();
+
+        ArrayList<ActionProto> list = new ArrayList<>();
+        list.add(
+                (ActionProto) ActionProto.newBuilder()
+                        .setFocusElement(FocusElementProto.newBuilder()
+                                                 .setElement(touch_area_one)
+                                                 .setTouchableElementArea(
+                                                         ElementAreaProto.newBuilder().addTouchable(
+                                                                 Rectangle.newBuilder().addElements(
+                                                                         touch_area_one))))
+                        .build());
+
+        ElementCheck touch_area_one_present =
+                (ElementCheck) ElementCheck.newBuilder()
+                        .setModelIdentifier("touch_area_one_present")
+                        .setElementCondition(
+                                ElementConditionProto.newBuilder().setMatch(touch_area_one))
+                        .build();
+
+        list.add(
+                (ActionProto) ActionProto.newBuilder()
+                        .setShowGenericUi(
+                                ShowGenericUiProto.newBuilder()
+                                        .setGenericUserInterface(genericUserInterface)
+                                        .setPeriodicElementChecks(
+                                                PeriodicElementChecks.newBuilder().addElementChecks(
+                                                        touch_area_one_present)))
+                        .build());
+
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setPrompt(PromptProto.newBuilder().setMessage("Prompt").addChoices(
+                                 PromptProto.Choice.newBuilder()))
+                         .build());
+
+        AutofillAssistantTestScript script = new AutofillAssistantTestScript(
+                (SupportedScriptProto) SupportedScriptProto.newBuilder()
+                        .setPath("autofill_assistant_target_website.html")
+                        .setPresentation(PresentationProto.newBuilder().setAutostart(true).setChip(
+                                ChipProto.newBuilder().setText("Autostart")))
+                        .build(),
+                list);
+
+        AutofillAssistantTestService testService =
+                new AutofillAssistantTestService(Collections.singletonList(script));
+        startAutofillAssistant(mTestRule.getActivity(), testService);
+
+        waitUntilViewMatchesCondition(withText("Text"), isCompletelyDisplayed());
+        onView(withText("Prompt")).check(doesNotExist());
+        tapElement(mTestRule, "touch_area_one");
+        waitUntilViewMatchesCondition(withText("Prompt"), isCompletelyDisplayed());
+    }
+
+    /**
+     * Tests a simple for-each loop.
+     */
+    @Test
+    @MediumTest
+    public void testForEach() {
+        // Clicking the view will run a for-each loop that loops over a value and writes the i'th
+        // value to result_i, and then ends the action.
+        List<InteractionProto> interactions = new ArrayList<>();
+        interactions.add(
+                (InteractionProto) InteractionProto.newBuilder()
+                        .setTriggerEvent(EventProto.newBuilder().setOnViewClicked(
+                                OnViewClickedEventProto.newBuilder().setViewIdentifier(
+                                        "clickable_view")))
+                        .addCallbacks(CallbackProto.newBuilder().setForEach(
+                                ForEachProto.newBuilder()
+                                        .setLoopCounter("i")
+                                        .setLoopValueModelIdentifier("loop_value")
+                                        .addCallbacks(CallbackProto.newBuilder().setSetValue(
+                                                SetModelValueProto.newBuilder()
+                                                        .setModelIdentifier("result_${i}")
+                                                        .setValue(createValueReference(
+                                                                "loop_value[${i}]"))))))
+                        .addCallbacks(CallbackProto.newBuilder().setEndAction(
+                                EndActionProto.newBuilder().setStatus(
+                                        ProcessedActionStatusProto.ACTION_APPLIED)))
+                        .build());
+
+        List<ModelProto.ModelValue> modelValues = new ArrayList<>();
+        modelValues.add((ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                .setIdentifier("loop_value")
+                                .setValue(ValueProto.newBuilder().setStrings(
+                                        StringList.newBuilder().addAllValues(
+                                                Arrays.asList("first", "second", "third"))))
+                                .build());
+        modelValues.add((ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                .setIdentifier("result_0")
+                                .build());
+        modelValues.add((ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                .setIdentifier("result_1")
+                                .build());
+        modelValues.add((ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                .setIdentifier("result_2")
+                                .build());
+
+        GenericUserInterfaceProto genericUserInterface =
+                (GenericUserInterfaceProto) GenericUserInterfaceProto.newBuilder()
+                        .setRootView(ViewProto.newBuilder()
+                                             .setIdentifier("clickable_view")
+                                             .setTextView(TextViewProto.newBuilder().setText(
+                                                     "Click me")))
+                        .setInteractions(
+                                InteractionsProto.newBuilder().addAllInteractions(interactions))
+                        .setModel(ModelProto.newBuilder().addAllValues(modelValues))
+                        .build();
+
+        ArrayList<ActionProto> list = new ArrayList<>();
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setShowGenericUi(ShowGenericUiProto.newBuilder()
+                                                   .setGenericUserInterface(genericUserInterface)
+                                                   .addAllOutputModelIdentifiers(Arrays.asList(
+                                                           "result_0", "result_1", "result_2")))
+                         .build());
+        AutofillAssistantTestScript script = new AutofillAssistantTestScript(
+                (SupportedScriptProto) SupportedScriptProto.newBuilder()
+                        .setPath("autofill_assistant_target_website.html")
+                        .setPresentation(PresentationProto.newBuilder().setAutostart(true).setChip(
+                                ChipProto.newBuilder().setText("Autostart")))
+                        .build(),
+                list);
+
+        AutofillAssistantTestService testService =
+                new AutofillAssistantTestService(Collections.singletonList(script));
+        startAutofillAssistant(mTestRule.getActivity(), testService);
+
+        waitUntilViewMatchesCondition(withText("Click me"), isCompletelyDisplayed());
+
+        int numNextActionsCalled = testService.getNextActionsCounter();
+        onView(withText("Click me")).perform(click());
+        testService.waitUntilGetNextActions(numNextActionsCalled + 1);
+
+        List<ProcessedActionProto> processedActions = testService.getProcessedActions();
+        assertThat(processedActions, iterableWithSize(1));
+        assertThat(
+                processedActions.get(0).getStatus(), is(ProcessedActionStatusProto.ACTION_APPLIED));
+        ShowGenericUiProto.Result result = processedActions.get(0).getShowGenericUiResult();
+        List<ModelProto.ModelValue> resultModelValues = result.getModel().getValuesList();
+        assertThat(resultModelValues, iterableWithSize(3));
+        assertThat(resultModelValues,
+                containsInAnyOrder((ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                           .setIdentifier("result_0")
+                                           .setValue(ValueProto.newBuilder().setStrings(
+                                                   StringList.newBuilder().addValues("first")))
+                                           .build(),
+                        (ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                .setIdentifier("result_1")
+                                .setValue(ValueProto.newBuilder().setStrings(
+                                        StringList.newBuilder().addValues("second")))
+                                .build(),
+                        (ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                .setIdentifier("result_2")
+                                .setValue(ValueProto.newBuilder().setStrings(
+                                        StringList.newBuilder().addValues("third")))
+                                .build()));
+    }
+
+    /**
+     * Tests a nested for-each loop.
+     */
+    @Test
+    @MediumTest
+    public void testNestedForEach() {
+        // In pseudo code:
+        // items = {"first", "second", "third"};
+        // for (int i = 0; i < items.size(); i++) {
+        //   for (int j = 0; j < items.size(); j++) {
+        //     result_i_j = items[j];
+        //   }
+        // }
+        //
+        // Which should result in:
+        // result_0_0 = first
+        // result_0_1 = second
+        // result_0_2 = third
+        // result_1_0 = first
+        // ...
+        // result_2_2 = third
+        //
+        CallbackProto nestedForEach =
+                (CallbackProto) CallbackProto.newBuilder()
+                        .setForEach(ForEachProto.newBuilder()
+                                            .setLoopCounter("j")
+                                            .setLoopValueModelIdentifier("loop_value")
+                                            .addCallbacks(CallbackProto.newBuilder().setSetValue(
+                                                    SetModelValueProto.newBuilder()
+                                                            .setModelIdentifier("result_${i}_${j}")
+                                                            .setValue(createValueReference(
+                                                                    "loop_value[${j}]")))))
+                        .build();
+
+        List<InteractionProto> interactions = new ArrayList<>();
+        interactions.add((InteractionProto) InteractionProto.newBuilder()
+                                 .setTriggerEvent(EventProto.newBuilder().setOnViewClicked(
+                                         OnViewClickedEventProto.newBuilder().setViewIdentifier(
+                                                 "clickable_view")))
+                                 .addCallbacks(CallbackProto.newBuilder().setForEach(
+                                         ForEachProto.newBuilder()
+                                                 .setLoopCounter("i")
+                                                 .setLoopValueModelIdentifier("loop_value")
+                                                 .addCallbacks(nestedForEach)))
+                                 .addCallbacks(CallbackProto.newBuilder().setEndAction(
+                                         EndActionProto.newBuilder().setStatus(
+                                                 ProcessedActionStatusProto.ACTION_APPLIED)))
+                                 .build());
+
+        List<String> loopValue = Arrays.asList("first", "second", "third");
+        List<ModelProto.ModelValue> modelValues = new ArrayList<>();
+        modelValues.add((ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                .setIdentifier("loop_value")
+                                .setValue(ValueProto.newBuilder().setStrings(
+                                        StringList.newBuilder().addAllValues(loopValue)))
+                                .build());
+
+        List<String> outputModelIdentifiers = new ArrayList<>();
+        for (int i = 0; i < loopValue.size(); i++) {
+            for (int j = 0; j < loopValue.size(); j++) {
+                String identifier = "result_" + i + "_" + j;
+                modelValues.add((ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                        .setIdentifier(identifier)
+                                        .build());
+                outputModelIdentifiers.add(identifier);
+            }
+        }
+
+        GenericUserInterfaceProto genericUserInterface =
+                (GenericUserInterfaceProto) GenericUserInterfaceProto.newBuilder()
+                        .setRootView(ViewProto.newBuilder()
+                                             .setIdentifier("clickable_view")
+                                             .setTextView(TextViewProto.newBuilder().setText(
+                                                     "Click me")))
+                        .setInteractions(
+                                InteractionsProto.newBuilder().addAllInteractions(interactions))
+                        .setModel(ModelProto.newBuilder().addAllValues(modelValues))
+                        .build();
+
+        ArrayList<ActionProto> list = new ArrayList<>();
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setShowGenericUi(
+                                 ShowGenericUiProto.newBuilder()
+                                         .setGenericUserInterface(genericUserInterface)
+                                         .addAllOutputModelIdentifiers(outputModelIdentifiers))
+                         .build());
+        AutofillAssistantTestScript script = new AutofillAssistantTestScript(
+                (SupportedScriptProto) SupportedScriptProto.newBuilder()
+                        .setPath("autofill_assistant_target_website.html")
+                        .setPresentation(PresentationProto.newBuilder().setAutostart(true).setChip(
+                                ChipProto.newBuilder().setText("Autostart")))
+                        .build(),
+                list);
+
+        AutofillAssistantTestService testService =
+                new AutofillAssistantTestService(Collections.singletonList(script));
+        startAutofillAssistant(mTestRule.getActivity(), testService);
+
+        waitUntilViewMatchesCondition(withText("Click me"), isCompletelyDisplayed());
+
+        int numNextActionsCalled = testService.getNextActionsCounter();
+        onView(withText("Click me")).perform(click());
+        testService.waitUntilGetNextActions(numNextActionsCalled + 1);
+
+        List<ProcessedActionProto> processedActions = testService.getProcessedActions();
+        assertThat(processedActions, iterableWithSize(1));
+        assertThat(
+                processedActions.get(0).getStatus(), is(ProcessedActionStatusProto.ACTION_APPLIED));
+        ShowGenericUiProto.Result result = processedActions.get(0).getShowGenericUiResult();
+        List<ModelProto.ModelValue> resultModelValues = result.getModel().getValuesList();
+
+        List<ModelProto.ModelValue> expectedResultValues = new ArrayList<>();
+        for (int i = 0; i < loopValue.size(); i++) {
+            for (int j = 0; j < loopValue.size(); j++) {
+                expectedResultValues.add(
+                        (ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                .setIdentifier("result_" + i + "_" + j)
+                                .setValue(ValueProto.newBuilder().setStrings(
+                                        StringList.newBuilder().addValues(loopValue.get(j))))
+                                .build());
+            }
+        }
+        assertThat(resultModelValues, iterableWithSize(expectedResultValues.size()));
+        assertThat(resultModelValues, containsInAnyOrder(expectedResultValues.toArray()));
+    }
+
+    /**
+     * Shows a simple UI (one view per credit card).
+     */
+    @Test
+    @MediumTest
+    public void testCreditCardUi() throws Exception {
+        // Clicking |credit_card_view| will write the current card to |selected_card| and end the
+        // action.
+        List<InteractionProto> singleCardInteractions = new ArrayList<>();
+        singleCardInteractions.add(
+                (InteractionProto) InteractionProto.newBuilder()
+                        .setTriggerEvent(EventProto.newBuilder().setOnViewClicked(
+                                OnViewClickedEventProto.newBuilder().setViewIdentifier(
+                                        "credit_card_view_${i}")))
+                        .addCallbacks(CallbackProto.newBuilder().setSetValue(
+                                SetModelValueProto.newBuilder()
+                                        .setModelIdentifier("selected_credit_card")
+                                        .setValue(createValueReference("credit_cards[${i}]"))))
+                        .addCallbacks(CallbackProto.newBuilder().setEndAction(
+                                EndActionProto.newBuilder().setStatus(
+                                        ProcessedActionStatusProto.ACTION_APPLIED)))
+                        .build());
+
+        // For each credit card, a simple UI containing the name and the obfuscated number is
+        // created.
+        GenericUserInterfaceProto singleCardUi =
+                (GenericUserInterfaceProto) GenericUserInterfaceProto.newBuilder()
+                        .setRootView(
+                                ViewProto.newBuilder()
+                                        .setIdentifier("credit_card_view_${i}")
+                                        .setViewContainer(
+                                                ViewContainerProto.newBuilder()
+                                                        .setLinearLayout(
+                                                                LinearLayoutProto.newBuilder()
+                                                                        .setOrientation(
+                                                                                LinearLayoutProto
+                                                                                        .Orientation
+                                                                                        .VERTICAL))
+                                                        .addViews(createTextModelView(
+                                                                "card_holder_name_view_${i}",
+                                                                "card_holder_name_${i}"))
+                                                        .addViews(createTextModelView(
+                                                                "obfuscated_number_view_${i}",
+                                                                "obfuscated_number_${i}"))))
+                        .setInteractions(InteractionsProto.newBuilder().addAllInteractions(
+                                singleCardInteractions))
+
+                        .build();
+
+        // Every time |credit_cards| changes, we:
+        // - clear any previous card views
+        // - compute |card_holder_name_${i}| and |obfuscated_number_${i}|
+        // - re-create card UI
+        List<InteractionProto> interactions = new ArrayList<>();
+        interactions.add(
+                (InteractionProto) InteractionProto.newBuilder()
+                        .setTriggerEvent(EventProto.newBuilder().setOnValueChanged(
+                                OnModelValueChangedEventProto.newBuilder().setModelIdentifier(
+                                        "credit_cards")))
+                        .addCallbacks(CallbackProto.newBuilder().setClearViewContainer(
+                                ClearViewContainerProto.newBuilder().setViewIdentifier(
+                                        "credit_card_container_view")))
+                        .addCallbacks(CallbackProto.newBuilder().setForEach(
+                                ForEachProto.newBuilder()
+                                        .setLoopCounter("i")
+                                        .setLoopValueModelIdentifier("credit_cards")
+                                        .addCallbacks(
+                                                createAutofillToStringCallback("credit_cards[${i}]",
+                                                        "card_holder_name_${i}", "${51}"))
+                                        .addCallbacks(
+                                                createAutofillToStringCallback("credit_cards[${i}]",
+                                                        "obfuscated_number_${i}", "•••• ${-4}"))
+                                        .addCallbacks(CallbackProto.newBuilder().setCreateNestedUi(
+                                                CreateNestedGenericUiProto.newBuilder()
+                                                        .setGenericUiIdentifier("nested_ui_${i}")
+                                                        .setGenericUi(singleCardUi)
+                                                        .setParentViewIdentifier(
+                                                                "credit_card_container_view")))))
+                        .build());
+
+        // Every time |selected_credit_card| changes, we write the network of the selected card to
+        // |selected_card_network|, which will be sent back to backend.
+        interactions.add(
+                (InteractionProto) InteractionProto.newBuilder()
+                        .setTriggerEvent(EventProto.newBuilder().setOnValueChanged(
+                                OnModelValueChangedEventProto.newBuilder().setModelIdentifier(
+                                        "selected_credit_card")))
+                        .addCallbacks(CallbackProto.newBuilder().setComputeValue(
+                                ComputeValueProto.newBuilder()
+                                        .setResultModelIdentifier("selected_card_network")
+                                        .setCreateCreditCardResponse(
+                                                CreateCreditCardResponseProto.newBuilder().setValue(
+                                                        createValueReference(
+                                                                "selected_credit_card")))))
+                        .build());
+
+        List<ModelProto.ModelValue> modelValues = new ArrayList<>();
+        modelValues.add((ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                .setIdentifier("selected_card_network")
+                                .build());
+
+        GenericUserInterfaceProto genericUserInterface =
+                (GenericUserInterfaceProto) GenericUserInterfaceProto.newBuilder()
+                        .setRootView(
+                                ViewProto.newBuilder()
+                                        .setIdentifier("credit_card_container_view")
+                                        .setViewContainer(
+                                                ViewContainerProto.newBuilder().setLinearLayout(
+                                                        LinearLayoutProto.newBuilder()
+                                                                .setOrientation(
+                                                                        LinearLayoutProto
+                                                                                .Orientation
+                                                                                .VERTICAL))))
+                        .setInteractions(
+                                InteractionsProto.newBuilder().addAllInteractions(interactions))
+                        .setModel(ModelProto.newBuilder().addAllValues(modelValues))
+                        .build();
+
+        ArrayList<ActionProto> list = new ArrayList<>();
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setShowGenericUi(
+                                 ShowGenericUiProto.newBuilder()
+                                         .setGenericUserInterface(genericUserInterface)
+                                         .setRequestCreditCards(
+                                                 ShowGenericUiProto.RequestAutofillCreditCards
+                                                         .newBuilder()
+                                                         .setModelIdentifier("credit_cards"))
+                                         .addOutputModelIdentifiers("selected_card_network"))
+                         .build());
+        AutofillAssistantTestScript script = new AutofillAssistantTestScript(
+                (SupportedScriptProto) SupportedScriptProto.newBuilder()
+                        .setPath("autofill_assistant_target_website.html")
+                        .setPresentation(PresentationProto.newBuilder().setAutostart(true).setChip(
+                                ChipProto.newBuilder().setText("Autostart")))
+                        .build(),
+                list);
+
+        mHelper.addDummyCreditCard(mHelper.addDummyProfile("John Doe", "johndoe@google.com"));
+        mHelper.addDummyCreditCard(mHelper.addDummyProfile("Jane Doe", "janedoe@google.com"));
+
+        AutofillAssistantTestService testService =
+                new AutofillAssistantTestService(Collections.singletonList(script));
+        startAutofillAssistant(mTestRule.getActivity(), testService);
+
+        waitUntilViewMatchesCondition(withText("John Doe"), isCompletelyDisplayed());
+        onView(withText("Jane Doe")).check(matches(isDisplayed()));
+        onView(allOf(withText(containsString("1111")), hasSibling(withText("John Doe"))))
+                .check(matches(isDisplayed()));
+        onView(allOf(withText(containsString("1111")), hasSibling(withText("Jane Doe"))))
+                .check(matches(isDisplayed()));
+
+        int numNextActionsCalled = testService.getNextActionsCounter();
+        onView(withText("Jane Doe")).perform(click());
+        testService.waitUntilGetNextActions(numNextActionsCalled + 1);
+
+        List<ProcessedActionProto> processedActions = testService.getProcessedActions();
+        assertThat(processedActions, iterableWithSize(1));
+        assertThat(
+                processedActions.get(0).getStatus(), is(ProcessedActionStatusProto.ACTION_APPLIED));
+        ShowGenericUiProto.Result result = processedActions.get(0).getShowGenericUiResult();
+        List<ModelProto.ModelValue> resultModelValues = result.getModel().getValuesList();
+        assertThat(resultModelValues, iterableWithSize(1));
+        assertThat(resultModelValues,
+                containsInAnyOrder(
+                        (ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                .setIdentifier("selected_card_network")
+                                .setValue(ValueProto.newBuilder().setCreditCardResponse(
+                                        CreditCardResponseProto.newBuilder().setNetwork("visa")))
+                                .build()));
     }
 }

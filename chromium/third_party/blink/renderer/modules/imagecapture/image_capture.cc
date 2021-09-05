@@ -7,9 +7,10 @@
 #include <memory>
 #include <utility>
 
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/mojom/permissions/permission_status.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_media_stream_track.h"
 #include "third_party/blink/renderer/bindings/core/v8/callback_promise_adapter.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_track_capabilities.h"
@@ -23,8 +24,10 @@
 #include "third_party/blink/renderer/modules/imagecapture/media_settings_range.h"
 #include "third_party/blink/renderer/modules/imagecapture/photo_capabilities.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_track.h"
+#include "third_party/blink/renderer/modules/permissions/permission_utils.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
@@ -95,7 +98,14 @@ ImageCapture* ImageCapture::Create(ExecutionContext* context,
     return nullptr;
   }
 
-  return MakeGarbageCollected<ImageCapture>(context, track);
+  // The initial PTZ permission comes from the internal ImageCapture object of
+  // the track, if already created.
+  bool pan_tilt_zoom_allowed =
+      (track->GetImageCapture() &&
+       track->GetImageCapture()->HasPanTiltZoomPermissionGranted());
+
+  return MakeGarbageCollected<ImageCapture>(context, track,
+                                            pan_tilt_zoom_allowed);
 }
 
 ImageCapture::~ImageCapture() {
@@ -258,39 +268,6 @@ ScriptPromise ImageCapture::setOptions(ScriptState* script_state,
   return promise;
 }
 
-ScriptPromise ImageCapture::takePhoto(ScriptState* script_state) {
-  TRACE_EVENT_INSTANT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
-                       "ImageCapture::takePhoto", TRACE_EVENT_SCOPE_PROCESS);
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  ScriptPromise promise = resolver->Promise();
-
-  if (TrackIsInactive(*stream_track_)) {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kInvalidStateError,
-        "The associated Track is in an invalid state."));
-    return promise;
-  }
-  if (!service_.is_bound()) {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kNotFoundError, kNoServiceError));
-    return promise;
-  }
-
-  service_requests_.insert(resolver);
-
-  // m_streamTrack->component()->source()->id() is the renderer "name" of the
-  // camera;
-  // TODO(mcasas) consider sending the security origin as well:
-  // scriptState->getExecutionContext()->getSecurityOrigin()->toString()
-  TRACE_EVENT_INSTANT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
-                       "ImageCapture::takePhoto", TRACE_EVENT_SCOPE_PROCESS);
-  service_->TakePhoto(
-      stream_track_->Component()->Source()->Id(),
-      WTF::Bind(&ImageCapture::OnMojoTakePhoto, WrapPersistent(this),
-                WrapPersistent(resolver)));
-  return promise;
-}
-
 ScriptPromise ImageCapture::takePhoto(ScriptState* script_state,
                                       const PhotoSettings* photo_settings) {
   TRACE_EVENT_INSTANT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
@@ -323,19 +300,63 @@ ScriptPromise ImageCapture::grabFrame(ScriptState* script_state) {
     return promise;
   }
 
-  // The platform does not know about MediaStreamTrack, so we wrap it up.
-  WebMediaStreamTrack track(stream_track_->Component());
   auto resolver_callback_adapter =
       std::make_unique<CallbackPromiseAdapter<ImageBitmap, void>>(resolver);
-  frame_grabber_->GrabFrame(&track, std::move(resolver_callback_adapter),
+  frame_grabber_->GrabFrame(stream_track_->Component(),
+                            std::move(resolver_callback_adapter),
                             ExecutionContext::From(script_state)
                                 ->GetTaskRunner(TaskType::kDOMManipulation));
 
   return promise;
 }
 
-MediaTrackCapabilities* ImageCapture::GetMediaTrackCapabilities() const {
-  return capabilities_;
+void ImageCapture::GetMediaTrackCapabilities(
+    MediaTrackCapabilities* capabilities) const {
+  // Merge any present |capabilities_| members into |capabilities|.
+
+  if (capabilities_->hasWhiteBalanceMode())
+    capabilities->setWhiteBalanceMode(capabilities_->whiteBalanceMode());
+  if (capabilities_->hasExposureMode())
+    capabilities->setExposureMode(capabilities_->exposureMode());
+  if (capabilities_->hasFocusMode())
+    capabilities->setFocusMode(capabilities_->focusMode());
+  if (capabilities_->hasExposureCompensation()) {
+    capabilities->setExposureCompensation(
+        capabilities_->exposureCompensation());
+  }
+  if (capabilities_->hasExposureTime())
+    capabilities->setExposureTime(capabilities_->exposureTime());
+
+  if (capabilities_->hasColorTemperature())
+    capabilities->setColorTemperature(capabilities_->colorTemperature());
+  if (capabilities_->hasIso())
+    capabilities->setIso(capabilities_->iso());
+
+  if (capabilities_->hasBrightness())
+    capabilities->setBrightness(capabilities_->brightness());
+  if (capabilities_->hasContrast())
+    capabilities->setContrast(capabilities_->contrast());
+  if (capabilities_->hasSaturation())
+    capabilities->setSaturation(capabilities_->saturation());
+  if (capabilities_->hasSharpness())
+    capabilities->setSharpness(capabilities_->sharpness());
+
+  if (capabilities_->hasFocusDistance())
+    capabilities->setFocusDistance(capabilities_->focusDistance());
+
+  if (HasPanTiltZoomPermissionGranted()) {
+    if (capabilities_->hasPan())
+      capabilities->setPan(capabilities_->pan());
+    if (capabilities_->hasTilt())
+      capabilities->setTilt(capabilities_->tilt());
+  }
+  // TODO(crbug.com/934063): Check HasPanTiltZoomPermissionGranted() as well if
+  // upcoming metrics show that zoom may be moved under this permission.
+  if (capabilities_->hasZoom())
+    capabilities->setZoom(capabilities_->zoom());
+
+  if (capabilities_->hasTorch())
+    capabilities->setTorch(capabilities_->torch());
 }
 
 // TODO(mcasas): make the implementation fully Spec compliant, see the TODOs
@@ -404,8 +425,12 @@ void ImageCapture::SetMediaTrackConstraints(
       (constraints->hasSaturation() && !capabilities_->hasSaturation()) ||
       (constraints->hasSharpness() && !capabilities_->hasSharpness()) ||
       (constraints->hasFocusDistance() && !capabilities_->hasFocusDistance()) ||
-      (constraints->hasPan() && !capabilities_->hasPan()) ||
-      (constraints->hasTilt() && !capabilities_->hasTilt()) ||
+      (constraints->hasPan() &&
+       !(capabilities_->hasPan() && HasPanTiltZoomPermissionGranted())) ||
+      (constraints->hasTilt() &&
+       !(capabilities_->hasTilt() && HasPanTiltZoomPermissionGranted())) ||
+      // TODO(crbug.com/934063): Check HasPanTiltZoomPermissionGranted() as well
+      // if upcoming metrics show that zoom may be moved under this permission.
       (constraints->hasZoom() && !capabilities_->hasZoom()) ||
       (constraints->hasTorch() && !capabilities_->hasTorch())) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -716,26 +741,39 @@ void ImageCapture::GetMediaTrackSettings(MediaTrackSettings* settings) const {
   if (settings_->hasFocusDistance())
     settings->setFocusDistance(settings_->focusDistance());
 
-  if (settings_->hasPan())
-    settings->setPan(settings_->pan());
-  if (settings_->hasTilt())
-    settings->setTilt(settings_->tilt());
+  if (HasPanTiltZoomPermissionGranted()) {
+    if (settings_->hasPan())
+      settings->setPan(settings_->pan());
+    if (settings_->hasTilt())
+      settings->setTilt(settings_->tilt());
+  }
+  // TODO(crbug.com/934063): Check HasPanTiltZoomPermissionGranted() as well if
+  // upcoming metrics show that zoom may be moved under this permission.
   if (settings_->hasZoom())
     settings->setZoom(settings_->zoom());
+
   if (settings_->hasTorch())
     settings->setTorch(settings_->torch());
 }
 
-ImageCapture::ImageCapture(ExecutionContext* context, MediaStreamTrack* track)
+ImageCapture::ImageCapture(ExecutionContext* context,
+                           MediaStreamTrack* track,
+                           bool pan_tilt_zoom_allowed)
     : ExecutionContextLifecycleObserver(context),
       stream_track_(track),
       service_(context),
+      pan_tilt_zoom_permission_(pan_tilt_zoom_allowed
+                                    ? mojom::blink::PermissionStatus::GRANTED
+                                    : mojom::blink::PermissionStatus::ASK),
+      permission_service_(context),
+      permission_observer_receiver_(this, context),
       capabilities_(MediaTrackCapabilities::Create()),
       settings_(MediaTrackSettings::Create()),
       current_constraints_(MediaTrackConstraintSet::Create()),
       photo_settings_(PhotoSettings::Create()) {
   DCHECK(stream_track_);
   DCHECK(!service_.is_bound());
+  DCHECK(!permission_service_.is_bound());
 
   // This object may be constructed over an ExecutionContext that has already
   // been detached. In this case the ImageCapture service will not be available.
@@ -754,6 +792,30 @@ ImageCapture::ImageCapture(ExecutionContext* context, MediaStreamTrack* track)
   service_->GetPhotoState(stream_track_->Component()->Source()->Id(),
                           WTF::Bind(&ImageCapture::UpdateMediaTrackCapabilities,
                                     WrapPersistent(this)));
+
+  ConnectToPermissionService(
+      context, permission_service_.BindNewPipeAndPassReceiver(
+                   context->GetTaskRunner(TaskType::kMiscPlatformAPI)));
+
+  mojo::PendingRemote<mojom::blink::PermissionObserver> observer;
+  permission_observer_receiver_.Bind(
+      observer.InitWithNewPipeAndPassReceiver(),
+      context->GetTaskRunner(TaskType::kMiscPlatformAPI));
+  permission_service_->AddPermissionObserver(
+      CreateVideoCapturePermissionDescriptor(/*pan_tilt_zoom=*/true),
+      pan_tilt_zoom_permission_, std::move(observer));
+}
+
+void ImageCapture::OnPermissionStatusChange(
+    mojom::blink::PermissionStatus status) {
+  pan_tilt_zoom_permission_ = status;
+}
+
+bool ImageCapture::HasPanTiltZoomPermissionGranted() const {
+  if (!RuntimeEnabledFeatures::MediaCapturePanTiltEnabled())
+    return false;
+
+  return pan_tilt_zoom_permission_ == mojom::blink::PermissionStatus::GRANTED;
 }
 
 void ImageCapture::OnMojoGetPhotoState(
@@ -951,14 +1013,18 @@ void ImageCapture::UpdateMediaTrackCapabilities(
     settings_->setFocusDistance(photo_state->focus_distance->current);
   }
 
-  if (photo_state->pan->max != photo_state->pan->min) {
-    capabilities_->setPan(MediaSettingsRange::Create(*photo_state->pan));
-    settings_->setPan(photo_state->pan->current);
+  if (HasPanTiltZoomPermissionGranted()) {
+    if (photo_state->pan->max != photo_state->pan->min) {
+      capabilities_->setPan(MediaSettingsRange::Create(*photo_state->pan));
+      settings_->setPan(photo_state->pan->current);
+    }
+    if (photo_state->tilt->max != photo_state->tilt->min) {
+      capabilities_->setTilt(MediaSettingsRange::Create(*photo_state->tilt));
+      settings_->setTilt(photo_state->tilt->current);
+    }
   }
-  if (photo_state->tilt->max != photo_state->tilt->min) {
-    capabilities_->setTilt(MediaSettingsRange::Create(*photo_state->tilt));
-    settings_->setTilt(photo_state->tilt->current);
-  }
+  // TODO(crbug.com/934063): Check HasPanTiltZoomPermissionGranted() as well if
+  // upcoming metrics show that zoom may be moved under this permission.
   if (photo_state->zoom->max != photo_state->zoom->min) {
     capabilities_->setZoom(MediaSettingsRange::Create(*photo_state->zoom));
     settings_->setZoom(photo_state->zoom->current);
@@ -995,9 +1061,11 @@ void ImageCapture::ResolveWithPhotoCapabilities(
   resolver->Resolve(photo_capabilities_);
 }
 
-void ImageCapture::Trace(Visitor* visitor) {
+void ImageCapture::Trace(Visitor* visitor) const {
   visitor->Trace(stream_track_);
   visitor->Trace(service_);
+  visitor->Trace(permission_service_);
+  visitor->Trace(permission_observer_receiver_);
   visitor->Trace(capabilities_);
   visitor->Trace(settings_);
   visitor->Trace(photo_settings_);

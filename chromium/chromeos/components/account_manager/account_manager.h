@@ -16,7 +16,6 @@
 #include "base/component_export.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
@@ -93,6 +92,8 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   class Observer {
    public:
     Observer();
+    Observer(const Observer&) = delete;
+    Observer& operator=(const Observer&) = delete;
     virtual ~Observer();
 
     // Called when the token for |account| is updated/inserted.
@@ -110,13 +111,12 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
     // |AccountManager::CreateAccessTokenFetcher|), must clear their cache entry
     // for this |account| on receiving this callback.
     virtual void OnAccountRemoved(const Account& account) = 0;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(Observer);
   };
 
   // Note: |Initialize| MUST be called at least once on this object.
   AccountManager();
+  AccountManager(const AccountManager&) = delete;
+  AccountManager& operator=(const AccountManager&) = delete;
   virtual ~AccountManager();
 
   static void RegisterPrefs(PrefRegistrySimple* registry);
@@ -126,7 +126,8 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   void SetPrefService(PrefService* pref_service);
 
   // |home_dir| is the path of the Device Account's home directory (root of the
-  // user's cryptohome).
+  // user's cryptohome). If |home_dir| is |base::FilePath::empty()|, then |this|
+  // |AccountManager| does not persist any data to disk.
   // |request_context| is a non-owning pointer.
   // |delay_network_call_runner| is basically a wrapper for
   // |chromeos::DelayNetworkCall|. Cannot use |chromeos::DelayNetworkCall| due
@@ -371,7 +372,13 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
 
   // A task runner for disk I/O.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
+
+  // Writes |AccountManager|'s state to disk. Will be |nullptr| if
+  // |AccountManager| is operating in-memory only.
   std::unique_ptr<base::ImportantFileWriter> writer_;
+
+  // Cryptohome root.
+  base::FilePath home_dir_;
 
   // A map from |AccountKey|s to |AccountInfo|.
   AccountMap accounts_;
@@ -393,7 +400,6 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<AccountManager> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(AccountManager);
 };
 
 // For logging.

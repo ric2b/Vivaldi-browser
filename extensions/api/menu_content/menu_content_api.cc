@@ -128,7 +128,7 @@ void MenuContentAPI::SendOnChanged(BrowserContext* browser_context,
                                    Menu_Model* model,
                                    int64_t select_id,
                                    const std::string& named_menu) {
-  Menu_Node* menu = model ? model->GetMenu(named_menu) : nullptr;
+  Menu_Node* menu = model ? model->GetNamedMenu(named_menu) : nullptr;
   if (menu) {
     // We want the children of the menu node
     std::vector<MenuTreeNode> nodes;
@@ -163,7 +163,7 @@ ExtensionFunction::ResponseAction MenuContentGetFunction::Run() {
 
 void MenuContentGetFunction::SendResponse(Menu_Model* model,
                                           const std::string& named_menu) {
-  Menu_Node* menu = model ? model->GetMenu(named_menu) : nullptr;
+  Menu_Node* menu = model ? model->GetNamedMenu(named_menu) : nullptr;
   if (!menu) {
     Respond(Error("Menu model not available"));
   } else {
@@ -186,98 +186,18 @@ void MenuContentGetFunction::SendResponse(Menu_Model* model,
   }
 }
 
-ExtensionFunction::ResponseAction MenuContentSetFunction::Run() {
-  std::unique_ptr<vivaldi::menu_content::Set::Params> params(
-      vivaldi::menu_content::Set::Params::Create(*args_));
-
-  bool success = false;
-  Menu_Model* model = GetMenuModel(browser_context());
-  if (model) {
-    Menu_Node* menu = model->GetMenu(params->named_menu);
-    if (menu && menu->parent()) {
-      std::unique_ptr<Menu_Node> menu_node = std::make_unique<Menu_Node>();
-      menu_node->SetGuid(base::GenerateGUID());
-      menu_node->SetType(Menu_Node::MENU);
-      menu_node->SetAction(params->named_menu);
-      menu_node->SetId(menu->id());
-      success = DecodeItems(menu_node.get(), params->items);
-      if (success) {
-        success = model->SetMenu(std::move(menu_node));
-      }
-    }
-  }
-
-  return RespondNow(ArgumentList(
-      vivaldi::menu_content::Set::Results::Create(success)));
-}
-
-bool MenuContentSetFunction::DecodeItems(menus::Menu_Node* parent,
-    const std::vector<MenuTreeNode>& items) {
-  for (auto& item : items) {
-    std::unique_ptr<Menu_Node> child = std::make_unique<Menu_Node>();
-    bool success = true;
-    if (item.id.length() == 0 &&
-        item.type != vivaldi::menu_content::NODE_TYPE_SEPARATOR) {
-      return false;
-    }
-    child->SetGuid(base::GenerateGUID());
-    child->SetId(Menu_Node::GetNewId());
-    child->SetAction(item.id);
-    switch (item.type) {
-      case vivaldi::menu_content::NODE_TYPE_COMMAND:
-        child->SetType(Menu_Node::COMMAND);
-        break;
-      case vivaldi::menu_content::NODE_TYPE_CHECKBOX:
-        child->SetType(Menu_Node::CHECKBOX);
-        break;
-      case vivaldi::menu_content::NODE_TYPE_RADIO:
-        if (!item.radiogroup || item.radiogroup->length() == 0) {
-          return false;
-        }
-        child->SetRadioGroup(*item.radiogroup);
-        child->SetType(Menu_Node::RADIO);
-        break;
-      case vivaldi::menu_content::NODE_TYPE_SEPARATOR:
-        child->SetType(Menu_Node::SEPARATOR);
-        break;
-      case vivaldi::menu_content::NODE_TYPE_CONTAINER:
-        child->SetContainerMode(
-          vivaldi::menu_content::ToString(item.containermode));
-        child->SetContainerEdge(
-          vivaldi::menu_content::ToString(item.containeredge));
-        child->SetType(Menu_Node::CONTAINER);
-        break;
-      case vivaldi::menu_content::NODE_TYPE_FOLDER:
-        if (item.children) {
-          child->SetType(Menu_Node::FOLDER);
-          success = DecodeItems(child.get(), *item.children);
-        }
-        break;
-      default:
-        success = false;
-        break;
-    }
-    if (success) {
-      parent->Add(std::move(child));
-    } else {
-      return false;
-    }
-  }
-  return true;
-}
-
 ExtensionFunction::ResponseAction MenuContentMoveFunction::Run() {
   std::unique_ptr<vivaldi::menu_content::Move::Params> params(
       vivaldi::menu_content::Move::Params::Create(*args_));
   bool success = false;
   Menu_Model* model = GetMenuModel(browser_context());
   if (model) {
-    Menu_Node* menu = model->GetMenu(params->named_menu);
+    Menu_Node* menu = model->GetNamedMenu(params->named_menu);
     if (menu && menu->parent()) {
       success = true;
       for (auto& id : params->ids) {
         Menu_Node* node = menu->GetById(GetIdFromString(id));
-        Menu_Node* parent = model->GetRoot().GetById(
+        Menu_Node* parent = model->root_node().GetById(
             GetIdFromString(params->parent_id));
         model->Move(node, parent, params->index);
       }
@@ -295,40 +215,34 @@ ExtensionFunction::ResponseAction MenuContentCreateFunction::Run() {
   std::vector<std::string> ids;
   Menu_Model* model = GetMenuModel(browser_context());
   if (model) {
-    Menu_Node* menu = model->GetMenu(params->named_menu);
+    Menu_Node* menu = model->GetNamedMenu(params->named_menu);
     if (menu && menu->parent()) {
       success = true;
-      Menu_Node* parent = model->GetRoot().GetById(
+      Menu_Node* parent = model->root_node().GetById(
           GetIdFromString(params->parent_id));
       int index = params->index < 0 ? parent->children().size() : params->index;
 
       for (auto& item : params->items) {
-        std::unique_ptr<Menu_Node> node = std::make_unique<Menu_Node>();
+        std::unique_ptr<Menu_Node> node = std::make_unique<Menu_Node>(
+            base::GenerateGUID(), Menu_Node::GetNewId());
         node->SetOrigin(Menu_Node::USER);
-        node->SetGuid(base::GenerateGUID());
         if (item.type == vivaldi::menu_content::NODE_TYPE_SEPARATOR) {
-          node->SetId(Menu_Node::GetNewId());
           node->SetType(Menu_Node::SEPARATOR);
         } else if (item.type == vivaldi::menu_content::NODE_TYPE_COMMAND) {
-          node->SetId(Menu_Node::GetNewId());
           node->SetType(Menu_Node::COMMAND);
           node->SetAction(item.action);
         } else if (item.type == vivaldi::menu_content::NODE_TYPE_CHECKBOX) {
-          node->SetId(Menu_Node::GetNewId());
           node->SetType(Menu_Node::CHECKBOX);
           node->SetAction(item.action);
         } else if (item.type == vivaldi::menu_content::NODE_TYPE_RADIO) {
-          node->SetId(Menu_Node::GetNewId());
           node->SetType(Menu_Node::RADIO);
           node->SetAction(item.action);
         } else if (item.type == vivaldi::menu_content::NODE_TYPE_FOLDER) {
-          node->SetId(Menu_Node::GetNewId());
           node->SetType(Menu_Node::FOLDER);
           std::string action = std::string("MENU_") +
               std::to_string(node->id());
           node->SetAction(action);
         } else if (item.type == vivaldi::menu_content::NODE_TYPE_CONTAINER) {
-          node->SetId(Menu_Node::GetNewId());
           node->SetType(Menu_Node::CONTAINER);
           node->SetAction(item.action);
           node->SetContainerMode(vivaldi::menu_content::ToString(
@@ -364,7 +278,7 @@ ExtensionFunction::ResponseAction MenuContentRemoveFunction::Run() {
   bool success = false;
   Menu_Model* model = GetMenuModel(browser_context());
   if (model) {
-    Menu_Node* menu = model->GetMenu(params->named_menu);
+    Menu_Node* menu = model->GetNamedMenu(params->named_menu);
     if (menu && menu->parent()) {
       success = true;
       for (auto& id : params->ids) {
@@ -384,7 +298,7 @@ ExtensionFunction::ResponseAction MenuContentUpdateFunction::Run() {
   bool success = false;
   Menu_Model* model = GetMenuModel(browser_context());
   if (model) {
-    Menu_Node* menu = model->GetMenu(params->named_menu);
+    Menu_Node* menu = model->GetNamedMenu(params->named_menu);
     if (menu && menu->parent()) {
       success = true;
       Menu_Node* node = menu->GetById(GetIdFromString(params->id));
@@ -415,7 +329,7 @@ ExtensionFunction::ResponseAction MenuContentResetFunction::Run() {
   bool success = false;
   Menu_Model* model = GetMenuModel(browser_context());
   if (model) {
-    Menu_Node* menu = model->GetMenu(params->named_menu);
+    Menu_Node* menu = model->GetNamedMenu(params->named_menu);
     if (menu && menu->parent()) {
       success = true;
       if (params->ids) {
@@ -426,7 +340,9 @@ ExtensionFunction::ResponseAction MenuContentResetFunction::Run() {
           }
         }
       } else {
-        model->Reset(menu);
+        // We do have a node here, but it is quicker to reset the whole menu and
+        // the node in question is the menu itself.
+        model->Reset(params->named_menu);
       }
     } else {
       // Reset all and report back that name menu is to be used afterwards.

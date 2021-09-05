@@ -17,7 +17,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/task/post_task.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
@@ -101,18 +100,22 @@ void PasswordProtectionService::MaybeStartPasswordFieldOnFocusRequest(
     const GURL& password_form_frame_url,
     const std::string& hosted_domain) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  RequestOutcome reason;
-  if (CanSendPing(LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE,
-                  main_frame_url,
-                  GetPasswordProtectionReusedPasswordAccountType(
-                      PasswordType::PASSWORD_TYPE_UNKNOWN,
-                      /*username=*/""),
-                  &reason)) {
+  LoginReputationClientRequest::TriggerType trigger_type =
+      LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE;
+  ReusedPasswordAccountType reused_password_account_type =
+      GetPasswordProtectionReusedPasswordAccountType(
+          PasswordType::PASSWORD_TYPE_UNKNOWN,
+          /*username=*/"");
+  if (CanSendPing(trigger_type, main_frame_url, reused_password_account_type)) {
     StartRequest(web_contents, main_frame_url, password_form_action,
                  password_form_frame_url, /* username */ "",
                  PasswordType::PASSWORD_TYPE_UNKNOWN,
                  {}, /* matching_reused_credentials: not used for this type */
                  LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE, true);
+  } else {
+    RequestOutcome reason = GetPingNotSentReason(trigger_type, main_frame_url,
+                                                 reused_password_account_type);
+    LogNoPingingReason(trigger_type, reason, reused_password_account_type);
   }
 }
 #endif
@@ -127,13 +130,10 @@ void PasswordProtectionService::MaybeStartProtectedPasswordEntryRequest(
         matching_reused_credentials,
     bool password_field_exists) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  LoginReputationClientRequest::TriggerType trigger_type =
+      LoginReputationClientRequest::PASSWORD_REUSE_EVENT;
   ReusedPasswordAccountType reused_password_account_type =
       GetPasswordProtectionReusedPasswordAccountType(password_type, username);
-  RequestOutcome reason;
-  // Need to populate |reason| to be passed into CanShowInterstitial.
-  bool can_send_ping =
-      CanSendPing(LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
-                  main_frame_url, reused_password_account_type, &reason);
   if (IsSupportedPasswordTypeForPinging(password_type)) {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
     // Collect metrics about typical page-zoom on login pages.
@@ -143,7 +143,8 @@ void PasswordProtectionService::MaybeStartProtectedPasswordEntryRequest(
         "PasswordProtection.PageZoomFactor",
         static_cast<int>(100 * blink::PageZoomLevelToZoomFactor(zoom_level)));
 #endif  // defined(FULL_SAFE_BROWSING)
-    if (can_send_ping) {
+    if (CanSendPing(LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
+                    main_frame_url, reused_password_account_type)) {
       saved_passwords_matching_reused_credentials_ =
           matching_reused_credentials;
       StartRequest(web_contents, main_frame_url, GURL(), GURL(), username,
@@ -151,6 +152,9 @@ void PasswordProtectionService::MaybeStartProtectedPasswordEntryRequest(
                    LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
                    password_field_exists);
     } else {
+      RequestOutcome reason = GetPingNotSentReason(
+          trigger_type, main_frame_url, reused_password_account_type);
+      LogNoPingingReason(trigger_type, reason, reused_password_account_type);
 #if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
       if (reused_password_account_type.is_account_syncing())
         MaybeLogPasswordReuseLookupEvent(web_contents, reason, password_type,
@@ -160,8 +164,9 @@ void PasswordProtectionService::MaybeStartProtectedPasswordEntryRequest(
   }
 
 #if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
-  if (CanShowInterstitial(reason, reused_password_account_type,
-                          main_frame_url)) {
+  if (CanShowInterstitial(reused_password_account_type, main_frame_url)) {
+    LogPasswordAlertModeOutcome(RequestOutcome::SUCCEEDED,
+                                reused_password_account_type);
     username_for_last_shown_warning_ = username;
     reused_password_account_type_for_last_shown_warning_ =
         reused_password_account_type;
@@ -247,24 +252,9 @@ void PasswordProtectionService::StartRequest(
 bool PasswordProtectionService::CanSendPing(
     LoginReputationClientRequest::TriggerType trigger_type,
     const GURL& main_frame_url,
-    ReusedPasswordAccountType password_type,
-    RequestOutcome* reason) {
-  *reason = RequestOutcome::UNKNOWN;
-  bool is_pinging_enabled =
-      IsPingingEnabled(trigger_type, password_type, reason);
-  // Pinging is enabled for password_reuse trigger level; however we need to
-  // make sure *reason is set appropriately.
-  PasswordProtectionTrigger trigger_level =
-      GetPasswordProtectionWarningTriggerPref(password_type);
-  if (trigger_level == PASSWORD_REUSE) {
-    *reason = RequestOutcome::PASSWORD_ALERT_MODE;
-  }
-  if (is_pinging_enabled &&
-      !IsURLWhitelistedForPasswordEntry(main_frame_url, reason)) {
-    return true;
-  }
-  LogNoPingingReason(trigger_type, *reason, password_type);
-  return false;
+    ReusedPasswordAccountType password_type) {
+  return IsPingingEnabled(trigger_type, password_type) &&
+         !IsURLWhitelistedForPasswordEntry(main_frame_url);
 }
 
 void PasswordProtectionService::RequestFinished(
@@ -408,8 +398,8 @@ void PasswordProtectionService::FillUserPopulation(
 void PasswordProtectionService::OnURLsDeleted(
     history::HistoryService* history_service,
     const history::DeletionInfo& deletion_info) {
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindRepeating(&PasswordProtectionService::
                               RemoveUnhandledSyncPasswordReuseOnURLsDeleted,
                           GetWeakPtr(), deletion_info.IsAllHistory(),
@@ -551,7 +541,8 @@ bool PasswordProtectionService::IsSupportedPasswordTypeForPinging(
     PasswordType password_type) const {
   switch (password_type) {
     case PasswordType::SAVED_PASSWORD:
-      return true;
+      return base::FeatureList::IsEnabled(
+          safe_browsing::kPasswordProtectionForSavedPasswords);
     case PasswordType::PRIMARY_ACCOUNT_PASSWORD:
       return true;
     case PasswordType::ENTERPRISE_PASSWORD:

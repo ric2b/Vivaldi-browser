@@ -232,8 +232,7 @@ TestRenderViewHost::TestRenderViewHost(
                          swapped_out,
                          false /* has_initialized_audio_host */),
       delete_counter_(nullptr),
-      webkit_preferences_changed_counter_(nullptr),
-      opener_frame_route_id_(MSG_ROUTING_NONE) {
+      webkit_preferences_changed_counter_(nullptr) {
   // TestRenderWidgetHostView installs itself into this->view_ in its
   // constructor, and deletes itself when TestRenderWidgetHostView::Destroy() is
   // called.
@@ -246,30 +245,21 @@ TestRenderViewHost::~TestRenderViewHost() {
 }
 
 bool TestRenderViewHost::CreateTestRenderView(
-    const base::string16& frame_name,
-    int opener_frame_route_id,
+    const base::Optional<base::UnguessableToken>& opener_frame_token,
     int proxy_route_id,
     bool window_was_created_with_opener) {
-  FrameReplicationState replicated_state;
-  replicated_state.name = base::UTF16ToUTF8(frame_name);
-  return CreateRenderView(opener_frame_route_id, proxy_route_id,
-                          base::UnguessableToken::Create(),
-                          base::UnguessableToken::Create(), replicated_state,
+  return CreateRenderView(opener_frame_token, proxy_route_id,
                           window_was_created_with_opener);
 }
 
 bool TestRenderViewHost::CreateRenderView(
-    int opener_frame_route_id,
+    const base::Optional<base::UnguessableToken>& opener_frame_token,
     int proxy_route_id,
-    const base::UnguessableToken& frame_token,
-    const base::UnguessableToken& devtools_frame_token,
-    const FrameReplicationState& replicated_frame_state,
     bool window_was_created_with_opener) {
   DCHECK(!IsRenderViewLive());
-  GetWidget()->SetRendererInitialized(
-      true, RenderWidgetHostImpl::RendererInitializer::kTest);
+  GetWidget()->set_renderer_initialized(true);
   DCHECK(IsRenderViewLive());
-  opener_frame_route_id_ = opener_frame_route_id;
+  opener_frame_token_ = opener_frame_token;
   RenderFrameHostImpl* main_frame =
       static_cast<RenderFrameHostImpl*>(GetMainFrame());
   if (main_frame && is_active()) {
@@ -277,16 +267,24 @@ bool TestRenderViewHost::CreateRenderView(
         stub_interface_provider_remote;
     main_frame->BindInterfaceProviderReceiver(
         stub_interface_provider_remote.InitWithNewPipeAndPassReceiver());
-    main_frame->SetRenderFrameCreated(true);
+
+    mojo::AssociatedRemote<blink::mojom::WidgetHost> blink_widget_host;
+    mojo::AssociatedRemote<blink::mojom::Widget> blink_widget;
+    auto blink_widget_receiver =
+        blink_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
+    GetWidget()->BindWidgetInterfaces(
+        blink_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting(),
+        blink_widget.Unbind());
 
     mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
-    auto frame_widget_host_receiver =
-        frame_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting();
     mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
     auto frame_widget_receiver =
         frame_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
     GetWidget()->BindFrameWidgetInterfaces(
-        std::move(frame_widget_host_receiver), frame_widget.Unbind());
+        frame_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting(),
+        frame_widget.Unbind());
+
+    main_frame->SetRenderFrameCreated(true);
   }
 
   return true;
@@ -330,7 +328,7 @@ void TestRenderViewHost::TestOnUpdateStateWithFile(
     const base::FilePath& file_path) {
   PageState state = PageState::CreateForTesting(GURL("http://www.google.com"),
                                                 false, "data", &file_path);
-  static_cast<RenderFrameHostImpl*>(GetMainFrame())->OnUpdateState(state);
+  static_cast<RenderFrameHostImpl*>(GetMainFrame())->UpdateState(state);
 }
 
 RenderViewHostImplTestHarness::RenderViewHostImplTestHarness()

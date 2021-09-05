@@ -9,7 +9,6 @@
 #import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils.h"
 #import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils_app_interface.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/unified_consent_constants.h"
-#import "ios/chrome/browser/ui/signin_interaction/signin_interaction_controller_egtest_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
@@ -29,6 +28,7 @@ using chrome_test_util::SecondarySignInButton;
 using chrome_test_util::SettingsAccountButton;
 using chrome_test_util::SettingsDoneButton;
 using chrome_test_util::SignOutAccountsButton;
+using chrome_test_util::SignOutAndClearDataAccountsButton;
 using chrome_test_util::UnifiedConsentAddAccountButton;
 
 @implementation SigninEarlGreyUI
@@ -75,7 +75,7 @@ using chrome_test_util::UnifiedConsentAddAccountButton;
   ScopedSynchronizationDisabler disabler;
   id<GREYMatcher> acceptButton = [ChromeMatchersAppInterface
       buttonWithAccessibilityLabelID:IDS_IOS_MANAGED_SIGNIN_ACCEPT_BUTTON];
-  WaitForMatcher(acceptButton);
+  [SigninEarlGreyUtils waitForMatcher:acceptButton];
   [[EarlGrey selectElementWithMatcher:acceptButton] performAction:grey_tap()];
 }
 
@@ -193,30 +193,29 @@ using chrome_test_util::UnifiedConsentAddAccountButton;
     (SignOutConfirmation)signOutConfirmation {
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
-  [ChromeEarlGreyUI tapAccountsMenuButton:SignOutAccountsButton()];
+
+  id<GREYMatcher> signOutButtonMatcher;
   int confirmationLabelID = 0;
   switch (signOutConfirmation) {
-    case SignOutConfirmationManagedUser: {
-      confirmationLabelID = IDS_IOS_MANAGED_DISCONNECT_DIALOG_ACCEPT_UNITY;
-      break;
-    }
     case SignOutConfirmationNonManagedUser: {
+      signOutButtonMatcher = SignOutAccountsButton();
       confirmationLabelID = IDS_IOS_DISCONNECT_DIALOG_CONTINUE_BUTTON_MOBILE;
       break;
     }
+    case SignOutConfirmationManagedUser:
     case SignOutConfirmationNonManagedUserWithClearedData: {
+      signOutButtonMatcher = SignOutAndClearDataAccountsButton();
       confirmationLabelID = IDS_IOS_DISCONNECT_DIALOG_CONTINUE_AND_CLEAR_MOBILE;
-      break;
-    }
-    default: {
-      NOTREACHED();
       break;
     }
   }
 
+  [ChromeEarlGreyUI tapAccountsMenuButton:signOutButtonMatcher];
   id<GREYMatcher> confirmationButtonMatcher = [ChromeMatchersAppInterface
       buttonWithAccessibilityLabelID:confirmationLabelID];
-  [[EarlGrey selectElementWithMatcher:confirmationButtonMatcher]
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(confirmationButtonMatcher,
+                                          grey_not(signOutButtonMatcher), nil)]
       performAction:grey_tap()];
   // Wait until the user is signed out.
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];

@@ -15,7 +15,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/viz/host/host_frame_sink_manager.h"
@@ -115,8 +114,8 @@ void FrameSinkVideoCaptureDevice::AllocateAndStartWithReceiver(
     capturer_->ChangeTarget(target_);
   }
 
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&MouseCursorOverlayController::Start,
                      cursor_controller_->GetWeakPtr(),
                      capturer_->CreateOverlay(kMouseCursorStackingIndex),
@@ -171,8 +170,8 @@ void FrameSinkVideoCaptureDevice::StopAndDeAllocate() {
     wake_lock_.reset();
   }
 
-  base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(&MouseCursorOverlayController::Stop,
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&MouseCursorOverlayController::Stop,
                                 cursor_controller_->GetWeakPtr()));
 
   MaybeStopConsuming();
@@ -232,12 +231,8 @@ void FrameSinkVideoCaptureDevice::OnFrameCaptured(
   }
   const BufferId buffer_id = static_cast<BufferId>(index);
 
-  // Set the INTERACTIVE_CONTENT frame metadata.
-  media::VideoFrameMetadata modified_metadata;
-  modified_metadata.MergeInternalValuesFrom(info->metadata);
-  modified_metadata.SetBoolean(media::VideoFrameMetadata::INTERACTIVE_CONTENT,
-                               cursor_controller_->IsUserInteractingWithView());
-  info->metadata = modified_metadata.GetInternalValues().Clone();
+  info->metadata.interactive_content =
+      cursor_controller_->IsUserInteractingWithView();
 
   // Pass the video frame to the VideoFrameReceiver. This is done by first
   // passing the shared memory buffer handle and then notifying it that a new
@@ -271,8 +266,8 @@ void FrameSinkVideoCaptureDevice::OnLog(const std::string& message) {
     if (BrowserThread::CurrentlyOn(BrowserThread::IO)) {
       receiver_->OnLog(message);
     } else {
-      base::PostTask(
-          FROM_HERE, {BrowserThread::IO},
+      GetIOThreadTaskRunner({})->PostTask(
+          FROM_HERE,
           base::BindOnce(&media::VideoFrameReceiver::OnLog,
                          base::Unretained(receiver_.get()), message));
     }
@@ -314,8 +309,8 @@ void FrameSinkVideoCaptureDevice::CreateCapturerViaGlobalManager(
     mojo::PendingReceiver<viz::mojom::FrameSinkVideoCapturer> receiver) {
   // Send the receiver to UI thread because that's where HostFrameSinkManager
   // lives.
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(
           [](mojo::PendingReceiver<viz::mojom::FrameSinkVideoCapturer>
                  receiver) {
@@ -379,8 +374,8 @@ void FrameSinkVideoCaptureDevice::RequestWakeLock() {
 
   mojo::Remote<device::mojom::WakeLockProvider> wake_lock_provider;
   auto receiver = wake_lock_provider.BindNewPipeAndPassReceiver();
-  base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(&BindWakeLockProvider, std::move(receiver)));
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&BindWakeLockProvider, std::move(receiver)));
   wake_lock_provider->GetWakeLockWithoutContext(
       device::mojom::WakeLockType::kPreventDisplaySleep,
       device::mojom::WakeLockReason::kOther, "screen capture",

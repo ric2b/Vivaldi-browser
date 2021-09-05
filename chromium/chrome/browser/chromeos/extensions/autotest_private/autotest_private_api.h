@@ -13,6 +13,7 @@
 #include "ash/public/cpp/window_state_type.h"
 #include "ash/rotator/screen_rotation_animator_observer.h"
 #include "base/compiler_specific.h"
+#include "base/optional.h"
 #include "base/scoped_observer.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
@@ -410,6 +411,26 @@ class AutotestPrivateInstallPluginVMFunction : public ExtensionFunction {
   void OnInstallFinished(bool success);
 };
 
+class AutotestPrivateSetPluginVMPolicyFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.setPluginVMPolicy",
+                             AUTOTESTPRIVATE_SETPLUGINVMPOLICY)
+
+ private:
+  ~AutotestPrivateSetPluginVMPolicyFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateShowPluginVMInstallerFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.showPluginVMInstaller",
+                             AUTOTESTPRIVATE_SHOWPLUGINVMINSTALLER)
+
+ private:
+  ~AutotestPrivateShowPluginVMInstallerFunction() override;
+  ResponseAction Run() override;
+};
+
 class AutotestPrivateRegisterComponentFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autotestPrivate.registerComponent",
@@ -598,7 +619,7 @@ class AutotestPrivateSendAssistantTextQueryFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   // Called when the interaction finished with non-empty response.
-  void OnInteractionFinishedCallback(bool success);
+  void OnInteractionFinishedCallback(const base::Optional<std::string>& error);
 
   // Called when Assistant service fails to respond in a certain amount of
   // time. We will respond with an error.
@@ -622,7 +643,7 @@ class AutotestPrivateWaitForAssistantQueryStatusFunction
   ResponseAction Run() override;
 
   // Called when the current interaction finished with non-empty response.
-  void OnInteractionFinishedCallback(bool success);
+  void OnInteractionFinishedCallback(const base::Optional<std::string>& error);
 
   // Called when Assistant service fails to respond in a certain amount of
   // time. We will respond with an error.
@@ -1221,6 +1242,41 @@ class AutotestPrivateStopSmoothnessTrackingFunction : public ExtensionFunction {
 
  private:
   ~AutotestPrivateStopSmoothnessTrackingFunction() override;
+  ResponseAction Run() override;
+
+  void OnReportSmoothness(int smoothness);
+};
+
+class AutotestPrivateWaitForAmbientPhotoAnimationFunction
+    : public ExtensionFunction {
+ public:
+  AutotestPrivateWaitForAmbientPhotoAnimationFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.waitForAmbientPhotoAnimation",
+                             AUTOTESTPRIVATE_WAITFORAMBIENTPHOTOANIMATION)
+
+ private:
+  ~AutotestPrivateWaitForAmbientPhotoAnimationFunction() override;
+  ResponseAction Run() override;
+
+  // Called when photo transition animations completed.
+  void OnPhotoTransitionAnimationCompleted();
+
+  // Called when photo transition animations fail to finish in a certain amount
+  // of time. We will respond with an error.
+  void Timeout();
+
+  base::OneShotTimer timeout_timer_;
+};
+
+class AutotestPrivateDisableSwitchAccessDialogFunction
+    : public ExtensionFunction {
+ public:
+  AutotestPrivateDisableSwitchAccessDialogFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.disableSwitchAccessDialog",
+                             AUTOTESTPRIVATE_DISABLESWITCHACCESSDIALOG)
+
+ private:
+  ~AutotestPrivateDisableSwitchAccessDialogFunction() override;
   ResponseAction Run() override;
 };
 

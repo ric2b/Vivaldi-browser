@@ -203,4 +203,10 @@ base::Lock& Clipboard::ClipboardMapLock() {
   return *clipboard_map_lock;
 }
 
+bool Clipboard::IsMarkedByOriginatorAsConfidential() const {
+  return false;
+}
+
+void Clipboard::MarkAsConfidential() {}
+
 }  // namespace ui

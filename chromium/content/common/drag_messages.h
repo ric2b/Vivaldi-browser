@@ -12,7 +12,7 @@
 #include "content/common/drag_event_source_info.h"
 #include "content/public/common/drop_data.h"
 #include "ipc/ipc_message_macros.h"
-#include "third_party/blink/public/platform/web_drag_operation.h"
+#include "third_party/blink/public/common/page/web_drag_operation.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/vector2d.h"
@@ -28,27 +28,11 @@ IPC_MESSAGE_ROUTED5(DragMsg_TargetDragEnter,
                     blink::WebDragOperationsMask /* ops_allowed */,
                     int /* key_modifiers */)
 
-IPC_MESSAGE_ROUTED4(DragMsg_TargetDragOver,
-                    gfx::PointF /* client_pt */,
-                    gfx::PointF /* screen_pt */,
-                    blink::WebDragOperationsMask /* ops_allowed */,
-                    int /* key_modifiers */)
-
-IPC_MESSAGE_ROUTED2(DragMsg_TargetDragLeave,
-                    gfx::PointF /* client_point */,
-                    gfx::PointF /* screen_point */)
-
 IPC_MESSAGE_ROUTED4(DragMsg_TargetDrop,
                     content::DropData /* drop_data */,
                     gfx::PointF /* client_pt */,
                     gfx::PointF /* screen_pt */,
                     int /* key_modifiers */)
-
-// Notifies the renderer when and where the mouse-drag ended.
-IPC_MESSAGE_ROUTED3(DragMsg_SourceEnded,
-                    gfx::PointF /* client_pt */,
-                    gfx::PointF /* screen_pt */,
-                    blink::WebDragOperation /* drag_operation */)
 
 // Messages sent from the renderer to the browser.
 

@@ -37,16 +37,17 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       const KURL&,
       const ResourceLoaderOptions&,
       ReportingDisposition,
-      ResourceRequest::RedirectStatus) const override;
+      const base::Optional<ResourceRequest::RedirectInfo>&) const override;
   base::Optional<ResourceRequestBlockedReason> CheckCSPForRequest(
       mojom::RequestContextType,
       network::mojom::RequestDestination request_destination,
       const KURL&,
       const ResourceLoaderOptions&,
       ReportingDisposition,
+      const KURL& url_before_redirects,
       ResourceRequest::RedirectStatus) const override;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   const DetachableResourceFetcherProperties& GetResourceFetcherProperties()
       const {
@@ -77,7 +78,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   // registration endpoint.
   virtual bool SendConversionRequestInsteadOfRedirecting(
       const KURL& url,
-      ResourceRequest::RedirectStatus redirect_status,
+      const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
       ReportingDisposition reporting_disposition) const;
 
   virtual const ContentSecurityPolicy* GetContentSecurityPolicy() const = 0;
@@ -102,7 +103,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   virtual bool IsSVGImageChromeClient() const = 0;
   virtual bool ShouldBlockFetchByMixedContentCheck(
       mojom::blink::RequestContextType request_context,
-      ResourceRequest::RedirectStatus redirect_status,
+      const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
       const KURL& url,
       ReportingDisposition reporting_disposition,
       const base::Optional<String>& devtools_id) const = 0;
@@ -127,7 +128,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       const KURL&,
       const ResourceLoaderOptions&,
       ReportingDisposition,
-      ResourceRequest::RedirectStatus) const;
+      const base::Optional<ResourceRequest::RedirectInfo>& redirect_info) const;
 
   base::Optional<ResourceRequestBlockedReason> CheckCSPForRequestInternal(
       mojom::RequestContextType,
@@ -135,7 +136,8 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       const KURL&,
       const ResourceLoaderOptions&,
       ReportingDisposition,
-      ResourceRequest::RedirectStatus,
+      const KURL& url_before_redirects,
+      ResourceRequest::RedirectStatus redirect_status,
       ContentSecurityPolicy::CheckHeaderType) const;
 };
 

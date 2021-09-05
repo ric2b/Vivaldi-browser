@@ -44,6 +44,34 @@ void GetDirList(Scope* scope,
   (config_values->*accessor)().swap(result);
 }
 
+void GetFrameworksList(Scope* scope,
+                       const char* var_name,
+                       ConfigValues* config_values,
+                       std::vector<std::string>& (ConfigValues::*accessor)(),
+                       Err* err) {
+  const Value* value = scope->GetValue(var_name, true);
+  if (!value)
+    return;
+
+  std::vector<std::string> frameworks;
+  if (!ExtractListOfStringValues(*value, &frameworks, err))
+    return;
+
+  // All strings must end with ".frameworks".
+  for (const std::string& framework : frameworks) {
+    std::string_view framework_name = GetFrameworkName(framework);
+    if (framework_name.empty()) {
+      *err = Err(*value,
+                 "This frameworks value is wrong."
+                 "All listed frameworks names must not include any\n"
+                 "path component and have \".framework\" extension.");
+      return;
+    }
+  }
+
+  (config_values->*accessor)().swap(frameworks);
+}
+
 }  // namespace
 
 ConfigValuesGenerator::ConfigValuesGenerator(ConfigValues* dest_values,
@@ -105,27 +133,10 @@ void ConfigValuesGenerator::Run() {
   }
 
   // Frameworks
-  const Value* frameworks_value =
-      scope_->GetValue(variables::kFrameworks, true);
-  if (frameworks_value) {
-    std::vector<std::string> frameworks;
-    if (!ExtractListOfStringValues(*frameworks_value, &frameworks, err_))
-      return;
-
-    // All strings must end with ".frameworks".
-    for (const std::string& framework : frameworks) {
-      std::string_view framework_name = GetFrameworkName(framework);
-      if (framework_name.empty()) {
-        *err_ = Err(*frameworks_value,
-                    "This frameworks value is wrong."
-                    "All listed frameworks names must not include any\n"
-                    "path component and have \".framework\" extension.");
-        return;
-      }
-    }
-
-    config_values_->frameworks().swap(frameworks);
-  }
+  GetFrameworksList(scope_, variables::kFrameworks, config_values_,
+                    &ConfigValues::frameworks, err_);
+  GetFrameworksList(scope_, variables::kWeakFrameworks, config_values_,
+                    &ConfigValues::weak_frameworks, err_);
 
   // Precompiled headers.
   const Value* precompiled_header_value =

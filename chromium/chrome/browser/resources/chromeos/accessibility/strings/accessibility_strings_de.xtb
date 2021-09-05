@@ -63,7 +63,7 @@
 <translation id="1360699455582016846">Klicken Sie auf das Element unterhalb des Routing-Schlüssels <ph name="ROUTING_KEY_NUMBER" /></translation>
 <translation id="1377925789329510816">Hierbei handelt es sich um die letzte Überschrift. Drücken Sie "Suche + H", um zur ersten Überschrift zu gelangen, oder "Suche + Umschalttaste + H", um zur zweiten Überschrift auf dieser Seite zu springen.</translation>
 <translation id="138218114945450791">Hellblau</translation>
-<translation id="1383876407941801731">Suchen</translation>
+<translation id="1383876407941801731">Durchsuchen</translation>
 <translation id="1396114365388024581">tablst</translation>
 <translation id="1405567553485452995">Hellgrün</translation>
 <translation id="1417889266572670458">Marineblau</translation>
@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Nach rechts scrollen</translation>
 <translation id="1781173782405573156">Taste ignorieren</translation>
 <translation id="1787176709638001873">Text für Passwort bearbeiten</translation>
+<translation id="180203835522132923">Suchtaste + O, anschließend W</translation>
 <translation id="1810107444790159527">Listenfeld</translation>
 <translation id="1812527064848182527">Querformat</translation>
 <translation id="1829244130665387512">Auf Seite suchen</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Mit zwei Fingern nach links wischen</translation>
 <translation id="2998131015536248178">Vorheriges Zeichen</translation>
 <translation id="2999559350546931576">Tonhöhe verringern</translation>
+<translation id="3009352964623081324">Suchtaste + O, anschließend S. Zum Installieren, Verwalten und Personalisieren von Stimmen verwenden.</translation>
 <translation id="3014130421870723208">@bea 8pkt</translation>
 <translation id="3030432017085518523">Optionsfeld für Menüpunkt</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{Apostroph}other{# Apostrophe}}</translation>
@@ -367,7 +369,7 @@
 <translation id="3781428340399460090">Dunkelrosa</translation>
 <translation id="3783725005098956899">Protokoll anzeigen</translation>
 <translation id="3801735343383419236">Liste der Autovervollständigungen</translation>
-<translation id="3810838688059735925">Videos</translation>
+<translation id="3810838688059735925">Video</translation>
 <translation id="3813387282697781382">Helles Korallenrot</translation>
 <translation id="3816633764618089385">Nächstes Medium</translation>
 <translation id="385383972552776628">Seite "Optionen" öffnen</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Einfügen</translation>
 <translation id="4511186779140817916">Mandelweiß</translation>
 <translation id="451510441928265982">Keine vorherige Überschrift der Ebene 2</translation>
+<translation id="4515799157838123044">Inhalte im Hintergrund abdunkeln</translation>
 <translation id="4517854969512651305">Wert erhöhen</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{Schrägstrich}other{# Schrägstriche}}</translation>
 <translation id="4537277403911487429">Nächstes ähnliches Element</translation>
@@ -480,7 +483,7 @@
 <translation id="4784215347943747396">Das Gerät lässt sich über einen oder zwei Schalter steuern</translation>
 <translation id="4786285211967466855">Keine vorherige Überschrift der Ebene 1</translation>
 <translation id="4787577491510559358">Formatierung für aktuelles Element ansagen</translation>
-<translation id="479989351350248267">Suchen</translation>
+<translation id="479989351350248267">Suchtaste</translation>
 <translation id="4804818685124855865">Verbindung trennen</translation>
 <translation id="481165870889056555">Titel der aktuellen Seite ansagen</translation>
 <translation id="4815668758102003883">Blasses Türkis</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Teil</translation>
 <translation id="6637586476836377253">log</translation>
 <translation id="6657128831881431364">Statusanzeige</translation>
+<translation id="6660819301598582123">Zwölf Boxkämpfer jagen Viktor quer über den großen Sylter Deich.</translation>
 <translation id="667999046851023355">Dokument</translation>
 <translation id="6688209025607531203">Eine nicht modale Benachrichtigung</translation>
 <translation id="6689672606256159458">Dunkle Lachsfarbe</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">Keine nächste Überschrift der Ebene 5</translation>
 <translation id="6955705049214951590">Altrosa</translation>
 <translation id="696356426651109308">Zum Anfang springen</translation>
-<translation id="699159175332639490">Suchtaste + "O" + "W"</translation>
 <translation id="6994042831499278539">Glossarreferenz</translation>
 <translation id="6996566555547746822">Nächstes Kombinationsfeld</translation>
 <translation id="6997224546856374593">Beim Lesen von Großbuchstaben:</translation>
@@ -765,7 +768,7 @@
 <translation id="7137397390322864165">Lachs</translation>
 <translation id="7140168702531682811">Hochgestellt</translation>
 <translation id="7143034430156387447">Zwischen 6- und 8-Punkt-Braille wechseln</translation>
-<translation id="7143207342074048698">Verbindung wird hergestellt.</translation>
+<translation id="7143207342074048698">Verbindung...</translation>
 <translation id="7153618581592392745">Lavendel</translation>
 <translation id="7157306005867877619">Zusammenfassung</translation>
 <translation id="7161771961008409533">Pop-up-Schaltfläche</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">Beispiel</translation>
 <translation id="7439060726180460871">Verzeichnis</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Tonhöhe beim Vorlesen von Elementtypen und zitiertem, gelöschtem, fett gedrucktem, eingeklammertem oder großgeschriebenem Text verändern.</translation>
 <translation id="7491962110804786152">tab</translation>
 <translation id="7505149250476994901">Vor dem Buchstaben "Großes" ansagen</translation>
 <translation id="7518543783849163354">Um ChromeVox vorübergehend stummzuschalten, drücken Sie die Strg-Taste.</translation>

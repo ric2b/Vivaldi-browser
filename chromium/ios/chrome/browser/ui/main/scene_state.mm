@@ -102,6 +102,33 @@
   return self.controller.interfaceProvider;
 }
 
+- (void)setPresentingModalOverlay:(BOOL)presentingModalOverlay {
+  if (presentingModalOverlay) {
+    [self.observers sceneStateWillShowModalOverlay:self];
+  } else {
+    [self.observers sceneStateWillHideModalOverlay:self];
+  }
+
+  _presentingModalOverlay = presentingModalOverlay;
+}
+
+- (void)setURLContextsToOpen:(NSSet<UIOpenURLContext*>*)URLContextsToOpen {
+  if (_URLContextsToOpen == nil || URLContextsToOpen == nil) {
+    _URLContextsToOpen = URLContextsToOpen;
+  } else {
+    _URLContextsToOpen =
+        [_URLContextsToOpen setByAddingObjectsFromSet:URLContextsToOpen];
+  }
+  if (_URLContextsToOpen) {
+    [self.observers sceneState:self hasPendingURLs:_URLContextsToOpen];
+  }
+}
+
+- (void)setPendingUserActivity:(NSUserActivity*)pendingUserActivity {
+  _pendingUserActivity = pendingUserActivity;
+  [self.observers sceneState:self receivedUserActivity:pendingUserActivity];
+}
+
 #pragma mark - debug
 
 - (NSString*)description {

@@ -971,7 +971,6 @@ external/wpt/css/css-backgrounds/border-image-width-006.xht [ Skip ]
 external/wpt/css/css-backgrounds/border-image-width-007.xht [ Skip ]
 external/wpt/css/css-backgrounds/border-radius-clipping.html [ Skip ]
 external/wpt/css/css-backgrounds/css-border-radius-001.html [ Skip ]
-external/wpt/css/css-backgrounds/css-border-radius-002.html [ Skip ]
 external/wpt/css/css-backgrounds/css-box-shadow-001.html [ Skip ]
 external/wpt/css/css-backgrounds/css3-background-origin-padding-box.html [ Skip ]
 external/wpt/css/css-backgrounds/css3-background-size-001.html [ Skip ]
@@ -1383,10 +1382,10 @@ http/tests/mixed-autoupgrade/* [ Skip ]
 
 # Not expected to pass in default configuration, only virtual test suite.
 crbug.com/830901 fast/webgl/video-metadata/texImage-video-last-uploaded-metadata.html [ Skip ]
-virtual/webgl-extra-video-texture-metadata/fast/webgl/video-metadata/* [ Pass ]
+virtual/webgl-extra-video-texture-metadata/fast/webgl/video-metadata/texImage-video-last-uploaded-metadata.html [ Pass ]
 
 # Below are manual tests from web-platform-tests without automation.
-external/wpt/html/canvas/element/drawing-paths-to-the-canvas/canvas_focus_drawFocusIfNeeded_AAPI_001-manual.html [ Skip ]
+external/wpt/html/canvas/element/manual/drawing-paths-to-the-canvas/canvas_focus_drawFocusIfNeeded_AAPI_001-manual.html [ Skip ]
 external/wpt/FileAPI/FileReader/test_notreadableerrors-manual.html [ Skip ]
 external/wpt/FileAPI/FileReader/test_securityerrors-manual.html [ Skip ]
 external/wpt/FileAPI/url/url_createobjecturl_file_img-manual.html [ Skip ]
@@ -1875,8 +1874,6 @@ external/wpt/html/browsers/history/the-location-interface/allow_prototype_cycle_
 external/wpt/html/browsers/history/the-location-interface/location-prototype-setting-same-origin-domain.sub.html [ Skip ]
 external/wpt/html/browsers/origin/cross-origin-objects/cross-origin-objects-on-new-window.html [ Skip ]
 external/wpt/html/browsers/the-windowproxy-exotic-object/windowproxy-prototype-setting-same-origin-domain.sub.html [ Skip ]
-external/wpt/html/infrastructure/safe-passing-of-structured-data/shared-array-buffers/window-domain-success.https.sub.html [ Skip ]
-external/wpt/html/infrastructure/safe-passing-of-structured-data/shared-array-buffers/window-similar-but-cross-origin-success.https.sub.html [ Skip ]
 external/wpt/wasm/serialization/module/window-domain-success.sub.html [ Skip ]
 external/wpt/wasm/serialization/module/window-similar-but-cross-origin-success.sub.html [ Skip ]
 # -------------------- origin-vs-url in console messages -----------------
@@ -1906,11 +1903,11 @@ http/tests/devtools/isolated-code-cache/cross-origin-test.js [ Skip ]
 # test that feature when web-platform.test domains are being forced into
 # origin-isolation mode. Note that since we also want coverage of this feature
 # with site isolation enabled, we use a different virtual test suite than
-# not-site-per-process, named no-auto-web-platform-test-origin-isolation.
+# not-site-per-process, named no-auto-wpt-origin-isolation.
 external/wpt/origin-isolation/* [ Skip ]
 wpt_internal/origin-isolation/* [ Skip ]
-virtual/no-auto-wpt-origin-isolation/* [ Pass ]
-virtual/not-site-per-process/* [ Pass ]
+virtual/no-auto-wpt-origin-isolation/external/wpt/origin-isolation/* [ Pass ]
+virtual/no-auto-wpt-origin-isolation/wpt_internal/origin-isolation/* [ Pass ]
 # ==== Tests incompatible with the default WPT Origin Isolation end here ==^^
 
 # Tests using testRunner.useUnfortunateSynchronousResizeMode occasionally fail on Win7,
@@ -1938,6 +1935,18 @@ crbug.com/946022 [ Win7 ] media/controls/overflow-menu-hide-on-resize.html [ Ski
 crbug.com/946022 [ Win7 ] paint/invalidation/resize-iframe-text.html [ Skip ]
 crbug.com/946022 [ Win7 ] paint/invalidation/scroll/scrollbar-damage-and-full-viewport-repaint.html [ Skip ]
 crbug.com/946022 [ Win7 ] paint/invalidation/window-resize/* [ Skip ]
+
+# These text-antialias tests are flaky on Win7. Won't fix as we have test coverage on Win10.
+crbug.com/657646 [ Win7 ] virtual/text-antialias/font-weight.html [ Skip ]
+crbug.com/657646 [ Win7 ] virtual/text-antialias/textIteratorNilRenderer.html [ Skip ]
+crbug.com/657646 [ Win7 ] virtual/text-antialias/font-stretch.html [ Skip ]
+crbug.com/657646 [ Win7 ] virtual/text-antialias/sub-pixel/text-scaling-pixel.html [ Skip ]
+crbug.com/657646 [ Win7 ] virtual/text-antialias/international/bidi-listbox-atsui.html [ Skip ]
+crbug.com/657646 [ Win7 ] virtual/text-antialias/international/bidi-listbox.html [ Skip ]
+crbug.com/657646 [ Win7 ] virtual/text-antialias/international/lang-glyph-cache-separation.html [ Skip ]
+crbug.com/657646 [ Win7 ] virtual/text-antialias/font-stretch-variant.html [ Skip ]
+crbug.com/657646 [ Win7 ] virtual/text-antialias/drawBidiText.html [ Skip ]
+crbug.com/657646 [ Win7 ] virtual/text-antialias/font-features/caps-native-synthesis.html [ Skip ]
 
 # We don't plan to support this use-case in the near future.
 crbug.com/940797 external/wpt/signed-exchange/appcache/sxg-served-from-appcache.tentative.https.html [ Skip ]
@@ -1979,10 +1988,6 @@ crbug.com/626703 [ Win ] external/wpt/payment-method-basic-card/billing-address-
 
 crbug.com/626703 [ Win7 ] external/wpt/pointerevents/pointerevent_fractional_coordinates-manual.html [ Skip ]
 
-# These tests require a preferred dark color-scheme and are only run as virtual tests
-external/wpt/css/css-color-adjust/rendering/dark-color-scheme/* [ Skip ]
-virtual/dark-color-scheme/external/wpt/css/css-color-adjust/rendering/dark-color-scheme/* [ Pass ]
-
 crbug.com/626703 [ Linux ] external/wpt/payment-request/dynamically-change-shipping-options-manual.https.html [ Skip ]
 crbug.com/626703 [ Mac ] external/wpt/payment-request/dynamically-change-shipping-options-manual.https.html [ Skip ]
 crbug.com/626703 [ Win ] external/wpt/payment-request/dynamically-change-shipping-options-manual.https.html [ Skip ]
@@ -2006,8 +2011,10 @@ virtual/scalefactor200withzoom/fast/hidpi/static/* [ Pass ]
 # Skip the non-virtualized CORS-RFC1918 blocking tests (`.addressSpace` tests are fine):
 crbug.com/763830 http/tests/security/cors-rfc1918/external-to-internal-fetch.php [ Skip ]
 crbug.com/763830 http/tests/security/cors-rfc1918/external-to-internal-xhr.php [ Skip ]
-virtual/cors-rfc1918/http/tests/security/cors-rfc1918/* [ Pass ]
-virtual/omt-worker-fetch-cors-rfc1918/http/tests/security/cors-rfc1918/* [ Pass ]
+virtual/cors-rfc1918/http/tests/security/cors-rfc1918/external-to-internal-fetch.php [ Pass ]
+virtual/cors-rfc1918/http/tests/security/cors-rfc1918/external-to-internal-xhr.php [ Pass ]
+virtual/omt-worker-fetch-cors-rfc1918/http/tests/security/cors-rfc1918/external-to-internal-fetch.php [ Pass ]
+virtual/omt-worker-fetch-cors-rfc1918/http/tests/security/cors-rfc1918/external-to-internal-xhr.php [ Pass ]
 
 # Memory measurement tests are run as virtual tests.
 external/wpt/measure-memory/* [ Skip ]
@@ -2026,8 +2033,20 @@ crbug.com/961439 external/wpt/cookies/samesite/setcookie-lax.https.html?legacy-s
 crbug.com/961439 external/wpt/cookies/samesite/setcookie-navigation.https.html?legacy-samesite [ Skip ]
 crbug.com/961439 external/wpt/cookies/samesite/window-open-reload.https.html?legacy-samesite [ Skip ]
 crbug.com/961439 external/wpt/cookies/samesite/window-open.https.html?legacy-samesite [ Skip ]
+
 # Unskip the above tests for virtual/legacy-samesite.
-virtual/legacy-samesite/external/wpt/cookies/samesite/* [ Pass ]
+virtual/legacy-samesite/external/wpt/cookies/samesite/fetch.https.html?legacy-samesite [ Pass ]
+virtual/legacy-samesite/external/wpt/cookies/samesite/form-get-blank-reload.https.html?legacy-samesite [ Pass ]
+virtual/legacy-samesite/external/wpt/cookies/samesite/form-get-blank.https.html?legacy-samesite [ Pass ]
+virtual/legacy-samesite/external/wpt/cookies/samesite/form-post-blank-reload.https.html?legacy-samesite [ Pass ]
+virtual/legacy-samesite/external/wpt/cookies/samesite/form-post-blank.https.html?legacy-samesite [ Pass ]
+virtual/legacy-samesite/external/wpt/cookies/samesite/iframe-reload.https.html?legacy-samesite [ Pass ]
+virtual/legacy-samesite/external/wpt/cookies/samesite/iframe.https.html?legacy-samesite [ Pass ]
+virtual/legacy-samesite/external/wpt/cookies/samesite/img.https.html?legacy-samesite [ Pass ]
+virtual/legacy-samesite/external/wpt/cookies/samesite/setcookie-lax.https.html?legacy-samesite [ Pass ]
+virtual/legacy-samesite/external/wpt/cookies/samesite/setcookie-navigation.https.html?legacy-samesite [ Pass ]
+virtual/legacy-samesite/external/wpt/cookies/samesite/window-open-reload.https.html?legacy-samesite [ Pass ]
+virtual/legacy-samesite/external/wpt/cookies/samesite/window-open.https.html?legacy-samesite [ Pass ]
 
 # Non-legacy SameSite cookie tests do not apply when legacy SameSite behavior is in effect.
 crbug.com/961439 virtual/legacy-samesite/external/wpt/cookies/samesite/fetch.https.html [ Skip ]
@@ -2042,6 +2061,23 @@ crbug.com/961439 virtual/legacy-samesite/external/wpt/cookies/samesite/setcookie
 crbug.com/961439 virtual/legacy-samesite/external/wpt/cookies/samesite/setcookie-navigation.https.html [ Skip ]
 crbug.com/961439 virtual/legacy-samesite/external/wpt/cookies/samesite/window-open-reload.https.html [ Skip ]
 crbug.com/961439 virtual/legacy-samesite/external/wpt/cookies/samesite/window-open.https.html [ Skip ]
+
+# AppCache tests that need to run only in a virtual test suite
+# But have to live under non-virtual http/ to get http/ behavior
+crbug.com/582750 http/tests/appcache/* [ Skip ]
+virtual/appcache-origin-trial/http/tests/appcache/* [ Pass ]
+
+# AppCache is deprecated, remove these tests once it is removed.
+# These tests all timeout without appcache, so just skip them.
+crbug.com/582750 external/wpt/service-workers/service-worker/appcache-ordering-main.https.html [ Skip ]
+crbug.com/582750 external/wpt/service-workers/service-worker/claim-fetch-with-appcache.https.html [ Skip ]
+crbug.com/582750 external/wpt/storage/estimate-usage-details-application-cache.https.tentative.html [ Skip ]
+crbug.com/582750 http/tests/loading/appcache-delay/appcache-loads-subresource.html [ Skip ]
+crbug.com/582750 http/tests/security/cors-rfc1918/addressspace-document-appcache.https.html [ Skip ]
+crbug.com/582750 http/tests/security/cors-rfc1918/addressspace-document-csp-appcache.https.html [ Skip ]
+
+# These appcache tests fail differently in release and debug, so skip them.
+crbug.com/582750 http/tests/devtools/appcache/* [ Skip ]
 
 # Remove these from virtual tests when Network Error Logging is turned on by default
 crbug.com/748549 external/wpt/network-error-logging/* [ Skip ]
@@ -2073,3 +2109,13 @@ virtual/mse-1mb-buffers/http/tests/media/media-source/stream_memory_tests/medias
 # Remove from virtual tests when FreezeUserAgent is turned on by default.
 crbug.com/955620 http/tests/navigation/frozen-useragent.html [ Skip ]
 virtual/passive-fingerprinting/http/tests/navigation/frozen-useragent.html [ Pass ]
+
+# This test run under virtual suites only.
+crbug.com/1018640 external/wpt/web-bundle/wbn-from-network/* [ Skip ]
+virtual/wbn-from-network/external/wpt/web-bundle/wbn-from-network/* [ Pass ]
+crbug.com/1082020 external/wpt/web-bundle/subresource-loading/* [ Skip ]
+virtual/subresource-web-bundles/external/wpt/web-bundle/subresource-loading/* [ Pass ]
+crbug.com/626703 [ Mac10.10 ] virtual/cache-storage-sequence/external/wpt/service-workers/service-worker/fetch-event-is-reload-iframe-navigation-manual.https.html [ Skip ]
+
+# No good way to automate this test yet
+external/wpt/native-file-system/showSaveFilePicker-manual.https.html [ Skip ]

@@ -326,8 +326,7 @@ void NativeFileSystemFileWriterImpl::DoAfterWriteCheck(
     // swap file and invoke the callback.
     base::ThreadPool::PostTask(
         FROM_HERE, {base::MayBlock()},
-        base::BindOnce(base::IgnoreResult(&base::DeleteFile), swap_path,
-                       /*recursive=*/false));
+        base::BindOnce(base::GetDeleteFileCallback(), swap_path));
     std::move(callback).Run(native_file_system_error::FromStatus(
         NativeFileSystemStatus::kOperationAborted,
         "Failed to perform Safe Browsing check."));
@@ -344,8 +343,7 @@ void NativeFileSystemFileWriterImpl::DoAfterWriteCheck(
   item->frame_url = file_writer->context().url;
   item->has_user_gesture = file_writer->has_transient_user_activation_;
   file_writer->manager()->permission_context()->PerformAfterWriteChecks(
-      std::move(item), file_writer->context().process_id,
-      file_writer->context().frame_id,
+      std::move(item), file_writer->context().frame_id,
       base::BindOnce(&NativeFileSystemFileWriterImpl::DidAfterWriteCheck,
                      file_writer, swap_path, std::move(callback)));
 }
@@ -368,8 +366,7 @@ void NativeFileSystemFileWriterImpl::DidAfterWriteCheck(
   // failed.
   base::ThreadPool::PostTask(
       FROM_HERE, {base::MayBlock()},
-      base::BindOnce(base::IgnoreResult(&base::DeleteFile), swap_path,
-                     /*recursive=*/false));
+      base::BindOnce(base::GetDeleteFileCallback(), swap_path));
   std::move(callback).Run(native_file_system_error::FromStatus(
       NativeFileSystemStatus::kOperationAborted,
       "Write operation blocked by Safe Browsing."));
@@ -447,7 +444,16 @@ void NativeFileSystemFileWriterImpl::DidAnnotateFile(
 void NativeFileSystemFileWriterImpl::ComputeHashForSwapFile(
     HashCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+#if defined(OS_CHROMEOS)
+  DCHECK(swap_url().type() == storage::kFileSystemTypeNativeLocal ||
+         swap_url().type() == storage::kFileSystemTypeProvided ||
+         swap_url().type() == storage::kFileSystemTypeNativeForPlatformApp)
+      << swap_url().type();
+#else
   DCHECK_EQ(swap_url().type(), storage::kFileSystemTypeNativeLocal);
+#endif
+
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock()},
       base::BindOnce(&ReadAndComputeSHA256ChecksumAndSize, swap_url().path()),

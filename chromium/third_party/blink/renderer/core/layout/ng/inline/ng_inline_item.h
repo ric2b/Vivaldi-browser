@@ -115,6 +115,8 @@ class CORE_EXPORT NGInlineItem {
   unsigned EndOffset() const { return end_offset_; }
   unsigned Length() const { return end_offset_ - start_offset_; }
 
+  bool IsValidOffset(unsigned offset) const;
+
   TextDirection Direction() const { return DirectionFromLevel(BidiLevel()); }
   UBiDiLevel BidiLevel() const { return static_cast<UBiDiLevel>(bidi_level_); }
   // Resolved bidi level for the reordering algorithm. Certain items have
@@ -130,6 +132,9 @@ class CORE_EXPORT NGInlineItem {
 
   bool IsImage() const {
     return GetLayoutObject() && GetLayoutObject()->IsLayoutImage();
+  }
+  bool IsRubyRun() const {
+    return GetLayoutObject() && GetLayoutObject()->IsRubyRun();
   }
 
   void SetOffset(unsigned start, unsigned end) {
@@ -184,6 +189,10 @@ class CORE_EXPORT NGInlineItem {
            (Type() == NGInlineItem::kControl && type == kCollapsible));
     end_collapse_type_ = type;
   }
+  bool IsCollapsibleSpaceOnly() const {
+    return Type() == NGInlineItem::kText &&
+           end_collapse_type_ == kCollapsible && Length() == 1u;
+  }
 
   // True if this item was generated (not in DOM).
   // NGInlineItemsBuilder may generate break opportunitites to express the
@@ -229,7 +238,7 @@ class CORE_EXPORT NGInlineItem {
                                unsigned end_offset,
                                UBiDiLevel);
 
-  void AssertOffset(unsigned offset) const;
+  void AssertOffset(unsigned offset) const { DCHECK(IsValidOffset(offset)); }
   void AssertEndOffset(unsigned offset) const;
 
   String ToString() const;
@@ -257,9 +266,9 @@ class CORE_EXPORT NGInlineItem {
   friend class NGInlineNodeDataEditor;
 };
 
-inline void NGInlineItem::AssertOffset(unsigned offset) const {
-  DCHECK((offset >= start_offset_ && offset < end_offset_) ||
-         (offset == start_offset_ && start_offset_ == end_offset_));
+inline bool NGInlineItem::IsValidOffset(unsigned offset) const {
+  return (offset >= start_offset_ && offset < end_offset_) ||
+         (start_offset_ == end_offset_ && offset == start_offset_);
 }
 
 inline void NGInlineItem::AssertEndOffset(unsigned offset) const {
@@ -286,6 +295,10 @@ struct CORE_EXPORT NGInlineItemsData {
 
   // The DOM to text content offset mapping of this inline node.
   std::unique_ptr<NGOffsetMapping> offset_mapping;
+
+  bool IsValidOffset(unsigned index, unsigned offset) const {
+    return index < items.size() && items[index].IsValidOffset(offset);
+  }
 
   void AssertOffset(unsigned index, unsigned offset) const {
     items[index].AssertOffset(offset);

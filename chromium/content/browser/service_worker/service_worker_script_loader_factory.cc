@@ -8,13 +8,13 @@
 #include <string>
 #include <utility>
 
-#include "base/debug/crash_logging.h"
+#include "base/strings/string_number_conversions.h"
 #include "content/browser/service_worker/service_worker_cache_writer.h"
 #include "content/browser/service_worker/service_worker_consts.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
+#include "content/browser/service_worker/service_worker_host.h"
 #include "content/browser/service_worker/service_worker_installed_script_loader.h"
 #include "content/browser/service_worker/service_worker_new_script_loader.h"
-#include "content/browser/service_worker/service_worker_provider_host.h"
 #include "content/browser/service_worker/service_worker_updated_script_loader.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -27,16 +27,15 @@ namespace content {
 
 ServiceWorkerScriptLoaderFactory::ServiceWorkerScriptLoaderFactory(
     base::WeakPtr<ServiceWorkerContextCore> context,
-    base::WeakPtr<ServiceWorkerProviderHost> provider_host,
+    base::WeakPtr<ServiceWorkerHost> worker_host,
     scoped_refptr<network::SharedURLLoaderFactory>
         loader_factory_for_new_scripts)
     : context_(context),
-      provider_host_(provider_host),
+      worker_host_(worker_host),
       loader_factory_for_new_scripts_(
           std::move(loader_factory_for_new_scripts)) {
   DCHECK(loader_factory_for_new_scripts_ ||
-         ServiceWorkerVersion::IsInstalled(
-             provider_host_->running_hosted_version()->status()));
+         ServiceWorkerVersion::IsInstalled(worker_host_->version()->status()));
 }
 
 ServiceWorkerScriptLoaderFactory::~ServiceWorkerScriptLoaderFactory() = default;
@@ -78,8 +77,7 @@ void ServiceWorkerScriptLoaderFactory::CreateLoaderAndStart(
   //       using ServiceWorkerNewScriptLoader.
 
   // Case A and C:
-  scoped_refptr<ServiceWorkerVersion> version =
-      provider_host_->running_hosted_version();
+  scoped_refptr<ServiceWorkerVersion> version = worker_host_->version();
   int64_t resource_id =
       version->script_cache_map()->LookupResourceId(resource_request.url);
   if (resource_id != blink::mojom::kInvalidServiceWorkerResourceId) {
@@ -156,11 +154,10 @@ void ServiceWorkerScriptLoaderFactory::Update(
 
 bool ServiceWorkerScriptLoaderFactory::CheckIfScriptRequestIsValid(
     const network::ResourceRequest& resource_request) {
-  if (!context_ || !provider_host_)
+  if (!context_ || !worker_host_)
     return false;
 
-  scoped_refptr<ServiceWorkerVersion> version =
-      provider_host_->running_hosted_version();
+  scoped_refptr<ServiceWorkerVersion> version = worker_host_->version();
   if (!version)
     return false;
 
@@ -205,8 +202,7 @@ void ServiceWorkerScriptLoaderFactory::CopyScript(
       storage->CreateResponseReader(resource_id),
       storage->CreateResponseWriter(new_resource_id));
 
-  scoped_refptr<ServiceWorkerVersion> version =
-      provider_host_->running_hosted_version();
+  scoped_refptr<ServiceWorkerVersion> version = worker_host_->version();
   version->script_cache_map()->NotifyStartedCaching(url, new_resource_id);
 
   net::Error error = cache_writer_->StartCopy(
@@ -228,8 +224,7 @@ void ServiceWorkerScriptLoaderFactory::OnCopyScriptFinished(
     net::Error error) {
   int64_t resource_size = cache_writer_->bytes_written();
   cache_writer_.reset();
-  scoped_refptr<ServiceWorkerVersion> version =
-      provider_host_->running_hosted_version();
+  scoped_refptr<ServiceWorkerVersion> version = worker_host_->version();
 
   if (error != net::OK) {
     version->script_cache_map()->NotifyFinishedCaching(
@@ -273,8 +268,8 @@ void ServiceWorkerScriptLoaderFactory::OnResourceIdAssignedForNewScriptLoader(
   mojo::MakeSelfOwnedReceiver(
       ServiceWorkerNewScriptLoader::CreateAndStart(
           routing_id, request_id, options, resource_request, std::move(client),
-          provider_host_->running_hosted_version(),
-          loader_factory_for_new_scripts_, traffic_annotation, resource_id),
+          worker_host_->version(), loader_factory_for_new_scripts_,
+          traffic_annotation, resource_id),
       std::move(receiver));
 }
 

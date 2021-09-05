@@ -22,6 +22,7 @@
 
 class ArcAppListPrefs;
 class Profile;
+class GURL;
 
 namespace user_prefs {
 class PrefRegistrySyncable;
@@ -47,10 +48,17 @@ class ApkWebAppService : public KeyedService,
 
   void SetArcAppListPrefsForTesting(ArcAppListPrefs* prefs);
 
-  bool IsWebOnlyTwa(const web_app::AppId& web_app_id);
+  bool IsWebOnlyTwa(const web_app::AppId& app_id);
+
+  bool IsWebAppInstalledFromArc(const web_app::AppId& web_app_id);
+
+  base::Optional<std::string> GetPackageNameForWebApp(
+      const web_app::AppId& app_id);
+
+  base::Optional<std::string> GetPackageNameForWebApp(const GURL& url);
 
   base::Optional<std::string> GetCertificateSha256Fingerprint(
-      const web_app::AppId& web_app_id);
+      const web_app::AppId& app_id);
 
   using WebAppCallbackForTesting =
       base::OnceCallback<void(const std::string& package_name,
@@ -94,7 +102,8 @@ class ApkWebAppService : public KeyedService,
                           bool is_web_only_twa,
                           const base::Optional<std::string> sha256_fingerprint,
                           web_app::InstallResultCode code);
-  bool IsWebAppInstalledFromArc(const web_app::AppId& web_app_id);
+  void UpdatePackageInfo(const std::string& app_id,
+                         const arc::mojom::WebAppInfoPtr& web_app_info);
 
   WebAppCallbackForTesting web_app_installed_callback_;
   WebAppCallbackForTesting web_app_uninstalled_callback_;

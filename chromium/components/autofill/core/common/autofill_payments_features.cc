@@ -39,7 +39,14 @@ const base::Feature kAutofillCreditCardAblationExperiment{
 // Enables the use of platform authenticators through WebAuthn to retrieve
 // credit cards from Google payments.
 const base::Feature kAutofillCreditCardAuthentication{
-    "AutofillCreditCardAuthentication", base::FEATURE_DISABLED_BY_DEFAULT};
+  "AutofillCreditCardAuthentication",
+#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
+      // Better Auth project is fully launched on Win/Mac.
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 // When enabled, if credit card upload succeeded, the avatar icon will show a
 // highlight otherwise, the credit card icon image will be updated and if user
@@ -48,9 +55,14 @@ const base::Feature kAutofillCreditCardUploadFeedback{
     "AutofillCreditCardUploadFeedback", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, the credit card nicknames will be manageable. They can be
-// uploaded to Payments or be modified locally.
+// modified locally.
 const base::Feature kAutofillEnableCardNicknameManagement{
     "AutofillEnableCardNicknameManagement", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled, the credit card nicknames will be manageable. They can be
+// uploaded to Payments.
+const base::Feature kAutofillEnableCardNicknameUpstream{
+    "AutofillEnableCardNicknameUpstream", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, autofill payments bubbles' result will be recorded as either
 // 'accepted', 'cancelled', 'closed', 'not interacted' or 'lost focus'.
@@ -61,6 +73,11 @@ const base::Feature kAutofillEnableFixedPaymentsBubbleLogging{
 // Controls whether we show a Google-issued card in the suggestions list.
 const base::Feature kAutofillEnableGoogleIssuedCard{
     "AutofillEnableGoogleIssuedCard", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled, offer data will be retrieved during downstream and shown in
+// the dropdown list.
+const base::Feature kAutofillEnableOffersInDownstream{
+    "kAutofillEnableOffersInDownstream", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, all payments related bubbles will not be dismissed upon page
 // navigation.
@@ -83,11 +100,6 @@ const base::Feature kAutofillEnableToolbarStatusChip{
 const base::Feature kAutofillEnableVirtualCard{
     "AutofillEnableVirtualCard", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// When enabled, will remove the option to save unmasked server cards as
-// FULL_SERVER_CARDs upon successful unmask.
-const base::Feature kAutofillNoLocalSaveOnUnmaskSuccess{
-    "AutofillNoLocalSaveOnUnmaskSuccess", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // When enabled, the Save Card infobar will be dismissed by a user initiated
 // navigation other than one caused by submitted form.
 const base::Feature kAutofillSaveCardDismissOnNavigation{
@@ -109,9 +121,6 @@ const base::Feature kAutofillUpstream{"AutofillUpstream",
 
 const base::Feature kAutofillUpstreamAllowAllEmailDomains{
     "AutofillUpstreamAllowAllEmailDomains", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kAutofillUpstreamEditableExpirationDate{
-    "AutofillUpstreamEditableExpirationDate", base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool ShouldShowImprovedUserConsentForCreditCardSave() {
 #if defined(OS_WIN) || defined(OS_MACOSX) || \

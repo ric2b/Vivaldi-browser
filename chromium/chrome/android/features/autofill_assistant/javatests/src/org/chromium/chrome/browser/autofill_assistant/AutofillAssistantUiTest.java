@@ -4,14 +4,14 @@
 
 package org.chromium.chrome.browser.autofill_assistant;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.matcher.RootMatchers.withDecorView;
-import static android.support.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.RootMatchers.withDecorView;
+import static androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.is;
@@ -20,12 +20,12 @@ import static org.mockito.Mockito.inOrder;
 
 import android.content.Intent;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -55,8 +55,8 @@ import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 
@@ -132,9 +132,10 @@ public class AutofillAssistantUiTest {
                                 /* bottomSheetDelegate= */ null));
 
         // Bottom sheet is shown in the BottomSheet when creating the AssistantCoordinator.
-        ViewGroup bottomSheetContent =
-                bottomSheetController.getBottomSheetViewForTesting().findViewById(
-                        R.id.autofill_assistant);
+        View contentView = AutofillAssistantUiTestUtil.getBottomSheetController(getActivity())
+                                   .getCurrentSheetContent()
+                                   .getContentView();
+        ViewGroup bottomSheetContent = contentView.findViewById(R.id.autofill_assistant);
         Assert.assertNotNull(bottomSheetContent);
 
         // Disable bottom sheet content animations. This is a workaround for http://crbug/943483.
@@ -258,9 +259,10 @@ public class AutofillAssistantUiTest {
                                 /* bottomSheetDelegate= */ null));
 
         // Bottom sheet is shown in the BottomSheet when creating the AssistantCoordinator.
-        ViewGroup bottomSheetContent =
-                bottomSheetController.getBottomSheetViewForTesting().findViewById(
-                        R.id.autofill_assistant);
+        View contentView = AutofillAssistantUiTestUtil.getBottomSheetController(getActivity())
+                                   .getCurrentSheetContent()
+                                   .getContentView();
+        ViewGroup bottomSheetContent = contentView.findViewById(R.id.autofill_assistant);
         Assert.assertNotNull(bottomSheetContent);
 
         // Disable bottom sheet content animations. This is a workaround for http://crbug/943483.

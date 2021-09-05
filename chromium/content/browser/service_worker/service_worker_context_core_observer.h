@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "content/browser/service_worker/service_worker_info.h"
 #include "content/browser/service_worker/service_worker_version.h"
+#include "content/public/browser/global_routing_id.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_container_type.mojom.h"
 #include "url/gurl.h"
 
@@ -71,13 +72,15 @@ class ServiceWorkerContextCoreObserver {
   virtual void OnReportConsoleMessage(int64_t version_id,
                                       const ConsoleMessage& message) {}
   virtual void OnControlleeAdded(int64_t version_id,
-                                 const GURL& scope,
                                  const std::string& uuid,
                                  const ServiceWorkerClientInfo& info) {}
   virtual void OnControlleeRemoved(int64_t version_id,
-                                   const GURL& scope,
                                    const std::string& uuid) {}
   virtual void OnNoControllees(int64_t version_id, const GURL& scope) {}
+  virtual void OnControlleeNavigationCommitted(
+      int64_t version_id,
+      const std::string& uuid,
+      GlobalFrameRoutingId render_frame_host_id) {}
   // Called when the ServiceWorkerContainer.register() promise is resolved.
   //
   // This is called before the service worker registration is persisted to
@@ -92,8 +95,22 @@ class ServiceWorkerContextCoreObserver {
   // add user data to the registration.
   virtual void OnRegistrationStored(int64_t registration_id,
                                     const GURL& scope) {}
+
+  // Called after a task has been posted to delete a registration from storage.
+  // This is roughly equivalent to the same time that the promise for
+  // unregister() would be resolved. This means the live
+  // ServiceWorkerRegistration may still exist, and the deletion operator may
+  // not yet have finished.
   virtual void OnRegistrationDeleted(int64_t registration_id,
                                      const GURL& scope) {}
+
+  // Called after all registrations for |origin| are deleted from storage. There
+  // may still be live registrations for this origin in the kUninstalling or
+  // kUninstalled state.
+  //
+  // This is called after OnRegistrationDeleted(). It is called once
+  // ServiceWorkerRegistry gets confirmation that the delete operation finished.
+  virtual void OnAllRegistrationsDeletedForOrigin(const url::Origin& origin) {}
 
   // Notified when the storage corruption recovery is completed and all stored
   // data is wiped out.

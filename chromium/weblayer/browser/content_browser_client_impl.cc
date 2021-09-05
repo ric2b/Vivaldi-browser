@@ -17,6 +17,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
+#include "components/blocked_content/popup_blocker.h"
 #include "components/captive_portal/core/buildflags.h"
 #include "components/embedder_support/switches.h"
 #include "components/network_time/network_time_tracker.h"
@@ -26,20 +27,26 @@
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service_factory.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/security_interstitials/content/ssl_cert_reporter.h"
 #include "components/security_interstitials/content/ssl_error_handler.h"
 #include "components/security_interstitials/content/ssl_error_navigation_throttle.h"
+#include "components/site_isolation/pref_names.h"
+#include "components/site_isolation/preloaded_isolated_origins.h"
+#include "components/site_isolation/site_isolation_policy.h"
 #include "components/strings/grit/components_locale_settings.h"
-#include "components/variations/net/variations_http_headers.h"
+#include "components/user_prefs/user_prefs.h"
 #include "components/variations/service/variations_service.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/cors_exempt_headers.h"
+#include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/devtools_manager_delegate.h"
 #include "content/public/browser/generated_code_cache_settings.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/network_service_instance.h"
+#include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/tts_controller.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_names.mojom.h"
@@ -48,6 +55,7 @@
 #include "content/public/common/window_container_type.mojom.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "net/proxy_resolution/proxy_config.h"
+#include "net/ssl/client_cert_identity.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/network_service.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -55,6 +63,7 @@
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
@@ -62,8 +71,12 @@
 #include "weblayer/browser/browser_process.h"
 #include "weblayer/browser/download_manager_delegate_impl.h"
 #include "weblayer/browser/feature_list_creator.h"
+#include "weblayer/browser/host_content_settings_map_factory.h"
+#include "weblayer/browser/http_auth_handler_impl.h"
 #include "weblayer/browser/i18n_util.h"
 #include "weblayer/browser/navigation_controller_impl.h"
+#include "weblayer/browser/password_manager_driver_factory.h"
+#include "weblayer/browser/popup_navigation_delegate_impl.h"
 #include "weblayer/browser/profile_impl.h"
 #include "weblayer/browser/system_network_context_manager.h"
 #include "weblayer/browser/tab_impl.h"
@@ -86,19 +99,24 @@
 #include "base/android/jni_string.h"
 #include "base/android/path_utils.h"
 #include "base/bind.h"
-#include "base/task/post_task.h"
+#include "components/browser_ui/client_certificate/android/ssl_client_certificate_request.h"
 #include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/cdm/browser/media_drm_storage_impl.h"  // nogncheck
 #include "components/crash/content/browser/crash_handler_host_linux.h"
 #include "components/embedder_support/android/metrics/android_metrics_service_client.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
+#include "components/safe_browsing/core/realtime/policy_engine.h"  // nogncheck
+#include "components/safe_browsing/core/realtime/url_lookup_service.h"  // nogncheck
 #include "components/spellcheck/browser/spell_check_host_impl.h"  // nogncheck
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "ui/base/resource/resource_bundle_android.h"
+#include "weblayer/browser/android/metrics/weblayer_metrics_service_client.h"
 #include "weblayer/browser/android_descriptors.h"
+#include "weblayer/browser/browser_context_impl.h"
 #include "weblayer/browser/devtools_manager_delegate_android.h"
+#include "weblayer/browser/safe_browsing/real_time_url_lookup_service_factory.h"
 #include "weblayer/browser/safe_browsing/safe_browsing_service.h"
 #endif
 
@@ -333,8 +351,6 @@ void ContentBrowserClientImpl::ConfigureNetworkContextParams(
         proxy_config,
         net::DefineNetworkTrafficAnnotation("undefined", "Nothing here yet."));
   }
-  content::UpdateCorsExemptHeader(context_params);
-  variations::UpdateCorsExemptHeaderForVariations(context_params);
 }
 
 void ContentBrowserClientImpl::OnNetworkServiceCreated(
@@ -359,8 +375,27 @@ ContentBrowserClientImpl::CreateURLLoaderThrottles(
   if (base::FeatureList::IsEnabled(features::kWebLayerSafeBrowsing) &&
       IsSafebrowsingSupported()) {
 #if defined(OS_ANDROID)
-    result.push_back(GetSafeBrowsingService()->CreateURLLoaderThrottle(
-        wc_getter, frame_tree_node_id));
+    BrowserContextImpl* browser_context_impl =
+        static_cast<BrowserContextImpl*>(browser_context);
+    bool is_safe_browsing_enabled = safe_browsing::IsSafeBrowsingEnabled(
+        *browser_context_impl->pref_service());
+
+    if (is_safe_browsing_enabled) {
+      bool is_real_time_lookup_enabled =
+          safe_browsing::RealTimePolicyEngine::CanPerformFullURLLookup(
+              browser_context_impl->pref_service(),
+              browser_context_impl->IsOffTheRecord(),
+              FeatureListCreator::GetInstance()->variations_service());
+
+      // |url_lookup_service| is used when real time url check is enabled.
+      safe_browsing::RealTimeUrlLookupServiceBase* url_lookup_service =
+          is_real_time_lookup_enabled
+              ? RealTimeUrlLookupServiceFactory::GetForBrowserContext(
+                    browser_context)
+              : nullptr;
+      result.push_back(GetSafeBrowsingService()->CreateURLLoaderThrottle(
+          wc_getter, frame_tree_node_id, url_lookup_service));
+    }
 #endif
   }
 
@@ -410,6 +445,49 @@ bool ContentBrowserClientImpl::IsHandledURL(const GURL& url) {
   return false;
 }
 
+std::vector<url::Origin>
+ContentBrowserClientImpl::GetOriginsRequiringDedicatedProcess() {
+  return site_isolation::GetBrowserSpecificBuiltInIsolatedOrigins();
+}
+
+bool ContentBrowserClientImpl::ShouldDisableSiteIsolation() {
+  return site_isolation::SiteIsolationPolicy::
+      ShouldDisableSiteIsolationDueToMemoryThreshold();
+}
+
+std::vector<std::string>
+ContentBrowserClientImpl::GetAdditionalSiteIsolationModes() {
+  if (site_isolation::SiteIsolationPolicy::IsIsolationForPasswordSitesEnabled())
+    return {"Isolate Password Sites"};
+  return {};
+}
+
+void ContentBrowserClientImpl::PersistIsolatedOrigin(
+    content::BrowserContext* context,
+    const url::Origin& origin) {
+  DCHECK(!context->IsOffTheRecord());
+  ListPrefUpdate update(user_prefs::UserPrefs::Get(context),
+                        site_isolation::prefs::kUserTriggeredIsolatedOrigins);
+  base::ListValue* list = update.Get();
+  base::Value value(origin.Serialize());
+  if (!base::Contains(list->GetList(), value))
+    list->Append(std::move(value));
+}
+
+base::OnceClosure ContentBrowserClientImpl::SelectClientCertificate(
+    content::WebContents* web_contents,
+    net::SSLCertRequestInfo* cert_request_info,
+    net::ClientCertIdentityList client_certs,
+    std::unique_ptr<content::ClientCertificateDelegate> delegate) {
+#if defined(OS_ANDROID)
+  return browser_ui::ShowSSLClientCertificateSelector(
+      web_contents, cert_request_info, std::move(delegate));
+#else
+  delegate->ContinueWithCertificate(nullptr, nullptr);
+  return base::OnceClosure();
+#endif
+}
+
 bool ContentBrowserClientImpl::CanCreateWindow(
     content::RenderFrameHost* opener,
     const GURL& opener_url,
@@ -441,11 +519,6 @@ bool ContentBrowserClientImpl::CanCreateWindow(
     return false;
   }
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          embedder_support::kDisablePopupBlocking)) {
-    return true;
-  }
-
   // WindowOpenDisposition has a *ton* of types, but the following are really
   // the only ones that should be hit for this code path.
   switch (disposition) {
@@ -461,8 +534,27 @@ bool ContentBrowserClientImpl::CanCreateWindow(
       return false;
   }
 
-  // TODO(https://crbug.com/1019922): support proper popup blocking.
-  return user_gesture;
+  GURL popup_url(target_url);
+  web_contents->GetMainFrame()->GetProcess()->FilterURL(false, &popup_url);
+  // Use ui::PAGE_TRANSITION_LINK to match the similar logic in //chrome.
+  content::OpenURLParams params(popup_url, referrer, disposition,
+                                ui::PAGE_TRANSITION_LINK,
+                                /*is_renderer_initiated*/ true);
+  params.user_gesture = user_gesture;
+  params.initiator_origin = source_origin;
+  params.source_render_frame_id = opener->GetRoutingID();
+  params.source_render_process_id = opener->GetProcess()->GetID();
+  params.source_site_instance = opener->GetSiteInstance();
+  // The content::OpenURLParams are created just for the delegate, and do not
+  // correspond to actual params created by //content, so pass null for the
+  // |open_url_params| argument here.
+  return blocked_content::MaybeBlockPopup(
+             web_contents, &opener_top_level_frame_url,
+             std::make_unique<PopupNavigationDelegateImpl>(params, web_contents,
+                                                           opener),
+             /*open_url_params*/ nullptr, features,
+             HostContentSettingsMapFactory::GetForBrowserContext(
+                 web_contents->GetBrowserContext())) != nullptr;
 }
 
 std::vector<std::unique_ptr<content::NavigationThrottle>>
@@ -536,6 +628,13 @@ bool ContentBrowserClientImpl::BindAssociatedReceiverFromFrame(
         render_frame_host);
     return true;
   }
+  if (interface_name == autofill::mojom::PasswordManagerDriver::Name_) {
+    PasswordManagerDriverFactory::BindPasswordManagerDriver(
+        mojo::PendingAssociatedReceiver<autofill::mojom::PasswordManagerDriver>(
+            std::move(*handle)),
+        render_frame_host);
+    return true;
+  }
 
   return false;
 }
@@ -550,9 +649,8 @@ void ContentBrowserClientImpl::ExposeInterfacesToRenderer(
         mojo::MakeSelfOwnedReceiver(std::make_unique<SpellCheckHostImpl>(),
                                     std::move(receiver));
       };
-  registry->AddInterface(
-      base::BindRepeating(create_spellcheck_host),
-      base::CreateSingleThreadTaskRunner({content::BrowserThread::UI}));
+  registry->AddInterface(base::BindRepeating(create_spellcheck_host),
+                         content::GetUIThreadTaskRunner({}));
 
   if (base::FeatureList::IsEnabled(features::kWebLayerSafeBrowsing) &&
       IsSafebrowsingSupported()) {
@@ -591,6 +689,12 @@ void ContentBrowserClientImpl::RenderProcessWillLaunch(
 scoped_refptr<content::QuotaPermissionContext>
 ContentBrowserClientImpl::CreateQuotaPermissionContext() {
   return base::MakeRefCounted<permissions::QuotaPermissionContextImpl>();
+}
+
+content::TtsPlatform* ContentBrowserClientImpl::GetTtsPlatform() {
+  // TODO(sky): figure out a better way to integrate this.
+  content::TtsController::GetInstance()->SetStopSpeakingWhenHidden(true);
+  return nullptr;
 }
 
 void ContentBrowserClientImpl::CreateFeatureListAndFieldTrials() {
@@ -690,11 +794,34 @@ ContentBrowserClientImpl::GetWideColorGamutHeuristic() {
   // flinger.
   return WideColorGamutHeuristic::kUseWindow;
 }
+
+std::unique_ptr<content::LoginDelegate>
+ContentBrowserClientImpl::CreateLoginDelegate(
+    const net::AuthChallengeInfo& auth_info,
+    content::WebContents* web_contents,
+    const content::GlobalRequestID& request_id,
+    bool is_main_frame,
+    const GURL& url,
+    scoped_refptr<net::HttpResponseHeaders> response_headers,
+    bool first_auth_attempt,
+    LoginAuthRequiredCallback auth_required_callback) {
+  return std::make_unique<HttpAuthHandlerImpl>(
+      auth_info, web_contents, first_auth_attempt,
+      std::move(auth_required_callback));
+}
 #endif  // OS_ANDROID
 
 content::SpeechRecognitionManagerDelegate*
 ContentBrowserClientImpl::CreateSpeechRecognitionManagerDelegate() {
   return new WebLayerSpeechRecognitionManagerDelegate();
+}
+
+ukm::UkmService* ContentBrowserClientImpl::GetUkmService() {
+#if defined(OS_ANDROID)
+  return WebLayerMetricsServiceClient::GetInstance()->GetUkmService();
+#else
+  return nullptr;
+#endif
 }
 
 }  // namespace weblayer

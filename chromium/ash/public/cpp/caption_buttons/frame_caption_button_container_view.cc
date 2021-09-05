@@ -184,24 +184,23 @@ FrameCaptionButtonContainerView::FrameCaptionButtonContainerView(
   // Insert the buttons left to right.
   menu_button_ = new views::FrameCaptionButton(
       this, views::CAPTION_BUTTON_ICON_MENU, HTMENU);
-  menu_button_->SetAccessibleName(
-      l10n_util::GetStringUTF16(IDS_APP_ACCNAME_MENU));
+  menu_button_->SetTooltipText(l10n_util::GetStringUTF16(IDS_APP_ACCNAME_MENU));
   AddChildView(menu_button_);
 
   minimize_button_ = new views::FrameCaptionButton(
       this, views::CAPTION_BUTTON_ICON_MINIMIZE, HTMINBUTTON);
-  minimize_button_->SetAccessibleName(
+  minimize_button_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_APP_ACCNAME_MINIMIZE));
   AddChildView(minimize_button_);
 
   size_button_ = new FrameSizeButton(this, this);
-  size_button_->SetAccessibleName(
+  size_button_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_APP_ACCNAME_MAXIMIZE));
   AddChildView(size_button_);
 
   close_button_ = new views::FrameCaptionButton(
       this, views::CAPTION_BUTTON_ICON_CLOSE, HTCLOSE);
-  close_button_->SetAccessibleName(
+  close_button_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_APP_ACCNAME_CLOSE));
   AddChildView(close_button_);
 
@@ -276,6 +275,13 @@ void FrameCaptionButtonContainerView::UpdateCaptionButtonState(bool animate) {
   menu_button_->SetEnabled(model_->IsEnabled(views::CAPTION_BUTTON_ICON_MENU));
   close_button_->SetVisible(
       model_->IsVisible(views::CAPTION_BUTTON_ICON_CLOSE));
+}
+
+void FrameCaptionButtonContainerView::UpdateSizeButtonTooltip(
+    bool use_restore_frame) {
+  size_button_->SetTooltipText(
+      use_restore_frame ? l10n_util::GetStringUTF16(IDS_APP_ACCNAME_MAXIMIZE)
+                        : l10n_util::GetStringUTF16(IDS_APP_ACCNAME_RESTORE));
 }
 
 void FrameCaptionButtonContainerView::SetButtonSize(const gfx::Size& size) {

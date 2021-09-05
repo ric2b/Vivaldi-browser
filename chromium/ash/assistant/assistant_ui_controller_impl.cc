@@ -20,13 +20,15 @@
 #include "base/bind.h"
 #include "base/optional.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace ash {
 
 namespace {
+
+using chromeos::assistant::features::IsAmbientAssistantEnabled;
 
 // Toast -----------------------------------------------------------------------
 
@@ -47,33 +49,23 @@ void ShowToast(const std::string& id, int message_id) {
 // AssistantUiControllerImpl ---------------------------------------------------
 
 AssistantUiControllerImpl::AssistantUiControllerImpl() {
-  AddModelObserver(this);
+  model_.AddObserver(this);
   assistant_controller_observer_.Add(AssistantController::Get());
   highlighter_controller_observer_.Add(Shell::Get()->highlighter_controller());
   overview_controller_observer_.Add(Shell::Get()->overview_controller());
 }
 
 AssistantUiControllerImpl::~AssistantUiControllerImpl() {
-  RemoveModelObserver(this);
+  model_.RemoveObserver(this);
 }
 
 void AssistantUiControllerImpl::SetAssistant(
-    chromeos::assistant::mojom::Assistant* assistant) {
+    chromeos::assistant::Assistant* assistant) {
   assistant_ = assistant;
 }
 
 const AssistantUiModel* AssistantUiControllerImpl::GetModel() const {
   return &model_;
-}
-
-void AssistantUiControllerImpl::AddModelObserver(
-    AssistantUiModelObserver* observer) {
-  model_.AddObserver(observer);
-}
-
-void AssistantUiControllerImpl::RemoveModelObserver(
-    AssistantUiModelObserver* observer) {
-  model_.RemoveObserver(observer);
 }
 
 void AssistantUiControllerImpl::ShowUi(AssistantEntryPoint entry_point) {
@@ -101,8 +93,8 @@ void AssistantUiControllerImpl::ShowUi(AssistantEntryPoint entry_point) {
     return;
   }
 
-  if (chromeos::features::IsAmbientModeEnabled() &&
-      Shell::Get()->ambient_controller()->is_showing()) {
+  if (IsAmbientAssistantEnabled() &&
+      Shell::Get()->ambient_controller()->IsShown()) {
     model_.SetUiMode(AssistantUiMode::kAmbientUi);
     model_.SetVisible(entry_point);
     return;
@@ -175,11 +167,11 @@ void AssistantUiControllerImpl::OnHighlighterEnabledChanged(
 }
 
 void AssistantUiControllerImpl::OnAssistantControllerConstructed() {
-  AssistantInteractionController::Get()->AddModelObserver(this);
+  AssistantInteractionController::Get()->GetModel()->AddObserver(this);
 }
 
 void AssistantUiControllerImpl::OnAssistantControllerDestroying() {
-  AssistantInteractionController::Get()->RemoveModelObserver(this);
+  AssistantInteractionController::Get()->GetModel()->RemoveObserver(this);
 }
 
 void AssistantUiControllerImpl::OnOpeningUrl(const GURL& url,

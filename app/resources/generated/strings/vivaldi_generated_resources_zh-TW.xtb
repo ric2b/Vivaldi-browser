@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">（無痕模式）</translation>
 <translation id="1620510694547887537">攝影機</translation>
 <translation id="1627276047960621195">檔案描述符</translation>
-<translation id="1635033183663317347">由您的監護人安裝。</translation>
 <translation id="1682548588986054654">新增無痕視窗</translation>
 <translation id="1698122934742150150">僅適用於目前的無痕模式工作階段</translation>
 <translation id="1706625117072057435">縮放等級</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">延伸套件：<ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> 要求共用畫面</translation>
 <translation id="3711931198657368127">貼上 <ph name="URL" /> 並前往該網址 (&amp;S)</translation>
-<translation id="3725367690636977613">頁數</translation>
 <translation id="3727187387656390258">檢查跳出視窗</translation>
 <translation id="3744111561329211289">背景同步</translation>
 <translation id="3760460896538743390">檢查背景頁面(&amp;B)</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">接受群組邀請</translation>
-<translation id="4091434297613116013">張紙</translation>
 <translation id="4096508467498758490">停用開發人員模式延伸套件</translation>
 <translation id="4100839878934973028">電腦中其他程式所新增的應用程式可能會變更 Vivaldi 的運作方式。</translation>
 <translation id="4109898769411476438">在匯入前關閉瀏覽器</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">顯示控制介面(&amp;C)</translation>
 <translation id="7311079019872751559">無沙箱防護的外掛程式存取行為</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">準備列印時出現錯誤，請檢查您的印表機，然後再試一次。</translation>
 <translation id="7412226954991670867">GPU 記憶體</translation>
 <translation id="7421925624202799674">檢視網頁原始碼(&amp;V)</translation>
@@ -433,7 +429,6 @@
 <translation id="8071432093239591881">以圖片形式列印</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">管理延伸套件</translation>
-<translation id="8180239481735238521">個頁面</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
 	=1{正在執行一項下載作業}other{正在執行多項下載作業}}</translation>
 <translation id="8230134520748321204">要儲存 <ph name="ORIGIN" /> 的密碼嗎？</translation>
@@ -466,7 +461,6 @@
 <translation id="8798099450830957504">預設</translation>
 <translation id="8800004011501252845">顯示以下帳號的印表機</translation>
 <translation id="8808478386290700967">線上應用程式商店</translation>
-<translation id="8813811964357448561">張</translation>
 <translation id="8823514049557262177">複製連結文字(&amp;X)</translation>
 <translation id="8823704566850948458">建議密碼...</translation>
 <translation id="8859174528519900719">子頁框：<ph name="SUBFRAME_SITE" /></translation>

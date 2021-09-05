@@ -15269,8 +15269,8 @@ TEST_F(HttpNetworkTransactionTest, GenerateAuthToken) {
         HttpAuthChallengeTokenizer tokenizer(auth_challenge.begin(),
                                              auth_challenge.end());
         auth_handler->InitFromChallenge(&tokenizer, HttpAuth::AUTH_PROXY,
-                                        empty_ssl_info, origin,
-                                        NetLogWithSource());
+                                        empty_ssl_info, NetworkIsolationKey(),
+                                        origin, NetLogWithSource());
         auth_handler->SetGenerateExpectation(
             test_config.proxy_auth_timing == AUTH_ASYNC,
             n == 0 ? test_config.first_generate_proxy_token_rv : OK);
@@ -15284,8 +15284,8 @@ TEST_F(HttpNetworkTransactionTest, GenerateAuthToken) {
       HttpAuthChallengeTokenizer tokenizer(auth_challenge.begin(),
                                            auth_challenge.end());
       auth_handler->InitFromChallenge(&tokenizer, HttpAuth::AUTH_SERVER,
-                                      empty_ssl_info, origin,
-                                      NetLogWithSource());
+                                      empty_ssl_info, NetworkIsolationKey(),
+                                      origin, NetLogWithSource());
       auth_handler->SetGenerateExpectation(
           test_config.server_auth_timing == AUTH_ASYNC,
           test_config.first_generate_server_token_rv);
@@ -15297,8 +15297,8 @@ TEST_F(HttpNetworkTransactionTest, GenerateAuthToken) {
       std::unique_ptr<HttpAuthHandlerMock> second_handler =
           std::make_unique<HttpAuthHandlerMock>();
       second_handler->InitFromChallenge(&tokenizer, HttpAuth::AUTH_SERVER,
-                                        empty_ssl_info, origin,
-                                        NetLogWithSource());
+                                        empty_ssl_info, NetworkIsolationKey(),
+                                        origin, NetLogWithSource());
       second_handler->SetGenerateExpectation(true, OK);
       auth_factory->AddMockHandler(second_handler.release(),
                                    HttpAuth::AUTH_SERVER);
@@ -15413,7 +15413,8 @@ TEST_F(HttpNetworkTransactionTest, MultiRoundAuth) {
                                        auth_challenge.end());
   SSLInfo empty_ssl_info;
   auth_handler->InitFromChallenge(&tokenizer, HttpAuth::AUTH_SERVER,
-                                  empty_ssl_info, origin, NetLogWithSource());
+                                  empty_ssl_info, NetworkIsolationKey(), origin,
+                                  NetLogWithSource());
   auth_factory->AddMockHandler(auth_handler, HttpAuth::AUTH_SERVER);
 
   int rv = OK;
@@ -19438,21 +19439,15 @@ class HttpNetworkTransactionReportingTest : public HttpNetworkTransactionTest {
 
 TEST_F(HttpNetworkTransactionReportingTest,
        DontProcessReportToHeaderNoService) {
-  base::HistogramTester histograms;
   clear_reporting_service();
   RequestPolicy();
-  histograms.ExpectBucketCount(
-      ReportingHeaderParser::kHeaderOutcomeHistogram,
-      ReportingHeaderParser::HeaderOutcome::DISCARDED_NO_REPORTING_SERVICE, 1);
+  // No crash.
 }
 
 TEST_F(HttpNetworkTransactionReportingTest, DontProcessReportToHeaderHttp) {
-  base::HistogramTester histograms;
   url_ = "http://www.example.org/";
   RequestPolicy();
-  histograms.ExpectBucketCount(
-      ReportingHeaderParser::kHeaderOutcomeHistogram,
-      ReportingHeaderParser::HeaderOutcome::DISCARDED_INVALID_SSL_INFO, 1);
+  EXPECT_EQ(0u, reporting_context()->cache()->GetEndpointCount());
 }
 
 TEST_F(HttpNetworkTransactionReportingTest, ProcessReportToHeaderHttps) {
@@ -19469,12 +19464,9 @@ TEST_F(HttpNetworkTransactionReportingTest, ProcessReportToHeaderHttps) {
 
 TEST_F(HttpNetworkTransactionReportingTest,
        DontProcessReportToHeaderInvalidHttps) {
-  base::HistogramTester histograms;
   CertStatus cert_status = CERT_STATUS_COMMON_NAME_INVALID;
   RequestPolicy(cert_status);
-  histograms.ExpectBucketCount(
-      ReportingHeaderParser::kHeaderOutcomeHistogram,
-      ReportingHeaderParser::HeaderOutcome::DISCARDED_CERT_STATUS_ERROR, 1);
+  EXPECT_EQ(0u, reporting_context()->cache()->GetEndpointCount());
 }
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
@@ -19593,25 +19585,17 @@ class HttpNetworkTransactionNetworkErrorLoggingTest
 
 TEST_F(HttpNetworkTransactionNetworkErrorLoggingTest,
        DontProcessNelHeaderNoService) {
-  base::HistogramTester histograms;
   clear_network_error_logging_service();
   RequestPolicy();
-  histograms.ExpectBucketCount(
-      NetworkErrorLoggingService::kHeaderOutcomeHistogram,
-      NetworkErrorLoggingService::HeaderOutcome::
-          DISCARDED_NO_NETWORK_ERROR_LOGGING_SERVICE,
-      1);
+  // No crash.
 }
 
 TEST_F(HttpNetworkTransactionNetworkErrorLoggingTest,
        DontProcessNelHeaderHttp) {
-  base::HistogramTester histograms;
   url_ = "http://www.example.org/";
   request_.url = GURL(url_);
   RequestPolicy();
-  histograms.ExpectBucketCount(
-      NetworkErrorLoggingService::kHeaderOutcomeHistogram,
-      NetworkErrorLoggingService::HeaderOutcome::DISCARDED_INVALID_SSL_INFO, 1);
+  EXPECT_EQ(0u, network_error_logging_service()->headers().size());
 }
 
 // Don't set NEL policies received on a proxied connection.
@@ -19690,13 +19674,9 @@ TEST_F(HttpNetworkTransactionNetworkErrorLoggingTest, ProcessNelHeaderHttps) {
 
 TEST_F(HttpNetworkTransactionNetworkErrorLoggingTest,
        DontProcessNelHeaderInvalidHttps) {
-  base::HistogramTester histograms;
   CertStatus cert_status = CERT_STATUS_COMMON_NAME_INVALID;
   RequestPolicy(cert_status);
-  histograms.ExpectBucketCount(
-      NetworkErrorLoggingService::kHeaderOutcomeHistogram,
-      NetworkErrorLoggingService::HeaderOutcome::DISCARDED_CERT_STATUS_ERROR,
-      1);
+  EXPECT_EQ(0u, network_error_logging_service()->headers().size());
 }
 
 TEST_F(HttpNetworkTransactionNetworkErrorLoggingTest, CreateReportSuccess) {

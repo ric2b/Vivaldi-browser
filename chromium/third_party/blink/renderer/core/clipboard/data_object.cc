@@ -279,7 +279,7 @@ void DataObject::NotifyItemListChanged() const {
     observer->OnItemListChanged();
 }
 
-void DataObject::Trace(Visitor* visitor) {
+void DataObject::Trace(Visitor* visitor) const {
   visitor->Trace(item_list_);
   visitor->Trace(observers_);
   Supplementable<DataObject>::Trace(visitor);
@@ -333,7 +333,6 @@ DataObject* DataObject::Create(WebDragData data) {
 
 WebDragData DataObject::ToWebDragData() {
   WebDragData data;
-  data.Initialize();
   data.SetModifierKeyState(modifiers_);
   WebVector<WebDragData::Item> item_list(length());
 

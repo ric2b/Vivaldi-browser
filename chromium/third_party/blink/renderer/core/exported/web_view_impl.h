@@ -127,6 +127,9 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   // WebView methods:
   void DidAttachLocalMainFrame() override;
+  void DidDetachLocalMainFrame() override;
+  void DidAttachRemoteMainFrame() override;
+  void DidDetachRemoteMainFrame() override;
   void SetPrerendererClient(WebPrerendererClient*) override;
   WebSettings* GetSettings() override;
   WebString PageEncoding() const override;
@@ -158,8 +161,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
       bool zoom_into_legible_scale) override;
   double ZoomLevel() override;
   double SetZoomLevel(double) override;
-  float TextZoomFactor() override;
-  float SetTextZoomFactor(float) override;
   float PageScaleFactor() const override;
   float MinimumPageScaleFactor() const override;
   float MaximumPageScaleFactor() const override;
@@ -178,6 +179,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   WebSize ContentsPreferredMinimumSize() override;
   void UpdatePreferredSize() override;
   void EnablePreferredSizeChangedMode() override;
+  void Focus() override;
   void SetDeviceScaleFactor(float) override;
   void SetZoomFactorForDeviceScaleFactor(float) override;
   float ZoomFactorForDeviceScaleFactor() override {
@@ -199,9 +201,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   WebPagePopupImpl* GetPagePopup() const override { return page_popup_.get(); }
   void AcceptLanguagesChanged() override;
   void SetPageFrozen(bool frozen) override;
-  void PutPageIntoBackForwardCache() override;
-  void RestorePageFromBackForwardCache(
-      base::TimeTicks navigation_start) override;
   WebFrameWidget* MainFrameWidget() override;
   void SetBaseBackgroundColor(SkColor) override;
   void SetInsidePortal(bool inside_portal) override;
@@ -223,7 +222,12 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   // mojom::blink::PageBroadcast method:
   void SetPageLifecycleState(mojom::blink::PageLifecycleStatePtr state,
+                             base::Optional<base::TimeTicks> navigation_start,
                              SetPageLifecycleStateCallback callback) override;
+
+  void DispatchPagehide();
+  void DispatchPageshow(base::TimeTicks navigation_start);
+  void HookBackForwardCacheEviction(bool hook);
 
   float DefaultMinimumPageScaleFactor() const;
   float DefaultMaximumPageScaleFactor() const;
@@ -459,10 +463,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   ViewData& AsView() { return as_view_; }
   const ViewData& AsView() const { return as_view_; }
 
-  // Called while the main LocalFrame is being detached. The MainFrameImpl() is
-  // still valid until after this method is called.
-  void DidDetachLocalMainFrame();
-
   // These are temporary methods to allow WebViewFrameWidget to delegate to
   // WebViewImpl. We expect to eventually move these out.
   void SetSuppressFrameRequestsWorkaroundFor704763Only(bool);
@@ -487,10 +487,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void MouseCaptureLost();
   void SetFocus(bool enable) override;
   bool SelectionBounds(WebRect& anchor, WebRect& focus) const;
-  void DidAcquirePointerLock();
-  void DidNotAcquirePointerLock();
-  void DidLosePointerLock();
-  void ShowContextMenu(WebMenuSourceType);
   WebURL GetURLForDebugTrace();
 
   void SetPageScaleFactorAndLocation(float scale,
@@ -731,6 +727,11 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // local.
   mojo::AssociatedRemote<mojom::blink::LocalMainFrameHost>
       local_main_frame_host_remote_;
+
+  // Handle to the remote main frame host. Only valid when the MainFrame is
+  // remote.
+  mojo::AssociatedRemote<mojom::blink::RemoteMainFrameHost>
+      remote_main_frame_host_remote_;
 
   // Set when a measurement begins, reset when the measurement is taken.
   base::Optional<base::TimeTicks> update_layers_start_time_;

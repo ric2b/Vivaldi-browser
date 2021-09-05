@@ -31,15 +31,15 @@ if (generate_linker_map) {
       is_official_build,
       "Linker map files should only be generated when is_official_build = true")
   assert(current_os == "android" || current_os == "linux" ||
-             target_os == "android" || target_os == "linux",
-         "Linker map files should only be generated for Android and Linux")
+             target_os == "android" || target_os == "linux" ||
+             target_os == "chromeos",
+         "Linker map files should only be generated for Android, Linux, " +
+             "or ChromeOS.")
 }
 
 declare_args() {
-  if (is_clang) {
-    # Clang compiler version. Clang files are placed at version-dependent paths.
-    clang_version = "11.0.0"
-  }
+  # Clang compiler version. Clang files are placed at version-dependent paths.
+  clang_version = "11.0.0"
 }
 
 # Check target_os here instead of is_ios as this file is loaded for secondary

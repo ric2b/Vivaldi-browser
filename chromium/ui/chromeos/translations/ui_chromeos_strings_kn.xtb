@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">ಜಪಾನೀಸ್ ಇನ್‌ಪುಟ್ (ಅಮೇರಿಕಾ ಕೀಬೋರ್ಡ್‌ಗಾಗಿ)</translation>
 <translation id="1047956942837015229"><ph name="COUNT" /> ಐಟಂಗಳನ್ನು ಅಳಿಸಲಾಗುತ್ತಿದೆ...</translation>
 <translation id="1049926623896334335">Word ಡಾಕ್ಯುಮೆಂಟ್</translation>
+<translation id="1060368002126861100"><ph name="APP_NAME" /> ಬಳಸಿಕೊಂಡು ಫೈಲ್‌ಗಳನ್ನು ತೆರೆಯಲು, ಅವುಗಳನ್ನು ಮೊದಲು Windows ಫೈಲ್‌ಗಳ ಫೋಲ್ಡರ್‌ಗೆ ಸರಿಸಿ.</translation>
 <translation id="1062407476771304334">ಸ್ಥಾನಾಂತರಿಸು</translation>
 <translation id="1065449928621190041">ಕೆನಡಿಯನ್ ಫ್ರೆಂಚ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="1119069657431255176">Bzip2 ಸಂಕ್ಷೇಪಿಸಿದ tar ಆರ್ಕೈವ್</translation>
@@ -37,10 +38,12 @@
 <translation id="1358735829858566124">ಫೈಲ್ ಅಥವಾ ಡೈರೆಕ್ಟರಿ ಬಳಸಲಾಗುವುದಿಲ್ಲ.</translation>
 <translation id="1363028406613469049">ಟ್ರ್ಯಾಕ್</translation>
 <translation id="1378727793141957596">Google ಡ್ರೈವ್‌ಗೆ ಸುಸ್ವಾಗತ!</translation>
-<translation id="1383876407941801731">ಹುಡುಕಾಟ</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1395262318152388157">ಸೀಕ್ ಸ್ಲೈಡರ್</translation>
 <translation id="1399648040768741453">ತೆಲುಗು ಕೀಬೋರ್ಡ್ (ಫೋನೆಟಿಕ್)</translation>
 <translation id="1430915738399379752">ಮುದ್ರಿಸು</translation>
+<translation id="1433600251059882049">ಈ ಫೋಲ್ಡರ್‌ ಅನ್ನು Linux ಮತ್ತು Windows ಮೂಲಕ ಹಂಚಿಕೊಳ್ಳಲಾಗಿದೆ</translation>
+<translation id="1435838927755162558">Parallels Desktop ಮೂಲಕ ಫೋಲ್ಡರ್ ಹಂಚಿಕೊಳ್ಳಿ</translation>
 <translation id="1439494416798956626"><ph name="FOLDER_NAME" /> ಗೆ ಸರಿಸಲಾಗಿದೆ.</translation>
 <translation id="1441841714100794440">ವಿಯೆಟ್ನಾಮೀಸ್ ಕೀಬೋರ್ಡ್ (ಟೆಲೆಕ್ಸ್)</translation>
 <translation id="1455548678241328678">ನಾರ್ವೇಜಿಯನ್ ಕೀಬೋರ್ಡ್</translation>
@@ -75,6 +78,7 @@
 <translation id="1844692022597038441">ಈ ಫೈಲ್ ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ.</translation>
 <translation id="184633654410729720">ಥಾಯ್ ಕೀಬೋರ್ಡ್ (ಕೆಡ್‌ಮೇನಿ)</translation>
 <translation id="1847880352285315359">ಉಳಿಸಲಾಗಿದೆ</translation>
+<translation id="1853795129690976061">ಈ ಫೋಲ್ಡರ್ ಅನ್ನು Linux ಮೂಲಕ ಹಂಚಿಕೊಳ್ಳಲಾಗಿದೆ</translation>
 <translation id="1864756863218646478">ಫೈಲ್ ಅನ್ನು ಕಂಡುಹಿಡಿಯಲಾಗಲಿಲ್ಲ.</translation>
 <translation id="1921986354447415460">ಟರ್ಕಿಶ್-F ಕೀಬೋರ್ಡ್</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" /> ಅನ್ನು ಫಾರ್ಮ್ಯಾಟ್ ಮಾಡಲಾಗಿದೆ</translation>
@@ -120,6 +124,7 @@
 <translation id="2384596874640104496">ಸಿಂಹಳ ಕೀಬೋರ್ಡ್</translation>
 <translation id="240770291734945588"><ph name="SPACE_AVAILABLE" /> ಲಭ್ಯವಿದೆ</translation>
 <translation id="2425665904502185219">ಒಟ್ಟು ಫೈಲ್‌ನ ಗಾತ್ರ</translation>
+<translation id="2428749644083375155"><ph name="NUMBER_OF_ITEMS" /> ಐಟಂಗಳನ್ನು <ph name="FOLDER_NAME" /> ಗೆ ನಕಲಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="2448312741937722512">ಪ್ರಕಾರ</translation>
 <translation id="2453576648990281505">ಈಗಾಗಲೇ ಫೈಲ್ ಅಸ್ತಿತ್ವದಲ್ಲಿದೆ</translation>
 <translation id="2464079411014186876">ಐಸ್ ಕ್ರೀಂ</translation>
@@ -161,7 +166,7 @@
 <translation id="2925966894897775835">Sheets</translation>
 <translation id="2938685643439809023">ಮಂಗೋಲಿಯನ್</translation>
 <translation id="2942290791863759244">ಜರ್ಮನ್ ನಿಯೊ 2 ಕೀಬೋರ್ಡ್</translation>
-<translation id="2943400156390503548">ಸ್ಲೈಡ್‌ಗಳು</translation>
+<translation id="2943400156390503548">Slides</translation>
 <translation id="2943503720238418293">ಕಡಿಮೆ ಅಕ್ಷರಗಳನ್ನು ಹೊಂದಿರುವ ಹೆಸರನ್ನು ಬಳಸಿ</translation>
 <translation id="2949781154072577687"><ph name="DRIVE_NAME" /> ಅನ್ನು ಫಾರ್ಮ್ಯಾಟ್ ಮಾಡಲಾಗುತ್ತಿದೆ...</translation>
 <translation id="2951236788251446349">ಜೆಲ್ಲಿಫಿಶ್</translation>
@@ -174,6 +179,7 @@
 <translation id="303198083543495566">ಭೂಗೋಳಶಾಸ್ತ್ರ</translation>
 <translation id="3057861065630527966">ನಿಮ್ಮ ಫೋಟೋಗಳು ಮತ್ತು ವೀಡಿಯೊಗಳನ್ನು ಬ್ಯಾಕಪ್ ಮಾಡಿ</translation>
 <translation id="3064388234319122767">ಲಿಪ್ಯಂತರಣ (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Windows ಫೈಲ್‌ಗಳು</translation>
 <translation id="3078461028045006476"><ph name="EXTENSION_NAME" /> ಜೊತೆಗೆ ಹಂಚಿಕೊಳ್ಳಿ</translation>
 <translation id="3088034400796962477">ಲಿಪ್ಯಂತರಣ (salam ← سلام)</translation>
 <translation id="3116361045094675131">ಯುಕೆ ಕೀಬೋರ್ಡ್</translation>
@@ -212,6 +218,7 @@
 <translation id="3524311639100184459">ಎಚ್ಚರಿಕೆ: ಈ ಫೈಲ್‌ಗಳು ತಾತ್ಕಾಲಿಕವಾಗಿರುತ್ತವೆ ಹಾಗೂ ಡಿಸ್ಕ್ ಸ್ಥಳವನ್ನು ಮುಕ್ತಗೊಳಿಸಲು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಅವುಗಳನ್ನು ಅಳಿಸಬಹುದು.  <ph name="BEGIN_LINK" />ಇನ್ನಷ್ಟು ತಿಳಿಯಿರಿ<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">ಫೋಲ್ಡರ್</translation>
 <translation id="3549797760399244642">drive.google.com ಗೆ ಹೋಗಿ...</translation>
+<translation id="3553048479571901246"><ph name="APP_NAME" /> ಬಳಸಿಕೊಂಡು ಫೈಲ್‌ಗಳನ್ನು ತೆರೆಯಲು, ಅವುಗಳನ್ನು ಮೊದಲು Windows ಫೈಲ್‌ಗಳ ಫೋಲ್ಡರ್‌ಗೆ ನಕಲಿಸಿ.</translation>
 <translation id="357479282490346887">ಲಿಥುವಾನಿಯನ್</translation>
 <translation id="3583509704582854624">ಆಲ್ಫಾನ್ಯೂಮರಿಕ್ ಇನ್‌ಪುಟ್ (ಜಪಾನೀಸ್ ಕೀಬೋರ್ಡ್‌ಗಾಗಿ)</translation>
 <translation id="3603385196401704894">ಕೆನೆಡಿಯನ್ ಫ್ರೆಂಚ್</translation>
@@ -235,6 +242,7 @@
 <translation id="3798449238516105146">ಆವೃತ್ತಿ</translation>
 <translation id="3801082500826908679">ಫರೋಸೆ</translation>
 <translation id="3809272675881623365">ಮೊಲ</translation>
+<translation id="3810973564298564668">ನಿರ್ವಹಿಸು</translation>
 <translation id="3811494700605067549">1 ಫೈಲ್ ಆಯ್ಕೆಮಾಡಲಾಗಿದೆ</translation>
 <translation id="3815016854028376614">ಝುಯಿನ್ ಇನ್‌ಪುಟ್ ವಿಧಾನ</translation>
 <translation id="3825863595139017598">ಮೊಂಗೊಲಿಯನ್ ಕೀಬೋರ್ಡ್</translation>
@@ -255,8 +263,8 @@
 <translation id="3943857333388298514">ಅಂಟಿಸು</translation>
 <translation id="3958548648197196644">ಕಿವಿ</translation>
 <translation id="3966388904776714213">ಆಡಿಯೊ ಪ್ಲೇಯರ್</translation>
+<translation id="3984317463833596033"><ph name="FOLDER_NAME" /> ಫೋಲ್ಡರ್‌ನಲ್ಲಿರುವ ಫೈಲ್‌ಗಳನ್ನು ಮಾರ್ಪಡಿಸಲು Parallels Desktop ಗೆ ಅನುಮತಿಸಿ</translation>
 <translation id="4002066346123236978">ಶೀರ್ಷಿಕೆ</translation>
-<translation id="4065397611279318371"><ph name="APP_NAME" /> ಆ್ಯಪ್‌ಗಳೊಂದಿಗೆ ಫೈಲ್‌ಗಳನ್ನು ತೆರೆಯಲು, ಮೊದಲು ಅವುಗಳನ್ನು <ph name="SHARED_DIRECTORY_LABEL" /> ಫೋಲ್ಡರ್‌ಗೆ ಸರಿಸಿ.</translation>
 <translation id="4070370845051020638">ಕ್ಯಾಂಟೋನೀಸ್ ಇನ್‌ಪುಟ್ ವಿಧಾನ</translation>
 <translation id="4072248638558688893">ತಮಿಳು ಕೀಬೋರ್ಡ್ (ಫೋನೆಟಿಕ್)</translation>
 <translation id="4124935795427217608">ಯುನಿಕಾರ್ನ್</translation>
@@ -284,6 +292,7 @@
 <translation id="4470564870223067757">ಹಂಗುಲ್ 2 ಸೆಟ್</translation>
 <translation id="4477219268485577442">ಬಲ್ಗೇರಿಯನ್ ಫೊನೆಟಿಕ್</translation>
 <translation id="4479812471636796472">ಯುಎಸ್ ಡಿವೊರಾಕ್ ಕೀಬೋರ್ಡ್</translation>
+<translation id="4481711095103932593">ಈ ಫೋಲ್ಡರ್ ಅನ್ನು Windows ಮೂಲಕ ಹಂಚಿಕೊಳ್ಳಲಾಗಿದೆ</translation>
 <translation id="4487088045714738411">ಬೆಲ್ಜಿಯನ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="4522570452068850558">ವಿವರಗಳು</translation>
 <translation id="4552678318981539154">ಇನ್ನಷ್ಟು ಸಂಗ್ರಹಣೆಯನ್ನು ಖರೀದಿಸಿ</translation>
@@ -293,6 +302,7 @@
 <translation id="4579744207439506346">ಆಯ್ಕೆಗೆ <ph name="ENTRY_NAME" /> ಅನ್ನು ಸೇರಿಸಲಾಗಿದೆ.</translation>
 <translation id="4582497162516204941">Linux (ಬೀಟಾ) ನೊಂದಿಗೆ ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡಿ</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" /> ಗಾಗಿ ಫಲಿತಾಂಶಗಳನ್ನು ತೋರಿಸಲಾಗುತ್ತಿದೆ.</translation>
+<translation id="4603392156942865207"><ph name="FILE_NAME" /> ಅನ್ನು <ph name="FOLDER_NAME" /> ಗೆ ನಕಲಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="4631887759990505102">ಕಲೆಗಾರ</translation>
 <translation id="4656293982926141856">ಈ ಕಂಪ್ಯೂಟರ್</translation>
 <translation id="4669606053856530811"><ph name="SOURCE_NAME" /> ನ ಸದಸ್ಯರೊಂದಿಗೆ ಈ ಐಟಂಗಳನ್ನು ಹಂಚಿಕೊಳ್ಳದ ಹೊರತು ಅವರು ಪ್ರವೇಶವನ್ನು ಕಳೆದುಕೊಳ್ಳುತ್ತಾರೆ.</translation>
@@ -326,11 +336,12 @@
 <translation id="4880520557730313061">ಸ್ವಯಂ-ಹೊಂದಿಸು</translation>
 <translation id="4881695831933465202">ತೆರೆ</translation>
 <translation id="4886021172213954916">ತಮಿಳು ಕೀಬೋರ್ಡ್ (ಟೈಪ್‌ರೈಟರ್)</translation>
-<translation id="4892969127351273348"><ph name="APP_NAME" /> ಬಳಸಿ ತೆರೆಯಲು ಸಾಧ್ಯವಿಲ್ಲ</translation>
+<translation id="4900532980794411603">Parallels Desktop ಮೂಲಕ ಹಂಚಿಕೊಳ್ಳಿ</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> ಅನ್ನು ಬ್ಯಾಕಪ್ ಮಾಡಲು ಸಿದ್ಧವಾಗಿದೆ</translation>
 <translation id="4924638091161556692">ಸ್ಥಿರವಾದ</translation>
 <translation id="4935975195727477204">ಗಜಾನಿಯಾ ಹೂ</translation>
 <translation id="4943368462779413526">ಫುಟ್‌ಬಾಲ್</translation>
+<translation id="4961158930123534723">Parallels Desktop ಮೂಲಕ 1 ಫೋಲ್ಡರ್ ಅನ್ನು ಹಂಚಿಕೊಳ್ಳಲಾಗಿದೆ</translation>
 <translation id="4969785127455456148">ಆಲ್ಬಮ್</translation>
 <translation id="497244430928947428">ಮಲಯಾಳಂ ಕೀಬೋರ್ಡ್ (ಫೋನೆಟಿಕ್)</translation>
 <translation id="4973523518332075481"><ph name="MAX_LENGTH" /> ಅಕ್ಷರಗಳು ಅಥವಾ ಕಡಿಮೆ ಅಕ್ಷರಗಳನ್ನು ಹೊಂದಿರುವ ಹೆಸರನ್ನು ಬಳಸಿ</translation>
@@ -342,10 +353,12 @@
 <translation id="5010406651457630570">ಕಂಪ್ಯೂಟರ್‌ಗಳು</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">ಕಾರ್ಯಾಚರಣೆಯು ನಿರೀಕ್ಷಿಸಿದ್ದಕ್ಕಿಂತ ಹೆಚ್ಚಿನ ಕಾಲವನ್ನು ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ. ನೀವು ಅದನ್ನು ಸ್ಥಗಿತಗೊಳಿಸಲು ಬಯಸುವಿರಾ?</translation>
+<translation id="5036159836254554629">Parallels Desktop ಹಂಚಿಕೊಳ್ಳುವಿಕೆಯನ್ನು ನಿರ್ವಹಿಸಿ</translation>
 <translation id="5038625366300922036">ಇನ್ನಷ್ಟು ನೋಡಿ...</translation>
 <translation id="5061708541166515394">ಕಾಂಟ್ರಾಸ್ಟ್‌‌</translation>
 <translation id="5068919226082848014">ಪಿಜ್ಜಾ</translation>
 <translation id="5081517858322016911"><ph name="TOTAL_FILE_SIZE" /> ಗಾತ್ರದ ಫೈಲ್‍‍ಗಳನ್ನು ಅಳಿಸಲಾಗುತ್ತದೆ</translation>
+<translation id="508423945471810158"><ph name="NUMBER_OF_ITEMS" /> ಐಟಂಗಳನ್ನು <ph name="FOLDER_NAME" /> ಗೆ ಸರಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="509429900233858213">ದೋಷವೊಂದು ಕಾಣಿಸಿಕೊಂಡಿದೆ.</translation>
 <translation id="5098629044894065541">Hebrew</translation>
 <translation id="5123433949759960244">ಬ್ಯಾಸ್ಕೆಟ್‌ಬಾಲ್‌</translation>
@@ -449,6 +462,7 @@
 <translation id="6054173164583630569">ಫ್ರೆಂಚ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="6074825444536523002">Google ಫಾರ್ಮ್</translation>
 <translation id="6096979789310008754">ಹುಡುಕಾಟ ಪಠ್ಯವನ್ನು ತೆರವುಗೊಳಿಸಲಾಗಿದೆ, ಎಲ್ಲಾ ಫೈಲ್‌ಗಳು ಮತ್ತು ಫೋಲ್ಡರ್‌ಗಳನ್ನು ತೋರಿಸಲಾಗುತ್ತಿದೆ.</translation>
+<translation id="610101264611565198"><ph name="FILE_NAME" /> ಅನ್ನು <ph name="FOLDER_NAME" /> ಗೆ ಸರಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="6111770213269631447">ಲಿಪ್ಯಂತರಣ (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">ಸ್ಪೇಸ್</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" /> ಗೆ ಸರಿಸಲಾಗುತ್ತಿದೆ...</translation>
@@ -489,6 +503,7 @@
 <translation id="656398493051028875">"<ph name="FILENAME" />" ಅಳಿಸಲಾಗುತ್ತಿದೆ...</translation>
 <translation id="6581162200855843583">Google ಡ್ರೈವ್ ಲಿಂಕ್</translation>
 <translation id="6607272825297743757">ಫೈಲ್ ಮಾಹಿತಿ</translation>
+<translation id="6609332149380188670">Parallels Desktop ಮೂಲಕ <ph name="NUMBER_OF_ITEMS" /> ಫೋಲ್ಡರ್‌ಗಳನ್ನು ಹಂಚಿಕೊಳ್ಳಲಾಗಿದೆ</translation>
 <translation id="6629841649550503054"><ph name="BEGIN_LINK" />Google ಡ್ರೈವ್<ph name="END_LINK" /> ಗೆ ಎಲ್ಲವನ್ನೂ ಬ್ಯಾಕಪ್ ಮಾಡಲಾಗಿದೆ!</translation>
 <translation id="6643016212128521049">ತೆರವುಗೊಳಿಸಿ</translation>
 <translation id="6650726141019353908">ಗುಲಾಬಿ ಬಣ್ಣದ ಚಿಟ್ಟೆ</translation>
@@ -530,6 +545,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">ಸ್ಥಾಪನೆ ವಿಫಲವಾಗಿದೆ.</translation>
 <translation id="7040138676081995583">ಇದರೊಂದಿಗೆ ತೆರೆಯಿರಿ...</translation>
+<translation id="7059566040011178088"><ph name="REMAINING_TIME" /> ಗಿಂತ ಕಡಿಮೆ</translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> ಐಟಂಗಳನ್ನು ಆಯ್ಕೆಮಾಡಲಾಗಿದೆ</translation>
 <translation id="7106346894903675391">ಇನ್ನಷ್ಟು ಸಂಗ್ರಹಣೆಯನ್ನು ಖರೀದಿಸಿ...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;ಡ್ರೈವ್ ಹುಡುಕಿ&lt;/em&gt;</translation>
@@ -634,6 +650,7 @@
 <translation id="8193175696669055101">ಸಾಧನ ಮಾದರಿ</translation>
 <translation id="8208580316430297579">ಕಲಾಕೃತಿ</translation>
 <translation id="8223479393428528563">ಆಫ್‌‌ಲೈನ್ ಬಳಕೆಗಾಗಿ ಈ ಫೈಲ್ ಗಳನ್ನು ಉಳಿಸಲು, ಆನ್‌ಲೈನ್‌ಗೆ ಹಿಂತಿರುಗಲು, ಫೈಲ್‌ಗಳ ಮೇಲೆ ಬಲ ಕ್ಲಿಕ್ ಮಾಡಿ, ಮತ್ತು <ph name="OFFLINE_CHECKBOX_NAME" /> ಆಯ್ಕೆಯನ್ನು ಆರಿಸಿ.</translation>
+<translation id="8231972167769262174"><ph name="REMAINING_TIME" /> ಕುರಿತು</translation>
 <translation id="8249296373107784235">ನಿಷ್ಫಲಗೊಳಿಸು</translation>
 <translation id="8261506727792406068">ಅಳಿಸಿ</translation>
 <translation id="8269755669432358899">ಫೈಲ್‌ಗಳ ಪ್ರತಿಕ್ರಿಯೆ ಫಲಕಗಳನ್ನು ಕುಗ್ಗಿಸಿ</translation>
@@ -660,6 +677,7 @@
 <translation id="8475647382427415476">Google ಡ್ರೈವ್‌ಗೆ ಇದೀಗ "<ph name="FILENAME" />" ಅನ್ನು ಸಿಂಕ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಿಲ್ಲ. Google ಡ್ರೈವ್ ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸುತ್ತದೆ.</translation>
 <translation id="8477649328507734757">ಸ್ಪಿನ್</translation>
 <translation id="8487700953926739672">ಆಫ್‌ಲೈನ್ ಲಭ್ಯವಿದೆ</translation>
+<translation id="8490342535582768689">ನಿಮ್ಮ Google Drive ನಲ್ಲಿರುವ ಫೈಲ್‌ಗಳನ್ನು ಮಾರ್ಪಡಿಸಲು, Parallels Desktop ಗೆ ಅನುಮತಿ ನೀಡಿ. ಈ ಬದಲಾವಣೆಗಳು, ನಿಮ್ಮ ಇತರ ಸಾಧನಗಳೊಂದಿಗೆ ಸಿಂಕ್ ಆಗುತ್ತವೆ.</translation>
 <translation id="8521441079177373948">UK</translation>
 <translation id="8525306231823319788">ಪೂರ್ಣ ಪರದೆ</translation>
 <translation id="8551494947769799688">ಲ್ಯಾಟ್ವಿಯನ್</translation>

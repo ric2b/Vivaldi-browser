@@ -10,8 +10,8 @@
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
-#include "chrome/services/app_service/public/mojom/app_service.mojom.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
+#include "components/services/app_service/public/mojom/app_service.mojom.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "ui/gfx/image/image_skia.h"
 
 namespace content {
@@ -80,6 +80,14 @@ void LoadIconFromFileWithFallback(
     apps::mojom::Publisher::LoadIconCallback callback,
     base::OnceCallback<void(apps::mojom::Publisher::LoadIconCallback)>
         fallback);
+
+// Creates an icon with the specified effects from |compressed_icon_data|.
+void LoadIconFromCompressedData(
+    apps::mojom::IconCompression icon_compression,
+    int size_hint_in_dip,
+    IconEffects icon_effects,
+    const std::string& compressed_icon_data,
+    apps::mojom::Publisher::LoadIconCallback callback);
 
 // Loads an icon from a compiled-into-the-binary resource, with a resource_id
 // named IDR_XXX, for some value of XXX.

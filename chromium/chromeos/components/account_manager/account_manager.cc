@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/location.h"
@@ -93,7 +94,9 @@ class AccountManager::GaiaTokenRevocationRequest : public GaiaAuthConsumer {
         &GaiaTokenRevocationRequest::Start, weak_factory_.GetWeakPtr());
     delay_network_call_runner.Run(std::move(start_revoke_token));
   }
-
+  GaiaTokenRevocationRequest(const GaiaTokenRevocationRequest&) = delete;
+  GaiaTokenRevocationRequest& operator=(const GaiaTokenRevocationRequest&) =
+      delete;
   ~GaiaTokenRevocationRequest() override = default;
 
   // GaiaAuthConsumer overrides.
@@ -124,7 +127,6 @@ class AccountManager::GaiaTokenRevocationRequest : public GaiaAuthConsumer {
   std::string refresh_token_;
 
   base::WeakPtrFactory<GaiaTokenRevocationRequest> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(GaiaTokenRevocationRequest);
 };
 
 bool AccountManager::AccountKey::IsValid() const {
@@ -152,7 +154,7 @@ AccountManager::Observer::Observer() = default;
 
 AccountManager::Observer::~Observer() = default;
 
-AccountManager::AccountManager() {}
+AccountManager::AccountManager() = default;
 
 // static
 void AccountManager::RegisterPrefs(PrefRegistrySimple* registry) {
@@ -201,22 +203,28 @@ void AccountManager::Initialize(
     // conditions, check whether the |home_dir| parameter provided by the first
     // invocation of |Initialize| matches the one it is currently being called
     // with.
-    DCHECK_EQ(home_dir, writer_->path().DirName());
-    std::move(initialization_callback).Run();
+    DCHECK_EQ(home_dir, home_dir_);
+    RunOnInitialization(std::move(initialization_callback));
     return;
   }
 
+  home_dir_ = home_dir;
   init_state_ = InitializationState::kInProgress;
   url_loader_factory_ = url_loader_factory;
   delay_network_call_runner_ = std::move(delay_network_call_runner);
   task_runner_ = task_runner;
-  writer_ = std::make_unique<base::ImportantFileWriter>(
-      home_dir.Append(kTokensFileName), task_runner_);
+
+  base::FilePath tokens_file_path;
+  if (!home_dir_.empty()) {
+    tokens_file_path = home_dir_.Append(kTokensFileName);
+    writer_ = std::make_unique<base::ImportantFileWriter>(tokens_file_path,
+                                                          task_runner_);
+  }
   initialization_callbacks_.emplace_back(std::move(initialization_callback));
 
   PostTaskAndReplyWithResult(
       task_runner_.get(), FROM_HERE,
-      base::BindOnce(&AccountManager::LoadAccountsFromDisk, writer_->path()),
+      base::BindOnce(&AccountManager::LoadAccountsFromDisk, tokens_file_path),
       base::BindOnce(
           &AccountManager::InsertAccountsAndRunInitializationCallbacks,
           weak_factory_.GetWeakPtr(), initialization_start_time));
@@ -228,6 +236,12 @@ AccountManager::AccountMap AccountManager::LoadAccountsFromDisk(
   AccountManager::AccountMap accounts;
 
   VLOG(1) << "AccountManager::LoadTokensFromDisk";
+
+  if (tokens_file_path.empty()) {
+    RecordTokenLoadStatus(TokenLoadStatus::kSuccess);
+    return accounts;
+  }
+
   std::string token_file_data;
   bool success = base::ReadFileToStringWithMaxSize(
       tokens_file_path, &token_file_data, kTokensFileMaxSizeInBytes);
@@ -293,9 +307,8 @@ void AccountManager::InsertAccountsAndRunInitializationCallbacks(
   RecordNumAccountsMetric(accounts_.size());
 }
 
-AccountManager::~AccountManager() {
-  // AccountManager is supposed to be used as a leaky global.
-}
+// AccountManager is supposed to be used as a leaky global.
+AccountManager::~AccountManager() = default;
 
 bool AccountManager::IsInitialized() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -507,6 +520,10 @@ void AccountManager::UpsertAccountInternal(const AccountKey& account_key,
 }
 
 void AccountManager::PersistAccountsAsync() {
+  if (!writer_) {
+    return;
+  }
+
   // Schedule (immediately) a non-blocking write.
   writer_->WriteNow(std::make_unique<std::string>(GetSerializedAccounts()));
 }

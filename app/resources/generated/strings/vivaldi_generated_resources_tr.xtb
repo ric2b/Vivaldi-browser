@@ -36,7 +36,6 @@
 <translation id="1601560923496285236">Uygula</translation>
 <translation id="1603914832182249871">(Gizli Mod)</translation>
 <translation id="1620510694547887537">Kamera</translation>
-<translation id="1635033183663317347">Gözetmeniniz tarafından yüklendi.</translation>
 <translation id="1682548588986054654">Yeni Gizli Pencere</translation>
 <translation id="1698122934742150150">Sadece geçerli gizli oturum</translation>
 <translation id="1706625117072057435">Yakınlaştırma seviyeleri</translation>
@@ -122,7 +121,7 @@
 <translation id="3038675903128704560">Sitelerin bilgisayarıma erişmek için eklenti kullanmasına izin verme</translation>
 <translation id="3046910703532196514">Web Sayfası, Tamamı</translation>
 <translation id="3067198360141518313">Bu eklentiyi çalıştır</translation>
-<translation id="3080207940057008665">Bilgisayarınızdaki başka bir program, Vivaldi'un çalışma şeklini değiştirebilecek bir tema ekledi.</translation>
+<translation id="3080207940057008665">Bilgisayarınızdaki başka bir program, Vivaldi'nin çalışma şeklini değiştirebilecek bir tema ekledi.</translation>
 <translation id="3084548735795614657">Kurulum için bırak</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3127156390846601284">Bu işlem, gösterilen tüm sitelerin cihazınıza kaydettiği bütün verileri silecek. Devam etmek istiyor musunuz?</translation>
@@ -162,7 +161,6 @@
 <translation id="3678156199662914018">Eklenti: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Ekran Paylaşım İsteği</translation>
 <translation id="3711931198657368127">Ya&amp;pıştır ve <ph name="URL" /> Adresine Git</translation>
-<translation id="3725367690636977613">sayfa</translation>
 <translation id="3727187387656390258">Açılır pencereyi incele</translation>
 <translation id="3744111561329211289">Arka plan eşitlemesi</translation>
 <translation id="3760460896538743390">&amp;Arka Plan Sayfasını İncele</translation>
@@ -190,9 +188,8 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Grup için kabul et</translation>
-<translation id="4091434297613116013">yaprak</translation>
 <translation id="4096508467498758490">Geliştirici modu eklentilerini devre dışı bırakın</translation>
-<translation id="4100839878934973028">Bilgisayarınızdaki başka bir program, Vivaldi'un çalışma şeklini değiştirebilecek bir uygulama ekledi.</translation>
+<translation id="4100839878934973028">Bilgisayarınızdaki başka bir program, Vivaldi'nin çalışma şeklini değiştirebilecek bir uygulama ekledi.</translation>
 <translation id="4109898769411476438">İçe Aktarma İşleminden Önce Tarayıcıyı Kapatın</translation>
 <translation id="4115080753528843955">Bazı içerik hizmetleri korunmuş içeriğe erişimi yetkilendirmek amacıyla benzersiz tanımlayıcılar kullanır</translation>
 <translation id="4130207949184424187">Bu eklenti, Çok Amaçlı Adres Çubuğunda arama yaptığınızda gösterilen sayfayı değiştirdi.</translation>
@@ -415,7 +412,6 @@ Anahtar dosyanızı güvenli bir yerde saklayın. Eklentinizin yeni sürümlerin
 <translation id="8071432093239591881">Resim olarak yazdır</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8137559199583651773">Eklentileri yönet</translation>
-<translation id="8180239481735238521">sayfa</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {İndirme işlemi devam ediyor} other {İndirme işlemi devam ediyor}}</translation>
 <translation id="8230134520748321204"><ph name="ORIGIN" /> için parolanız kaydedilsin mi?</translation>
@@ -448,7 +444,6 @@ Anahtar dosyanızı güvenli bir yerde saklayın. Eklentinizin yeni sürümlerin
 <translation id="8798099450830957504">Varsayılan</translation>
 <translation id="8800004011501252845">Bu adresin hedefleri gösteriliyor:</translation>
 <translation id="8808478386290700967">Web Mağazası</translation>
-<translation id="8813811964357448561">kağıt</translation>
 <translation id="8823514049557262177">&amp;Bağlantı metnini kopyala</translation>
 <translation id="8823704566850948458">Parola öner...</translation>
 <translation id="8859174528519900719">Alt çerçeve: <ph name="SUBFRAME_SITE" /></translation>

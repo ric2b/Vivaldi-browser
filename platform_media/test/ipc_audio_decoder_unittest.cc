@@ -7,6 +7,7 @@
 // chromium\src\media\filters\audio_file_reader_unittest.cc.
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread.h"

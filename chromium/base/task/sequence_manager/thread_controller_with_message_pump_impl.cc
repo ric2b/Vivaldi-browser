@@ -4,14 +4,16 @@
 
 #include "base/task/sequence_manager/thread_controller_with_message_pump_impl.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "base/auto_reset.h"
-#include "base/feature_list.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_pump.h"
-#include "base/power_monitor/power_monitor.h"
 #include "base/threading/hang_watcher.h"
 #include "base/time/tick_clock.h"
-#include "base/trace_event/trace_event.h"
+#include "base/trace_event/base_tracing.h"
 #include "build/build_config.h"
 
 #if defined(OS_IOS)
@@ -24,12 +26,6 @@ namespace base {
 namespace sequence_manager {
 namespace internal {
 namespace {
-
-// Activate the power management events that affect the tasks scheduling.
-const Feature kUsePowerMonitorWithThreadController{
-    "UsePowerMonitorWithThreadController", FEATURE_DISABLED_BY_DEFAULT};
-
-bool g_use_power_monitor_with_thread_controller = false;
 
 // Returns |next_run_time| capped at 1 day from |lazy_now|. This is used to
 // mitigate https://crbug.com/850450 where some platforms are unhappy with
@@ -183,6 +179,9 @@ void ThreadControllerWithMessagePumpImpl::InitializeThreadTaskRunnerHandle() {
   main_thread_only().thread_task_runner_handle.reset();
   main_thread_only().thread_task_runner_handle =
       std::make_unique<ThreadTaskRunnerHandle>(task_runner_);
+  // When the task runner is known, bind the power manager. Power notifications
+  // are received through that sequence.
+  power_monitor_.BindToCurrentThread();
 }
 
 scoped_refptr<SingleThreadTaskRunner>
@@ -306,7 +305,12 @@ TimeDelta ThreadControllerWithMessagePumpImpl::DoWorkImpl(
   DCHECK(main_thread_only().task_source);
 
   for (int i = 0; i < main_thread_only().work_batch_size; i++) {
-    Task* task = main_thread_only().task_source->SelectNextTask();
+    const SequencedTaskSource::SelectTaskOption select_task_option =
+        power_monitor_.IsProcessInPowerSuspendState()
+            ? SequencedTaskSource::SelectTaskOption::kSkipDelayedTask
+            : SequencedTaskSource::SelectTaskOption::kDefault;
+    Task* task =
+        main_thread_only().task_source->SelectNextTask(select_task_option);
     if (!task)
       break;
 
@@ -351,8 +355,14 @@ TimeDelta ThreadControllerWithMessagePumpImpl::DoWorkImpl(
 
   work_deduplicator_.WillCheckForMoreWork();
 
-  TimeDelta do_work_delay =
-      main_thread_only().task_source->DelayTillNextTask(continuation_lazy_now);
+  // Re-check the state of the power after running tasks. An executed task may
+  // have been a power change notification.
+  const SequencedTaskSource::SelectTaskOption select_task_option =
+      power_monitor_.IsProcessInPowerSuspendState()
+          ? SequencedTaskSource::SelectTaskOption::kSkipDelayedTask
+          : SequencedTaskSource::SelectTaskOption::kDefault;
+  TimeDelta do_work_delay = main_thread_only().task_source->DelayTillNextTask(
+      continuation_lazy_now, select_task_option);
   DCHECK_GE(do_work_delay, TimeDelta());
   return do_work_delay;
 }
@@ -368,8 +378,7 @@ bool ThreadControllerWithMessagePumpImpl::DoIdleWork() {
 
   work_id_provider_->IncrementWorkId();
 #if defined(OS_WIN)
-  if (!g_use_power_monitor_with_thread_controller ||
-      !base::PowerMonitor::IsProcessSuspended()) {
+  if (!power_monitor_.IsProcessInPowerSuspendState()) {
     // Avoid calling Time::ActivateHighResolutionTimer() between
     // suspend/resume as the system hangs if we do (crbug.com/1074028).
     // OnResume() will generate a task on this thread per the
@@ -532,11 +541,5 @@ bool ThreadControllerWithMessagePumpImpl::ShouldQuitRunLoopWhenIdle() {
 }
 
 }  // namespace internal
-
-void PostFieldTrialInitialization() {
-  internal::g_use_power_monitor_with_thread_controller =
-      FeatureList::IsEnabled(internal::kUsePowerMonitorWithThreadController);
-}
-
 }  // namespace sequence_manager
 }  // namespace base

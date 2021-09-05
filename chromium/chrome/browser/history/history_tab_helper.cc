@@ -88,6 +88,7 @@ HistoryTabHelper::CreateHistoryAddPageArgs(
       navigation_handle->GetRedirectChain(),
       navigation_handle->GetPageTransition(), hidden, history::SOURCE_BROWSED,
       navigation_handle->DidReplaceEntry(), !content_suggestions_navigation,
+      navigation_handle->GetSocketAddress().address().IsPubliclyRoutable(),
       navigation_handle->IsSameDocument()
           ? base::Optional<base::string16>(
                 navigation_handle->GetWebContents()->GetTitle())
@@ -180,7 +181,8 @@ void HistoryTabHelper::DidFinishNavigation(
 // TODO(mcnee): Investigate whether the early return cases in
 // DidFinishNavigation apply to portal activation. See https://crbug.com/1072762
 void HistoryTabHelper::DidActivatePortal(
-    content::WebContents* predecessor_contents) {
+    content::WebContents* predecessor_contents,
+    base::TimeTicks activation_time) {
   history::HistoryService* hs = GetHistoryService();
   if (!hs)
     return;
@@ -201,7 +203,7 @@ void HistoryTabHelper::DidActivatePortal(
       /* redirects */ {}, ui::PAGE_TRANSITION_LINK,
       /* hidden */ false, history::SOURCE_BROWSED, did_replace_entry,
       /* consider_for_ntp_most_visited */ true,
-      last_committed_entry->GetTitle());
+      /* publicly_routable */ false, last_committed_entry->GetTitle());
   hs->AddPage(add_page_args);
 }
 

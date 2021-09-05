@@ -66,9 +66,11 @@ const int kMaxRequestStateKeysTries = 10;
 constexpr base::TimeDelta kSafeguardTimeout = base::TimeDelta::FromSeconds(90);
 
 // Maximum time to wait for time sync before forcing a decision on whether
-// Initial Enrollment should be performed.
+// Initial Enrollment should be performed. This corresponds to at least seven
+// TCP retransmissions attempts to the remote server used to update the system
+// clock.
 constexpr base::TimeDelta kSystemClockSyncWaitTimeout =
-    base::TimeDelta::FromSeconds(15);
+    base::TimeDelta::FromSeconds(45);
 
 // A callback that will be invoked when the system clock has been synchronized,
 // or if system clock synchronization has failed.
@@ -323,6 +325,9 @@ const char AutoEnrollmentController::kInitialEnrollmentNever[] = "never";
 const char AutoEnrollmentController::kInitialEnrollmentOfficialBuild[] =
     "official";
 
+const char AutoEnrollmentController::kEnablePsmAlways[] = "always";
+const char AutoEnrollmentController::kEnablePsmNever[] = "never";
+
 // static
 bool AutoEnrollmentController::IsFREEnabled() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -366,6 +371,26 @@ bool AutoEnrollmentController::IsInitialEnrollmentEnabled() {
     return false;
 
   LOG(FATAL) << "Unknown Initial Enrollment mode: " << command_line_mode << ".";
+  return false;
+}
+
+// static
+bool AutoEnrollmentController::IsPrivateSetMembershipEnabled() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+
+  if (!command_line->HasSwitch(switches::kEnterpriseEnablePrivateSetMembership))
+    return false;  // Disabled by default.
+
+  std::string command_line_mode = command_line->GetSwitchValueASCII(
+      switches::kEnterpriseEnablePrivateSetMembership);
+  if (command_line_mode.empty() || command_line_mode == kEnablePsmAlways)
+    return true;
+
+  if (command_line_mode == kEnablePsmNever) {
+    return false;
+  }
+
+  LOG(FATAL) << "Unknown PSM enablement mode: " << command_line_mode << ".";
   return false;
 }
 
@@ -491,41 +516,43 @@ void AutoEnrollmentController::SetAutoEnrollmentClientFactoryForTesting(
   testing_auto_enrollment_client_factory_ = auto_enrollment_client_factory;
 }
 
-AutoEnrollmentController::InitialEnrollmentRequirement
-AutoEnrollmentController::GetInitialEnrollmentRequirement() {
+AutoEnrollmentController::InitialStateDeterminationRequirement
+AutoEnrollmentController::GetInitialStateDeterminationRequirement() {
   system::StatisticsProvider* provider =
       system::StatisticsProvider::GetInstance();
   system::FactoryPingEmbargoState embargo_state =
-      system::GetFactoryPingEmbargoState(provider);
+      system::GetEnterpriseManagementPingEmbargoState(provider);
   if (provider->GetEnterpriseMachineID().empty()) {
     LOG(WARNING)
-        << "Skip Initial Enrollment Check due to missing serial number.";
+        << "Skip Initial State Determination due to missing serial number.";
     RecordInitialEnrollmentRequirement(
         InitialEnrollmentRequirementHistogramValue::
             kNotRequiredSerialNumberMissing,
         system_clock_sync_state_);
-    return InitialEnrollmentRequirement::kNotRequired;
+    return InitialStateDeterminationRequirement::kNotRequired;
   }
 
   std::string rlz_brand_code;
   const bool rlz_brand_code_found =
       provider->GetMachineStatistic(system::kRlzBrandCodeKey, &rlz_brand_code);
   if (!rlz_brand_code_found || rlz_brand_code.empty()) {
-    LOG(WARNING) << "Skip Initial Enrollment Check due to missing brand code.";
+    LOG(WARNING)
+        << "Skip Initial State Determination due to missing brand code.";
     RecordInitialEnrollmentRequirement(
         InitialEnrollmentRequirementHistogramValue::
             kNotRequiredBrandCodeMissing,
         system_clock_sync_state_);
-    return InitialEnrollmentRequirement::kNotRequired;
+    return InitialStateDeterminationRequirement::kNotRequired;
   }
 
   if (system_clock_sync_state_ == SystemClockSyncState::kCanWaitForSync &&
       (embargo_state == system::FactoryPingEmbargoState::kInvalid ||
        embargo_state == system::FactoryPingEmbargoState::kNotPassed)) {
     // Wait for the system clock to become synchronized and check again.
-    LOG(WARNING) << "Skip Initial Enrollment Check due to out of sync clock.";
+    LOG(WARNING)
+        << "Skip Initial State Determination due to out of sync clock.";
     system_clock_sync_wait_requested_ = true;
-    return InitialEnrollmentRequirement::kNotRequired;
+    return InitialStateDeterminationRequirement::kNotRequired;
   }
 
   const char* system_clock_log_info =
@@ -534,30 +561,30 @@ AutoEnrollmentController::GetInitialEnrollmentRequirement() {
           : "system clock sync failed";
   if (embargo_state == system::FactoryPingEmbargoState::kInvalid) {
     LOG(WARNING)
-        << "Skip Initial Enrollment Check due to invalid embargo date ("
+        << "Skip Initial State Determination due to invalid embargo date ("
         << system_clock_log_info << ").";
     RecordInitialEnrollmentRequirement(
         InitialEnrollmentRequirementHistogramValue::
             kNotRequiredEmbargoEndDateInvalid,
         system_clock_sync_state_);
-    return InitialEnrollmentRequirement::kNotRequired;
+    return InitialStateDeterminationRequirement::kNotRequired;
   }
   if (embargo_state == system::FactoryPingEmbargoState::kNotPassed) {
-    LOG(WARNING) << "Skip Initial Enrollment Check because the device is in "
+    LOG(WARNING) << "Skip Initial State Determination because the device is in "
                     "the embargo period  ("
                  << system_clock_log_info << ").";
     RecordInitialEnrollmentRequirement(
         InitialEnrollmentRequirementHistogramValue::kNotRequiredInEmbargoPeriod,
         system_clock_sync_state_);
-    return InitialEnrollmentRequirement::kNotRequired;
+    return InitialStateDeterminationRequirement::kNotRequired;
   }
 
   RecordInitialEnrollmentRequirement(
       InitialEnrollmentRequirementHistogramValue::kRequired,
       system_clock_sync_state_);
 
-  VLOG(1) << "Initial Enrollment Check required.";
-  return InitialEnrollmentRequirement::kRequired;
+  VLOG(1) << "Initial State Determination required.";
+  return InitialStateDeterminationRequirement::kRequired;
 }
 
 void AutoEnrollmentController::DetermineAutoEnrollmentCheckType() {
@@ -576,28 +603,28 @@ void AutoEnrollmentController::DetermineAutoEnrollmentCheckType() {
     return;
   }
 
-  // Skip everything if the device was in consumer mode previously.
+  // Determine whether to do an FRE check or an initial state determination.
+  // FRE has precedence since managed devices must go through an FRE check.
   fre_requirement_ = GetFRERequirement();
   VLOG(1) << FRERequirementToString(fre_requirement_);
-  if (fre_requirement_ == FRERequirement::kExplicitlyNotRequired) {
-    LOGIN_LOG(EVENT) << "Auto-enrollment disabled: VPD.";
-    auto_enrollment_check_type_ = AutoEnrollmentCheckType::kNone;
-    return;
-  }
 
   if (ShouldDoFRECheck(command_line, fre_requirement_)) {
     // FRE has precedence over Initial Enrollment.
     LOGIN_LOG(EVENT) << "Proceeding with FRE check.";
-    auto_enrollment_check_type_ = AutoEnrollmentCheckType::kFRE;
+    auto_enrollment_check_type_ = AutoEnrollmentCheckType::kForcedReEnrollment;
     return;
   }
 
+  // The device is in consumer mode, check whether an initial state
+  // determination is in order.
   if (ShouldDoInitialEnrollmentCheck()) {
-    LOGIN_LOG(EVENT) << "Proceeding with Initial Enrollment check.";
-    auto_enrollment_check_type_ = AutoEnrollmentCheckType::kInitialEnrollment;
+    LOGIN_LOG(EVENT) << "Proceeding with Initial State Determination.";
+    auto_enrollment_check_type_ =
+        AutoEnrollmentCheckType::kInitialStateDetermination;
     return;
   }
 
+  // Neither FRE nor initial state determination checks are needed.
   auto_enrollment_check_type_ = AutoEnrollmentCheckType::kNone;
 }
 
@@ -618,6 +645,12 @@ bool AutoEnrollmentController::ShouldDoFRECheck(
     return false;
   }
 
+  // Skip FRE check if explicitly not required to check.
+  if (fre_requirement == FRERequirement::kExplicitlyNotRequired) {
+    LOGIN_LOG(EVENT) << "FRE disabled for device in consumer mode.";
+    return false;
+  }
+
   // Skip FRE check if it is not required according to the device state.
   if (fre_requirement == FRERequirement::kNotRequired)
     return false;
@@ -627,18 +660,18 @@ bool AutoEnrollmentController::ShouldDoFRECheck(
 
 // static
 bool AutoEnrollmentController::ShouldDoInitialEnrollmentCheck() {
-  // Skip Initial Enrollment check if it is not enabled according to
+  // Skip Initial State Determination if it is not enabled according to
   // command-line flags.
   if (!IsInitialEnrollmentEnabled()) {
     VLOG(1) << "Initial Enrollment is disabled.";
     return false;
   }
 
-  // Skip Initial Enrollment check if it is not required according to the
+  // Skip Initial State Determination if it is not required according to the
   // device state.
-  if (GetInitialEnrollmentRequirement() ==
-      InitialEnrollmentRequirement::kNotRequired) {
-    VLOG(1) << "Initial Enrollment Check is not required.";
+  if (GetInitialStateDeterminationRequirement() ==
+      InitialStateDeterminationRequirement::kNotRequired) {
+    VLOG(1) << "Initial State Determination is not required.";
     return false;
   }
 
@@ -650,7 +683,7 @@ void AutoEnrollmentController::OnOwnershipStatusCheckDone(
   switch (status) {
     case DeviceSettingsService::OWNERSHIP_NONE:
       switch (auto_enrollment_check_type_) {
-        case AutoEnrollmentCheckType::kFRE:
+        case AutoEnrollmentCheckType::kForcedReEnrollment:
           ++request_state_keys_tries_;
           // For FRE, request state keys first.
           g_browser_process->platform_part()
@@ -660,7 +693,7 @@ void AutoEnrollmentController::OnOwnershipStatusCheckDone(
                   base::BindOnce(&AutoEnrollmentController::StartClientForFRE,
                                  client_start_weak_factory_.GetWeakPtr()));
           break;
-        case AutoEnrollmentCheckType::kInitialEnrollment:
+        case AutoEnrollmentCheckType::kInitialStateDetermination:
           StartClientForInitialEnrollment();
           break;
         case AutoEnrollmentCheckType::kNone:
@@ -756,9 +789,9 @@ void AutoEnrollmentController::StartClientForInitialEnrollment() {
   std::string rlz_brand_code;
   const bool rlz_brand_code_found =
       provider->GetMachineStatistic(system::kRlzBrandCodeKey, &rlz_brand_code);
-  // The initial enrollment check should not be started if the serial number or
-  // brand code are missing. This is ensured in
-  // |GetInitialEnrollmentRequirement|.
+  // The Initial State Determination should not be started if the serial number
+  // or brand code are missing. This is ensured in
+  // |GetInitialStateDeterminationRequirement|.
   CHECK(!serial_number.empty() && rlz_brand_code_found &&
         !rlz_brand_code.empty());
 

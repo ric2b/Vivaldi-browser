@@ -87,7 +87,7 @@ class PLATFORM_EXPORT ResourceFetcher
    public:
     virtual ~LoaderFactory() = default;
 
-    virtual void Trace(Visitor*) {}
+    virtual void Trace(Visitor*) const {}
 
     // Create a WebURLLoader for given the request information and task runner.
     virtual std::unique_ptr<WebURLLoader> CreateURLLoader(
@@ -103,7 +103,7 @@ class PLATFORM_EXPORT ResourceFetcher
   // in ResourceFetcherInit to ensure correctness of this ResourceFetcher.
   explicit ResourceFetcher(const ResourceFetcherInit&);
   virtual ~ResourceFetcher();
-  virtual void Trace(Visitor*);
+  virtual void Trace(Visitor*) const;
 
   // - This function returns the same object throughout this fetcher's
   //   entire life.
@@ -198,7 +198,7 @@ class PLATFORM_EXPORT ResourceFetcher
 
   int CountPreloads() const { return preloads_.size(); }
   void ClearPreloads(ClearPreloadsPolicy = kClearAllPreloads);
-  Vector<KURL> GetUrlsOfUnusedPreloads();
+  void ScheduleWarnUnusedPreloads();
 
   MHTMLArchive* Archive() const { return archive_.Get(); }
 
@@ -387,6 +387,8 @@ class PLATFORM_EXPORT ResourceFetcher
   void ScheduleStaleRevalidate(Resource* stale_resource);
   void RevalidateStaleResource(Resource* stale_resource);
 
+  void WarnUnusedPreloads();
+
   Member<DetachableResourceFetcherProperties> properties_;
   Member<ResourceLoadObserver> resource_load_observer_;
   Member<FetchContext> context_;
@@ -411,6 +413,8 @@ class PLATFORM_EXPORT ResourceFetcher
   Member<MHTMLArchive> archive_;
 
   TaskRunnerTimer<ResourceFetcher> resource_timing_report_timer_;
+
+  TaskHandle unused_preloads_timer_;
 
   using ResourceTimingInfoMap =
       HeapHashMap<Member<Resource>, scoped_refptr<ResourceTimingInfo>>;

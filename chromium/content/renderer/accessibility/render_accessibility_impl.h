@@ -12,6 +12,8 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/ax_content_node_data.h"
+#include "content/common/ax_content_tree_data.h"
+#include "content/common/ax_content_tree_update.h"
 #include "content/common/content_export.h"
 #include "content/common/render_accessibility.mojom.h"
 #include "content/public/renderer/plugin_ax_tree_source.h"
@@ -35,6 +37,10 @@ namespace ui {
 struct AXActionData;
 class AXActionTarget;
 struct AXEvent;
+}
+
+namespace ukm {
+class MojoUkmRecorder;
 }
 
 namespace content {
@@ -115,14 +121,16 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   int GenerateAXID() override;
   void SetPluginTreeSource(PluginAXTreeSource* source) override;
   void OnPluginRootNodeUpdated() override;
+  void ShowPluginContextMenu() override;
 
   // RenderFrameObserver implementation.
   void DidCreateNewDocument() override;
-  void DidCommitProvisionalLoad(bool is_same_document_navigation,
-                                ui::PageTransition transition) override;
+  void DidCommitProvisionalLoad(ui::PageTransition transition) override;
   void AccessibilityModeChanged(const ui::AXMode& mode) override;
 
-  void HitTest(const ui::AXActionData& action_data,
+  void HitTest(const gfx::Point& point,
+               ax::mojom::Event event_to_fire,
+               int request_id,
                mojom::RenderAccessibility::HitTestCallback callback);
   void PerformAction(const ui::AXActionData& data);
   void Reset(int32_t reset_token);
@@ -151,8 +159,25 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
 
  private:
   struct DirtyObject {
+    DirtyObject();
+    DirtyObject(const DirtyObject& other);
+    ~DirtyObject();
     blink::WebAXObject obj;
     ax::mojom::EventFrom event_from;
+    std::vector<ui::AXEventIntent> event_intents;
+  };
+
+  enum class EventScheduleMode { kDeferEvents, kProcessEventsImmediately };
+
+  enum class EventScheduleStatus {
+    // Events have been scheduled with a delay, but have not been sent.
+    kScheduledDeferred,
+    // Events have been scheduled without a delay, but have not been sent.
+    kScheduledImmediate,
+    // Events have been sent, waiting for callback.
+    kWaitingForAck,
+    // Events are not scheduled and we are not waiting for an ack.
+    kNotWaiting
   };
 
   // Callback that will be called from the browser upon handling the message
@@ -183,13 +208,27 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
 
   void Scroll(const ui::AXActionTarget* target,
               ax::mojom::Action scroll_action);
-  void ScheduleSendAccessibilityEventsIfNeeded();
-  void RecordImageMetrics(AXContentTreeUpdate* update);
+
+  // Whether an event should mark its associated object dirty.
+  bool ShouldSerializeNodeForEvent(const blink::WebAXObject& obj,
+                                   const ui::AXEvent& event) const;
+
+  // If we are calling this from a task, scheduling is allowed even if there is
+  // a running task
+  void ScheduleSendPendingAccessibilityEvents(
+      bool scheduling_from_task = false);
   void AddImageAnnotationDebuggingAttributes(
       const std::vector<AXContentTreeUpdate>& updates);
 
   // Returns the document for the active popup if any.
   blink::WebDocument GetPopupDocument();
+
+  // Searches the accessibility tree for plugin's root object and returns it.
+  // Returns an empty WebAXObject if no root object is present.
+  blink::WebAXObject GetPluginRoot();
+
+  // Cancels scheduled events that are not yet in flight
+  void CancelScheduledEvents();
 
   // The RenderAccessibilityManager that owns us.
   RenderAccessibilityManager* render_accessibility_manager_;
@@ -233,8 +272,8 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   // is fixed.
   gfx::Size last_scroll_offset_;
 
-  // Set if we are waiting for an accessibility event ack.
-  bool ack_pending_;
+  // Current event scheduling status
+  EventScheduleStatus event_schedule_status_;
 
   // Nonzero if the browser requested we reset the accessibility state.
   // We need to return this token in the next IPC.
@@ -244,6 +283,9 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   // (only when debugging flags are enabled, never under normal circumstances).
   bool has_injected_stylesheet_ = false;
 
+  // We defer events to improve performance during the initial page load.
+  EventScheduleMode event_schedule_mode_;
+
   // Whether we should highlight annotation results visually on the page
   // for debugging.
   bool image_annotation_debugging_ = false;
@@ -251,8 +293,11 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   // The specified page language, or empty if unknown.
   std::string page_language_;
 
+  std::unique_ptr<ukm::MojoUkmRecorder> ukm_recorder_;
+
   // So we can queue up tasks to be executed later.
-  base::WeakPtrFactory<RenderAccessibilityImpl> weak_factory_{this};
+  base::WeakPtrFactory<RenderAccessibilityImpl>
+      weak_factory_for_pending_events_{this};
 
   friend class AXImageAnnotatorTest;
   friend class PluginActionHandlingTest;

@@ -106,16 +106,6 @@ DocumentTimeline::InitialStartTimeForAnimations() {
   return base::nullopt;
 }
 
-Animation* DocumentTimeline::Play(AnimationEffect* child) {
-  Animation* animation = Animation::Create(child, this);
-  DCHECK(animations_.Contains(animation));
-
-  animation->play();
-  DCHECK(animations_needing_update_.Contains(animation));
-
-  return animation;
-}
-
 void DocumentTimeline::ScheduleNextService() {
   DCHECK_EQ(outdated_animation_count_, 0U);
 
@@ -150,7 +140,7 @@ void DocumentTimeline::DocumentTimelineTiming::WakeAfter(
   timer_.StartOneShot(duration, FROM_HERE);
 }
 
-void DocumentTimeline::DocumentTimelineTiming::Trace(Visitor* visitor) {
+void DocumentTimeline::DocumentTimelineTiming::Trace(Visitor* visitor) const {
   visitor->Trace(timeline_);
   DocumentTimeline::PlatformTiming::Trace(visitor);
 }
@@ -225,7 +215,7 @@ CompositorAnimationTimeline* DocumentTimeline::EnsureCompositorTimeline() {
   return compositor_timeline_.get();
 }
 
-void DocumentTimeline::Trace(Visitor* visitor) {
+void DocumentTimeline::Trace(Visitor* visitor) const {
   visitor->Trace(timing_);
   AnimationTimeline::Trace(visitor);
 }

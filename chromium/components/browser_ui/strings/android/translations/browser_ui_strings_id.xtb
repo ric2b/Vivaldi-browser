@@ -10,6 +10,7 @@
 <translation id="1201402288615127009">Berikutnya</translation>
 <translation id="1242008676835033345">Disematkan di <ph name="WEBSITE_URL" /></translation>
 <translation id="1272079795634619415">Berhenti</translation>
+<translation id="1289742167380433257">Untuk menghemat data Anda, gambar di halaman ini telah dioptimalkan oleh Google.</translation>
 <translation id="129382876167171263">File yang disimpan situs muncul di sini</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" /> - <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">Situs <ph name="SITE_NAME" /> ditambahkan</translation>
@@ -42,6 +43,7 @@
 <translation id="2182457891543959921">Tanyakan sebelum mengizinkan situs membuat peta 3D untuk area di sekeliling Anda atau melacak posisi kamera (direkomendasikan)</translation>
 <translation id="2212565012507486665">Izinkan cookie</translation>
 <translation id="2289270750774289114">Tanyakan saat situs ingin menemukan perangkat Bluetooth di sekitar (direkomendasikan)</translation>
+<translation id="2315043854645842844">Pilihan sertifikat sisi klien tidak didukung oleh sistem operasi.</translation>
 <translation id="2359808026110333948">Lanjutkan</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2434158240863470628">Download selesai <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -61,10 +63,12 @@
 <translation id="2704606927547763573">Disalin</translation>
 <translation id="2822354292072154809">Yakin ingin menyetel ulang semua izin situs untuk <ph name="CHOSEN_OBJECT_NAME" />?</translation>
 <translation id="2870560284913253234">Situs</translation>
+<translation id="2874939134665556319">Lagu sebelumnya</translation>
 <translation id="2910701580606108292">Tanyakan sebelum mengizinkan situs untuk memutar konten yang dilindungi</translation>
 <translation id="2913331724188855103">Izinkan situs untuk menyimpan dan membaca data cookie (disarankan)</translation>
 <translation id="2968755619301702150">Penampil sertifikat</translation>
 <translation id="300526633675317032">Ini akan menghapus seluruh penyimpanan situs web, sebesar <ph name="SIZE_IN_KB" />.</translation>
+<translation id="301521992641321250">Diblokir secara otomatis</translation>
 <translation id="3115898365077584848">Tampilkan Info</translation>
 <translation id="3123473560110926937">Diblokir di beberapa situs</translation>
 <translation id="3190152372525844641">Aktifkan izin untuk Chrome di <ph name="BEGIN_LINK" />Setelan Android<ph name="END_LINK" />.</translation>
@@ -82,17 +86,20 @@
 <translation id="3730075448226062617">Untuk mengizinkan Chrome mengakses mikrofon Anda, aktifkan juga mikrofon di <ph name="BEGIN_LINK" />Setelan Android<ph name="END_LINK" />.</translation>
 <translation id="3744111561329211289">Sinkronisasi latar belakang</translation>
 <translation id="3822502789641063741">Kosongkan penyimpanan situs?</translation>
-<translation id="385051799172605136">Mundur</translation>
+<translation id="385051799172605136">Kembali</translation>
+<translation id="3859306556332390985">Cari maju</translation>
 <translation id="3955193568934677022">Izinkan situs memutar konten yang dilindungi (direkomendasikan)</translation>
 <translation id="3987993985790029246">Salin link</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">Judul</translation>
 <translation id="4008040567710660924">Izinkan cookie untuk situs tertentu.</translation>
+<translation id="4046123991198612571">Lagu berikutnya</translation>
 <translation id="4165986682804962316">Setelan situs</translation>
 <translation id="4226663524361240545">Notifikasi dapat membuat perangkat bergetar</translation>
 <translation id="4242533952199664413">Buka setelan</translation>
 <translation id="4259722352634471385">Navigasi diblokir: <ph name="URL" /></translation>
 <translation id="4278390842282768270">Diizinkan</translation>
+<translation id="429312253194641664">Sebuah situs sedang memutar media</translation>
 <translation id="4433925000917964731">Halaman ringan yang ditampilkan oleh Google.</translation>
 <translation id="4434045419905280838">Pop-up dan pengalihan</translation>
 <translation id="445467742685312942">Izinkan situs memutar konten yang dilindungi</translation>
@@ -102,11 +109,12 @@
 <translation id="4645575059429386691">Dikelola oleh orang tua Anda</translation>
 <translation id="4670064810192446073">Virtual reality</translation>
 <translation id="4751476147751820511">Sensor gerakan atau cahaya</translation>
-<translation id="4883854917563148705">Setelan yang dikelola tidak dapat disetel ulang</translation>
+<translation id="4883854917563148705">Setelan yang dikelola tidak dapat direset</translation>
 <translation id="4887024562049524730">Tanyakan sebelum mengizinkan situs untuk menggunakan perangkat dan data virtual reality Anda (direkomendasikan)</translation>
 <translation id="4962975101802056554">Cabut semua izin untuk perangkat</translation>
 <translation id="4964199952259983386">Untuk mengizinkan Chrome menggunakan Augmented Reality (AR), aktifkan juga kamera di <ph name="BEGIN_LINK" />Setelan Android<ph name="END_LINK" />.</translation>
 <translation id="497421865427891073">Maju</translation>
+<translation id="4996978546172906250">Bagikan dengan</translation>
 <translation id="5039804452771397117">Izinkan</translation>
 <translation id="5048398596102334565">Mengizinkan situs mengakses sensor gerakan (disarankan)</translation>
 <translation id="5063480226653192405">Penggunaan</translation>
@@ -137,11 +145,11 @@
 <translation id="5860033963881614850">Nonaktif</translation>
 <translation id="5916664084637901428">Aktif</translation>
 <translation id="5922853908706496913">Membagikan layar Anda</translation>
-<translation id="5939518447894949180">Setel ulang</translation>
+<translation id="5939518447894949180">Reset</translation>
 <translation id="6040143037577758943">Tutup</translation>
 <translation id="6042308850641462728">Lainnya</translation>
 <translation id="6064125863973209585">Download yang selesai</translation>
-<translation id="6165508094623778733">Pelajari lebih lanjut</translation>
+<translation id="6165508094623778733">Pelajari selengkapnya</translation>
 <translation id="6177111841848151710">Diblokir untuk mesin telusur yang sedang digunakan</translation>
 <translation id="6181444274883918285">Tambahkan pengecualian situs</translation>
 <translation id="6192792657125177640">Pengecualian</translation>
@@ -152,7 +160,7 @@
 <translation id="6270391203985052864">Situs dapat meminta izin mengirimkan notifikasi</translation>
 <translation id="6295158916970320988">Semua situs</translation>
 <translation id="6320088164292336938">Getar</translation>
-<translation id="6388207532828177975">Hapus &amp; setel ulang</translation>
+<translation id="6388207532828177975">Hapus &amp; reset</translation>
 <translation id="6439114592976064011">Blokir situs agar tidak menggunakan perangkat dan data virtual reality Anda</translation>
 <translation id="6447842834002726250">Cookie</translation>
 <translation id="6527303717912515753">Bagikan</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">Hapus</translation>
 <translation id="6697925417670533197">Download aktif</translation>
 <translation id="6746124502594467657">Berpindah ke bawah</translation>
+<translation id="6766622839693428701">Geser ke bawah untuk menutup.</translation>
 <translation id="6782111308708962316">Cegah situs web pihak ketiga agar tidak menyimpan dan membaca data cookie</translation>
+<translation id="6790428901817661496">Putar</translation>
 <translation id="6818926723028410516">Pilih item</translation>
 <translation id="6864395892908308021">Perangkat ini tidak dapat membaca NFC</translation>
 <translation id="6910211073230771657">Dihapus</translation>
@@ -197,6 +207,7 @@
 <translation id="7804248752222191302">Situs menggunakan kamera Anda</translation>
 <translation id="7817023149356982970">Anda akan logout dari situs ini.</translation>
 <translation id="7828557259026017104">Cookie adalah file yang dibuat oleh situs yang Anda kunjungi. Situs menggunakannya untuk mengingat preferensi Anda. Cookie pihak ketiga dibuat oleh situs lain. Situs seperti ini adalah pemilik beberapa konten, misalnya iklan atau gambar, yang terlihat di halaman yang Anda kunjungi.</translation>
+<translation id="7835852323729233924">Media yang sedang diputar</translation>
 <translation id="7846076177841592234">Batalkan pilihan</translation>
 <translation id="7846621471902887024">Anda akan logout dari semua situs.</translation>
 <translation id="7882806643839505685">Izinkan suara untuk situs tertentu.</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">Yakin ingin menghapus semua data lokal, termasuk cookie, dan menyetel ulang semua izin untuk situs web ini?</translation>
 <translation id="8007176423574883786">Dinonaktifkan untuk perangkat ini</translation>
 <translation id="802154636333426148">Download gagal</translation>
+<translation id="8068648041423924542">Tidak dapat memilih sertifikat.</translation>
 <translation id="8087000398470557479">Konten ini dari <ph name="DOMAIN_NAME" />, dikirimkan oleh Google.</translation>
 <translation id="8116925261070264013">Dinonaktifkan</translation>
 <translation id="8131740175452115882">Konfirmasi</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">Situs menggunakan kamera dan mikrofon Anda</translation>
 <translation id="8380167699614421159">Situs ini menampilkan iklan yang mengganggu atau menyesatkan</translation>
 <translation id="8394832520002899662">Ketuk untuk kembali ke situs</translation>
+<translation id="8425213833346101688">Ubah</translation>
+<translation id="8441146129660941386">Cari mundur</translation>
 <translation id="8447861592752582886">Cabut izin perangkat</translation>
 <translation id="8463851957836045671">Situs ini cepat</translation>
 <translation id="851751545965956758">Blokir situs agar tidak terhubung ke perangkat</translation>
@@ -236,6 +250,7 @@
 <translation id="8958424370300090006">Blokir cookie untuk situs tertentu.</translation>
 <translation id="8959122750345127698">Navigasi tidak dapat dijangkau: <ph name="URL" /></translation>
 <translation id="9019902583201351841">Dikelola oleh orang tua Anda</translation>
+<translation id="9074739597929991885">Bluetooth</translation>
 <translation id="945632385593298557">Akses mikrofon Anda</translation>
 <translation id="965817943346481315">Blokir jika situs menampilkan iklan yang mengganggu atau menyesatkan (direkomendasikan)</translation>
 </translationbundle>

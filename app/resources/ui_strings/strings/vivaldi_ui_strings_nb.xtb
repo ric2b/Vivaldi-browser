@@ -10,6 +10,7 @@
 <translation id="1801827354178857021">Punktum</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS, plural, =1 {1 time og } other {# timer og }}</translation>
+<translation id="1859234291848436338">Skriveretning</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
 <translation id="3291688615589870984">{DAYS, plural, =1 {1 dag} other {# dager}}</translation>

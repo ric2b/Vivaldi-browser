@@ -18,6 +18,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_renderer_host.h"
+#include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -138,11 +139,14 @@ TEST_F(PaintPreviewClientRenderViewHostTest, CaptureMainFrameMock) {
 
   auto response = mojom::PaintPreviewCaptureResponse::New();
   response->embedding_token = base::nullopt;
+  response->scroll_offsets = gfx::Size(5, 10);
 
   PaintPreviewProto expected_proto;
   expected_proto.mutable_metadata()->set_url(expected_url.spec());
   PaintPreviewFrameProto* main_frame = expected_proto.mutable_root_frame();
   main_frame->set_is_main_frame(true);
+  main_frame->set_scroll_offset_x(5);
+  main_frame->set_scroll_offset_y(10);
 
   base::RunLoop loop;
   auto callback = base::BindOnce(
@@ -223,6 +227,8 @@ TEST_F(PaintPreviewClientRenderViewHostTest, CaptureFailureMock) {
   ASSERT_NE(client, nullptr);
   client->CapturePaintPreview(params, main_rfh(), std::move(callback));
   loop.Run();
+  content::RunAllTasksUntilIdle();
+  EXPECT_TRUE(base::IsDirectoryEmpty(temp_dir_.GetPath()));
 }
 
 TEST_F(PaintPreviewClientRenderViewHostTest, RenderFrameDeletedNotCapturing) {

@@ -15,9 +15,11 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/clipboard_constants.h"
+#include "ui/base/clipboard/clipboard_metrics.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -27,7 +29,7 @@
 
 #if defined(OS_CHROMEOS) && BUILDFLAG(OZONE_PLATFORM_X11)
 #include "base/command_line.h"
-#include "ui/base/clipboard/clipboard_aura.h"
+#include "ui/base/clipboard/clipboard_non_backed.h"
 #include "ui/base/ui_base_switches.h"
 #endif
 
@@ -294,18 +296,21 @@ class ClipboardOzone::AsyncClipboardOzone {
   DISALLOW_COPY_AND_ASSIGN(AsyncClipboardOzone);
 };
 
+// Uses the factory in the clipboard_linux otherwise.
+#if defined(OS_CHROMEOS) || !defined(OS_LINUX)
 // Clipboard factory method.
 Clipboard* Clipboard::Create() {
-// linux-chromeos uses aura clipboard by default, but supports ozone x11
+// linux-chromeos uses non-backed clipboard by default, but supports ozone x11
 // with flag --use-system-clipbboard.
 #if defined(OS_CHROMEOS) && BUILDFLAG(OZONE_PLATFORM_X11)
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kUseSystemClipboard)) {
-    return new ClipboardAura;
+    return new ClipboardNonBacked;
   }
 #endif
   return new ClipboardOzone;
 }
+#endif
 
 // ClipboardOzone implementation.
 ClipboardOzone::ClipboardOzone() {
@@ -383,6 +388,7 @@ ClipboardOzone::ReadAvailablePlatformSpecificFormatNames(
 void ClipboardOzone::ReadText(ClipboardBuffer buffer,
                               base::string16* result) const {
   DCHECK(CalledOnValidThread());
+  RecordRead(ClipboardFormatMetric::kText);
 
   auto clipboard_data =
       async_clipboard_ozone_->ReadClipboardDataAndWait(buffer, kMimeTypeText);
@@ -393,6 +399,7 @@ void ClipboardOzone::ReadText(ClipboardBuffer buffer,
 void ClipboardOzone::ReadAsciiText(ClipboardBuffer buffer,
                                    std::string* result) const {
   DCHECK(CalledOnValidThread());
+  RecordRead(ClipboardFormatMetric::kText);
 
   auto clipboard_data =
       async_clipboard_ozone_->ReadClipboardDataAndWait(buffer, kMimeTypeText);
@@ -405,6 +412,7 @@ void ClipboardOzone::ReadHTML(ClipboardBuffer buffer,
                               uint32_t* fragment_start,
                               uint32_t* fragment_end) const {
   DCHECK(CalledOnValidThread());
+  RecordRead(ClipboardFormatMetric::kHtml);
 
   markup->clear();
   if (src_url)
@@ -423,6 +431,7 @@ void ClipboardOzone::ReadHTML(ClipboardBuffer buffer,
 void ClipboardOzone::ReadRTF(ClipboardBuffer buffer,
                              std::string* result) const {
   DCHECK(CalledOnValidThread());
+  RecordRead(ClipboardFormatMetric::kRtf);
 
   auto clipboard_data =
       async_clipboard_ozone_->ReadClipboardDataAndWait(buffer, kMimeTypeRTF);
@@ -431,6 +440,7 @@ void ClipboardOzone::ReadRTF(ClipboardBuffer buffer,
 
 void ClipboardOzone::ReadImage(ClipboardBuffer buffer,
                                ReadImageCallback callback) const {
+  RecordRead(ClipboardFormatMetric::kImage);
   std::move(callback).Run(ReadImageInternal(buffer));
 }
 
@@ -438,6 +448,7 @@ void ClipboardOzone::ReadCustomData(ClipboardBuffer buffer,
                                     const base::string16& type,
                                     base::string16* result) const {
   DCHECK(CalledOnValidThread());
+  RecordRead(ClipboardFormatMetric::kCustomData);
 
   auto custom_data = async_clipboard_ozone_->ReadClipboardDataAndWait(
       buffer, kMimeTypeWebCustomData);
@@ -454,6 +465,7 @@ void ClipboardOzone::ReadBookmark(base::string16* title,
 void ClipboardOzone::ReadData(const ClipboardFormatType& format,
                               std::string* result) const {
   DCHECK(CalledOnValidThread());
+  RecordRead(ClipboardFormatMetric::kData);
 
   auto clipboard_data = async_clipboard_ozone_->ReadClipboardDataAndWait(
       ClipboardBuffer::kCopyPaste, format.GetName());
@@ -469,8 +481,8 @@ void ClipboardOzone::WritePortableRepresentations(ClipboardBuffer buffer,
 
   async_clipboard_ozone_->OfferData(buffer);
 
-  // Just like Aura/X11 implementation does, copy text data from the copy/paste
-  // selection to the primary selection.
+  // Just like Non-Backed/X11 implementation does, copy text data from the
+  // copy/paste selection to the primary selection.
   if (buffer == ClipboardBuffer::kCopyPaste) {
     auto text_iter = objects.find(PortableFormat::kText);
     if (text_iter != objects.end()) {

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
@@ -22,6 +23,7 @@
 #include "components/viz/common/surfaces/scoped_surface_id_allocator.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/host/hit_test/hit_test_query.h"
+#include "content/browser/renderer_host/display_feature.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
 #include "content/common/content_to_visible_time_reporter.h"
@@ -35,15 +37,15 @@
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/accessibility/ax_tree_id_registry.h"
+#include "ui/base/ime/mojom/text_input_state.mojom-forward.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/display/display.h"
+#include "ui/events/event_constants.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/range/range.h"
 #include "ui/surface/transport_dib.h"
-
-struct WidgetHostMsg_SelectionBounds_Params;
 
 namespace blink {
 class WebMouseEvent;
@@ -70,7 +72,7 @@ class TextInputManager;
 class TouchSelectionControllerClientManager;
 class WebCursor;
 class DelegatedFrameHost;
-struct TextInputState;
+struct DisplayFeature;
 
 // Basic implementation shared by concrete RenderWidgetHostView subclasses.
 class CONTENT_EXPORT RenderWidgetHostViewBase
@@ -123,7 +125,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   void SetRecordContentToVisibleTimeRequest(
       base::TimeTicks start_time,
       base::Optional<bool> destination_is_loaded,
-      base::Optional<bool> destination_is_frozen,
       bool show_reason_tab_switching,
       bool show_reason_unoccluded,
       bool show_reason_bfcache_restore) final;
@@ -397,6 +398,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   virtual void TransferTouches(
       const std::vector<std::unique_ptr<ui::TouchEvent>>& touches) {}
 
+  virtual void SetLastPointerType(ui::EventPointerType last_pointer_type) {}
+
   //----------------------------------------------------------------------------
   // The following methods are related to IME.
   // TODO(ekaramad): Most of the IME methods should not stay virtual after IME
@@ -404,7 +407,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // non-virtual (https://crbug.com/578168).
 
   // Updates the state of the input method attached to the view.
-  virtual void TextInputStateChanged(const TextInputState& text_input_state);
+  virtual void TextInputStateChanged(
+      const ui::mojom::TextInputState& text_input_state);
 
   // Cancel the ongoing composition of the input method attached to the view.
   virtual void ImeCancelComposition();
@@ -415,8 +419,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // starting position of the selection. The coordinates are with respect to
   // RenderWidget's window's origin. Focus and anchor bound are represented as
   // gfx::Rect.
-  virtual void SelectionBoundsChanged(
-      const WidgetHostMsg_SelectionBounds_Params& params);
+  virtual void SelectionBoundsChanged(const gfx::Rect& anchor_rect,
+                                      base::i18n::TextDirection anchor_dir,
+                                      const gfx::Rect& focus_rect,
+                                      base::i18n::TextDirection focus_dir,
+                                      bool is_anchor_first);
 
   // Updates the range of the marked text in an IME composition.
   virtual void ImeCompositionRangeChanged(
@@ -482,6 +489,13 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   virtual void SetShowingContextMenu(bool showing) {}
 
   virtual void OnAutoscrollStart();
+
+  // Gets the DisplayFeature whose offset and mask_length are expressed in DIPs
+  // relative to the view. See display_feature.h for more details.
+  virtual const DisplayFeature* GetDisplayFeature();
+
+  void SetDisplayFeatureForTesting(
+      base::Optional<DisplayFeature> display_feature);
 
   // Returns the associated RenderWidgetHostImpl.
   RenderWidgetHostImpl* host() const { return host_; }
@@ -605,6 +619,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
 
   bool is_currently_scrolling_viewport_ = false;
 
+  // TODO(crbug.com/1039050) Remove this member that is set for testing once
+  // support for returning the actual DisplayFeature is added to the platform
+  // specific RenderWidgetHostView.
+  base::Optional<DisplayFeature> display_feature_;
+
   // Vivaldi addition:
   bool is_render_widget_host_view_mac_ = false;
 
@@ -615,6 +634,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   FRIEND_TEST_ALL_PREFIXES(
       BrowserSideFlingBrowserTest,
       EarlyTouchpadFlingCancelationOnInertialGSUAckNotConsumed);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostDelegatedInkMetadataTest,
+                           FlagGetsSetFromRenderFrameMetadata);
 
   void SynchronizeVisualProperties();
 
@@ -654,6 +675,12 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   bool view_stopped_flinging_for_test_ = false;
 
   bool is_evicted_ = false;
+
+  // True when points should be forwarded from the
+  // RenderWidgetHostViewEventHandler directly to viz for use in a delegated
+  // ink trail.
+  // TODO(1052145): Use this to begin forwarding the points to viz.
+  bool is_drawing_delegated_ink_trails_ = false;
 
   base::WeakPtrFactory<RenderWidgetHostViewBase> weak_factory_{this};
 

@@ -3,6 +3,7 @@
 <translationbundle lang="am">
 <translation id="102360288709523007">የአጠቃቀም ስታቲክሶችን እና የብልሽት ሪፖርቶችን ወደ Google በመላክ Chromiumን የተሻለ ለማድረግ ያግዙ።</translation>
 <translation id="1185134272377778587">ስለChromium</translation>
+<translation id="1257458525759135959">ምስሎችን ለማስቀመጥ፣ Chromium ወደ የእርስዎ ፎቶዎች ማከል እንዲችል ለማድረግ ቅንብሮች ላይ መታ ያድርጉ</translation>
 <translation id="1472013873724362412">የእርስዎ መለያ በChromium ላይ አይሠራም። እባክዎ የእርስዎን የጎራ አስተዳዳሪ ያነጋግሩ ወይም ለመግባት መደበኛ Google መለያ ይጠቀሙ።</translation>
 <translation id="1507010443238049608">የChromium ባህሪያት እና አፈጻጸም እንዲሻሻል ያግዙ</translation>
 <translation id="1617663976202781617">ከChromium ስምረት የመጣ ውሂብ</translation>
@@ -14,6 +15,7 @@
 <translation id="2178608107313874732">Chromium አሁን ካሜራዎን መጠቀም አይችልም</translation>
 <translation id="2195025571279539885">Chromium በሚቀጥለው ጊዜ ከዚህ ጣቢያ የመጡ የ<ph name="LANGUAGE_NAME" /> ገጾችን እንዲተረጎምልዎ ይፈልጋሉ?</translation>
 <translation id="2590893390871230428">የChromium ውሂብዎን ያስምሩ</translation>
+<translation id="2650312721222849884">Chromiumን ከሚጠቀሙበት የትኛዉም ቦታ ትሮችን ለማየት ስምረትን ያብሩ</translation>
 <translation id="2730884209570016437">ሌላ መተግበሪያ ካሜራዎን እየተጠቀመበት ስለሆነ Chromium ካሜራዎን መጠቀም አይችልም</translation>
 <translation id="2915596697727466327">Chromium ወደ የእርስዎ የይለፍ ቃላት መዳረሻ መፈቀዱን ለማረጋገጥ የመልክ መታወቂያን ይጠቀማል።</translation>
 <translation id="3256316712990552818">ወደ Chromium ተቀድቷል</translation>
@@ -22,7 +24,9 @@
 <translation id="4681781466797808448">የChromium ቃኚን ያብሩ</translation>
 <translation id="4787850887676698916">በሌሎች መሣሪያዎችዎ ላይ ባለ Chromium ላይ የከፈቷቸው ትሮች እዚህ ይመጣሉ።</translation>
 <translation id="4999538639245140991">በ<ph name="SIGNOUT_MANAGED_DOMAIN" /> ከሚተዳደር መለያ ዘግተው እየወጡ ስለሆነ የእርስዎ Chromium ውሂብ ከዚህ መሣሪያ ላይ ይሰረዛል። የእርስዎ ውሂብ በGoogle መለያዎ ውስጥ ይቆያል።</translation>
+<translation id="5521125884468363740">Chromiumን ከሚጠቀሙበት የትኛዉም ቦታ ሆነዉ ትሮችዎን ለማየት በመለያ ይግቡ እና ስምረትን ያብሩ</translation>
 <translation id="5573014823074921752">የChromium ጠቃሚ ምክር። ተጨማሪ የትር አማራጮችን ለማግኘት በመሣሪያ አሞሌው ውስጥ የትሮችን አሳይ አዝራሩን ነክተው ይያዙ፣ ይህ በማያ ገጽዎ አናት ወይም ግርጌ ላይ ነው ያለው።</translation>
+<translation id="5777187867430702742">የChromium ገጽ</translation>
 <translation id="5862307444128926510">ወደ Chromium እንኳን በደህና መጡ</translation>
 <translation id="5945387852661427312">በ<ph name="DOMAIN" /> ከሚተዳደር መለያ ዘግተው እየወጡና ለአስተዳዳሪው ሙሉውን በChromium ውሂብዎ ቁጥጥር እየሰጡ ነው። የእርስዎ ውሂብ እስከመጨረሻው ከዚህ መለያ ጋር ይተሳሰራል። ከChromium ዘግቶ መውጣት ውሂብዎን ከዚህ መሣሪያ ይሰርዘዋል፣ ነገር ግን በእርስዎ Google መለያ ላይ እንደተከማቸ ይቆያል።</translation>
 <translation id="602807004951640891">Chromium በመጠቀምዎ በ<ph name="BEGIN_LINK_TOS" />አገልግሎት ውሉ<ph name="END_LINK_TOS" /> ተስማማተዋል።</translation>
@@ -39,11 +43,12 @@
 <translation id="7746854981345936341">የChromium ጠቃሚ ምክር። አሁን እንደ ተመለስ፣ ወደፊት እና ፍለጋ ያሉ አንዳንድ አዝራሮች አሁን በማያ ገጽዎ አናት ላይ ነው ያሉት።</translation>
 <translation id="786327964234957808">የስምረት መለያዎችን ከ<ph name="USER_EMAIL1" /> ወደ <ph name="USER_EMAIL2" /> እየቀየሩ ነው። ነባሩ የChromium ውሂብዎ በ<ph name="DOMAIN" /> ነው የሚተዳደረው። ይሄ ውሂብዎን ከዚህ መሣሪያዎ ይሰርዘዋል፣ ነገር ግን ውሂብዎ በ<ph name="USER_EMAIL1" /> ውስጥ እንዳለ ይቀራል።</translation>
 <translation id="7890287942691234100">የChromium ቃኚውን መጠቀም ይጀምሩ</translation>
+<translation id="8013573822802650211">Chromiumን ከሚጠቀሙበት የትኛዉም ቦታ ትሮችን ለማየት በሁሉም መሣሪያዎችዎ ላይ ይግቡ</translation>
 <translation id="8073677936375100957">የChromium ውሂብዎ ከዚህ መሣሪያ ላይ ይጽዳ?</translation>
 <translation id="8175055321229419309">ጠቃሚ ምክር፦ <ph name="BEGIN_LINK" />Chromiumን ወደ የእርስዎ መትከያ ይውሰዱት<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">በአካባቢዎ ላይ በመመስረት በChromium ውስጥ የተሻለ የGoogle ተሞክሮ ያግኙ።</translation>
 <translation id="8586442755830160949">የቅጂ መብት <ph name="YEAR" /> የChromium ደራሲያን። ሁሉም መብቶች የተጠበቁ ናቸው።</translation>
-<translation id="8809780021347235332">ምስሎችን ለማስቀመጥ Chromium የእርስዎን ፎቶዎች መጠቀም እንዲችል በቅንብሮች ላይ መታ ያድርጉ።</translation>
+<translation id="8776843108004031667">ይህ መለያ እና ማንኛውም ያልተቀመጠ ውሂብ ከChromium ይወገዳል።</translation>
 <translation id="9022552996538154597">Chromium ውስጥ ይግቡ</translation>
 <translation id="985602178874221306">የChromium ደራሲዎች</translation>
 </translationbundle>

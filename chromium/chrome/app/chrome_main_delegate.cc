@@ -20,7 +20,7 @@
 #include "base/process/process_handle.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/task/sequence_manager/thread_controller_with_message_pump_impl.h"
+#include "base/task/sequence_manager/thread_controller_power_monitor.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event_impl.h"
@@ -126,6 +126,7 @@
 #endif
 
 #if defined(OS_ANDROID)
+#include "base/android/library_loader/library_loader_hooks.h"
 #include "base/android/java_exception_reporter.h"
 #include "chrome/browser/android/crash/pure_java_exception_handler.h"
 #include "chrome/browser/android/metrics/uma_session_stats.h"
@@ -658,7 +659,8 @@ void ChromeMainDelegate::PostFieldTrialInitialization() {
 #if defined(OS_WIN)
   SetUpExtendedCrashReporting(is_browser_process);
   base::Time::ReadMinTimerIntervalLowResMs();
-  base::sequence_manager::PostFieldTrialInitialization();
+  base::sequence_manager::internal::ThreadControllerPowerMonitor::
+      InitializeOnMainThread();
 #endif
 }
 
@@ -1088,6 +1090,12 @@ void ChromeMainDelegate::PreSandboxStartup() {
   }
 #endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
 
+#if defined(OS_ANDROID)
+  CHECK_EQ(base::android::GetLibraryProcessType(),
+           process_type.empty() ? base::android::PROCESS_BROWSER
+                                : base::android::PROCESS_CHILD);
+#endif  // defined(OS_ANDROID)
+
   // After all the platform Breakpads have been initialized, store the command
   // line for crash reporting.
   crash_keys::SetCrashKeysFromCommandLine(command_line);
@@ -1172,8 +1180,7 @@ void ChromeMainDelegate::ProcessExiting(const std::string& process_type) {
 
 #if defined(OS_LINUX)
 void ChromeMainDelegate::ZygoteStarting(
-    std::vector<std::unique_ptr<service_manager::ZygoteForkDelegate>>*
-        delegates) {
+    std::vector<std::unique_ptr<content::ZygoteForkDelegate>>* delegates) {
 #if defined(OS_CHROMEOS)
     chromeos::InitHugepagesAndMlockSelf();
 #endif

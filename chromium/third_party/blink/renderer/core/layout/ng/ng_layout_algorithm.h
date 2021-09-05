@@ -77,8 +77,7 @@ class CORE_EXPORT NGLayoutAlgorithm : public NGLayoutAlgorithmOperations {
         container_builder_(node,
                            style,
                            &space,
-                           space.GetWritingMode(),
-                           direction) {
+                           {space.GetWritingMode(), direction}) {
     if (UNLIKELY(space.HasBlockFragmentation())) {
       DCHECK(space.IsAnonymous() || !node.IsMonolithic());
       SetupFragmentBuilderForFragmentation(space, BreakToken(),
@@ -112,6 +111,16 @@ class CORE_EXPORT NGLayoutAlgorithm : public NGLayoutAlgorithmOperations {
   NGInputNodeType Node() const { return node_; }
 
   const NGBreakTokenType* BreakToken() const { return break_token_.get(); }
+
+  const NGBoxStrut& BorderPadding() const {
+    return container_builder_.BorderPadding();
+  }
+  const NGBoxStrut& BorderScrollbarPadding() const {
+    return container_builder_.BorderScrollbarPadding();
+  }
+  const LogicalSize& ChildAvailableSize() const {
+    return container_builder_.ChildAvailableSize();
+  }
 
   NGInputNodeType node_;
 

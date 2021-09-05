@@ -8,6 +8,8 @@
 #include <string>
 
 #include "base/callback_forward.h"
+#include "base/containers/flat_map.h"
+#include "base/observer_list.h"
 #include "chromeos/dbus/vm_plugin_dispatcher/vm_plugin_dispatcher.pb.h"
 #include "components/keyed_service/core/keyed_service.h"
 
@@ -17,13 +19,25 @@ class VmStartingObserver;
 
 namespace plugin_vm {
 
+enum class PermissionType { kCamera = 0, kMicrophone = 1 };
+
+class PluginVmPermissionsObserver : public base::CheckedObserver {
+ public:
+  virtual void OnPluginVmPermissionsChanged(
+      plugin_vm::PermissionType permission_type,
+      bool allowed) = 0;
+};
+
 class PluginVmManager : public KeyedService {
  public:
   using LaunchPluginVmCallback = base::OnceCallback<void(bool success)>;
 
   ~PluginVmManager() override;
 
+  virtual void OnPrimaryUserProfilePrepared() = 0;
+
   virtual void LaunchPluginVm(LaunchPluginVmCallback callback) = 0;
+  virtual void RelaunchPluginVm() = 0;
   virtual void StopPluginVm(const std::string& name, bool force) = 0;
   virtual void UninstallPluginVm() = 0;
 
@@ -49,10 +63,28 @@ class PluginVmManager : public KeyedService {
   virtual void RemoveVmStartingObserver(
       chromeos::VmStartingObserver* observer) = 0;
 
+  // Add/remove permissions observers
+  void AddPluginVmPermissionsObserver(PluginVmPermissionsObserver* observer);
+  void RemovePluginVmPermissionsObserver(PluginVmPermissionsObserver* observer);
+
   virtual vm_tools::plugin_dispatcher::VmState vm_state() const = 0;
+  bool GetPermission(PermissionType permission_type);
+  void SetPermission(PermissionType permission_type, bool value);
+
+  // Indicates whether relaunch (suspend + start) is needed for the new
+  // permissions to go into effect.
+  virtual bool IsRelaunchNeededForNewPermissions() const = 0;
 
  protected:
   PluginVmManager();
+
+ private:
+  base::flat_map<PermissionType, bool> permissions_ = {
+      {PermissionType::kCamera, false},
+      {PermissionType::kMicrophone, false}};
+
+  base::ObserverList<PluginVmPermissionsObserver>
+      plugin_vm_permissions_observers_;
 };
 
 }  // namespace plugin_vm

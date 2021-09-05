@@ -63,6 +63,7 @@ public class BrowserImpl extends IBrowser.Stub {
     private final UrlBarControllerImpl mUrlBarController;
     private boolean mFragmentStarted;
     private boolean mFragmentResumed;
+    private boolean mFragmentStoppedForConfigurationChange;
     // Cache the value instead of querying system every time.
     private Boolean mPasswordEchoEnabled;
     private Boolean mDarkThemeEnabled;
@@ -105,6 +106,8 @@ public class BrowserImpl extends IBrowser.Stub {
                 (savedInstanceState != null && (persistenceId == null || persistenceId.isEmpty()))
                 ? savedInstanceState.getByteArray(SAVED_STATE_MINIMAL_PERSISTENCE_STATE_KEY)
                 : null;
+
+        windowAndroid.restoreInstanceState(savedInstanceState);
 
         createAttachmentState(embedderAppContext, windowAndroid);
         mNativeBrowser = BrowserImplJni.get().createBrowser(profile.getNativeProfile(), this);
@@ -160,6 +163,10 @@ public class BrowserImpl extends IBrowser.Stub {
             outState.putByteArray(SAVED_STATE_MINIMAL_PERSISTENCE_STATE_KEY,
                     BrowserImplJni.get().getMinimalPersistenceState(mNativeBrowser));
         }
+
+        if (mWindowAndroid != null) {
+            mWindowAndroid.saveInstanceState(outState);
+        }
     }
 
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -185,6 +192,13 @@ public class BrowserImpl extends IBrowser.Stub {
     public void setBottomView(IObjectWrapper viewWrapper) {
         StrictModeWorkaround.apply();
         getViewController().setBottomView(ObjectWrapper.unwrap(viewWrapper, View.class));
+    }
+
+    @Override
+    public TabImpl createTab() {
+        TabImpl tab = new TabImpl(mProfile, mWindowAndroid);
+        addTab(tab);
+        return tab;
     }
 
     @Override
@@ -230,7 +244,7 @@ public class BrowserImpl extends IBrowser.Stub {
     }
 
     @CalledByNative
-    private void createTabForSessionRestore(long nativeTab) {
+    private void createJavaTabForNativeTab(long nativeTab) {
         new TabImpl(mProfile, mWindowAndroid, nativeTab);
     }
 
@@ -309,7 +323,7 @@ public class BrowserImpl extends IBrowser.Stub {
 
     @CalledByNative
     private void onActiveTabChanged(TabImpl tab) {
-        mViewController.setActiveTab(tab);
+        if (mViewController != null) mViewController.setActiveTab(tab);
         if (mInDestroy) return;
         try {
             if (mClient != null) {
@@ -388,10 +402,8 @@ public class BrowserImpl extends IBrowser.Stub {
             updateAllTabsAndSetActive();
         } else if (persistenceInfo.mPersistenceId == null
                 || persistenceInfo.mPersistenceId.isEmpty()) {
-            TabImpl tab = new TabImpl(mProfile, mWindowAndroid);
-            addTab(tab);
-            boolean set_active_result = setActiveTab(tab);
-            assert set_active_result;
+            boolean setActiveResult = setActiveTab(createTab());
+            assert setActiveResult;
         } // else case is session restore, which will asynchronously create tabs.
     }
 
@@ -404,7 +416,6 @@ public class BrowserImpl extends IBrowser.Stub {
     }
 
     private void destroyTabImpl(TabImpl tab) {
-        BrowserImplJni.get().removeTab(mNativeBrowser, tab.getNativeTab());
         tab.destroy();
     }
 
@@ -438,24 +449,31 @@ public class BrowserImpl extends IBrowser.Stub {
     }
 
     public void onFragmentStart() {
+        mFragmentStoppedForConfigurationChange = false;
         mFragmentStarted = true;
         BrowserImplJni.get().onFragmentStart(mNativeBrowser);
         updateAllTabs();
         checkPreferences();
     }
 
-    public void onFragmentStop() {
+    public void onFragmentStop(boolean forConfigurationChange) {
+        mFragmentStoppedForConfigurationChange = forConfigurationChange;
         mFragmentStarted = false;
+        if (mFragmentStoppedForConfigurationChange) {
+            destroyAttachmentState();
+        }
         updateAllTabs();
     }
 
     public void onFragmentResume() {
         mFragmentResumed = true;
         WebLayerAccessibilityUtil.get().onBrowserResumed();
+        BrowserImplJni.get().onFragmentResume(mNativeBrowser);
     }
 
     public void onFragmentPause() {
         mFragmentResumed = false;
+        BrowserImplJni.get().onFragmentPause(mNativeBrowser);
     }
 
     public boolean isStarted() {
@@ -464,6 +482,10 @@ public class BrowserImpl extends IBrowser.Stub {
 
     public boolean isResumed() {
         return mFragmentResumed;
+    }
+
+    public boolean isFragmentStoppedForConfigurationChange() {
+        return mFragmentStoppedForConfigurationChange;
     }
 
     private void destroyAttachmentState() {
@@ -515,5 +537,7 @@ public class BrowserImpl extends IBrowser.Stub {
                 byte[] persistenceCryptoKey, byte[] minimalPersistenceState);
         void webPreferencesChanged(long nativeBrowserImpl);
         void onFragmentStart(long nativeBrowserImpl);
+        void onFragmentResume(long nativeBrowserImpl);
+        void onFragmentPause(long nativeBrowserImpl);
     }
 }

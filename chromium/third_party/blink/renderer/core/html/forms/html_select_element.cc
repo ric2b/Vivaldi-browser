@@ -50,7 +50,6 @@
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_opt_group_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_option_element.h"
-#include "third_party/blink/renderer/core/html/forms/menu_list_inner_element.h"
 #include "third_party/blink/renderer/core/html/forms/select_type.h"
 #include "third_party/blink/renderer/core/html/html_hr_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
@@ -230,9 +229,7 @@ int HTMLSelectElement::ActiveSelectionEndListIndex() const {
 }
 
 HTMLOptionElement* HTMLSelectElement::ActiveSelectionEnd() const {
-  if (active_selection_end_)
-    return active_selection_end_.Get();
-  return LastSelectedOption();
+  return select_type_->ActiveSelectionEnd();
 }
 
 void HTMLSelectElement::add(
@@ -512,25 +509,6 @@ void HTMLSelectElement::SelectAll() {
   select_type_->SelectAll();
 }
 
-void HTMLSelectElement::SetActiveSelectionAnchor(HTMLOptionElement* option) {
-  active_selection_anchor_ = option;
-  select_type_->SaveListboxActiveSelection();
-}
-
-void HTMLSelectElement::SetActiveSelectionEnd(HTMLOptionElement* option) {
-  active_selection_end_ = option;
-}
-
-void HTMLSelectElement::ScrollToSelection() {
-  if (!IsFinishedParsingChildren())
-    return;
-  if (UsesMenuList())
-    return;
-  select_type_->ScrollToOption(ActiveSelectionEnd());
-  if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
-    cache->ListboxActiveIndexChanged(this);
-}
-
 const HTMLSelectElement::ListItems& HTMLSelectElement::GetListItems() const {
   if (should_recalc_list_items_) {
     RecalcListItems();
@@ -789,10 +767,6 @@ void HTMLSelectElement::OptionRemoved(HTMLOptionElement& option) {
   if (last_on_change_option_ == &option)
     last_on_change_option_.Clear();
   select_type_->OptionRemoved(option);
-  if (active_selection_anchor_ == &option)
-    active_selection_anchor_.Clear();
-  if (active_selection_end_ == &option)
-    active_selection_end_.Clear();
   if (suggested_option_ == &option)
     SetSuggestedOption(nullptr);
   if (option.Selected())
@@ -845,18 +819,6 @@ void HTMLSelectElement::SelectOption(HTMLOptionElement* element,
   // DeselectItemsWithoutValidation() is O(N).
   if (flags & kDeselectOtherOptionsFlag)
     should_update_popup |= DeselectItemsWithoutValidation(element);
-
-  // We should update active selection after finishing OPTION state change
-  // because setActiveSelectionAnchorIndex() stores OPTION's selection state.
-  if (element) {
-    // setActiveSelectionAnchor is O(N).
-    if (!active_selection_anchor_ || !IsMultiple() ||
-        flags & kDeselectOtherOptionsFlag)
-      SetActiveSelectionAnchor(element);
-    if (!active_selection_end_ || !IsMultiple() ||
-        flags & kDeselectOtherOptionsFlag)
-      SetActiveSelectionEnd(element);
-  }
 
   select_type_->DidSelectOption(element, flags, should_update_popup);
   NotifyFormStateChanged();
@@ -1169,10 +1131,8 @@ void HTMLSelectElement::SelectOptionByAccessKey(HTMLOptionElement* option) {
     SelectOption(option, flags);
   }
   option->SetDirty(true);
-  if (UsesMenuList())
-    return;
   select_type_->ListBoxOnChange();
-  ScrollToSelection();
+  select_type_->ScrollToSelection();
 }
 
 unsigned HTMLSelectElement::length() const {
@@ -1209,11 +1169,9 @@ bool HTMLSelectElement::IsInteractiveContent() const {
   return true;
 }
 
-void HTMLSelectElement::Trace(Visitor* visitor) {
+void HTMLSelectElement::Trace(Visitor* visitor) const {
   visitor->Trace(list_items_);
   visitor->Trace(last_on_change_option_);
-  visitor->Trace(active_selection_anchor_);
-  visitor->Trace(active_selection_end_);
   visitor->Trace(suggested_option_);
   visitor->Trace(select_type_);
   HTMLFormControlElementWithState::Trace(visitor);
@@ -1241,30 +1199,15 @@ void HTMLSelectElement::UpdateUserAgentShadowTree(ShadowRoot& root) {
       will_be_removed->remove();
     }
   }
-  if (UsesMenuList()) {
-    Element* inner_element =
-        MakeGarbageCollected<MenuListInnerElement>(GetDocument());
-    inner_element->setAttribute(html_names::kAriaHiddenAttr, "true");
-    // Make sure InnerElement() always has a Text node.
-    inner_element->appendChild(Text::Create(GetDocument(), g_empty_string));
-    root.insertBefore(inner_element, root.firstChild());
-  }
+  select_type_->CreateShadowSubtree(root);
 }
 
 Element& HTMLSelectElement::InnerElement() const {
-  DCHECK(UsesMenuList());
-  auto* inner_element = DynamicTo<Element>(UserAgentShadowRoot()->firstChild());
-  DCHECK(inner_element);
-  return *inner_element;
+  return select_type_->InnerElement();
 }
 
 HTMLOptionElement* HTMLSelectElement::SpatialNavigationFocusedOption() {
-  if (!IsSpatialNavigationEnabled(GetDocument().GetFrame()))
-    return nullptr;
-  HTMLOptionElement* focused_option = ActiveSelectionEnd();
-  if (!focused_option)
-    focused_option = select_type_->FirstSelectableOption();
-  return focused_option;
+  return select_type_->SpatialNavigationFocusedOption();
 }
 
 String HTMLSelectElement::ItemText(const Element& element) const {
@@ -1418,9 +1361,12 @@ void HTMLSelectElement::CloneNonAttributePropertiesFrom(
 
 void HTMLSelectElement::ChangeRendering() {
   select_type_->DidDetachLayoutTree();
+  bool old_uses_menu_list = UsesMenuList();
   UpdateUsesMenuList();
-  select_type_->WillBeDestroyed();
-  select_type_ = SelectType::Create(*this);
+  if (UsesMenuList() != old_uses_menu_list) {
+    select_type_->WillBeDestroyed();
+    select_type_ = SelectType::Create(*this);
+  }
   if (!InActiveDocument())
     return;
   // TODO(futhark): SetForceReattachLayoutTree() should be the correct way to

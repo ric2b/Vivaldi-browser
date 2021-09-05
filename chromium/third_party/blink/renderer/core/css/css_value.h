@@ -170,19 +170,24 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   bool IsShorthandWrapperValue() const {
     return class_type_ == kKeyframeShorthandClass;
   }
+  bool IsInitialColorValue() const {
+    return class_type_ == kInitialColorValueClass;
+  }
   bool IsLightDarkValuePair() const {
     return class_type_ == kLightDarkValuePairClass;
   }
+  bool IsIdSelectorValue() const { return class_type_ == kIdSelectorClass; }
 
   bool HasFailedOrCanceledSubresources() const;
   bool MayContainUrl() const;
   void ReResolveUrl(const Document&) const;
 
   bool operator==(const CSSValue&) const;
+  bool operator!=(const CSSValue& o) const { return !(*this == o); }
 
   void FinalizeGarbageCollectedObject();
   void TraceAfterDispatch(blink::Visitor* visitor) const {}
-  void Trace(Visitor*);
+  void Trace(Visitor*) const;
 
   // ~CSSValue should be public, because non-public ~CSSValue causes C2248
   // error: 'blink::CSSValue::~CSSValue' : cannot access protected member
@@ -203,6 +208,7 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
     kURIClass,
     kValuePairClass,
     kLightDarkValuePairClass,
+    kIdSelectorClass,
 
     // Basic shape classes.
     // TODO(sashab): Represent these as a single subclass, BasicShapeClass.
@@ -254,6 +260,7 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
     kCSSContentDistributionClass,
 
     kKeyframeShorthandClass,
+    kInitialColorValueClass,
 
     // List class types must appear after ValueListClass.
     kValueListClass,

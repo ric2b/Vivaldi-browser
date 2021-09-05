@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/logging.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -267,11 +268,8 @@ void VTVideoEncodeAccelerator::EncodeTask(scoped_refptr<VideoFrame> frame,
           kVTEncodeFrameOptionKey_ForceKeyFrame,
           force_keyframe ? kCFBooleanTrue : kCFBooleanFalse);
 
-  base::TimeTicks ref_time;
-  if (!frame->metadata()->GetTimeTicks(VideoFrameMetadata::REFERENCE_TIME,
-                                       &ref_time)) {
-    ref_time = base::TimeTicks::Now();
-  }
+  base::TimeTicks ref_time =
+      frame->metadata()->reference_time.value_or(base::TimeTicks::Now());
   auto timestamp_cm =
       CMTimeMake(frame->timestamp().InMicroseconds(), USEC_PER_SEC);
   // Wrap information we'll need after the frame is encoded in a heap object.

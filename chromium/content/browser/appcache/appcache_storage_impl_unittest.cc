@@ -22,7 +22,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -40,6 +39,7 @@
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/url_loader_interceptor.h"
@@ -51,12 +51,14 @@
 #include "net/http/http_response_headers.h"
 #include "services/network/test/test_utils.h"
 #include "sql/test/test_helpers.h"
+#include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/appcache/appcache.mojom.h"
 #include "third_party/blink/public/mojom/appcache/appcache_info.mojom.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom-shared.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -197,7 +199,10 @@ class AppCacheStorageImplTest : public testing::Test {
     }
 
     // Not needed for our tests.
-    void RegisterClient(scoped_refptr<storage::QuotaClient> client) override {}
+    void RegisterClient(
+        scoped_refptr<storage::QuotaClient> client,
+        storage::QuotaClientType quota_client_type,
+        const std::vector<blink::mojom::StorageType>& storage_types) override {}
     void NotifyOriginInUse(const url::Origin& origin) override {}
     void NotifyOriginNoLongerInUse(const url::Origin& origin) override {}
     void SetUsageCacheEnabled(storage::QuotaClientType client_id,
@@ -285,8 +290,8 @@ class AppCacheStorageImplTest : public testing::Test {
   void RunTestOnUIThread(Method method) {
     base::RunLoop run_loop;
     test_finished_cb_ = run_loop.QuitClosure();
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&AppCacheStorageImplTest::MethodWrapper<Method>,
                        base::Unretained(this), method));
     run_loop.Run();
@@ -1616,9 +1621,12 @@ class AppCacheStorageImplTest : public testing::Test {
       // Try to create a new appcache, the resulting update job will
       // eventually fail when it gets to disk cache initialization.
       host1_id_ = base::UnguessableToken::Create();
-      service_->RegisterHost(host_remote_.BindNewPipeAndPassReceiver(),
-                             BindFrontend(), host1_id_, kMockRenderFrameId,
-                             kMockProcessId, GetBadMessageCallback());
+      service_->RegisterHost(
+          host_remote_.BindNewPipeAndPassReceiver(), BindFrontend(), host1_id_,
+          kMockRenderFrameId, kMockProcessId,
+          ChildProcessSecurityPolicyImpl::GetInstance()->CreateHandle(
+              kMockProcessId),
+          GetBadMessageCallback());
       AppCacheHost* host1 = service_->GetHost(host1_id_);
       const GURL kEmptyPageUrl(GetMockUrl("empty.html"));
       host1->SetSiteForCookiesForTesting(
@@ -1631,9 +1639,12 @@ class AppCacheStorageImplTest : public testing::Test {
       // The URLRequestJob  will eventually fail when it gets to disk
       // cache initialization.
       host2_id_ = base::UnguessableToken::Create();
-      service_->RegisterHost(host_remote_.BindNewPipeAndPassReceiver(),
-                             BindFrontend(), host2_id_, kMockRenderFrameId,
-                             kMockProcessId, GetBadMessageCallback());
+      service_->RegisterHost(
+          host_remote_.BindNewPipeAndPassReceiver(), BindFrontend(), host2_id_,
+          kMockRenderFrameId, kMockProcessId,
+          ChildProcessSecurityPolicyImpl::GetInstance()->CreateHandle(
+              kMockProcessId),
+          GetBadMessageCallback());
       AppCacheHost* host2 = service_->GetHost(host2_id_);
       network::ResourceRequest request;
       request.url = GetMockUrl("manifest");

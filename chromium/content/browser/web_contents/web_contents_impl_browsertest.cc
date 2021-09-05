@@ -1518,7 +1518,7 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
 
   std::string last_message() { return last_message_; }
 
-  WebContents* last_popup() { return popup_.get(); }
+  WebContents* last_popup() { return popups_.back().get(); }
 
   // WebContentsDelegate
 
@@ -1528,8 +1528,7 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
   }
 
   void EnterFullscreenModeForTab(
-      WebContents* web_contents,
-      const GURL& origin,
+      RenderFrameHost* requesting_frame,
       const blink::mojom::FullscreenOptions& options) override {
     is_fullscreen_ = true;
   }
@@ -1554,7 +1553,7 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
                       const gfx::Rect& initial_rect,
                       bool user_gesture,
                       bool* was_blocked) override {
-    popup_ = std::move(new_contents);
+    popups_.push_back(std::move(new_contents));
 
     if (waiting_for_ == kNewContents) {
       waiting_for_ = kNothing;
@@ -1616,7 +1615,7 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
 
   bool is_fullscreen_ = false;
 
-  std::unique_ptr<WebContents> popup_;
+  std::vector<std::unique_ptr<WebContents>> popups_;
 
   std::unique_ptr<base::RunLoop> run_loop_ = std::make_unique<base::RunLoop>();
 
@@ -2385,7 +2384,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), url));
 
   // alert
-  wc->EnterFullscreenMode(url, blink::mojom::FullscreenOptions());
+  wc->EnterFullscreenMode(wc->GetMainFrame(), {});
   EXPECT_TRUE(wc->IsFullscreenForCurrentTab());
   std::string script = "alert('hi')";
   test_delegate.WillWaitForDialog();
@@ -2394,7 +2393,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_FALSE(wc->IsFullscreenForCurrentTab());
 
   // confirm
-  wc->EnterFullscreenMode(url, blink::mojom::FullscreenOptions());
+  wc->EnterFullscreenMode(wc->GetMainFrame(), {});
   EXPECT_TRUE(wc->IsFullscreenForCurrentTab());
   script = "confirm('hi')";
   test_delegate.WillWaitForDialog();
@@ -2403,7 +2402,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_FALSE(wc->IsFullscreenForCurrentTab());
 
   // prompt
-  wc->EnterFullscreenMode(url, blink::mojom::FullscreenOptions());
+  wc->EnterFullscreenMode(wc->GetMainFrame(), {});
   EXPECT_TRUE(wc->IsFullscreenForCurrentTab());
   script = "prompt('hi')";
   test_delegate.WillWaitForDialog();
@@ -2412,7 +2411,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_FALSE(wc->IsFullscreenForCurrentTab());
 
   // beforeunload
-  wc->EnterFullscreenMode(url, blink::mojom::FullscreenOptions());
+  wc->EnterFullscreenMode(wc->GetMainFrame(), {});
   EXPECT_TRUE(wc->IsFullscreenForCurrentTab());
   // Disable the hang monitor (otherwise there will be a race between the
   // beforeunload dialog and the beforeunload hang timer) and give the page a
@@ -2456,7 +2455,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
   // A dialog from the inner WebContents should make the outer contents lose
   // fullscreen.
-  top_contents->EnterFullscreenMode(url, blink::mojom::FullscreenOptions());
+  top_contents->EnterFullscreenMode(top_contents->GetMainFrame(), {});
   EXPECT_TRUE(top_contents->IsFullscreenForCurrentTab());
   script = "alert('hi')";
   inner_test_delegate.WillWaitForDialog();
@@ -2472,7 +2471,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, FileChooserEndsFullscreen) {
   GURL url("about:blank");
   EXPECT_TRUE(NavigateToURL(shell(), url));
 
-  wc->EnterFullscreenMode(url, blink::mojom::FullscreenOptions());
+  wc->EnterFullscreenMode(wc->GetMainFrame(), {});
   EXPECT_TRUE(wc->IsFullscreenForCurrentTab());
   wc->RunFileChooser(wc->GetMainFrame(),
                      std::make_unique<MockFileSelectListener>(),
@@ -2489,7 +2488,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), url));
 
   // popup
-  wc->EnterFullscreenMode(url, blink::mojom::FullscreenOptions());
+  wc->EnterFullscreenMode(wc->GetMainFrame(), {});
   EXPECT_TRUE(wc->IsFullscreenForCurrentTab());
   std::string script = "window.open('', '', 'width=200,height=100')";
   test_delegate.WillWaitForNewContents();
@@ -2498,7 +2497,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_FALSE(wc->IsFullscreenForCurrentTab());
 }
 
-// Tests that if a popup is opened, all WebContentses down the opener chain are
+// Tests that if a popup is opened, a WebContents *up* the opener chain is
 // kicked out of fullscreen.
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        PopupsOfPopupsFromJavaScriptEndFullscreen) {
@@ -2517,7 +2516,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
       static_cast<WebContentsImpl*>(test_delegate.last_popup());
 
   // Put the original page into fullscreen.
-  wc->EnterFullscreenMode(url, blink::mojom::FullscreenOptions());
+  wc->EnterFullscreenMode(wc->GetMainFrame(), {});
   EXPECT_TRUE(wc->IsFullscreenForCurrentTab());
 
   // Have the popup open a popup.
@@ -2528,6 +2527,38 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
   // Ensure the original page, being in the opener chain, loses fullscreen.
   EXPECT_FALSE(wc->IsFullscreenForCurrentTab());
+}
+
+// Tests that if a popup is opened, a WebContents *down* the opener chain is
+// kicked out of fullscreen.
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       PopupsFromJavaScriptEndFullscreenDownstream) {
+  WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
+  TestWCDelegateForDialogsAndFullscreen test_delegate(wc);
+
+  GURL url("about:blank");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  // Make a popup.
+  std::string popup_script = "window.open('', '', 'width=200,height=100')";
+  test_delegate.WillWaitForNewContents();
+  EXPECT_TRUE(content::ExecuteScript(wc, popup_script));
+  test_delegate.Wait();
+  WebContentsImpl* popup =
+      static_cast<WebContentsImpl*>(test_delegate.last_popup());
+
+  // Put the popup into fullscreen.
+  TestWCDelegateForDialogsAndFullscreen popup_test_delegate(popup);
+  popup->EnterFullscreenMode(popup->GetMainFrame(), {});
+  EXPECT_TRUE(popup->IsFullscreenForCurrentTab());
+
+  // Have the original page open a new popup.
+  test_delegate.WillWaitForNewContents();
+  EXPECT_TRUE(content::ExecuteScript(wc, popup_script));
+  test_delegate.Wait();
+
+  // Ensure the popup, being downstream from the opener, loses fullscreen.
+  EXPECT_FALSE(popup->IsFullscreenForCurrentTab());
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
@@ -2547,7 +2578,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   test_delegate.Wait();
 
   // Put the main contents into fullscreen ...
-  wc->EnterFullscreenMode(url, blink::mojom::FullscreenOptions());
+  wc->EnterFullscreenMode(wc->GetMainFrame(), {});
   EXPECT_TRUE(wc->IsFullscreenForCurrentTab());
 
   // ... and ensure that a call to window.focus() from it causes loss of
@@ -3928,6 +3959,19 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   shell()->web_contents()->GetController().GoBack();
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(shell()->web_contents()->GetThemeColor(), 0xFFFF0000u);
+}
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       MimeTypeResetWhenNavigatingAway) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL url_a(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  const GURL url_b(embedded_test_server()->GetURL("b.com", "/single_face.jpg"));
+
+  EXPECT_TRUE(NavigateToURL(shell(), url_a));
+  EXPECT_EQ(shell()->web_contents()->GetContentsMimeType(), "text/html");
+
+  EXPECT_TRUE(NavigateToURL(shell(), url_b));
+  EXPECT_EQ(shell()->web_contents()->GetContentsMimeType(), "image/jpeg");
 }
 
 namespace {

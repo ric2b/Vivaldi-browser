@@ -8,20 +8,22 @@
 #include "base/bind.h"
 #include "base/containers/span.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/stl_util.h"
-#include "base/task/post_task.h"
 #include "chrome/browser/browsing_data/browsing_data_quota_helper_impl.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
+#include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/test/mock_quota_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 using blink::mojom::StorageType;
-using content::BrowserThread;
 using storage::MockOriginData;
 using storage::MockQuotaClient;
 
@@ -37,9 +39,8 @@ class BrowsingDataQuotaHelperTest : public testing::Test {
   void SetUp() override {
     EXPECT_TRUE(dir_.CreateUniqueTempDir());
     quota_manager_ = base::MakeRefCounted<storage::QuotaManager>(
-        false, dir_.GetPath(),
-        base::CreateSingleThreadTaskRunner({BrowserThread::IO}).get(), nullptr,
-        storage::GetQuotaSettingsFunc());
+        false, dir_.GetPath(), content::GetIOThreadTaskRunner({}).get(),
+        nullptr, storage::GetQuotaSettingsFunc());
     helper_ = new BrowsingDataQuotaHelperImpl(quota_manager_.get());
   }
 
@@ -70,7 +71,11 @@ class BrowsingDataQuotaHelperTest : public testing::Test {
     MockQuotaClient* client =
         new MockQuotaClient(quota_manager_->proxy(), origin_data,
                             storage::QuotaClientType::kFileSystem);
-    quota_manager_->proxy()->RegisterClient(client);
+    quota_manager_->proxy()->RegisterClient(
+        client, storage::QuotaClientType::kFileSystem,
+        {blink::mojom::StorageType::kTemporary,
+         blink::mojom::StorageType::kPersistent,
+         blink::mojom::StorageType::kSyncable});
     client->TouchAllOriginsAndNotify();
   }
 

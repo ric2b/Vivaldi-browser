@@ -46,10 +46,10 @@ class CORE_EXPORT MediaValuesDynamic : public MediaValues {
   bool StrictMode() const override;
   const String MediaType() const override;
   blink::mojom::DisplayMode DisplayMode() const override;
-  DisplayShape GetDisplayShape() const override;
   ColorSpaceGamut ColorGamut() const override;
   PreferredColorScheme GetPreferredColorScheme() const override;
   bool PrefersReducedMotion() const override;
+  bool PrefersReducedData() const override;
   ForcedColors GetForcedColors() const override;
   NavigationControls GetNavigationControls() const override;
   ScreenSpanning GetScreenSpanning() const override;
@@ -57,7 +57,7 @@ class CORE_EXPORT MediaValuesDynamic : public MediaValues {
   bool HasValues() const override;
   void OverrideViewportDimensions(double width, double height) override;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  protected:
   Member<LocalFrame> frame_;

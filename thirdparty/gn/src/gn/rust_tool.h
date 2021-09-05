@@ -41,7 +41,11 @@ class RustTool : public Tool {
   RustTool* AsRust() override;
   const RustTool* AsRust() const override;
 
+  std::string_view GetSysroot() const;
+
  private:
+  std::string rust_sysroot_;
+
   bool SetOutputExtension(const Value* value, std::string* var, Err* err);
   bool ReadOutputsPatternList(Scope* scope,
                               const char* var,

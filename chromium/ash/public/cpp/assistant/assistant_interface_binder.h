@@ -8,7 +8,6 @@
 #include "ash/public/cpp/ash_public_export.h"
 #include "ash/public/mojom/assistant_controller.mojom.h"
 #include "ash/public/mojom/assistant_volume_control.mojom.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 
 namespace ash {
@@ -20,13 +19,8 @@ class ASH_PUBLIC_EXPORT AssistantInterfaceBinder {
   static AssistantInterfaceBinder* GetInstance();
   static void SetInstance(AssistantInterfaceBinder* binder);
 
-  virtual void BindAlarmTimerController(
-      mojo::PendingReceiver<mojom::AssistantAlarmTimerController> receiver) = 0;
   virtual void BindNotificationController(
       mojo::PendingReceiver<mojom::AssistantNotificationController>
-          receiver) = 0;
-  virtual void BindScreenContextController(
-      mojo::PendingReceiver<mojom::AssistantScreenContextController>
           receiver) = 0;
   virtual void BindVolumeControl(
       mojo::PendingReceiver<mojom::AssistantVolumeControl> receiver) = 0;

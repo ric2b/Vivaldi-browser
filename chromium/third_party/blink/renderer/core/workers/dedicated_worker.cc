@@ -64,9 +64,7 @@ DedicatedWorker* DedicatedWorker::Create(ExecutionContext* context,
     return nullptr;
   }
 
-  KURL script_request_url = ResolveURL(
-      context, url, exception_state, mojom::RequestContextType::SCRIPT,
-      network::mojom::RequestDestination::kScript);
+  KURL script_request_url = ResolveURL(context, url, exception_state);
   if (!script_request_url.IsValid()) {
     // Don't throw an exception here because it's already thrown in
     // ResolveURL().
@@ -195,10 +193,9 @@ void DedicatedWorker::Start() {
     }
 
     factory_client_->CreateWorkerHost(
-        script_request_url_,
-        credentials_mode,
+        script_request_url_, credentials_mode,
         WebFetchClientSettingsObject(*outside_fetch_client_settings_object_),
-        blob_url_token.PassPipe());
+        std::move(blob_url_token));
     // Continue in OnScriptLoadStarted() or OnScriptLoadStartFailed().
     return;
   }
@@ -292,12 +289,10 @@ bool DedicatedWorker::HasPendingActivity() const {
 }
 
 void DedicatedWorker::OnWorkerHostCreated(
-    mojo::ScopedMessagePipeHandle browser_interface_broker) {
+    CrossVariantMojoRemote<mojom::blink::BrowserInterfaceBrokerInterfaceBase>
+        browser_interface_broker) {
   DCHECK(!browser_interface_broker_);
-  browser_interface_broker_ =
-      mojo::PendingRemote<mojom::blink::BrowserInterfaceBroker>(
-          std::move(browser_interface_broker),
-          mojom::blink::BrowserInterfaceBroker::Version_);
+  browser_interface_broker_ = std::move(browser_interface_broker);
 }
 
 void DedicatedWorker::OnScriptLoadStarted() {
@@ -471,14 +466,12 @@ void DedicatedWorker::ContextLifecycleStateChanged(
       break;
     case mojom::FrameLifecycleState::kFrozen:
     case mojom::FrameLifecycleState::kFrozenAutoResumeMedia:
-      factory_client_->LifecycleStateChanged(state);
       if (!requested_frozen_) {
         requested_frozen_ = true;
         context_proxy_->Freeze();
       }
       break;
     case mojom::FrameLifecycleState::kRunning:
-      factory_client_->LifecycleStateChanged(state);
       if (requested_frozen_) {
         context_proxy_->Resume();
         requested_frozen_ = false;
@@ -487,7 +480,7 @@ void DedicatedWorker::ContextLifecycleStateChanged(
   }
 }
 
-void DedicatedWorker::Trace(Visitor* visitor) {
+void DedicatedWorker::Trace(Visitor* visitor) const {
   visitor->Trace(options_);
   visitor->Trace(outside_fetch_client_settings_object_);
   visitor->Trace(context_proxy_);

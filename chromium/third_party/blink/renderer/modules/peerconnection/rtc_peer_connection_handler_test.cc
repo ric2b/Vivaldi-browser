@@ -21,6 +21,8 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -41,10 +43,12 @@
 #include "third_party/blink/renderer/modules/peerconnection/mock_peer_connection_impl.h"
 #include "third_party/blink/renderer/modules/peerconnection/mock_rtc_peer_connection_handler_client.h"
 #include "third_party/blink/renderer/modules/peerconnection/peer_connection_tracker.h"
+#include "third_party/blink/renderer/modules/peerconnection/testing/fake_resource_listener.h"
 #include "third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl.h"
 #include "third_party/blink/renderer/platform/mediastream/media_constraints.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_track.h"
+#include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_dtmf_sender_handler.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_ice_candidate_platform.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_peer_connection_handler_client.h"
@@ -225,7 +229,9 @@ class DummyRTCVoidRequest final : public RTCVoidRequest {
 
   void RequestSucceeded() override { was_called_ = true; }
   void RequestFailed(const webrtc::RTCError&) override { was_called_ = true; }
-  void Trace(Visitor* visitor) override { RTCVoidRequest::Trace(visitor); }
+  void Trace(Visitor* visitor) const override {
+    RTCVoidRequest::Trace(visitor);
+  }
 
  private:
   bool was_called_ = false;
@@ -274,6 +280,8 @@ class RTCPeerConnectionHandlerUnderTest : public RTCPeerConnectionHandler {
   webrtc::PeerConnectionObserver* observer() {
     return native_peer_connection()->observer();
   }
+
+  bool HasThermalUmaListner() const { return thermal_uma_listener(); }
 };
 
 class RTCPeerConnectionHandlerTest : public ::testing::Test {
@@ -432,7 +440,7 @@ class RTCPeerConnectionHandlerTest : public ::testing::Test {
   std::vector<std::unique_ptr<blink::RTCRtpSenderImpl>>::iterator
   FindSenderForTrack(const blink::WebMediaStreamTrack& web_track) {
     for (auto it = senders_.begin(); it != senders_.end(); ++it) {
-      if ((*it)->Track().UniqueId() == web_track.UniqueId())
+      if ((*it)->Track()->UniqueId() == web_track.UniqueId())
         return it;
     }
     return senders_.end();
@@ -542,7 +550,7 @@ class RTCPeerConnectionHandlerTest : public ::testing::Test {
       const webrtc::MediaStreamTrackInterface& track,
       const std::vector<std::unique_ptr<RTCRtpReceiverPlatform>>& receivers) {
     for (const auto& receiver : receivers) {
-      if (receiver->Track().Id().Utf8() == track.id())
+      if (receiver->Track()->Id().Utf8() == track.id())
         return true;
     }
     return false;
@@ -914,7 +922,7 @@ TEST_F(RTCPeerConnectionHandlerTest, GetStatsWithBadSelector) {
 }
 
 TEST_F(RTCPeerConnectionHandlerTest, GetRTCStats) {
-  blink::WhitelistStatsForTesting(webrtc::RTCTestStats::kType);
+  blink::AllowStatsForTesting(webrtc::RTCTestStats::kType);
 
   rtc::scoped_refptr<webrtc::RTCStatsReport> report =
       webrtc::RTCStatsReport::Create();
@@ -1292,6 +1300,51 @@ TEST_F(RTCPeerConnectionHandlerTest, CheckInsertableStreamsConfig) {
                 force_encoded_video_insertable_streams);
     }
   }
+}
+
+TEST_F(RTCPeerConnectionHandlerTest, ThermalResourceIsDisabledByDefault) {
+  EXPECT_TRUE(mock_peer_connection_->adaptation_resources().IsEmpty());
+  pc_handler_->OnThermalStateChange(
+      base::PowerObserver::DeviceThermalState::kCritical);
+  // A ThermalResource is not created despite the thermal signal.
+  EXPECT_TRUE(mock_peer_connection_->adaptation_resources().IsEmpty());
+}
+
+TEST_F(RTCPeerConnectionHandlerTest,
+       ThermalStateChangeTriggersThermalResourceIfEnabled) {
+  // Overwrite base::Feature kWebRtcThermalResource's default to ENABLED.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(kWebRtcThermalResource);
+
+  EXPECT_TRUE(mock_peer_connection_->adaptation_resources().IsEmpty());
+  // ThermalResource is created and injected on the fly.
+  pc_handler_->OnThermalStateChange(
+      base::PowerObserver::DeviceThermalState::kCritical);
+  auto resources = mock_peer_connection_->adaptation_resources();
+  ASSERT_EQ(1u, resources.size());
+  auto thermal_resource = resources[0];
+  EXPECT_EQ("ThermalResource", thermal_resource->Name());
+  // The initial kOveruse is observed.
+  FakeResourceListener resource_listener;
+  thermal_resource->SetResourceListener(&resource_listener);
+  EXPECT_EQ(1u, resource_listener.measurement_count());
+  EXPECT_EQ(webrtc::ResourceUsageState::kOveruse,
+            resource_listener.latest_measurement());
+  // ThermalResource responds to new measurements.
+  pc_handler_->OnThermalStateChange(
+      base::PowerObserver::DeviceThermalState::kNominal);
+  EXPECT_EQ(2u, resource_listener.measurement_count());
+  EXPECT_EQ(webrtc::ResourceUsageState::kUnderuse,
+            resource_listener.latest_measurement());
+}
+
+TEST_F(RTCPeerConnectionHandlerTest,
+       ThermalStateUmaListenerCreatedWhenVideoStreamAdded) {
+  base::HistogramTester histogram;
+  EXPECT_FALSE(pc_handler_->HasThermalUmaListner());
+  blink::WebMediaStream local_stream(CreateLocalMediaStream("local_stream"));
+  EXPECT_TRUE(AddStream(local_stream));
+  EXPECT_TRUE(pc_handler_->HasThermalUmaListner());
 }
 
 }  // namespace blink

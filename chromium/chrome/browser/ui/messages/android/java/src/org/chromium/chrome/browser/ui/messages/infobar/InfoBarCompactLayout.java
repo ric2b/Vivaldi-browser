@@ -24,6 +24,9 @@ import androidx.annotation.StringRes;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.chrome.ui.messages.R;
+import org.chromium.components.infobars.InfoBarInteractionHandler;
+import org.chromium.components.infobars.InfoBarLayout;
+import org.chromium.components.infobars.InfoBarMessageView;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 
 /**

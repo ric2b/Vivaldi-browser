@@ -10,9 +10,18 @@
 #include "base/path_service.h"
 #include "browser/stats_reporter.h"
 #include "calendar/calendar_service_factory.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/extensions/api/content_settings/content_settings_helpers.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
+#include "components/content_settings/core/browser/content_settings_info.h"
+#include "components/content_settings/core/browser/content_settings_registry.h"
+#include "components/content_settings/core/browser/content_settings_utils.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "components/translate/core/browser/translate_language_list.h"
 #include "contact/contact_service_factory.h"
@@ -56,10 +65,10 @@ VivaldiBrowserMainExtraParts::~VivaldiBrowserMainExtraParts() {}
 
 // Overridden from ChromeBrowserMainExtraParts:
 void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
-  stats_reporter_ = vivaldi::StatsReporter::CreateInstance();
   if (!vivaldi::IsVivaldiRunning()) {
     return;
   }
+  stats_reporter_ = vivaldi::StatsReporter::CreateInstance();
 #if defined(OS_LINUX) || defined(OS_MACOSX)
   base::FilePath messaging(
     // Hardcoded from chromium/chrome/common/chrome_paths.cc
@@ -141,5 +150,49 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
 
   vivaldi::CommandLineAppendSwitchNoDup(base::CommandLine::ForCurrentProcess(),
                                         switches::kSavePageAsMHTML);
-#endif
+
+  // Sanetize contentsettings visible in our web-ui.
+  std::list<ContentSettingsType> ui_exposed_settings = {
+      ContentSettingsType::BLUETOOTH_SCANNING,
+      ContentSettingsType::GEOLOCATION,
+      ContentSettingsType::MEDIASTREAM_CAMERA,
+      ContentSettingsType::MEDIASTREAM_MIC,
+      ContentSettingsType::MIDI_SYSEX,
+      ContentSettingsType::NOTIFICATIONS,
+      ContentSettingsType::POPUPS,
+      ContentSettingsType::SENSORS,
+      ContentSettingsType::SOUND
+  };
+
+  Profile* profile =
+      g_browser_process->profile_manager()->GetActiveUserProfile();
+
+  HostContentSettingsMap* content_settings_map =
+    HostContentSettingsMapFactory::GetForProfile(profile);
+
+  std::list<ContentSettingsType>::iterator it;
+  for (it = ui_exposed_settings.begin(); it != ui_exposed_settings.end();
+       it++) {
+    ContentSettingsType content_type = *it;
+    ContentSetting default_setting =
+        HostContentSettingsMapFactory::GetForProfile(profile)
+            ->GetDefaultContentSetting(content_type, nullptr);
+    const content_settings::ContentSettingsInfo* info =
+        content_settings::ContentSettingsRegistry::GetInstance()->Get(
+            content_type);
+
+    bool is_valid_settings_value = info->IsDefaultSettingValid(default_setting);
+    if (!is_valid_settings_value) {
+      LOG(INFO)
+          << "Vivaldi changed invalid default setting "
+          << extensions::content_settings_helpers::ContentSettingsTypeToString(
+                 content_type);
+      default_setting = CONTENT_SETTING_DEFAULT;
+      content_settings_map->SetDefaultContentSetting(content_type,
+                                                     default_setting);
+    }
+  }
+
+#endif //OS_ANDROID
+
 }

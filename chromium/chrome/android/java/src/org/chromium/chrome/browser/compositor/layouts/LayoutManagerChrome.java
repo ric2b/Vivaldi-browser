@@ -12,7 +12,9 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.accessibility_tab_switcher.OverviewListLayout;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.TitleCache;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
@@ -25,7 +27,8 @@ import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.device.DeviceClassManager;
-import org.chromium.chrome.browser.fullscreen.FullscreenManager;
+import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
@@ -34,7 +37,8 @@ import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementModuleProvider;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
-import org.chromium.chrome.browser.util.AccessibilityUtil;
+import org.chromium.chrome.browser.toolbar.ControlContainer;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
@@ -46,7 +50,7 @@ import java.util.List;
  * superset of {@link LayoutManager}.
  */
 public class LayoutManagerChrome
-        extends LayoutManager implements OverviewModeController, AccessibilityUtil.Observer {
+        extends LayoutManager implements OverviewModeController, ChromeAccessibilityUtil.Observer {
     // Layouts
     /** An {@link Layout} that should be used as the accessibility tab switcher. */
     protected OverviewListLayout mOverviewListLayout;
@@ -104,8 +108,11 @@ public class LayoutManagerChrome
                         }
                     }
                 });
-                mOverviewLayout = tabManagementDelegate.createStartSurfaceLayout(
-                        context, this, renderHost, startSurface);
+                final ObservableSupplier<? extends BrowserControlsStateProvider>
+                        browserControlsSupplier = mHost.getFullscreenManagerSupplier();
+                mOverviewLayout = tabManagementDelegate.createStartSurfaceLayout(context, this,
+                        renderHost, startSurface,
+                        (ObservableSupplier<BrowserControlsStateProvider>) browserControlsSupplier);
             } else {
                 mCreateOverviewLayout = true;
             }
@@ -138,21 +145,27 @@ public class LayoutManagerChrome
     @Override
     public void init(TabModelSelector selector, TabCreatorManager creator,
             TabContentManager content, ViewGroup androidContentContainer,
+            ControlContainer controlContainer,
             ContextualSearchManagementDelegate contextualSearchDelegate,
             DynamicResourceLoader dynamicResourceLoader) {
         Context context = mHost.getContext();
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
+        BrowserControlsStateProvider browserControlsStateProvider = mHost.getFullscreenManager();
 
         // Build Layouts
-        mOverviewListLayout = new OverviewListLayout(context, this, renderHost);
+        mOverviewListLayout =
+                new OverviewListLayout(context, this, renderHost, browserControlsStateProvider);
         mToolbarSwipeLayout = new ToolbarSwipeLayout(context, this, renderHost);
 
         if (mCreateOverviewLayout) {
-            mOverviewLayout = new StackLayout(context, this, renderHost);
+            final ObservableSupplier<? extends BrowserControlsStateProvider>
+                    browserControlsSupplier = mHost.getFullscreenManagerSupplier();
+            mOverviewLayout = new StackLayout(context, this, renderHost,
+                    (ObservableSupplier<BrowserControlsStateProvider>) browserControlsSupplier);
         }
 
-        super.init(selector, creator, content, androidContentContainer, contextualSearchDelegate,
-                dynamicResourceLoader);
+        super.init(selector, creator, content, androidContentContainer, controlContainer,
+                contextualSearchDelegate, dynamicResourceLoader);
 
         // TODO: TitleCache should be a part of the ResourceManager.
         mTitleCache = mHost.getTitleCache();
@@ -430,7 +443,7 @@ public class LayoutManagerChrome
         mOverviewModeObservers.removeObserver(listener);
     }
 
-    // AccessibilityUtil.Observer
+    // ChromeAccessibilityUtil.Observer
 
     @Override
     public void onAccessibilityModeChanged(boolean enabled) {
@@ -524,7 +537,7 @@ public class LayoutManagerChrome
 
         @Override
         public boolean isSwipeEnabled(@ScrollDirection int direction) {
-            FullscreenManager manager = mHost.getFullscreenManager();
+            ChromeFullscreenManager manager = mHost.getFullscreenManager();
             if (getActiveLayout() != mStaticLayout
                     || !DeviceClassManager.enableToolbarSwipe()
                     || (manager != null && manager.getPersistentFullscreenMode())) {
@@ -532,7 +545,7 @@ public class LayoutManagerChrome
             }
 
             if (direction == ScrollDirection.DOWN) {
-                boolean isAccessibility = AccessibilityUtil.isAccessibilityEnabled();
+                boolean isAccessibility = ChromeAccessibilityUtil.get().isAccessibilityEnabled();
                 return mOverviewLayout != null && !isAccessibility;
             }
 
@@ -547,6 +560,23 @@ public class LayoutManagerChrome
     protected Tab getTabById(int id) {
         TabModelSelector selector = getTabModelSelector();
         return selector == null ? null : selector.getTabById(id);
+    }
+
+    @Override
+    protected void switchToTab(Tab tab, int lastTabId) {
+        if (tab == null || lastTabId == Tab.INVALID_TAB_ID) {
+            super.switchToTab(tab, lastTabId);
+            return;
+        }
+        startShowing(mToolbarSwipeLayout, false);
+        mToolbarSwipeLayout.switchToTab(tab.getId(), lastTabId);
+
+        // Close the previous tab if the previous tab is a NTP.
+        Tab lastTab = getTabById(lastTabId);
+        if (NewTabPage.isNTPUrl(lastTab.getUrl()) && !lastTab.canGoBack()
+                && !lastTab.canGoForward()) {
+            getTabModelSelector().getCurrentModel().closeTab(lastTab, tab, false, false, false);
+        }
     }
 
     // Vivaldi: Removes the {@link SceneOverlay}.

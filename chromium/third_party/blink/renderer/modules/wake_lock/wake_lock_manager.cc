@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/modules/wake_lock/wake_lock_manager.h"
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/wake_lock/wake_lock.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -99,7 +99,7 @@ void WakeLockManager::OnWakeLockConnectionError() {
   ClearWakeLocks();
 }
 
-void WakeLockManager::Trace(Visitor* visitor) {
+void WakeLockManager::Trace(Visitor* visitor) const {
   visitor->Trace(execution_context_);
   visitor->Trace(wake_lock_sentinels_);
   visitor->Trace(wake_lock_);

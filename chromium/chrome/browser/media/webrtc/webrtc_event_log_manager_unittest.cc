@@ -69,7 +69,6 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/test/base/testing_profile.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
 #endif
@@ -189,14 +188,9 @@ class NullWebRtcEventLogUploader : public WebRtcEventLogUploader {
     return log_file_;
   }
 
-  bool Cancel() override {
+  void Cancel() override {
     EXPECT_TRUE(cancellation_expected_);
-    if (was_cancelled_) {  // Should not be called more than once.
-      EXPECT_TRUE(false);
-      return false;
-    }
     was_cancelled_ = true;
-    return true;
   }
 
   class Factory : public WebRtcEventLogUploader::Factory {
@@ -1202,14 +1196,14 @@ class WebRtcEventLogManagerTestIncognito
     incognito_rph_.reset();
     if (incognito_profile_) {
       DCHECK(browser_context_);
-      browser_context_->DestroyOffTheRecordProfile();
+      browser_context_->DestroyOffTheRecordProfile(incognito_profile_);
     }
   }
 
   void SetUp() override {
     WebRtcEventLogManagerTestBase::SetUp();
 
-    incognito_profile_ = browser_context_->GetOffTheRecordProfile();
+    incognito_profile_ = browser_context_->GetPrimaryOTRProfile();
     incognito_rph_ =
         std::make_unique<MockRenderProcessHost>(incognito_profile_);
   }
@@ -1311,7 +1305,7 @@ class FileListExpectingWebRtcEventLogUploader : public WebRtcEventLogUploader {
         // we cannot verify |log_file.browser_context_id| is correct.
         // This is unimportant to the test.
 
-        base::DeleteFile(log_file.path, false);
+        base::DeleteFile(log_file.path);
         expected_files_.pop_front();
       }
 
@@ -1345,9 +1339,8 @@ class FileListExpectingWebRtcEventLogUploader : public WebRtcEventLogUploader {
     return log_file_;
   }
 
-  bool Cancel() override {
+  void Cancel() override {
     NOTREACHED() << "Incompatible with this kind of test.";
-    return true;
   }
 
  private:
@@ -1408,19 +1401,19 @@ TEST_F(WebRtcEventLogManagerTest,
 }
 
 TEST_F(WebRtcEventLogManagerTest,
-       PeerConnectionSessionIdSetReturnsFalseIfAlreadyCalledSameId) {
-  const auto key = GetPeerConnectionKey(rph_.get(), kLid);
-  ASSERT_TRUE(PeerConnectionAdded(key));
-  ASSERT_TRUE(PeerConnectionSessionIdSet(key, kSessionId));
-  EXPECT_FALSE(PeerConnectionSessionIdSet(key, kSessionId));
-}
-
-TEST_F(WebRtcEventLogManagerTest,
        PeerConnectionSessionIdSetReturnsFalseIfPeerConnectionAlreadyRemoved) {
   const auto key = GetPeerConnectionKey(rph_.get(), kLid);
   ASSERT_TRUE(PeerConnectionAdded(key));
   ASSERT_TRUE(PeerConnectionRemoved(key));
   EXPECT_FALSE(PeerConnectionSessionIdSet(key, kSessionId));
+}
+
+TEST_F(WebRtcEventLogManagerTest,
+       PeerConnectionSessionIdSetReturnsTrueIfAlreadyCalledSameId) {
+  const auto key = GetPeerConnectionKey(rph_.get(), kLid);
+  ASSERT_TRUE(PeerConnectionAdded(key));
+  ASSERT_TRUE(PeerConnectionSessionIdSet(key, kSessionId));
+  EXPECT_TRUE(PeerConnectionSessionIdSet(key, kSessionId));
 }
 
 TEST_F(WebRtcEventLogManagerTest,
@@ -4357,7 +4350,7 @@ TEST_F(WebRtcEventLogManagerTestPolicy,
 
   ASSERT_TRUE(base::PathExists(*log_file));  // Test sanity; exists before.
 
-  allow_remote_logging = !allow_remote_logging;
+  allow_remote_logging = false;
   profile->GetPrefs()->SetBoolean(prefs::kWebRtcEventLogCollectionAllowed,
                                   allow_remote_logging);
 

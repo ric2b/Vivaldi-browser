@@ -74,7 +74,7 @@ constexpr char kGlobalProxyLabel[] = "WindowProxy::global_proxy_";
 
 }  // namespace
 
-void LocalWindowProxy::Trace(Visitor* visitor) {
+void LocalWindowProxy::Trace(Visitor* visitor) const {
   visitor->Trace(script_state_);
   WindowProxy::Trace(visitor);
 }
@@ -175,7 +175,7 @@ void LocalWindowProxy::Initialize() {
        IsolatedWorldCSP::Get().HasContentSecurityPolicy(world_->GetWorldId()));
   if (evaluate_csp_for_eval) {
     ContentSecurityPolicy* csp =
-        GetFrame()->GetDocument()->GetContentSecurityPolicyForWorld();
+        GetFrame()->DomWindow()->GetContentSecurityPolicyForWorld();
     context->AllowCodeGenerationFromStrings(!csp->ShouldCheckEval());
     context->SetErrorMessageForCodeGenerationFromStrings(
         V8String(GetIsolate(), csp->EvalDisabledErrorMessage()));

@@ -117,10 +117,11 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
   return proxy.release();
 }
 
+// static
 RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
     int routing_id,
     int render_view_routing_id,
-    blink::WebFrame* opener,
+    const base::UnguessableToken& opener_frame_token,
     int parent_routing_id,
     const FrameReplicationState& replicated_state,
     const base::UnguessableToken& frame_token,
@@ -141,14 +142,19 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
   RenderWidget* ancestor_widget = nullptr;
   blink::WebRemoteFrame* web_frame = nullptr;
 
+  auto* opener = blink::WebFrame::FromFrameToken(opener_frame_token);
   if (!parent) {
     // Create a top level WebRemoteFrame.
     render_view = RenderViewImpl::FromRoutingID(render_view_routing_id);
+    blink::WebView* web_view = render_view->GetWebView();
     web_frame = blink::WebRemoteFrame::CreateMainFrame(
-        render_view->GetWebView(), proxy.get(),
-        proxy->blink_interface_registry_.get(),
+        web_view, proxy.get(), proxy->blink_interface_registry_.get(),
         proxy->GetRemoteAssociatedInterfaces(), frame_token, opener);
     // Root frame proxy has no ancestors to point to their RenderWidget.
+
+    // The WebRemoteFrame created here was already attached to the Page as its
+    // main frame, so we can call WebView's DidAttachRemoteMainFrame().
+    web_view->DidAttachRemoteMainFrame();
   } else {
     // Create a frame under an existing parent. The parent is always expected
     // to be a RenderFrameProxy, because navigations initiated by local frames
@@ -303,6 +309,13 @@ void RenderFrameProxy::OnZoomLevelChanged(double zoom_level) {
   SynchronizeVisualProperties();
 }
 
+void RenderFrameProxy::OnRootWindowSegmentsChanged(
+    std::vector<gfx::Rect> root_widget_window_segments) {
+  pending_visual_properties_.root_widget_window_segments =
+      std::move(root_widget_window_segments);
+  SynchronizeVisualProperties();
+}
+
 void RenderFrameProxy::OnPageScaleFactorChanged(float page_scale_factor,
                                                 bool is_pinch_gesture_active) {
   DCHECK(ancestor_render_widget_);
@@ -364,7 +377,10 @@ void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
   // NOTE(andre@vivaldi.com) : We have to skip this as the frame will inherit
   // our UIs activation state breaking autoplay logic, and other.
   if (!vivaldi::IsVivaldiRunning()) {
-  if (state.has_received_user_gesture) {
+  if (state.has_active_user_gesture) {
+    // TODO(crbug.com/1087963): This should be hearing about sticky activations
+    // and setting those (as well as the active one?). But the call to
+    // UpdateUserActivationState sets the transient activation.
     web_frame_->UpdateUserActivationState(
         blink::mojom::UserActivationUpdateType::kNotifyActivation);
   }
@@ -393,10 +409,7 @@ bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
 
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderFrameProxy, msg)
-    IPC_MESSAGE_HANDLER(FrameMsg_UpdateOpener, OnUpdateOpener)
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateName, OnDidUpdateName)
-    IPC_MESSAGE_HANDLER(FrameMsg_TransferUserActivationFrom,
-                        OnTransferUserActivationFrom)
     IPC_MESSAGE_HANDLER(UnfreezableFrameMsg_DeleteProxy, OnDeleteProxy)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
@@ -432,11 +445,6 @@ void RenderFrameProxy::ChildProcessGone() {
                                       screen_info().device_scale_factor);
 }
 
-void RenderFrameProxy::OnUpdateOpener(int opener_routing_id) {
-  blink::WebFrame* opener = RenderFrameImpl::ResolveWebFrame(opener_routing_id);
-  web_frame_->SetOpener(opener);
-}
-
 void RenderFrameProxy::DidStartLoading() {
   web_frame_->DidStartLoading();
 }
@@ -445,14 +453,6 @@ void RenderFrameProxy::OnDidUpdateName(const std::string& name,
                                        const std::string& unique_name) {
   web_frame_->SetReplicatedName(blink::WebString::FromUTF8(name));
   unique_name_ = unique_name;
-}
-
-void RenderFrameProxy::OnTransferUserActivationFrom(int32_t source_routing_id) {
-  RenderFrameProxy* source_proxy =
-      RenderFrameProxy::FromRoutingID(source_routing_id);
-  if (!source_proxy)
-    return;
-  web_frame()->TransferUserActivationFrom(source_proxy->web_frame());
 }
 
 void RenderFrameProxy::DidUpdateVisualProperties(
@@ -533,6 +533,8 @@ void RenderFrameProxy::SynchronizeVisualProperties() {
           pending_visual_properties_.visible_viewport_size ||
       sent_visual_properties_->compositor_viewport !=
           pending_visual_properties_.compositor_viewport ||
+      sent_visual_properties_->root_widget_window_segments !=
+          pending_visual_properties_.root_widget_window_segments ||
       capture_sequence_number_changed;
 
   if (synchronized_props_changed) {
@@ -612,34 +614,6 @@ void RenderFrameProxy::FrameDetached(DetachType type) {
   delete this;
 }
 
-void RenderFrameProxy::ForwardPostMessage(
-    blink::WebLocalFrame* source_frame,
-    blink::WebRemoteFrame* target_frame,
-    blink::WebSecurityOrigin target_origin,
-    blink::WebDOMMessageEvent event) {
-  DCHECK(!web_frame_ || web_frame_ == target_frame);
-
-  FrameMsg_PostMessage_Params params;
-  params.message =
-      new base::RefCountedData<blink::TransferableMessage>(event.AsMessage());
-  params.source_origin = event.Origin().Utf16();
-  if (!target_origin.IsNull())
-    params.target_origin = target_origin.ToString().Utf16();
-
-  // Include the routing ID for the source frame (if one exists), which the
-  // browser process will translate into the routing ID for the equivalent
-  // frame in the target process.
-  params.source_routing_id = MSG_ROUTING_NONE;
-  if (source_frame) {
-    RenderFrameImpl* source_render_frame =
-        RenderFrameImpl::FromWebFrame(source_frame);
-    if (source_render_frame)
-      params.source_routing_id = source_render_frame->GetRoutingID();
-  }
-
-  Send(new FrameHostMsg_RouteMessageEvent(routing_id_, params));
-}
-
 void RenderFrameProxy::Navigate(
     const blink::WebURLRequest& request,
     blink::WebLocalFrame* initiator_frame,
@@ -648,33 +622,37 @@ void RenderFrameProxy::Navigate(
     bool initiator_frame_has_download_sandbox_flag,
     bool blocking_downloads_in_sandbox_enabled,
     bool initiator_frame_is_ad,
-    mojo::ScopedMessagePipeHandle blob_url_token,
+    blink::CrossVariantMojoRemote<blink::mojom::BlobURLTokenInterfaceBase>
+        blob_url_token,
     const base::Optional<blink::WebImpression>& impression) {
   // The request must always have a valid initiator origin.
   DCHECK(!request.RequestorOrigin().IsNull());
 
-  FrameHostMsg_OpenURL_Params params;
-  params.url = request.Url();
-  params.initiator_origin = request.RequestorOrigin();
-  params.post_body = GetRequestBodyForWebURLRequest(request);
-  DCHECK_EQ(!!params.post_body, request.HttpMethod().Utf8() == "POST");
-  params.extra_headers = GetWebURLRequestHeadersAsString(request);
-  params.referrer.url = blink::WebStringToGURL(request.ReferrerString());
-  params.referrer.policy = request.GetReferrerPolicy();
-  params.disposition = WindowOpenDisposition::CURRENT_TAB;
-  params.should_replace_current_entry = should_replace_current_entry;
-  params.user_gesture = request.HasUserGesture();
-  params.triggering_event_info = blink::TriggeringEventInfo::kUnknown;
-  params.blob_url_token = blob_url_token.release();
+  auto params = mojom::OpenURLParams::New();
+  params->url = request.Url();
+  params->initiator_origin = request.RequestorOrigin();
+  params->post_body = GetRequestBodyForWebURLRequest(request);
+  DCHECK_EQ(!!params->post_body, request.HttpMethod().Utf8() == "POST");
+  params->extra_headers = GetWebURLRequestHeadersAsString(request);
+  params->referrer = blink::mojom::Referrer::New(
+      blink::WebStringToGURL(request.ReferrerString()),
+      request.GetReferrerPolicy());
+  params->disposition = WindowOpenDisposition::CURRENT_TAB;
+  params->should_replace_current_entry = should_replace_current_entry;
+  params->user_gesture = request.HasUserGesture();
+  params->triggering_event_info = blink::TriggeringEventInfo::kUnknown;
+  params->blob_url_token =
+      mojo::PendingRemote<blink::mojom::BlobURLToken>(std::move(blob_url_token))
+          .PassPipe();
 
   RenderFrameImpl* initiator_render_frame =
       RenderFrameImpl::FromWebFrame(initiator_frame);
-  params.initiator_routing_id = initiator_render_frame
-                                    ? initiator_render_frame->GetRoutingID()
-                                    : MSG_ROUTING_NONE;
+  params->initiator_routing_id = initiator_render_frame
+                                     ? initiator_render_frame->GetRoutingID()
+                                     : MSG_ROUTING_NONE;
 
   if (impression)
-    params.impression = ConvertWebImpressionToImpression(*impression);
+    params->impression = ConvertWebImpressionToImpression(*impression);
 
   // Note: For the AdFrame/Sandbox download policy here it only covers the case
   // where the navigation initiator frame is ad. The download_policy may be
@@ -684,9 +662,9 @@ void RenderFrameProxy::Navigate(
       is_opener_navigation, request, web_frame_->GetSecurityOrigin(),
       initiator_frame_has_download_sandbox_flag,
       blocking_downloads_in_sandbox_enabled, initiator_frame_is_ad,
-      &params.download_policy);
+      &params->download_policy);
 
-  Send(new FrameHostMsg_OpenURL(routing_id_, params));
+  GetFrameProxyHost()->OpenURL(std::move(params));
 }
 
 void RenderFrameProxy::FrameRectsChanged(
@@ -722,28 +700,6 @@ void RenderFrameProxy::UpdateRemoteViewportIntersection(
                                                    intersection_state));
 }
 
-void RenderFrameProxy::DidChangeOpener(blink::WebFrame* opener) {
-  // A proxy shouldn't normally be disowning its opener.  It is possible to get
-  // here when a proxy that is being detached clears its opener, in which case
-  // there is no need to notify the browser process.
-  if (!opener)
-    return;
-
-  // Only a LocalFrame (i.e., the caller of window.open) should be able to
-  // update another frame's opener.
-  DCHECK(opener->IsWebLocalFrame());
-
-  int opener_routing_id =
-      RenderFrameImpl::FromWebFrame(opener->ToWebLocalFrame())->GetRoutingID();
-  Send(new FrameHostMsg_DidChangeOpener(routing_id_, opener_routing_id));
-}
-
-void RenderFrameProxy::AdvanceFocus(blink::mojom::FocusType type,
-                                    blink::WebLocalFrame* source) {
-  int source_routing_id = RenderFrameImpl::FromWebFrame(source)->GetRoutingID();
-  Send(new FrameHostMsg_AdvanceFocus(routing_id_, type, source_routing_id));
-}
-
 base::UnguessableToken RenderFrameProxy::GetDevToolsFrameToken() {
   return devtools_frame_token_;
 }
@@ -755,9 +711,18 @@ cc::Layer* RenderFrameProxy::GetLayer() {
 void RenderFrameProxy::SetLayer(scoped_refptr<cc::Layer> layer,
                                 bool prevent_contents_opaque_changes,
                                 bool is_surface_layer) {
+  // |ancestor_render_widget_| can be null if this is a proxy for a remote main
+  // frame, or a subframe of that proxy. However, we should not be setting a
+  // layer on such a proxy (the layer is used for embedding a child proxy).
+  DCHECK(ancestor_render_widget_);
+
   if (web_frame()) {
     web_frame()->SetCcLayer(layer.get(), prevent_contents_opaque_changes,
                             is_surface_layer);
+
+    // Schedule an animation so that a new frame is produced with the updated
+    // layer, otherwise this local root's visible content may not be up to date.
+    ancestor_render_widget_->ScheduleAnimation();
   }
   embedded_layer_ = std::move(layer);
 }

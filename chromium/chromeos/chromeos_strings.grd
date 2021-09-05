@@ -313,18 +313,11 @@ Try tapping the mic to ask me anything.
       </message>
 
       <!-- Print Management App -->
-      <!-- TODO(crbug/1067465): Update with finalized copies of the strings -->
-      <message name="IDS_PRINT_MANAGEMENT_COMPLETION_STATUS_FAILED" desc="Displayed text status if the print job failed." translateable="false">
-        Failed
-      </message>
-      <message name="IDS_PRINT_MANAGEMENT_COMPLETION_STATUS_CANCELED" desc="Displayed text status if the print job was canceled." translateable="false">
+      <message name="IDS_PRINT_MANAGEMENT_COMPLETION_STATUS_CANCELED" desc="Displayed text status if the print job was canceled.">
         Canceled
       </message>
-      <message name="IDS_PRINT_MANAGEMENT_COMPLETION_STATUS_PRINTED" desc="Displayed text status if the print job was printed succesfully." translateable="false">
+      <message name="IDS_PRINT_MANAGEMENT_COMPLETION_STATUS_PRINTED" desc="Displayed text status if the print job was printed succesfully.">
         Printed
-      </message>
-      <message name="IDS_PRINT_MANAGEMENT_COMPLETION_STATUS_UNKNOWN_ERROR" desc="Displayed text status if the print job had an unknown error." translateable="false">
-        Unknown Error
       </message>
       <message name="IDS_PRINT_MANAGEMENT_FILE_NAME_COLUMN" desc="The label for the column header that displays the file name of the print job.">
         File name
@@ -339,6 +332,9 @@ Try tapping the mic to ask me anything.
         Status
       </message>
       <message name="IDS_PRINT_MANAGEMENT_TITLE" desc="The title of the print management app.">
+        Print jobs
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_APP_NAME" desc="The app name of the print management app.">
         Print Jobs
       </message>
       <message name="IDS_PRINT_MANAGEMENT_CLEAR_ALL_HISTORY_BUTTON_TEXT" desc="The label for the button that clears the print job history.">
@@ -352,6 +348,69 @@ Try tapping the mic to ask me anything.
       </message>
       <message name="IDS_PRINT_MANAGEMENT_CLEAR_BUTTON_LABEL" desc="The label for the action button that confirms clearing a user's print history in the clear print history dialog.">
         Clear
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_HISTORY_HEADER_LABEL" desc="The header label that indicates that print jobs below this header are the user's print history.">
+        History
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_HISTORY_TOOL_TIP" desc="The tooltip that states that the user's print jobs are automatically deleted after 90 days.">
+        Print jobs older than 90 days will be removed
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_PRINTED_PAGES_ARIA_LABEL" desc="The aria label that describes the current page printed printed versus the total number of pages.">
+        Printed page <ph name="PRINTED_PAGES">$1<ex>1</ex></ph> out of <ph name="TOTAL_PAGES">$2<ex>2</ex></ph>.
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_PRINTED_PAGES_PROGRESS_FRACTION" desc="A fraction-based progress indicator that lets users know how many pages are print versus how many pages total to be printed. Example: 5/7 (where 5 pages haves been printed out of 7 total pages">
+        <ph name="PRINTED_PAGES_NUMBER">$1<ex>5</ex></ph>/<ph name="TOTAL_PAGES_NUMBER">$2<ex>7</ex></ph>
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_COMPLETED_JOB_ARIA_LABEL" desc="The aria label that describes a completed print job that includes the print job documenet title, printer name, creation time, and completion status. This is a sentence with commas and spaces (minor pause) between placeholders.">
+        <ph name="DOCUMENT_TITLE">$1<ex>my_essay.doc</ex></ph>, <ph name="PRINTER_NAME">$2<ex>canon 6450</ex></ph>, <ph name="CREATION_TIME">$3<ex>February 8, 2020</ex></ph>, <ph name="COMPLETION_STATUS">$4<ex>Printed</ex></ph>
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_ONGOING_JOB_ARIA_LABEL" desc="The aria label that describes an ongoing print job that includes the print job documenet title, printer name, creation time, and ongoing status. Also notifies users that the ongoing print job can be cancelled with the 'Enter' key. This is only used for ChromeVox voice transcriptions.">
+        <ph name="DOCUMENT_TITLE">$1<ex>my_essay.doc</ex></ph>, <ph name="PRINTER_NAME">$2<ex>canon 6450</ex></ph>, <ph name="CREATION_TIME">$3<ex>February 8, 2020</ex></ph>, <ph name="PRINTED_PAGE_NUMBER">$4<ex>5</ex></ph> out of <ph name="TOTAL_PAGE_NUMBER">$5<ex>7</ex></ph>. Press enter to cancel the print job.
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_PAPER_JAM_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job failed because of a printer paper jam.">
+        Failed - Paper jam
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_OUT_OF_PAPER_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job faied because their printer is out out of paper.">
+        Failed - Out of paper
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_OUT_OF_INK_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job failed because their printer is out of ink.">
+        Failed - Out of ink
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_DOOR_OPEN_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job failed because their printer door is open.">
+        Failed - Door open
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_PRINTER_UNREACHABLE_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job failed because their printer is unreachable.">
+        Failed - Printer unreachable
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_TRAY_MISSING_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job failed because their printer's tray is missing.">
+        Failed - Tray missing
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_OUTPUT_FULL_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job failed because their printer's output is full .">
+        Failed - Output full
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_STOPPED_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job failed because their printer has stopped the print job.">
+        Failed - Stopped
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_FILTERED_FAILED_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job failed because their printer's filter has failed.">
+        Failed - Filter failed
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_UNKNOWN_ERROR_STATUS" desc="The error status displayed next to a print job to indicate to users that their print job failed due to an unknown error.">
+        Failed - Unknown error
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_NO_PRINT_JOBS_IN_PROGRESS_MESSAGE" desc="The message shown to users if they do not have any print jobs in progress i.e. being printed.">
+        No print jobs in progress
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_CLEAR_ALL_POLICY_PRINT_JOB_INDICATOR_MESSAGE" desc="The message shown to indicate that a user policy is in place to prevent the user from deleting their print job history.">
+        This action is managed by your administrator
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_CANCEL_PRINT_JOB_BUTTON_LABEL" desc="The label for the button that cancels a print job.">
+        Cancel print job
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_CANCELED_PRINT_JOB_ARIA_ANNOUNCEMENT" desc="The announcement said to notify ChromeVox that a print job was recently cancelled.">
+        Cancelled print job <ph name="DOCUMENT_TITLE">$1<ex>my_essay.doc</ex></ph>
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_COLLAPSE_PRINTING_STATUS" desc="A text that indicates to the user that the print job is currently printing. This text only appears if the width of the app's window is small and cannot display the entire ongoing printing status.">
+        Printing
       </message>
     </messages>
   </release>

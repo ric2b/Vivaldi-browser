@@ -14,7 +14,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/trace_event/trace_event.h"
+#include "base/trace_event/base_tracing.h"
 
 namespace base {
 
@@ -24,11 +24,12 @@ namespace {
 // opportunity to yield to other threads according to some heuristics (e.g.
 // presumably when there's no input but perhaps a single WM_USER message posted
 // later than another thread was readied). MessagePumpForUI doesn't intend to
-// give this opportunity to the kernel when invoking ::PeekMessage however as it
-// runs most tasks out-of-band. Hence, PM_NOYIELD should be used to tell
-// ::PeekMessage it's not the only source of work for this thread.
-const Feature kNoYieldFromNativePeek{"NoYieldFromNativePeek",
-                                     FEATURE_DISABLED_BY_DEFAULT};
+// give this opportunity to the kernel when invoking ::PeekMessage however. This
+// experiment attempts to regain control of the pump (behind an experiment
+// because of how fragile this code is -- experiments help external contributors
+// diagnose regressions, e.g. crbug.com/1078475).
+const Feature kPreventMessagePumpHangs{"PreventMessagePumpHangs",
+                                       FEATURE_DISABLED_BY_DEFAULT};
 
 enum MessageLoopProblems {
   MESSAGE_POST_ERROR,
@@ -114,7 +115,7 @@ void MessagePumpForUI::ScheduleWork() {
     return;  // Someone else continued the pumping.
 
   // Make sure the MessagePump does some work for us.
-  BOOL ret = PostMessage(message_window_.hwnd(), kMsgHaveWork, 0, 0);
+  const BOOL ret = ::PostMessage(message_window_.hwnd(), kMsgHaveWork, 0, 0);
   if (ret)
     return;  // There was room in the Window Message queue.
 
@@ -131,6 +132,8 @@ void MessagePumpForUI::ScheduleWork() {
   work_scheduled_ = false;
   UMA_HISTOGRAM_ENUMERATION("Chrome.MessageLoopProblem", MESSAGE_POST_ERROR,
                             MESSAGE_LOOP_PROBLEM_MAX);
+  TRACE_EVENT_INSTANT0("base", "Chrome.MessageLoopProblem.MESSAGE_POST_ERROR",
+                       TRACE_EVENT_SCOPE_THREAD);
 }
 
 void MessagePumpForUI::ScheduleDelayedWork(const TimeTicks& delayed_work_time) {
@@ -252,8 +255,6 @@ void MessagePumpForUI::DoRunLoop() {
     if (more_work_is_plausible)
       continue;
 
-    // WaitForWork() does some work itself, so notify the delegate of it.
-    state_->delegate->BeforeWait();
     WaitForWork(next_work_info);
   }
 }
@@ -267,6 +268,8 @@ void MessagePumpForUI::WaitForWork(Delegate::NextWorkInfo next_work_info) {
   for (DWORD delay = GetSleepTimeoutMs(next_work_info.delayed_run_time,
                                        next_work_info.recent_now);
        delay != 0; delay = GetSleepTimeoutMs(next_work_info.delayed_run_time)) {
+    state_->delegate->BeforeWait();
+
     // Tell the optimizer to retain these values to simplify analyzing hangs.
     base::debug::Alias(&delay);
     base::debug::Alias(&wait_flags);
@@ -296,13 +299,15 @@ void MessagePumpForUI::WaitForWork(Delegate::NextWorkInfo next_work_info) {
       }
 
       {
-        static const auto kAdditionalFlags =
-            FeatureList::IsEnabled(kNoYieldFromNativePeek) ? PM_NOYIELD : 0x0;
+        // ::GetQueueStatus() above may racily miss a sent-message and
+        // ::PeekMessage() below may thus process one and/or internal events per
+        // its doc.
+        state_->delegate->BeforeDoInternalWork();
 
         MSG msg;
         // Trace as in ProcessNextWindowsMessage().
         TRACE_EVENT0("base", "MessagePumpForUI::WaitForWork PeekMessage");
-        if (::PeekMessage(&msg, nullptr, 0, 0, kAdditionalFlags | PM_NOREMOVE))
+        if (::PeekMessage(&msg, nullptr, 0, 0, PM_NOREMOVE))
           return;
       }
 
@@ -341,6 +346,7 @@ void MessagePumpForUI::HandleWorkMessage() {
   if (next_work_info.is_immediate()) {
     ScheduleWork();
   } else {
+    state_->delegate->BeforeWait();
     ScheduleNativeTimer(next_work_info);
   }
 }
@@ -372,6 +378,7 @@ void MessagePumpForUI::HandleTimerMessage() {
   if (next_work_info.is_immediate()) {
     ScheduleWork();
   } else {
+    state_->delegate->BeforeWait();
     ScheduleNativeTimer(next_work_info);
   }
 }
@@ -426,18 +433,22 @@ void MessagePumpForUI::ScheduleNativeTimer(
 
     // Tell the optimizer to retain the delay to simplify analyzing hangs.
     base::debug::Alias(&delay_msec);
-    UINT_PTR ret =
+    const UINT_PTR ret =
         ::SetTimer(message_window_.hwnd(), reinterpret_cast<UINT_PTR>(this),
                    delay_msec, nullptr);
-    installed_native_timer_ = next_work_info.delayed_run_time;
 
-    if (ret)
+    if (ret) {
+      installed_native_timer_ = next_work_info.delayed_run_time;
       return;
-    // If we can't set timers, we are in big trouble... but cross our fingers
-    // for now.
-    // TODO(jar): If we don't see this error, use a CHECK() here instead.
+    }
+    // This error is likely similar to MESSAGE_POST_ERROR (i.e. native queue is
+    // full). Since we only use ScheduleNativeTimer() in native nested loops
+    // this likely means this pump will not be given a chance to run application
+    // tasks until the nested loop completes.
     UMA_HISTOGRAM_ENUMERATION("Chrome.MessageLoopProblem", SET_TIMER_ERROR,
                               MESSAGE_LOOP_PROBLEM_MAX);
+    TRACE_EVENT_INSTANT0("base", "Chrome.MessageLoopProblem.SET_TIMER_ERROR",
+                         TRACE_EVENT_SCOPE_THREAD);
   }
 }
 
@@ -480,17 +491,13 @@ bool MessagePumpForUI::ProcessNextWindowsMessage() {
     // when ::PeekMessage turns out to be a no-op).
     state_->delegate->BeforeDoInternalWork();
 
-    static const auto kAdditionalFlags =
-        FeatureList::IsEnabled(kNoYieldFromNativePeek) ? PM_NOYIELD : 0x0;
-
     // PeekMessage can run a message if there are sent messages, trace that and
     // emit the boolean param to see if it ever janks independently (ref.
     // comment on GetQueueStatus).
     TRACE_EVENT1("base",
                  "MessagePumpForUI::ProcessNextWindowsMessage PeekMessage",
                  "sent_messages_in_queue", more_work_is_plausible);
-    has_msg = ::PeekMessage(&msg, nullptr, 0, 0,
-                            kAdditionalFlags | PM_REMOVE) != FALSE;
+    has_msg = ::PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) != FALSE;
   }
   if (has_msg)
     more_work_is_plausible |= ProcessMessageHelper(msg);
@@ -545,13 +552,33 @@ bool MessagePumpForUI::ProcessPumpReplacementMessage() {
   // that peeked replacement. Note that the re-post of kMsgHaveWork may be
   // asynchronous to this thread!!
 
-  // As in ProcessNextWindowsMessage() since ::PeekMessage() may process
-  // sent-messages.
+  // Bump the work id since ::PeekMessage may process internal events.
   state_->delegate->BeforeDoInternalWork();
 
+  // The system headers don't define this; it's equivalent to PM_QS_INPUT |
+  // PM_QS_PAINT | PM_QS_POSTMESSAGE. i.e., anything but QS_SENDMESSAGE. Since
+  // we're looking to replace our kMsgHaveWork posted message, we can ignore
+  // sent messages (which never compete with posted messages in the initial
+  // PeekMessage call).
+  constexpr auto PM_QS_ALLEVENTS = QS_ALLEVENTS << 16;
+  static_assert(
+      PM_QS_ALLEVENTS == (PM_QS_INPUT | PM_QS_PAINT | PM_QS_POSTMESSAGE), "");
+  static_assert((PM_QS_ALLEVENTS & PM_QS_SENDMESSAGE) == 0, "");
+
   MSG msg;
-  const bool have_message =
-      ::PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) != FALSE;
+  bool have_message = false;
+  {
+    TRACE_EVENT0("base",
+                 "MessagePumpForUI::ProcessPumpReplacementMessage PeekMessage");
+
+    static const auto peek_replacement_message_modifier =
+        base::FeatureList::IsEnabled(kPreventMessagePumpHangs) ? PM_QS_ALLEVENTS
+                                                               : 0;
+
+    have_message =
+        ::PeekMessage(&msg, nullptr, 0, 0,
+                      PM_REMOVE | peek_replacement_message_modifier) != FALSE;
+  }
 
   // Expect no message or a message different than kMsgHaveWork.
   DCHECK(!have_message || kMsgHaveWork != msg.message ||
@@ -623,9 +650,9 @@ void MessagePumpForIO::ScheduleWork() {
     return;  // Someone else continued the pumping.
 
   // Make sure the MessagePump does some work for us.
-  BOOL ret = ::PostQueuedCompletionStatus(port_.Get(), 0,
-                                          reinterpret_cast<ULONG_PTR>(this),
-                                          reinterpret_cast<OVERLAPPED*>(this));
+  const BOOL ret = ::PostQueuedCompletionStatus(
+      port_.Get(), 0, reinterpret_cast<ULONG_PTR>(this),
+      reinterpret_cast<OVERLAPPED*>(this));
   if (ret)
     return;  // Post worked perfectly.
 
@@ -634,6 +661,9 @@ void MessagePumpForIO::ScheduleWork() {
   work_scheduled_ = false;  // Clarify that we didn't succeed.
   UMA_HISTOGRAM_ENUMERATION("Chrome.MessageLoopProblem", COMPLETION_POST_ERROR,
                             MESSAGE_LOOP_PROBLEM_MAX);
+  TRACE_EVENT_INSTANT0("base",
+                       "Chrome.MessageLoopProblem.COMPLETION_POST_ERROR",
+                       TRACE_EVENT_SCOPE_THREAD);
 }
 
 void MessagePumpForIO::ScheduleDelayedWork(const TimeTicks& delayed_work_time) {

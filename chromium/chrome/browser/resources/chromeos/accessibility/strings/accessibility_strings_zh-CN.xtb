@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">向右滚动</translation>
 <translation id="1781173782405573156">忽略按键</translation>
 <translation id="1787176709638001873">密码编辑文本</translation>
+<translation id="180203835522132923">搜索键 + O，然后按 W</translation>
 <translation id="1810107444790159527">列表框</translation>
 <translation id="1812527064848182527">横向</translation>
 <translation id="1829244130665387512">在网页中查找</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">向左滑动两根手指</translation>
 <translation id="2998131015536248178">上一个字符</translation>
 <translation id="2999559350546931576">调低音高</translation>
+<translation id="3009352964623081324">搜索键 + O，然后按 S。用于安装、管理和自定义语音功能。</translation>
 <translation id="3014130421870723208">@编辑 8 点式盲文</translation>
 <translation id="3030432017085518523">菜单项单选按钮</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{1个单引号}other{#个单引号}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">插入</translation>
 <translation id="4511186779140817916">杏仁白</translation>
 <translation id="451510441928265982">没有上一个 2 级标题</translation>
+<translation id="4515799157838123044">暗化背景内容</translation>
 <translation id="4517854969512651305">将值增大</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{1个斜线符号}other{#个斜线符号}}</translation>
 <translation id="4537277403911487429">下一个相似项</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">部分</translation>
 <translation id="6637586476836377253">日志</translation>
 <translation id="6657128831881431364">进度条</translation>
+<translation id="6660819301598582123">敏捷的棕色狐狸跨过懒狗。</translation>
 <translation id="667999046851023355">文档</translation>
 <translation id="6688209025607531203">非模态提醒</translation>
 <translation id="6689672606256159458">暗鲑红色</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">没有下一个 5 级标题</translation>
 <translation id="6955705049214951590">雾玫瑰色</translation>
 <translation id="696356426651109308">跳到开头</translation>
-<translation id="699159175332639490">搜索键 + O + W</translation>
 <translation id="6994042831499278539">词汇表参考资料</translation>
 <translation id="6996566555547746822">下一个组合框</translation>
 <translation id="6997224546856374593">读出大写字母时：</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">示例</translation>
 <translation id="7439060726180460871">目录</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">读出元素类型和带引号/带删除线/加粗/带括号/大写的文字时改变音调。</translation>
 <translation id="7491962110804786152">标签</translation>
 <translation id="7505149250476994901">先说“大写”，后读字母</translation>
 <translation id="7518543783849163354">要使 ChromeVox 暂时停止朗读功能，请按 Ctrl 键。</translation>

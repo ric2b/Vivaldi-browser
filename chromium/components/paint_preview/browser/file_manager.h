@@ -16,6 +16,7 @@
 #include "url/gurl.h"
 
 namespace paint_preview {
+class PaintPreviewTabService;
 
 // FileManager manages paint preview files associated with a root directory.
 // Typically the root directory is <profile_dir>/paint_previews/<feature>.
@@ -46,6 +47,9 @@ class FileManager : public base::RefCountedThreadSafe<FileManager> {
   // Get statistics about the time of creation and size of artifacts.
   size_t GetSizeOfArtifacts(const DirectoryKey& key) const;
   base::Optional<base::File::Info> GetInfo(const DirectoryKey& key) const;
+
+  // Returns the total disk usage of all paint previews.
+  size_t GetTotalDiskUsage() const;
 
   // Returns true if the directory for |key| exists.
   bool DirectoryExists(const DirectoryKey& key) const;
@@ -87,9 +91,17 @@ class FileManager : public base::RefCountedThreadSafe<FileManager> {
   // Lists the current set of in-use DirectoryKeys.
   base::flat_set<DirectoryKey> ListUsedKeys() const;
 
+  // Returns a list of the least recently modified artifact sets until which
+  // when deleted would result in a total capture size on disk that is less than
+  // |max_size|.
+  std::vector<DirectoryKey> GetOldestArtifactsForCleanup(size_t max_size);
+
  private:
   friend class base::RefCountedThreadSafe<FileManager>;
   ~FileManager();
+
+  friend class PaintPreviewTabService;
+  base::FilePath GetPath() const { return root_directory_; }
 
   enum StorageType {
     kNone = 0,

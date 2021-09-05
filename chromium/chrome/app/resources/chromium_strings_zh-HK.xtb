@@ -127,6 +127,7 @@
 <translation id="5903106910045431592"><ph name="PAGE_TITLE" /> - 網絡登入</translation>
 <translation id="5987687638152509985">更新 Chromium 即可開始同步</translation>
 <translation id="6013050204643758987">「Chromium 作業系統」的開發全賴其他<ph name="BEGIN_LINK_CROS_OSS" />開放原始碼軟件<ph name="END_LINK_CROS_OSS" />協助才得以面世，<ph name="BEGIN_LINK_LINUX_OSS" />Linux (Beta 版本)<ph name="END_LINK_LINUX_OSS" /> 也一樣。</translation>
+<translation id="6039377483953237732">Chromium 作業系統版本</translation>
 <translation id="6055895534982063517">新版 Chromium 現已推出，速度更勝從前。</translation>
 <translation id="6063093106622310249">在 Chromium 中開啟</translation>
 <translation id="6072279588547424923">已將 <ph name="EXTENSION_NAME" /> 加到 Chromium</translation>
@@ -223,7 +224,6 @@ Chromium 無法復原您的設定。</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> The Chromium Authors. 保留所有權利。</translation>
 <translation id="8619360774459241877">正在啟動 Chromium…</translation>
 <translation id="8621669128220841554">不明錯誤導致安裝失敗，請重新下載 Chromium。</translation>
-<translation id="8682540261359803721">如果此頁面沒有顯示設定，請前往 <ph name="LINK_BEGIN" />Chromium 瀏覽器設定<ph name="LINK_END" /></translation>
 <translation id="8697124171261953979">這個擴充功能也會控管 Chromium 啟動時或您使用網址列搜尋時所顯示的網頁。</translation>
 <translation id="8704119203788522458">這是您專屬的 Chromium</translation>
 <translation id="8796602469536043152">Chromium 需要取得權限，才能讓這個網站存取您的相機和麥克風</translation>

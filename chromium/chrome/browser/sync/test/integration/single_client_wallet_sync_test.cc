@@ -252,6 +252,13 @@ class SingleClientWalletSyncTest : public SyncTest {
     }
   }
 
+  void WaitForCreditCardCloudTokenData(size_t expected_count,
+                                       autofill::PersonalDataManager* pdm) {
+    while (pdm->GetCreditCardCloudTokenData().size() != expected_count) {
+      WaitForOnPersonalDataChanged(pdm);
+    }
+  }
+
   bool TriggerGetUpdatesAndWait() {
     const base::Time now = base::Time::Now();
     // Trigger a sync and wait for the new data to arrive.
@@ -399,10 +406,10 @@ IN_PROC_BROWSER_TEST_F(SingleClientWalletWithAccountStorageSyncTest,
   ASSERT_TRUE(AwaitQuiescence());
 
   // Make sure the data & metadata is in the DB.
-  ASSERT_EQ(1uL, pdm->GetServerProfiles().size());
-  ASSERT_EQ(1uL, pdm->GetCreditCards().size());
-  ASSERT_EQ(kDefaultCustomerID, pdm->GetPaymentsCustomerData()->customer_id);
-  ASSERT_EQ(1uL, pdm->GetCreditCardCloudTokenData().size());
+  WaitForNumberOfCards(1, pdm);
+  WaitForNumberOfServerProfiles(1, pdm);
+  WaitForPaymentsCustomerData(kDefaultCustomerID, pdm);
+  WaitForCreditCardCloudTokenData(1, pdm);
 
   // Signout, the data & metadata should be gone.
   GetClient(0)->SignOutPrimaryAccount();

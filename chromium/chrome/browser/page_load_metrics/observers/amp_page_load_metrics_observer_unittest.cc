@@ -324,10 +324,13 @@ TEST_F(AMPPageLoadMetricsObserverTest, SubFrameMetrics) {
   page_load_metrics::mojom::PageLoadTiming subframe_timing;
   page_load_metrics::InitPageLoadTimingForTest(&subframe_timing);
   subframe_timing.navigation_start = base::Time::FromDoubleT(2);
+  subframe_timing.paint_timing->first_paint =
+      base::TimeDelta::FromMilliseconds(4);
   subframe_timing.paint_timing->first_contentful_paint =
       base::TimeDelta::FromMilliseconds(5);
-  subframe_timing.paint_timing->largest_image_paint_size = 1;
-  subframe_timing.paint_timing->largest_image_paint =
+  subframe_timing.paint_timing->largest_contentful_paint
+      ->largest_image_paint_size = 1;
+  subframe_timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(10);
   subframe_timing.interactive_timing->first_input_timestamp =
       base::TimeDelta::FromMilliseconds(20);
@@ -356,6 +359,8 @@ TEST_F(AMPPageLoadMetricsObserverTest, SubFrameMetrics) {
   tester()->test_ukm_recorder().ExpectEntrySourceHasUrl(entry.get(), amp_url);
   tester()->test_ukm_recorder().ExpectEntryMetric(
       entry.get(), "SubFrame.InteractiveTiming.FirstInputDelay4", 3);
+  tester()->test_ukm_recorder().ExpectEntryMetric(
+      entry.get(), "SubFrame.PaintTiming.NavigationToFirstPaint", 4);
   tester()->test_ukm_recorder().ExpectEntryMetric(
       entry.get(), "SubFrame.PaintTiming.NavigationToFirstContentfulPaint", 5);
   tester()->test_ukm_recorder().ExpectEntryMetric(
@@ -431,8 +436,9 @@ TEST_F(AMPPageLoadMetricsObserverTest, SubFrameMetricsFullNavigation) {
   subframe_timing.navigation_start = base::Time::FromDoubleT(2);
   subframe_timing.paint_timing->first_contentful_paint =
       base::TimeDelta::FromMilliseconds(5);
-  subframe_timing.paint_timing->largest_image_paint_size = 1;
-  subframe_timing.paint_timing->largest_image_paint =
+  subframe_timing.paint_timing->largest_contentful_paint
+      ->largest_image_paint_size = 1;
+  subframe_timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(10);
   subframe_timing.interactive_timing->first_input_timestamp =
       base::TimeDelta::FromMilliseconds(20);

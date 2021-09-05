@@ -831,7 +831,7 @@ EVENT_TYPE(SOCKET_POOL_CLOSING_SOCKET)
 //      "initiator": <Initiator origin of the request, if any, or else "not an
 //                    origin">,
 //      "load_flags": <Numeric value of the combined load flags>,
-//      "privacy_mode": <True if privacy mode is enabled for the request>,
+//      "privacy_mode": <Privacy mode associated with the request>,
 //      "network_isolation_key": <NIK associated with the request>,
 //      "priority": <Numeric priority of the request>,
 //      "site_for_cookies": <SiteForCookies associated with the request>,
@@ -2004,6 +2004,20 @@ EVENT_TYPE(QUIC_SESSION_CRYPTO_HANDSHAKE_MESSAGE_RECEIVED)
 //   }
 EVENT_TYPE(QUIC_SESSION_CRYPTO_HANDSHAKE_MESSAGE_SENT)
 
+// A QUIC connection received transport parameters.
+//   {
+//     "quic_transport_parameters": <Human readable view of the transport
+//                                   parameters>
+//   }
+EVENT_TYPE(QUIC_SESSION_TRANSPORT_PARAMETERS_RECEIVED)
+
+// A QUIC connection sent transport parameters.
+//   {
+//     "quic_transport_parameters": <Human readable view of the transport
+//                                   parameters>
+//   }
+EVENT_TYPE(QUIC_SESSION_TRANSPORT_PARAMETERS_SENT)
+
 // A QUIC connection received a PUSH_PROMISE frame.  The following
 // parameters are attached:
 //   {
@@ -2284,6 +2298,13 @@ EVENT_TYPE(QUIC_CONNECTION_MIGRATION_TRIGGERED)
 //  }
 EVENT_TYPE(QUIC_CONNECTION_MIGRATION_FAILURE)
 
+// This event is emitted whenenver a platform notification is received that
+// could possibly trigger connection migration.
+//   {
+//     "signal": <Type of the platform notification>
+//   }
+EVENT_TYPE(QUIC_CONNECTION_MIGRATION_PLATFORM_NOTIFICATION)
+
 // Records a successful QUIC connection migration attempt of the session
 // identified by connection_id.
 //  {
@@ -2356,6 +2377,15 @@ EVENT_TYPE(QUIC_CONNECTIVITY_PROBING_MANAGER_PROBE_SENT)
 //     "peer_address": <Peer address on the probed path>
 //  }
 EVENT_TYPE(QUIC_CONNECTIVITY_PROBING_MANAGER_PROBE_RECEIVED)
+
+// Records that QUIC connectivity probing manager receives STATLESS_RESET on the
+// following path:
+//  {
+//     "network": <ID of the network being probed>
+//     "self_address": <Self address on the probed path>
+//     "peer_address": <Peer address on the probed path>
+//  }
+EVENT_TYPE(QUIC_CONNECTIVITY_PROBING_MANAGER_STATELESS_RESET_RECEIVED)
 
 // ------------------------------------------------------------------------
 // QuicPortMigration
@@ -2628,13 +2658,21 @@ EVENT_TYPE(AUTH_LIBRARY_ACQUIRE_CREDS)
 // This operation involves invoking an external library which may perform disk,
 // IPC, and network IO as a part of its work.
 //
-// On Posix platforms, the END phase has the following parameters.
+// On Windows, the BEGIN phase has the following parameters:
+//   {
+//     "spn": <Service Principle Name>,
+//     "context_flags": <Integer with bitfield value>
+//   }
+//
+// The END phase has the following parameters.
+//
+// On Posix platforms:
 //   {
 //     "context": <GSSAPI Context Description>,
 //     "status" : <GSSAPI Status if the operation failed>
 //   }
 //
-// On Windows, the END phase has the following parameters.
+// On Windows:
 //   {
 //     "context": <SSPI Context Description>
 //     "status" : <SSPI SECURITY_STATUS>

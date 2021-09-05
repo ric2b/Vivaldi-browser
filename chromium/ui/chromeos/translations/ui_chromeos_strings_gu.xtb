@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">જાપાનીઝ ઇનપુટ (યુએસ કીબોર્ડ માટે)</translation>
 <translation id="1047956942837015229"><ph name="COUNT" /> આઇટમ્સ કાઢી નાખી રહ્યું છે...</translation>
 <translation id="1049926623896334335">Word દસ્તાવેજ</translation>
+<translation id="1060368002126861100"><ph name="APP_NAME" /> વડે ફાઇલો ખોલવા માટે, પહેલા તેમને Windowsના ફાઇલ ફોલ્ડરમાં ખસેડો.</translation>
 <translation id="1062407476771304334">બદલો</translation>
 <translation id="1065449928621190041">કેનેડિયન ફ્રેંચ કીબોર્ડ</translation>
 <translation id="1119069657431255176">Bzip2 સંકુચિત તાર આર્કાઇવ</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">સ્લાઇડર શોધો</translation>
 <translation id="1399648040768741453">તેલુગુ કીબોર્ડ (ધ્વન્યાત્મક)</translation>
 <translation id="1430915738399379752">પ્રિન્ટ</translation>
+<translation id="1433600251059882049">આ ફોલ્ડર Linux અને Windows સાથે શેર થાય છે</translation>
+<translation id="1435838927755162558">Parallels ડેસ્કટૉપ સાથે ફોલ્ડર શેર કરો</translation>
 <translation id="1439494416798956626"><ph name="FOLDER_NAME" />માં ખસેડ્યું.</translation>
 <translation id="1441841714100794440">વિયેતનામીસ કીબોર્ડ (Telex)</translation>
 <translation id="1455548678241328678">નોર્વેજીયન કીબોર્ડ</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">આ ફાઇલ ઑફલાઇન ઉપલબ્ધ નથી.</translation>
 <translation id="184633654410729720">થાઈ કીબોર્ડ (Kedmanee)</translation>
 <translation id="1847880352285315359">સાચવ્યો</translation>
+<translation id="1853795129690976061">આ ફોલ્ડર Linux સાથે શેર થાય છે</translation>
 <translation id="1864756863218646478">ફાઇલ શોધી શકાઈ નથી.</translation>
 <translation id="1921986354447415460">ટર્કિશ-F કીબોર્ડ</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" />ને ફોર્મેટ કરી</translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">સિંહલા કીબોર્ડ</translation>
 <translation id="240770291734945588"><ph name="SPACE_AVAILABLE" /> ઉપલબ્ધ</translation>
 <translation id="2425665904502185219">કુલ ફાઇલ કદ</translation>
+<translation id="2428749644083375155"><ph name="NUMBER_OF_ITEMS" /> આઇટમની <ph name="FOLDER_NAME" />માં કૉપિ કરી રહ્યાં છીએ</translation>
 <translation id="2448312741937722512">પ્રકાર</translation>
 <translation id="2453576648990281505">ફાઇલ પહેલાથી જ અસ્તિત્વમાં છે</translation>
 <translation id="2464079411014186876">આઈસ્ક્રીમ</translation>
@@ -165,7 +170,7 @@
 <translation id="2925966894897775835">Sheets</translation>
 <translation id="2938685643439809023">મોંગોલિયન</translation>
 <translation id="2942290791863759244">જર્મન નીઓ 2 કીબોર્ડ</translation>
-<translation id="2943400156390503548">સ્લાઇડ્સ</translation>
+<translation id="2943400156390503548">Slides</translation>
 <translation id="2943503720238418293">વધુ ટૂંકા નામનો ઉપયોગ કરો</translation>
 <translation id="2949781154072577687"><ph name="DRIVE_NAME" />ને ફોર્મેટ કરી રહ્યાં છીએ…</translation>
 <translation id="2951236788251446349">જેલીફીશ</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">સ્થાન માહિતી</translation>
 <translation id="3057861065630527966">તમારા ફોટો અને વિડિઓઝનો બેકઅપ લો</translation>
 <translation id="3064388234319122767">લિવ્યંતરણ (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Windows ફાઇલો</translation>
 <translation id="3078461028045006476"><ph name="EXTENSION_NAME" /> સાથે શેર કરો</translation>
 <translation id="3088034400796962477">લિવ્યંતરણ (salam ← سلام)</translation>
 <translation id="3116361045094675131">યુકે કીબોર્ડ</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">ચેતવણી: આ ફાઇલો અસ્થાયી છે અને બની શકે કે ડિસ્ક પર સ્પેસ ખાલી કરવા માટે તેમને ઑટોમૅટિક રીતે ડિલીટ કરવામાં આવે  <ph name="BEGIN_LINK" />વધુ જાણો<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">ફોલ્ડર</translation>
 <translation id="3549797760399244642">drive.google.com પર જાઓ...</translation>
+<translation id="3553048479571901246"><ph name="APP_NAME" /> વડે ફાઇલો ખોલવા માટે, પહેલા તેમને Windowsના ફાઇલ ફોલ્ડરમાં કૉપિ કરો.</translation>
 <translation id="357479282490346887">લિથુનિયન</translation>
 <translation id="3583509704582854624">આલ્ફાન્યુમેરિક ઇનપુટ (જાપાનીઝ કીબોર્ડ માટે)</translation>
 <translation id="3603385196401704894">કેનેડિયન ફ્રેંચ</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">વર્ઝન</translation>
 <translation id="3801082500826908679">ફોરિસ્ત</translation>
 <translation id="3809272675881623365">સસલું</translation>
+<translation id="3810973564298564668">મેનેજ કરો</translation>
 <translation id="3811494700605067549">1 ફાઇલ પસંદ કરી</translation>
 <translation id="3815016854028376614">ઝુયિન ઇનપુટ પદ્ધતિ</translation>
 <translation id="3825863595139017598">મંગોલિયન કીબોર્ડ</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">પેસ્ટ કરો</translation>
 <translation id="3958548648197196644">કિવી</translation>
 <translation id="3966388904776714213">ઑડિયો પ્લેયર</translation>
+<translation id="3984317463833596033">Parallels ડેસ્કટૉપને <ph name="FOLDER_NAME" /> ફોલ્ડરમાંની ફાઇલોમાં ફેરફાર કરવાની પરવાનગી આપો</translation>
 <translation id="4002066346123236978">શીર્ષક</translation>
-<translation id="4065397611279318371"><ph name="APP_NAME" />માં ફાઇલો ખોલવા માટે, પહેલાં તેમને <ph name="SHARED_DIRECTORY_LABEL" />માં ખસેડો.</translation>
 <translation id="4070370845051020638">કેન્ટોનીઝ ઇનપુટ પદ્ધતિ</translation>
 <translation id="4072248638558688893">તમિલ કીબોર્ડ (ધ્વન્યાત્મક)</translation>
 <translation id="4124935795427217608">યુનિકોર્ન - એક કાલ્પનિક પાંખવાળો ઘોડો</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">હંગુલ 2 સેટ</translation>
 <translation id="4477219268485577442">બલ્ગેરિયન ધ્વન્યાત્મક</translation>
 <translation id="4479812471636796472">યુએસ ડ્વોરેક કીબોર્ડ</translation>
+<translation id="4481711095103932593">આ ફોલ્ડર Windows સાથે શેર થાય છે</translation>
 <translation id="4487088045714738411">બેલ્જિયન કીબોર્ડ</translation>
 <translation id="4522570452068850558">વિગતો</translation>
 <translation id="4552678318981539154">વધુ સ્ટોરેજ ખરીદો</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346"><ph name="ENTRY_NAME" /> પસંદગીમાં ઉમેર્યું.</translation>
 <translation id="4582497162516204941">Linux (બીટા) ઇન્સ્ટૉલ કરો</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" /> માટે પરિણામો બતાવી રહ્યાં છીએ.</translation>
+<translation id="4603392156942865207"><ph name="FILE_NAME" />ની <ph name="FOLDER_NAME" />માં કૉપિ કરી રહ્યાં છીએ</translation>
 <translation id="4631887759990505102">કલાકાર</translation>
 <translation id="4656293982926141856">આ કમ્પ્યુટર</translation>
 <translation id="4669606053856530811">'<ph name="SOURCE_NAME" />'ના સભ્યો ઍક્સેસ ગુમાવશે સિવાય કે આ આઇટમને તેમની સાથે શેર કરવામાં ન આવી હોય.</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">સ્વતઃ-સુધારો</translation>
 <translation id="4881695831933465202">ખોલો</translation>
 <translation id="4886021172213954916">તમિલ કીબોર્ડ (Typewriter)</translation>
-<translation id="4892969127351273348"><ph name="APP_NAME" /> વડે ખોલવામાં અસમર્થ</translation>
+<translation id="4900532980794411603">Parallels ડેસ્કટૉપ સાથે શેર કરો</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" />નો બૅકઅપ લેવા માટે તૈયાર</translation>
 <translation id="4924638091161556692">નિશ્ચિત</translation>
 <translation id="4935975195727477204">સૂર્યમુખીનું ફૂલ</translation>
 <translation id="4943368462779413526">ફૂટબૉલ</translation>
+<translation id="4961158930123534723">Parallels ડેસ્કટૉપ સાથે 1 ફોલ્ડર શેર થયું</translation>
 <translation id="4969785127455456148">આલ્બમ</translation>
 <translation id="497244430928947428">મલયાલમ કીબોર્ડ (ધ્વન્યાત્મક)</translation>
 <translation id="4973523518332075481"><ph name="MAX_LENGTH" /> કે તેથી ઓછા અક્ષરોનું હોય તેવા નામનો ઉપયોગ કરો</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">કમ્પ્યુટર</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">ઑપરેશનમાં અપેક્ષિત કરતાં વધુ સમય લાગી રહ્યો છે. શું તમે તેને નિરસ્ત કરવા માગો છો?</translation>
+<translation id="5036159836254554629">Parallels ડેસ્કટૉપ સાથે શેર કરવાને મેનેજ કરો</translation>
 <translation id="5038625366300922036">વધુ જુઓ...</translation>
 <translation id="5061708541166515394">કોન્ટ્રાસ્ટ</translation>
 <translation id="5068919226082848014">પિઝા</translation>
 <translation id="5081517858322016911"><ph name="TOTAL_FILE_SIZE" /> ફાઇલો ડિલીટ કરવામાં આવશે</translation>
+<translation id="508423945471810158"><ph name="NUMBER_OF_ITEMS" /> આઇટમને <ph name="FOLDER_NAME" />માં ખસેડી રહ્યાં છીએ</translation>
 <translation id="509429900233858213">કોઈ ભૂલ આવી છે.</translation>
 <translation id="5098629044894065541">હીબ્રુ</translation>
 <translation id="5123433949759960244">બાસ્કેટબૉલ</translation>
@@ -453,6 +466,7 @@
 <translation id="6054173164583630569">ફ્રેંચ કીબોર્ડ</translation>
 <translation id="6074825444536523002">Google ફોર્મ</translation>
 <translation id="6096979789310008754">શોધ ટેક્સ્ટ સાફ કરી, બધી ફાઇલો અને ફોલ્ડરો બતાવવામાં આવી રહ્યાં છે.</translation>
+<translation id="610101264611565198"><ph name="FILE_NAME" />ને <ph name="FOLDER_NAME" />માં ખસેડાય છે</translation>
 <translation id="6111770213269631447">લિવ્યંતરણ (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">જગ્યા</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" /> ખસેડાઈ રહી છે...</translation>
@@ -493,6 +507,7 @@
 <translation id="656398493051028875">"<ph name="FILENAME" />" કાઢી નાખી રહ્યું છે...</translation>
 <translation id="6581162200855843583">Google ડ્રાઇવ લિંક</translation>
 <translation id="6607272825297743757">ફાઇલ માહિતી</translation>
+<translation id="6609332149380188670">Parallels ડેસ્કટૉપ સાથે <ph name="NUMBER_OF_ITEMS" /> ફોલ્ડર શેર થયા</translation>
 <translation id="6629841649550503054">તમામનો <ph name="BEGIN_LINK" />Google ડ્રાઇવ<ph name="END_LINK" /> પર બેકઅપ લેવાયો!</translation>
 <translation id="6643016212128521049">સાફ કરો</translation>
 <translation id="6650726141019353908">ગુલાબી પતંગિયું</translation>
@@ -530,12 +545,13 @@
 <translation id="6970230597523682626">બલ્ગેરિયન</translation>
 <translation id="6973630695168034713">ફોલ્ડર્સ</translation>
 <translation id="6978611942794658017">આ ફાઇલ Windows સોફ્ટવેરનો ઉપયોગ કરતા PC માટે ડિઝાઇન કરવામાં આવી છે. આ તમારું ડિવાઇસ જે Chrome OS પર ચાલે છે તેની સાથે સુસંગત નથી. કૃપા કરીને યોગ્ય અવેજી ઍપ્લિકેશન માટે Chrome વેબ સ્ટોરમાં શોધો.</translation>
-<translation id="6979158407327259162">Google ડ્રાઇવ</translation>
+<translation id="6979158407327259162">Google Drive</translation>
 <translation id="6990081529015358884">તમારી પાસે સ્થાન નથી</translation>
 <translation id="6998711733709403587"><ph name="SELCTED_FOLDERS_COUNT" /> ફોલ્ડર્સ પસંદ કર્યા</translation>
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">ઇન્સ્ટોલેશન નિષ્ફળ થયું.</translation>
 <translation id="7040138676081995583">આની સાથે ખોલો...</translation>
+<translation id="7059566040011178088"><ph name="REMAINING_TIME" />થી ઓછો</translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> આઇટમ્સ પસંદ કરી</translation>
 <translation id="7106346894903675391">વધુ સ્ટોરેજ ખરીદો...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;ડ્રાઇવમાં શોધો&lt;/em&gt;</translation>
@@ -644,6 +660,7 @@
 <translation id="8193175696669055101">ઉપકરણ મૉડેલ</translation>
 <translation id="8208580316430297579">આર્ટવર્ક</translation>
 <translation id="8223479393428528563">ઑફલાઇન વપરાશ માટે આ ફાઇલો સાચવવા, પાછા ઓનલાઇન થાઓ, ફાઇલો પર જમણી ક્લિક કરો અને <ph name="OFFLINE_CHECKBOX_NAME" /> વિકલ્પ પસંદ કરો.</translation>
+<translation id="8231972167769262174">લગભગ <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">છોડો</translation>
 <translation id="8261506727792406068">ડિલીટ કરો</translation>
 <translation id="8269755669432358899">ફાઇલોના પ્રતિસાદની પૅનલ નાની કરો</translation>
@@ -670,6 +687,7 @@
 <translation id="8475647382427415476">Google ડ્રાઇવ "<ph name="FILENAME" />" ને અત્યારે જ સમન્વયિત કરવા અસમર્થ હતી. Google ડ્રાઇવ પછી ફરીથી પ્રયાસ કરશે.</translation>
 <translation id="8477649328507734757">સ્પિન</translation>
 <translation id="8487700953926739672">ઑફલાઇન ઉપલબ્ધ</translation>
+<translation id="8490342535582768689">Parallels ડેસ્કટૉપને તમારી Google Driveમાંની ફાઇલોમાં ફેરફાર કરવાની પરવાનગી આપો. ફેરફારો તમારા બીજા ડિવાઇસ સાથે સિંક થશે.</translation>
 <translation id="8521441079177373948">યુકે</translation>
 <translation id="8525306231823319788">પૂર્ણ સ્ક્રીન</translation>
 <translation id="8551494947769799688">લાતવિયન</translation>

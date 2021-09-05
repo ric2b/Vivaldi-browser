@@ -16,6 +16,7 @@
 #include "chrome/browser/chromeos/system_logs/dbus_log_source.h"
 #include "chrome/browser/chromeos/system_logs/debug_daemon_log_source.h"
 #include "chrome/browser/chromeos/system_logs/device_event_log_source.h"
+#include "chrome/browser/chromeos/system_logs/network_health_source.h"
 #include "chrome/browser/chromeos/system_logs/touch_log_source.h"
 #include "chrome/browser/chromeos/system_logs/ui_hierarchy_log_source.h"
 #endif
@@ -36,9 +37,9 @@ SystemLogsFetcher* BuildAboutSystemLogsFetcher() {
   fetcher->AddSource(std::make_unique<DeviceEventLogSource>());
   fetcher->AddSource(std::make_unique<TouchLogSource>());
 
-  // Debug Daemon data source - currently only this data source supports
-  // the scrub_data parameter.
+  // Data sources that directly scrub itentifiable information.
   fetcher->AddSource(std::make_unique<DebugDaemonLogSource>(scrub_data));
+  fetcher->AddSource(std::make_unique<NetworkHealthSource>(scrub_data));
   fetcher->AddSource(std::make_unique<UiHierarchyLogSource>(scrub_data));
 #endif
 

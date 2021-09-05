@@ -145,11 +145,15 @@ IDBRequest::IDBRequest(ScriptState* script_state,
                                            TaskType::kDatabaseAccess)) {}
 
 IDBRequest::~IDBRequest() {
-  DCHECK((ready_state_ == DONE && metrics_.IsEmpty()) ||
-         ready_state_ == kEarlyDeath || !GetExecutionContext());
+  if (!GetExecutionContext())
+    return;
+  if (ready_state_ == DONE)
+    DCHECK(metrics_.IsEmpty()) << metrics_.trace_event_name();
+  else
+    DCHECK_EQ(ready_state_, kEarlyDeath);
 }
 
-void IDBRequest::Trace(Visitor* visitor) {
+void IDBRequest::Trace(Visitor* visitor) const {
   visitor->Trace(transaction_);
   visitor->Trace(source_);
   visitor->Trace(result_);

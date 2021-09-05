@@ -14,6 +14,7 @@
 #import "ios/chrome/app/application_delegate/tab_opening.h"
 #import "ios/chrome/app/application_delegate/tab_switching.h"
 #import "ios/chrome/app/application_delegate/url_opener.h"
+#import "ios/chrome/app/application_delegate/url_opener_params.h"
 #import "ios/chrome/app/application_delegate/user_activity_handler.h"
 #import "ios/chrome/app/chrome_overlay_window.h"
 #import "ios/chrome/app/main_application_delegate_testing.h"
@@ -137,6 +138,11 @@
              selector:@selector(sceneDidEnterBackground:)
                  name:UISceneDidEnterBackgroundNotification
                object:nil];
+      [[NSNotificationCenter defaultCenter]
+          addObserver:self
+             selector:@selector(sceneWillEnterForeground:)
+                 name:UISceneWillEnterForegroundNotification
+               object:nil];
     }
   }
 
@@ -153,7 +159,8 @@
     return;
 
   [_appState resumeSessionWithTabOpener:_tabOpener
-                            tabSwitcher:_tabSwitcherProtocol];
+                            tabSwitcher:_tabSwitcherProtocol
+                  connectionInformation:self.sceneController];
 }
 
 - (void)applicationWillResignActive:(UIApplication*)application {
@@ -249,12 +256,25 @@
 - (void)sceneDidEnterBackground:(NSNotification*)notification {
   DCHECK(IsSceneStartupSupported());
   if (@available(iOS 13, *)) {
-    // When the first scene enters foreground, update the app state.
+    // When the last scene enters background, update the app state.
     if (self.foregroundSceneCount == 0) {
       [_appState applicationDidEnterBackground:UIApplication.sharedApplication
                                   memoryHelper:_memoryHelper
                        incognitoContentVisible:self.sceneController
                                                    .incognitoContentVisible];
+    }
+  }
+}
+
+- (void)sceneWillEnterForeground:(NSNotification*)notification {
+  DCHECK(IsSceneStartupSupported());
+  if (@available(iOS 13, *)) {
+    // When the first scene will enter foreground, update the app state.
+    if (self.foregroundSceneCount == 0) {
+      [_appState applicationWillEnterForeground:UIApplication.sharedApplication
+                                metricsMediator:_metricsMediator
+                                   memoryHelper:_memoryHelper
+                                      tabOpener:_tabOpener];
     }
   }
 }
@@ -304,6 +324,7 @@
   return [UserActivityHandler continueUserActivity:userActivity
                                applicationIsActive:applicationIsActive
                                          tabOpener:_tabOpener
+                             connectionInformation:self.sceneController
                                 startupInformation:_startupInformation];
 }
 
@@ -321,6 +342,7 @@
       performActionForShortcutItem:shortcutItem
                  completionHandler:completionHandler
                          tabOpener:_tabOpener
+             connectionInformation:self.sceneController
                 startupInformation:_startupInformation
                  interfaceProvider:_mainController.interfaceProvider];
 }
@@ -353,10 +375,11 @@
   BOOL applicationActive =
       [application applicationState] == UIApplicationStateActive;
 
-  return [URLOpener openURL:url
+  return [URLOpener openURL:[[URLOpenerParams alloc] initWithOpenURL:url
+                                                             options:options]
           applicationActive:applicationActive
-                    options:options
                   tabOpener:_tabOpener
+      connectionInformation:self.sceneController
          startupInformation:_startupInformation];
 }
 

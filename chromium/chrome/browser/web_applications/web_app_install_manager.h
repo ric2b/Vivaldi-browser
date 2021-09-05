@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_WEB_APPLICATIONS_WEB_APP_INSTALL_MANAGER_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/containers/flat_set.h"
@@ -35,6 +36,9 @@ class WebAppInstallManager final : public InstallManager,
  public:
   explicit WebAppInstallManager(Profile* profile);
   ~WebAppInstallManager() override;
+
+  void Start();
+  void Shutdown();
 
   // InstallManager:
   void LoadWebAppAndCheckInstallability(
@@ -68,7 +72,6 @@ class WebAppInstallManager final : public InstallManager,
       const AppId& app_id,
       std::unique_ptr<WebApplicationInfo> web_application_info,
       OnceInstallCallback callback) override;
-  void Shutdown() override;
 
   // For the new USS-based system only. SyncInstallDelegate:
   void InstallWebAppsAfterSync(std::vector<WebApp*> web_apps,
@@ -83,11 +86,22 @@ class WebAppInstallManager final : public InstallManager,
 
   void SetUrlLoaderForTesting(std::unique_ptr<WebAppUrlLoader> url_loader);
   bool has_web_contents_for_testing() const { return web_contents_ != nullptr; }
+  size_t tasks_size_for_testing() const { return tasks_.size(); }
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(WebAppInstallManagerTest,
+                           TaskQueueWebContentsReadyRace);
+
+  void MaybeEnqueuePendingAppSyncInstalls();
+  void EnqueueInstallAppFromSync(
+      const AppId& sync_app_id,
+      std::unique_ptr<WebApplicationInfo> web_application_info,
+      OnceInstallCallback callback);
+  bool IsAppIdAlreadyEnqueued(const AppId& app_id) const;
+
   // On failure will attempt a fallback install only loading icon URLs.
-  void LoadAndInstallWebAppFromManifestWithFallbackCompleted_ForBookmarkAppSync(
-      const AppId& bookmark_app_id,
+  void LoadAndInstallWebAppFromManifestWithFallbackCompleted_ForAppSync(
+      const AppId& sync_app_id,
       std::unique_ptr<WebApplicationInfo> web_application_info,
       OnceInstallCallback callback,
       const AppId& web_app_id,
@@ -107,10 +121,6 @@ class WebAppInstallManager final : public InstallManager,
                              const AppId& app_id,
                              InstallResultCode code);
   // For the new USS-based system only:
-  void OnWebAppInstalledAfterSync(const AppId& app_in_sync_install_id,
-                                  OnceInstallCallback callback,
-                                  const AppId& installed_app_id,
-                                  InstallResultCode code);
   void OnWebAppUninstalledAfterSync(std::unique_ptr<WebApp> web_app,
                                     OnceUninstallCallback callback,
                                     bool uninstalled);
@@ -136,13 +146,34 @@ class WebAppInstallManager final : public InstallManager,
 
   // Tasks can be queued for sequential completion (to be run one at a time).
   // FIFO. This is a subset of |tasks_|.
-  using TaskQueue = base::queue<base::OnceClosure>;
+  struct PendingTask {
+    PendingTask();
+    PendingTask(PendingTask&&);
+    ~PendingTask();
+
+    const WebAppInstallTask* task = nullptr;
+    base::OnceClosure start;
+  };
+  using TaskQueue = base::queue<PendingTask>;
   TaskQueue task_queue_;
-  bool is_running_queued_task_ = false;
+  const WebAppInstallTask* current_queued_task_ = nullptr;
+
+  struct AppSyncInstallRequest {
+    AppSyncInstallRequest();
+    AppSyncInstallRequest(AppSyncInstallRequest&&);
+    ~AppSyncInstallRequest();
+
+    AppId sync_app_id;
+    std::unique_ptr<WebApplicationInfo> web_application_info;
+    OnceInstallCallback callback;
+  };
+  std::vector<AppSyncInstallRequest> pending_app_sync_installs_;
 
   // A single WebContents, shared between tasks in |task_queue_|.
   std::unique_ptr<content::WebContents> web_contents_;
   bool web_contents_ready_ = false;
+
+  bool started_ = false;
 
   base::WeakPtrFactory<WebAppInstallManager> weak_ptr_factory_{this};
 

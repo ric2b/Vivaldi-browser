@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/core/animation/scroll_timeline.h"
 
+#include <tuple>
+
 #include "base/optional.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_scroll_timeline_options.h"
 #include "third_party/blink/renderer/core/animation/scroll_timeline_offset.h"
@@ -164,7 +166,7 @@ bool ScrollTimeline::IsActive() const {
 }
 
 void ScrollTimeline::Invalidate() {
-  ScheduleNextService();
+  ScheduleNextServiceInternal(/* time_check = */ false);
 }
 
 bool ScrollTimeline::ComputeIsActive() const {
@@ -175,8 +177,8 @@ bool ScrollTimeline::ComputeIsActive() const {
          layout_box->GetScrollableArea();
 }
 
-void ScrollTimeline::ResolveScrollOffsets(double* start_offset,
-                                          double* end_offset) const {
+std::tuple<base::Optional<double>, base::Optional<double>>
+ScrollTimeline::ResolveScrollOffsets() const {
   DCHECK(ComputeIsActive());
   LayoutBox* layout_box = resolved_scroll_source_->GetLayoutBox();
   DCHECK(layout_box);
@@ -187,11 +189,13 @@ void ScrollTimeline::ResolveScrollOffsets(double* start_offset,
 
   DCHECK(start_scroll_offset_ && end_scroll_offset_);
   auto orientation = ToPhysicalScrollOrientation(orientation_, *layout_box);
-  *start_offset = start_scroll_offset_->ResolveOffset(
+  auto start_offset = start_scroll_offset_->ResolveOffset(
       resolved_scroll_source_, orientation, max_offset, 0);
 
-  *end_offset = end_scroll_offset_->ResolveOffset(
+  auto end_offset = end_scroll_offset_->ResolveOffset(
       resolved_scroll_source_, orientation, max_offset, max_offset);
+
+  return {start_offset, end_offset};
 }
 
 AnimationTimeline::PhaseAndTime ScrollTimeline::CurrentPhaseAndTime() {
@@ -215,9 +219,17 @@ ScrollTimeline::TimelineState ScrollTimeline::ComputeTimelineState() const {
   double max_offset;
   GetCurrentAndMaxOffset(layout_box, current_offset, max_offset);
 
-  double start_offset;
-  double end_offset;
-  ResolveScrollOffsets(&start_offset, &end_offset);
+  base::Optional<double> start;
+  base::Optional<double> end;
+  std::tie(start, end) = ResolveScrollOffsets();
+
+  if (!start || !end) {
+    return {TimelinePhase::kInactive, /*current_time*/ base::nullopt,
+            base::nullopt, base::nullopt};
+  }
+
+  double start_offset = start.value();
+  double end_offset = end.value();
 
   // TODO(crbug.com/1060384): Once the spec has been updated to state what the
   // expected result is when startScrollOffset >= endScrollOffset, we might need
@@ -273,14 +285,21 @@ void ScrollTimeline::ServiceAnimations(TimingUpdateReason reason) {
   AnimationTimeline::ServiceAnimations(reason);
 }
 
-void ScrollTimeline::ScheduleNextService() {
+void ScrollTimeline::ScheduleNextServiceInternal(bool time_check) {
   if (AnimationsNeedingUpdateCount() == 0)
     return;
 
-  auto state = ComputeTimelineState();
-  PhaseAndTime current_phase_and_time{state.phase, state.current_time};
-  if (current_phase_and_time != last_current_phase_and_time_)
-    ScheduleServiceOnNextFrame();
+  if (time_check) {
+    auto state = ComputeTimelineState();
+    PhaseAndTime current_phase_and_time{state.phase, state.current_time};
+    if (current_phase_and_time == last_current_phase_and_time_)
+      return;
+  }
+  ScheduleServiceOnNextFrame();
+}
+
+void ScrollTimeline::ScheduleNextService() {
+  ScheduleNextServiceInternal(/* time_check = */ true);
 }
 
 void ScrollTimeline::SnapshotState() {
@@ -366,6 +385,20 @@ void ScrollTimeline::GetCurrentAndMaxOffset(const LayoutBox* layout_box,
   current_offset = std::abs(current_offset);
 }
 
+void ScrollTimeline::AnimationAttached(Animation* animation) {
+  AnimationTimeline::AnimationAttached(animation);
+  if (resolved_scroll_source_ && scroll_animations_.IsEmpty())
+    resolved_scroll_source_->RegisterScrollTimeline(this);
+
+  scroll_animations_.insert(animation);
+}
+
+void ScrollTimeline::AnimationDetached(Animation* animation) {
+  AnimationTimeline::AnimationDetached(animation);
+  scroll_animations_.erase(animation);
+  if (resolved_scroll_source_ && scroll_animations_.IsEmpty())
+    resolved_scroll_source_->UnregisterScrollTimeline(this);
+}
 
 void ScrollTimeline::WorkletAnimationAttached() {
   if (!resolved_scroll_source_)
@@ -379,7 +412,8 @@ void ScrollTimeline::WorkletAnimationDetached() {
   GetActiveScrollTimelineSet().erase(resolved_scroll_source_);
 }
 
-void ScrollTimeline::Trace(Visitor* visitor) {
+void ScrollTimeline::Trace(Visitor* visitor) const {
+  visitor->Trace(scroll_animations_);
   visitor->Trace(scroll_source_);
   visitor->Trace(resolved_scroll_source_);
   visitor->Trace(start_scroll_offset_);
@@ -426,6 +460,15 @@ CompositorAnimationTimeline* ScrollTimeline::EnsureCompositorTimeline() {
   compositor_timeline_ = std::make_unique<CompositorAnimationTimeline>(
       scroll_timeline_util::ToCompositorScrollTimeline(this));
   return compositor_timeline_.get();
+}
+
+void ScrollTimeline::UpdateCompositorTimeline() {
+  if (!compositor_timeline_)
+    return;
+  compositor_timeline_->UpdateCompositorTimeline(
+      scroll_timeline_util::GetCompositorScrollElementId(
+          resolved_scroll_source_),
+      GetResolvedStartScrollOffset(), GetResolvedEndScrollOffset());
 }
 
 }  // namespace blink

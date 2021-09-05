@@ -30,6 +30,7 @@ component("gpu") {
     "//chrome/gpu",
     "//chromecast/*",
     "//components/arc/mojom:media",
+    "//components/arc/mojom:media_mojolpm",
     "//components/arc/video_accelerator",
     "//components/mirroring/service:mirroring_service",
     "//components/chromeos_camera/*",
@@ -166,6 +167,7 @@ component("gpu") {
 
   if (is_win) {
     sources += [
+      "windows/av1_guids.h",
       "windows/d3d11_com_defs.h",
       "windows/d3d11_copying_texture_wrapper.cc",
       "windows/d3d11_copying_texture_wrapper.h",
@@ -559,7 +561,9 @@ if (use_v4l2_codec || use_vaapi) {
     data = [ "//media/test/data/" ]
     deps = [
       ":buildflags",
+      "test:frame_validator",
       "test:helpers",
+      "test:test_helpers",
       "test:video_encoder",
       "test:video_encoder_test_environment",
       "//media:test_support",

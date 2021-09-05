@@ -23,7 +23,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "content/common/input/web_mouse_wheel_event_traits.h"
 #include "content/renderer/compositor/compositor_dependencies.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_widget.h"
@@ -41,6 +40,7 @@
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_pointer_properties.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
+#include "third_party/blink/public/mojom/input/pointer_lock_result.mojom.h"
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -236,7 +236,7 @@ const int kButtonsInModifiers =
     WebMouseEvent::kRightButtonDown | WebMouseEvent::kBackButtonDown |
     WebMouseEvent::kForwardButtonDown;
 
-int modifiersWithButtons(int modifiers, int buttons) {
+int ModifiersWithButtons(int modifiers, int buttons) {
   return (modifiers & ~kButtonsInModifiers) | (buttons & kButtonsInModifiers);
 }
 
@@ -602,12 +602,12 @@ class EventSenderBindings : public gin::Wrappable<EventSenderBindings> {
   void FireKeyboardEventsToElement();
   void ClearKillRing();
   std::vector<std::string> ContextClick();
-  void TextZoomIn();
-  void TextZoomOut();
-  void ZoomPageIn();
-  void ZoomPageOut();
-  void SetPageZoomFactor(double factor);
   void ClearTouchPoints();
+  void DidAcquirePointerLock();
+  void DidNotAcquirePointerLock();
+  void DidLosePointerLock();
+  void SetPointerLockWillFailSynchronously();
+  void SetPointerLockWillRespondAsynchronously();
   void ReleaseTouchPoint(unsigned index);
   void UpdateTouchPoint(unsigned index,
                         double x,
@@ -726,12 +726,24 @@ gin::ObjectTemplateBuilder EventSenderBindings::GetObjectTemplateBuilder(
                  &EventSenderBindings::FireKeyboardEventsToElement)
       .SetMethod("clearKillRing", &EventSenderBindings::ClearKillRing)
       .SetMethod("contextClick", &EventSenderBindings::ContextClick)
-      .SetMethod("textZoomIn", &EventSenderBindings::TextZoomIn)
-      .SetMethod("textZoomOut", &EventSenderBindings::TextZoomOut)
-      .SetMethod("zoomPageIn", &EventSenderBindings::ZoomPageIn)
-      .SetMethod("zoomPageOut", &EventSenderBindings::ZoomPageOut)
-      .SetMethod("setPageZoomFactor", &EventSenderBindings::SetPageZoomFactor)
       .SetMethod("clearTouchPoints", &EventSenderBindings::ClearTouchPoints)
+      // When setPointerLockWillRespondAsynchronously() was called, this is used
+      // to respond to the async pointer request.
+      .SetMethod("didAcquirePointerLock",
+                 &EventSenderBindings::DidAcquirePointerLock)
+      // While holding a pointer lock, this breaks the lock.
+      .SetMethod("didLosePointerLock", &EventSenderBindings::DidLosePointerLock)
+      // When setPointerLockWillRespondAsynchronously() was called, this is used
+      // to respond to the async pointer request.
+      .SetMethod("didNotAcquirePointerLock",
+                 &EventSenderBindings::DidNotAcquirePointerLock)
+      // Causes the next pointer lock request to fail in the renderer.
+      .SetMethod("setPointerLockWillFailSynchronously",
+                 &EventSenderBindings::SetPointerLockWillFailSynchronously)
+      // Causes the next pointer lock request to delay until the test calls
+      // either didAcquirePointerLock() or didNotAcquirePointerLock().
+      .SetMethod("setPointerLockWillRespondAsynchronously",
+                 &EventSenderBindings::SetPointerLockWillRespondAsynchronously)
       .SetMethod("releaseTouchPoint", &EventSenderBindings::ReleaseTouchPoint)
       .SetMethod("updateTouchPoint", &EventSenderBindings::UpdateTouchPoint)
       .SetMethod("cancelTouchPoint", &EventSenderBindings::CancelTouchPoint)
@@ -827,34 +839,38 @@ std::vector<std::string> EventSenderBindings::ContextClick() {
   return std::vector<std::string>();
 }
 
-void EventSenderBindings::TextZoomIn() {
-  if (sender_)
-    sender_->TextZoomIn();
-}
-
-void EventSenderBindings::TextZoomOut() {
-  if (sender_)
-    sender_->TextZoomOut();
-}
-
-void EventSenderBindings::ZoomPageIn() {
-  if (sender_)
-    sender_->ZoomPageIn();
-}
-
-void EventSenderBindings::ZoomPageOut() {
-  if (sender_)
-    sender_->ZoomPageOut();
-}
-
-void EventSenderBindings::SetPageZoomFactor(double factor) {
-  if (sender_)
-    sender_->SetPageZoomFactor(factor);
-}
-
 void EventSenderBindings::ClearTouchPoints() {
   if (sender_)
     sender_->ClearTouchPoints();
+}
+
+void EventSenderBindings::DidAcquirePointerLock() {
+  if (sender_)
+    sender_->DidAcquirePointerLock();
+}
+
+void EventSenderBindings::DidNotAcquirePointerLock() {
+  if (sender_)
+    sender_->DidNotAcquirePointerLock();
+}
+
+void EventSenderBindings::DidLosePointerLock() {
+  if (sender_)
+    sender_->DidLosePointerLock();
+}
+
+void EventSenderBindings::SetPointerLockWillFailSynchronously() {
+  if (sender_) {
+    sender_->SetNextPointerLockAction(
+        EventSender::NextPointerLockAction::kWillFail);
+  }
+}
+
+void EventSenderBindings::SetPointerLockWillRespondAsynchronously() {
+  if (sender_) {
+    sender_->SetNextPointerLockAction(
+        EventSender::NextPointerLockAction::kTestWillRespond);
+  }
 }
 
 void EventSenderBindings::ReleaseTouchPoint(unsigned index) {
@@ -1307,7 +1323,7 @@ EventSender::EventSender(WebWidgetTestProxy* web_widget_test_proxy)
 EventSender::~EventSender() {}
 
 void EventSender::Reset() {
-  current_drag_data_.Reset();
+  current_drag_data_ = base::nullopt;
   current_drag_effect_ = blink::kWebDragOperationNone;
   current_drag_effects_allowed_ = blink::kWebDragOperationNone;
   if (widget() && current_pointer_state_[kRawMousePointerId].pressed_button_ !=
@@ -1316,6 +1332,11 @@ void EventSender::Reset() {
   current_pointer_state_.clear();
   is_drag_mode_ = true;
   force_layout_on_events_ = true;
+  pointer_lock_pending_ = false;
+  pointer_unlock_pending_ = false;
+  pointer_locked_ = false;
+  next_pointer_lock_action_ = NextPointerLockAction::kWillSucceedAsync;
+  pointer_locked_callback_.Reset();
 
   // Disable the zoom level override. Reset() also happens during creation of
   // the RenderWidget, which we can detect by checking for the WebWidget.
@@ -1359,9 +1380,121 @@ void EventSender::SetContextMenuData(const WebContextMenuData& data) {
 }
 
 int EventSender::ModifiersForPointer(int pointer_id) {
-  return modifiersWithButtons(
+  return ModifiersWithButtons(
       current_pointer_state_[pointer_id].modifiers_,
       current_pointer_state_[pointer_id].current_buttons_);
+}
+
+bool EventSender::RequestPointerLock(
+    blink::WebLocalFrame* requester_frame,
+    blink::WebWidgetClient::PointerLockCallback callback) {
+  // The fuzzer may call this at incorrect times, so guard against that.
+  if (pointer_lock_pending_)
+    return false;
+
+  blink::scheduler::WebThreadScheduler* scheduler =
+      web_widget_test_proxy_->compositor_deps()->GetWebMainThreadScheduler();
+
+  switch (next_pointer_lock_action_) {
+    case NextPointerLockAction::kWillSucceedAsync:
+      // This action lets the test harness pretend to do a pointer lock. Pointer
+      // lock requests normally go to the browser, so they are expected to be
+      // asynchronous and reply in a fresh callstack. We will return true.
+      scheduler->DefaultTaskRunner()->PostTask(
+          FROM_HERE, base::BindOnce(&EventSender::DidAcquirePointerLock,
+                                    weak_factory_.GetWeakPtr()));
+      break;
+    case NextPointerLockAction::kTestWillRespond:
+      // This action lets the web test itself initiate the reply. We will return
+      // true. The test will need to call eventSender.didAcquirePointerLock() or
+      // eventSender.didNotAcquirePointerLock() in order to resolve the request.
+      break;
+    case NextPointerLockAction::kWillFail:
+      // This action immediately fails. The |callback| is not run when returning
+      // false.
+      return false;
+  }
+
+  pointer_lock_pending_ = true;
+  pointer_locked_callback_ = std::move(callback);
+  return true;
+}
+
+void EventSender::RequestPointerUnlock() {
+  // The fuzzer may call this at incorrect times, so guard against that.
+  if (pointer_unlock_pending_)
+    return;
+  if (!(pointer_locked_ || pointer_lock_pending_))
+    return;
+
+  blink::scheduler::WebThreadScheduler* scheduler =
+      web_widget_test_proxy_->compositor_deps()->GetWebMainThreadScheduler();
+
+  // This request normally goes to the browser, so the result is expected to be
+  // asynchronous and reply in a fresh callstack.
+  scheduler->DefaultTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&EventSender::DidLosePointerLock,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void EventSender::SetNextPointerLockAction(NextPointerLockAction action) {
+  // The fuzzer may call this at incorrect times, so guard against that.
+  if (pointer_lock_pending_ || pointer_locked_)
+    return;
+  next_pointer_lock_action_ = action;
+}
+
+void EventSender::DidAcquirePointerLock() {
+  // The fuzzer may call this at incorrect times, so guard against that.
+  // Also, |pointer_lock_pending_| is reset to false in between tests, and the
+  // callback to here could have been in flight.
+  if (!pointer_lock_pending_)
+    return;
+  // If a lock was already active and requested again (without unlocking first),
+  // the second lock would fail.
+  if (pointer_locked_)
+    return DidNotAcquirePointerLock();
+
+  pointer_lock_pending_ = false;
+  pointer_locked_ = true;
+  // The callback runs first, then the WebWidget method.
+  // TODO(dtapuska): Why do we have both of these? Is the callback not enough?
+  std::move(pointer_locked_callback_)
+      .Run(blink::mojom::PointerLockResult::kSuccess);
+  web_widget_test_proxy_->GetWebWidget()->DidAcquirePointerLock();
+
+  // Reset planned result to default.
+  next_pointer_lock_action_ = NextPointerLockAction::kWillSucceedAsync;
+}
+
+void EventSender::DidNotAcquirePointerLock() {
+  // The fuzzer may call this at incorrect times, so guard against that.
+  // Also, |pointer_lock_pending_| is reset to false in between tests, and the
+  // callback to here could have been in flight.
+  if (!pointer_lock_pending_ || pointer_locked_)
+    return;
+
+  pointer_lock_pending_ = false;
+  // The callback runs first, then the WebWidget method.
+  // TODO(dtapuska): Why do we have both of these? Is the callback not enough?
+  std::move(pointer_locked_callback_)
+      .Run(blink::mojom::PointerLockResult::kUnknownError);
+  web_widget_test_proxy_->GetWebWidget()->DidNotAcquirePointerLock();
+
+  // Reset planned result to default.
+  next_pointer_lock_action_ = NextPointerLockAction::kWillSucceedAsync;
+}
+
+void EventSender::DidLosePointerLock() {
+  // The fuzzer may call this at incorrect times, so guard against that.
+  // Also, |pointer_locked_| is reset to false in between tests, and the
+  // callback to here could have been in flight.
+  if (!pointer_locked_)
+    return;
+
+  pointer_unlock_pending_ = false;
+  pointer_locked_ = false;
+  web_widget_test_proxy_->GetWebWidget()->DidLosePointerLock();
 }
 
 void EventSender::DoDragDrop(const WebDragData& drag_data,
@@ -1382,7 +1515,7 @@ void EventSender::DoDragDrop(const WebDragData& drag_data,
   current_drag_effect_ = MainFrameWidget()->DragTargetDragEnter(
       drag_data, event.PositionInWidget(), event.PositionInScreen(),
       current_drag_effects_allowed_,
-      modifiersWithButtons(
+      ModifiersWithButtons(
           current_pointer_state_[kRawMousePointerId].modifiers_,
           current_pointer_state_[kRawMousePointerId].current_buttons_));
 
@@ -1717,12 +1850,14 @@ void EventSender::KeyDown(const std::string& code_str,
   // the keyboard event, and stored in RenderWidget. We just simulate the same
   // behavior here.
   std::string edit_command;
-  if (GetEditCommand(event_down, &edit_command))
-    web_widget_test_proxy_->SetEditCommandForNextKeyEvent(edit_command, "");
+  if (GetEditCommand(event_down, &edit_command)) {
+    web_widget_test_proxy_->GetWebFrameWidget()->AddEditCommandForNextKeyEvent(
+        WebString::FromLatin1(edit_command), "");
+  }
 
   HandleInputEventOnViewOrPopup(event_down);
 
-  if (code == ui::VKEY_ESCAPE && !current_drag_data_.IsNull()) {
+  if (code == ui::VKEY_ESCAPE && current_drag_data_) {
     WebMouseEvent event(WebInputEvent::Type::kMouseDown,
                         ModifiersForPointer(kRawMousePointerId),
                         GetCurrentEventTime());
@@ -1733,7 +1868,7 @@ void EventSender::KeyDown(const std::string& code_str,
     FinishDragAndDrop(event, blink::kWebDragOperationNone);
   }
 
-  web_widget_test_proxy_->ClearEditCommands();
+  web_widget_test_proxy_->GetWebFrameWidget()->ClearEditCommands();
 
   if (generate_char) {
     WebKeyboardEvent event_char = event_up;
@@ -1805,53 +1940,6 @@ std::vector<std::string> EventSender::ContextClick() {
   return menu_items;
 }
 
-void EventSender::TextZoomIn() {
-  view()->SetTextZoomFactor(view()->TextZoomFactor() * 1.2f);
-}
-
-void EventSender::TextZoomOut() {
-  view()->SetTextZoomFactor(view()->TextZoomFactor() / 1.2f);
-}
-
-void EventSender::ZoomPageIn() {
-  for (WebViewTestProxy* view_proxy : interfaces()->GetWindowList()) {
-    // Only set page zoom on main frames. Any RenderViews that exist for
-    // a proxy main frame will hear about the change as a side effect of
-    // changing the main frame.
-    content::RenderFrameImpl* main_frame = view_proxy->GetMainRenderFrame();
-    if (main_frame) {
-      main_frame->GetLocalRootRenderWidget()->SetZoomLevelForTesting(
-          view_proxy->GetWebView()->ZoomLevel() + 1);
-    }
-  }
-}
-
-void EventSender::ZoomPageOut() {
-  for (WebViewTestProxy* view_proxy : interfaces()->GetWindowList()) {
-    // Only set page zoom on main frames. Any RenderViews that exist for
-    // a proxy main frame will hear about the change as a side effect of
-    // changing the main frame.
-    content::RenderFrameImpl* main_frame = view_proxy->GetMainRenderFrame();
-    if (main_frame) {
-      main_frame->GetLocalRootRenderWidget()->SetZoomLevelForTesting(
-          view_proxy->GetWebView()->ZoomLevel() - 1);
-    }
-  }
-}
-
-void EventSender::SetPageZoomFactor(double zoom_factor) {
-  for (WebViewTestProxy* view_proxy : interfaces()->GetWindowList()) {
-    // Only set page zoom on main frames. Any RenderViews that exist for
-    // a proxy main frame will hear about the change as a side effect of
-    // changing the main frame.
-    content::RenderFrameImpl* main_frame = view_proxy->GetMainRenderFrame();
-    if (main_frame) {
-      main_frame->GetLocalRootRenderWidget()->SetZoomLevelForTesting(
-          std::log(zoom_factor) / std::log(1.2));
-    }
-  }
-}
-
 void EventSender::ClearTouchPoints() {
   touch_points_.clear();
 }
@@ -1914,10 +2002,10 @@ void EventSender::SetTouchCancelable(bool cancelable) {
 }
 
 void EventSender::DumpFilenameBeingDragged() {
-  if (current_drag_data_.IsNull())
+  if (!current_drag_data_)
     return;
 
-  WebVector<WebDragData::Item> items = current_drag_data_.Items();
+  WebVector<WebDragData::Item> items = current_drag_data_->Items();
   for (size_t i = 0; i < items.size(); ++i) {
     if (items[i].storage_type == WebDragData::Item::kStorageTypeBinaryData) {
       WebURL url = items[i].binary_data_source_url;
@@ -1984,7 +2072,7 @@ void EventSender::LeapForward(int milliseconds) {
 
 void EventSender::BeginDragWithItems(
     const WebVector<WebDragData::Item>& items) {
-  if (!current_drag_data_.IsNull()) {
+  if (current_drag_data_) {
     // Nested dragging not supported, fuzzer code a likely culprit.
     // Cancel the current drag operation and throw an error.
     KeyDown("Escape", 0, DOMKeyLocationStandard);
@@ -1995,15 +2083,15 @@ void EventSender::BeginDragWithItems(
     return;
   }
 
-  current_drag_data_.Initialize();
+  current_drag_data_ = blink::WebDragData();
   WebVector<WebString> absolute_filenames;
   for (size_t i = 0; i < items.size(); ++i) {
-    current_drag_data_.AddItem(items[i]);
+    current_drag_data_->AddItem(items[i]);
     if (items[i].storage_type == WebDragData::Item::kStorageTypeFilename)
       absolute_filenames.emplace_back(items[i].filename_data);
   }
   if (!absolute_filenames.empty()) {
-    current_drag_data_.SetFilesystemId(
+    current_drag_data_->SetFilesystemId(
         blink_test_runner()->RegisterIsolatedFileSystem(absolute_filenames));
   }
   current_drag_effects_allowed_ = blink::kWebDragOperationCopy;
@@ -2012,7 +2100,8 @@ void EventSender::BeginDragWithItems(
       current_pointer_state_[kRawMousePointerId].last_pos_;
 
   // Provide a drag source.
-  MainFrameWidget()->DragTargetDragEnter(current_drag_data_, last_pos, last_pos,
+  MainFrameWidget()->DragTargetDragEnter(*current_drag_data_, last_pos,
+                                         last_pos,
                                          current_drag_effects_allowed_, 0);
   // |is_drag_mode_| saves events and then replays them later. We don't
   // need/want that.
@@ -2542,8 +2631,7 @@ void EventSender::GestureEvent(WebInputEvent::Type type,
   WebInputEventResult result = HandleInputEventOnViewOrPopup(event);
 
   // Long press might start a drag drop session. Complete it if so.
-  if (type == WebInputEvent::Type::kGestureLongPress &&
-      !current_drag_data_.IsNull()) {
+  if (type == WebInputEvent::Type::kGestureLongPress && current_drag_data_) {
     WebMouseEvent mouse_event(WebInputEvent::Type::kMouseDown,
                               ModifiersForPointer(kRawMousePointerId),
                               GetCurrentEventTime());
@@ -2657,7 +2745,8 @@ WebMouseWheelEvent EventSender::GetMouseWheelEvent(gin::Arguments* args,
     event.delta_x *= kScrollbarPixelsPerTick;
     event.delta_y *= kScrollbarPixelsPerTick;
   }
-  event.event_action = content::WebMouseWheelEventTraits::GetEventAction(event);
+  event.event_action =
+      blink::WebMouseWheelEvent::GetPlatformSpecificDefaultEventAction(event);
   return event;
 }
 
@@ -2712,17 +2801,21 @@ void EventSender::InitPointerProperties(gin::Arguments* args,
 
 void EventSender::FinishDragAndDrop(const WebMouseEvent& event,
                                     blink::WebDragOperation drag_effect) {
+  // Bail if cancelled.
+  if (!current_drag_data_)
+    return;
+
   current_drag_effect_ = drag_effect;
   if (current_drag_effect_) {
     // Specifically pass any keyboard modifiers to the drop method. This allows
     // tests to control the drop type (i.e. copy or move).
     MainFrameWidget()->DragTargetDrop(
-        current_drag_data_, event.PositionInWidget(), event.PositionInScreen(),
+        *current_drag_data_, event.PositionInWidget(), event.PositionInScreen(),
         event.GetModifiers());
   } else {
     MainFrameWidget()->DragTargetDragLeave(gfx::PointF(), gfx::PointF());
   }
-  current_drag_data_.Reset();
+  current_drag_data_ = base::nullopt;
   MainFrameWidget()->DragSourceEndedAt(
       event.PositionInWidget(), event.PositionInScreen(), current_drag_effect_);
   MainFrameWidget()->DragSourceSystemDragEnded();
@@ -2733,30 +2826,32 @@ void EventSender::DoDragAfterMouseUp(const WebMouseEvent& event) {
   last_click_pos_ = current_pointer_state_[kRawMousePointerId].last_pos_;
 
   // If we're in a drag operation, complete it.
-  if (current_drag_data_.IsNull())
+  if (!current_drag_data_)
     return;
 
-  blink::WebDragOperation drag_effect = MainFrameWidget()->DragTargetDragOver(
+  MainFrameWidget()->DragTargetDragOver(
       event.PositionInWidget(), event.PositionInScreen(),
-      current_drag_effects_allowed_, event.GetModifiers());
-
-  // Bail if dragover caused cancellation.
-  if (current_drag_data_.IsNull())
-    return;
-
-  FinishDragAndDrop(event, drag_effect);
+      current_drag_effects_allowed_, event.GetModifiers(),
+      base::BindOnce(&EventSender::FinishDragAndDrop,
+                     weak_factory_.GetWeakPtr(), event));
 }
 
 void EventSender::DoDragAfterMouseMove(const WebMouseEvent& event) {
   if (current_pointer_state_[kRawMousePointerId].pressed_button_ ==
           WebMouseEvent::Button::kNoButton ||
-      current_drag_data_.IsNull()) {
+      !current_drag_data_) {
     return;
   }
 
-  current_drag_effect_ = MainFrameWidget()->DragTargetDragOver(
+  MainFrameWidget()->DragTargetDragOver(
       event.PositionInWidget(), event.PositionInScreen(),
-      current_drag_effects_allowed_, event.GetModifiers());
+      current_drag_effects_allowed_, event.GetModifiers(),
+      base::BindOnce(
+          [](base::WeakPtr<EventSender> sender, blink::WebDragOperation op) {
+            if (sender)
+              sender->current_drag_effect_ = op;
+          },
+          weak_factory_.GetWeakPtr()));
 }
 
 void EventSender::ReplaySavedEvents() {

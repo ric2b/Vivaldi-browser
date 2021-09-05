@@ -46,6 +46,18 @@
     ]
   },
 
+ "ChromeVariations": {
+    "os": [ "ios" ],
+    "policy_pref_mapping_test": [
+      {
+        "policies": {
+          "ChromeVariations": 1
+        },
+        "prefs": { "variations_restrictions_by_policy": { "local_state": true } }
+      }
+    ]
+  },
+
   "DefaultPopupsSetting": {
     "os": [ "ios" ],
     "note": "TODO(crbug.com/106682): Flag this with can_be_recommended",
@@ -262,6 +274,26 @@
     ]
   },
 
+  "DisableSafeBrowsingProceedAnyway": {
+    "os": [ "ios" ],
+    "policy_pref_mapping_test": [
+      {
+        "policies": {"DisableSafeBrowsingProceedAnyway": true},
+        "prefs": { "safebrowsing.proceed_anyway_disabled": {}}
+      }
+    ]
+  },
+
+  "EditBookmarksEnabled": {
+    "os": [ "ios" ],
+    "policy_pref_mapping_test": [
+      {
+        "policies": { "EditBookmarksEnabled": false },
+        "prefs": { "bookmarks.editing_enabled": {} }
+      }
+    ]
+  },
+
   "PasswordManagerEnabled": {
     "os": [ "ios" ],
     "can_be_recommended": true,
@@ -359,5 +391,31 @@
         "prefs": { "translate.enabled": {} }
       }
     ]
+  },
+
+  "URLBlacklist": {
+    "os": [ "ios" ],
+    "policy_pref_mapping_test": [
+      {
+        "policies": {"URLBlacklist": ["google.com"]},
+        "prefs": { "policy.url_blacklist": {}}
+      }
+    ]
+  },
+
+  "URLWhitelist": {
+    "os": [ "ios" ],
+    "policy_pref_mapping_test": [
+      {
+        "policies": {"URLWhitelist": ["google.com"]},
+        "prefs": { "policy.url_whitelist": {}}
+      }
+    ]
+  },
+
+  "ManagedBookmarks": {},
+
+  "EnableExperimentalPolicies":{
+    "note": "This policy has no pref as it is only directly read by the policy system."
   }
 }

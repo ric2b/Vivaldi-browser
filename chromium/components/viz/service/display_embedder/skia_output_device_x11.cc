@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/logging.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/vk/GrVkTypes.h"
@@ -27,10 +28,11 @@ SkiaOutputDeviceX11::SkiaOutputDeviceX11(
                                 did_swap_buffer_complete_callback),
       display_(gfx::GetXDisplay()),
       widget_(widget),
-      gc_(XCreateGC(display_, widget_, 0, nullptr)) {
-  int result = XGetWindowAttributes(display_, widget_, &attributes_);
+      gc_(XCreateGC(display_, static_cast<uint32_t>(widget_), 0, nullptr)) {
+  int result = XGetWindowAttributes(display_, static_cast<uint32_t>(widget_),
+                                    &attributes_);
   LOG_IF(FATAL, !result) << "XGetWindowAttributes failed for window "
-                         << widget_;
+                         << static_cast<uint32_t>(widget_);
   bpp_ = gfx::BitsPerPixelForPixmapDepth(display_, attributes_.depth);
   support_rendr_ = ui::QueryRenderSupport(display_);
 
@@ -82,14 +84,15 @@ void SkiaOutputDeviceX11::PostSubBuffer(
   if (bpp_ == 32 || bpp_ == 16) {
     // gfx::PutARGBImage() only supports 16 and 32 bpp.
     // TODO(penghuang): Switch to XShmPutImage.
-    gfx::PutARGBImage(display_, attributes_.visual, attributes_.depth, widget_,
-                      gc_, static_cast<const uint8_t*>(sk_pixmap.addr()),
+    gfx::PutARGBImage(display_, attributes_.visual, attributes_.depth,
+                      static_cast<uint32_t>(widget_), gc_,
+                      static_cast<const uint8_t*>(sk_pixmap.addr()),
                       rect.width(), rect.height(), 0 /* src_x */, 0 /* src_y */,
                       rect.x() /* dst_x */, rect.y() /* dst_y */, rect.width(),
                       rect.height());
   } else if (support_rendr_) {
-    Pixmap pixmap =
-        XCreatePixmap(display_, widget_, rect.width(), rect.height(), 32);
+    Pixmap pixmap = XCreatePixmap(display_, static_cast<uint32_t>(widget_),
+                                  rect.width(), rect.height(), 32);
     GC gc = XCreateGC(display_, pixmap, 0, nullptr);
 
     XImage image = {};
@@ -97,10 +100,10 @@ void SkiaOutputDeviceX11::PostSubBuffer(
     image.height = rect.height();
     image.depth = 32;
     image.bits_per_pixel = 32;
-    image.format = ZPixmap;
-    image.byte_order = LSBFirst;
+    image.format = static_cast<int>(x11::ImageFormat::ZPixmap);
+    image.byte_order = static_cast<int>(x11::ImageOrder::LSBFirst);
     image.bitmap_unit = 8;
-    image.bitmap_bit_order = LSBFirst;
+    image.bitmap_bit_order = static_cast<int>(x11::ImageOrder::LSBFirst);
     image.bytes_per_line = sk_pixmap.rowBytes();
 
     image.red_mask = 0xff << SK_R32_SHIFT;
@@ -115,8 +118,8 @@ void SkiaOutputDeviceX11::PostSubBuffer(
         display_, pixmap, ui::GetRenderARGB32Format(display_), 0, nullptr);
     XRenderPictFormat* pictformat =
         XRenderFindVisualFormat(display_, attributes_.visual);
-    Picture dest_picture =
-        XRenderCreatePicture(display_, widget_, pictformat, 0, nullptr);
+    Picture dest_picture = XRenderCreatePicture(
+        display_, static_cast<uint32_t>(widget_), pictformat, 0, nullptr);
     XRenderComposite(display_,
                      PictOpSrc,       // op
                      picture,         // src
@@ -137,7 +140,7 @@ void SkiaOutputDeviceX11::PostSubBuffer(
     NOTIMPLEMENTED();
   }
   XFlush(display_);
-  FinishSwapBuffers(gfx::SwapResult::SWAP_ACK,
+  FinishSwapBuffers(gfx::SwapCompletionResult(gfx::SwapResult::SWAP_ACK),
                     gfx::Size(sk_surface_->width(), sk_surface_->height()),
                     std::move(latency_info));
 }

@@ -26,11 +26,10 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/trace_event/trace_event.h"
-#include "base/value_conversions.h"
+#include "base/util/values/values_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/accessibility/accessibility_labels_service.h"
 #include "chrome/browser/accessibility/accessibility_labels_service_factory.h"
@@ -44,6 +43,8 @@
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/download/download_core_service_factory.h"
+#include "chrome/browser/lite_video/lite_video_keyed_service.h"
+#include "chrome/browser/lite_video/lite_video_keyed_service_factory.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service_factory.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
@@ -260,7 +261,7 @@ void MarkProfileDirectoryForDeletion(const base::FilePath& path) {
   // on shutdown. In case of a crash remaining files are removed on next start.
   ListPrefUpdate deleted_profiles(g_browser_process->local_state(),
                                   prefs::kProfilesDeleted);
-  deleted_profiles->Append(CreateFilePathValue(path));
+  deleted_profiles->Append(util::FilePathToValue(path));
 }
 
 // Cancel a scheduling deletion, so ScheduleProfileDirectoryForDeletion can be
@@ -948,30 +949,27 @@ void ProfileManager::CleanUpDeletedProfiles() {
   DCHECK(deleted_profiles);
 
   for (const base::Value& value : *deleted_profiles) {
-    base::FilePath profile_path;
-    bool is_valid_profile_path =
-        base::GetValueAsFilePath(value, &profile_path) &&
-        IsAllowedProfilePath(profile_path);
+    base::Optional<base::FilePath> profile_path = util::ValueToFilePath(value);
     // Although it should never happen, make sure this is a valid path in the
-    // user_data_dir, so we don't accidentially delete something else.
-    if (is_valid_profile_path) {
-      if (base::PathExists(profile_path)) {
+    // user_data_dir, so we don't accidentally delete something else.
+    if (profile_path && IsAllowedProfilePath(*profile_path)) {
+      if (base::PathExists(*profile_path)) {
         LOG(WARNING) << "Files of a deleted profile still exist after restart. "
                         "Cleaning up now.";
         base::ThreadPool::PostTaskAndReply(
             FROM_HERE,
             {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
              base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-            base::BindOnce(&NukeProfileFromDisk, profile_path),
+            base::BindOnce(&NukeProfileFromDisk, *profile_path),
             base::BindOnce(&ProfileCleanedUp, &value));
       } else {
         // Everything is fine, the profile was removed on shutdown.
-        base::PostTask(FROM_HERE, {BrowserThread::UI},
-                       base::BindOnce(&ProfileCleanedUp, &value));
+        content::GetUIThreadTaskRunner({})->PostTask(
+            FROM_HERE, base::BindOnce(&ProfileCleanedUp, &value));
       }
     } else {
       LOG(ERROR) << "Found invalid profile path in deleted_profiles: "
-                 << profile_path.AsUTF8Unsafe();
+                 << profile_path->AsUTF8Unsafe();
       NOTREACHED();
     }
   }
@@ -982,7 +980,8 @@ void ProfileManager::InitProfileUserPrefs(Profile* profile) {
   ProfileAttributesStorage& storage = GetProfileAttributesStorage();
 
   if (!IsAllowedProfilePath(profile->GetPath())) {
-    UMA_HISTOGRAM_BOOLEAN("Profile.InitProfileUserPrefs.OutsideUserDir", true);
+    LOG(WARNING) << "Failed to initialize prefs for a profile at invalid path: "
+                 << profile->GetPath().AsUTF8Unsafe();
     return;
   }
 
@@ -1308,8 +1307,7 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
   // Create the Previews Service and begin loading opt out history from
   // persistent memory.
   PreviewsServiceFactory::GetForProfile(profile)->Initialize(
-      base::CreateSingleThreadTaskRunner({BrowserThread::UI}),
-      profile->GetPath());
+      content::GetUIThreadTaskRunner({}), profile->GetPath());
 
   // Ensure NavigationPredictorKeyedService is started.
   NavigationPredictorKeyedServiceFactory::GetForProfile(profile);
@@ -1340,6 +1338,13 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
   chromeos::AccountManagerPolicyControllerFactory::GetForBrowserContext(
       profile);
 #endif
+
+  // Creates the LiteVideo Keyed Service and begins loading the
+  // hint cache and user blocklist.
+  auto* lite_video_keyed_service =
+      LiteVideoKeyedServiceFactory::GetForProfile(profile);
+  if (lite_video_keyed_service)
+    lite_video_keyed_service->Initialize(profile->GetPath());
 
   // TODO(crbug.com/1031477): Remove once getting this created with the browser
   // context does not change dependency initialization order to cause crashes.
@@ -1629,7 +1634,8 @@ void ProfileManager::AddProfileToStorage(Profile* profile) {
   if (profile->IsGuestSession() || profile->IsSystemProfile())
     return;
   if (!IsAllowedProfilePath(profile->GetPath())) {
-    UMA_HISTOGRAM_BOOLEAN("Profile.GetProfileInfoPath.OutsideUserDir", true);
+    LOG(WARNING) << "Failed to add to storage a profile at invalid path: "
+                 << profile->GetPath().AsUTF8Unsafe();
     return;
   }
 
@@ -1671,8 +1677,8 @@ void ProfileManager::AddProfileToStorage(Profile* profile) {
 
         // GetPrimaryAccountMutator() returns nullptr on ChromeOS only.
         DCHECK(account_mutator);
-        base::PostTask(
-            FROM_HERE, {BrowserThread::UI},
+        content::GetUIThreadTaskRunner({})->PostTask(
+            FROM_HERE,
             base::BindOnce(
                 base::IgnoreResult(
                     &signin::PrimaryAccountMutator::ClearPrimaryAccount),

@@ -480,6 +480,10 @@ void ServiceWorkerSubresourceLoader::UpdateResponseTiming(
   // dispatching the fetch event, so set it to |dispatch_event_time|.
   response_head_->load_timing.service_worker_ready_time =
       timing->dispatch_event_time;
+  response_head_->load_timing.service_worker_fetch_start =
+      timing->dispatch_event_time;
+  response_head_->load_timing.service_worker_respond_with_settled =
+      timing->respond_with_settled_time;
   fetch_event_timing_ = std::move(timing);
 }
 
@@ -566,10 +570,9 @@ void ServiceWorkerSubresourceLoader::StartResponse(
   // Read side data if necessary.  We only do this if both the
   // |side_data_blob| is available to read and the request is destined
   // for a script.
-  auto resource_type =
-      static_cast<blink::mojom::ResourceType>(resource_request_.resource_type);
+  auto request_destination = resource_request_.destination;
   if (response->side_data_blob &&
-      resource_type == blink::mojom::ResourceType::kScript) {
+      request_destination == network::mojom::RequestDestination::kScript) {
     side_data_as_blob_.Bind(std::move(response->side_data_blob->blob));
     side_data_as_blob_->ReadSideData(base::BindOnce(
         &ServiceWorkerSubresourceLoader::OnSideDataReadingComplete,

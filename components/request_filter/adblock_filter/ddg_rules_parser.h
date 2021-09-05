@@ -23,9 +23,9 @@ class DuckDuckGoRulesParser {
                  const std::string& domain,
                  bool default_ignore,
                  const base::Value* excluded_origins);
-  std::bitset<FilterRule::kTypeCount> GetTypes(
+  base::Optional<std::bitset<FilterRule::kTypeCount>> GetTypes(
       const base::Value* rule_properties);
-  std::vector<std::string> GetDomains(const base::Value* rule_properties);
+  base::Optional<std::vector<std::string>> GetDomains(const base::Value* rule_properties);
   ParseResult* parse_result_;
 
   DISALLOW_COPY_AND_ASSIGN(DuckDuckGoRulesParser);

@@ -21,6 +21,7 @@
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/ozone/platform/wayland/test/mock_surface.h"
+#include "ui/ozone/platform/wayland/test/scoped_wl_array.h"
 #include "ui/ozone/platform/wayland/test/test_wayland_server_thread.h"
 #include "ui/ozone/platform/wayland/test/test_zwp_linux_buffer_params.h"
 #include "ui/ozone/platform/wayland/test/wayland_test.h"
@@ -126,8 +127,7 @@ class CallbacksHelper {
   // way.
   void FinishSwapBuffersAsync(uint32_t local_swap_id,
                               scoped_refptr<FakeGLImageNativePixmap> gl_image,
-                              gfx::SwapResult result,
-                              std::unique_ptr<gfx::GpuFence> gpu_fence) {
+                              gfx::SwapCompletionResult result) {
     last_finish_swap_id_ = pending_local_swap_ids_.front();
     pending_local_swap_ids_.pop();
 

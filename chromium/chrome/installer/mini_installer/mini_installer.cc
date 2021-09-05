@@ -196,8 +196,8 @@ ProcessExitResult RunProcessAndWait(const wchar_t* exe_path,
                                     DWORD generic_failure_code) {
   STARTUPINFOW si = {sizeof(si)};
   PROCESS_INFORMATION pi = {0};
-  if (!::CreateProcess(exe_path, cmdline, NULL, NULL, FALSE, CREATE_NO_WINDOW,
-                       NULL, NULL, &si, &pi)) {
+  if (!::CreateProcess(exe_path, cmdline, nullptr, nullptr, FALSE,
+                       CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
     // Split specific failure modes. If setup.exe couldn't be launched because
     // its file/path couldn't be found, report its attributes in ExtraCode1.
     // This will help diagnose the prevalence of launch failures due to Image
@@ -279,9 +279,11 @@ void AppendCommandLineFlags(const wchar_t* command_line,
 // matching resource found, the callback is invoked and at this point we write
 // it to disk. We expect resource names to start with 'chrome' or 'setup'. Any
 // other name is treated as an error.
-BOOL CALLBACK OnResourceFound(HMODULE module, const wchar_t* type,
-                              wchar_t* name, LONG_PTR context) {
-  if (NULL == context)
+BOOL CALLBACK OnResourceFound(HMODULE module,
+                              const wchar_t* type,
+                              wchar_t* name,
+                              LONG_PTR context) {
+  if (!context)
     return FALSE;
 
   Context* ctx = reinterpret_cast<Context*>(context);
@@ -291,8 +293,7 @@ BOOL CALLBACK OnResourceFound(HMODULE module, const wchar_t* type,
     return FALSE;
 
   PathString full_path;
-  if (!full_path.assign(ctx->base_path) ||
-      !full_path.append(name) ||
+  if (!full_path.assign(ctx->base_path) || !full_path.append(name) ||
       !resource.WriteToDisk(full_path.get()))
     return FALSE;
 
@@ -322,10 +323,8 @@ BOOL CALLBACK WriteResourceToDirectory(HMODULE module,
   PathString full_path;
 
   PEResource resource(name, type, module);
-  return (resource.IsValid() &&
-          full_path.assign(base_path) &&
-          full_path.append(name) &&
-          resource.WriteToDisk(full_path.get()));
+  return (resource.IsValid() && full_path.assign(base_path) &&
+          full_path.append(name) && resource.WriteToDisk(full_path.get()));
 }
 #endif
 
@@ -342,21 +341,21 @@ BOOL CALLBACK WriteResourceToDirectory(HMODULE module,
 // uncompressed 'BN' resources are also extracted. This is generally the set of
 // DLLs/resources needed by setup.exe to run.
 ProcessExitResult UnpackBinaryResources(const Configuration& configuration,
-                                      HMODULE module, const wchar_t* base_path,
-                                      PathString* archive_path,
-                                      PathString* setup_path) {
+                                        HMODULE module,
+                                        const wchar_t* base_path,
+                                        PathString* archive_path,
+                                        PathString* setup_path) {
   // Generate the setup.exe path where we patch/uncompress setup resource.
   PathString setup_dest_path;
-  if (!setup_dest_path.assign(base_path) ||
-      !setup_dest_path.append(kSetupExe))
+  if (!setup_dest_path.assign(base_path) || !setup_dest_path.append(kSetupExe))
     return ProcessExitResult(PATH_STRING_OVERFLOW);
 
   // Prepare the input to OnResourceFound method that needs a location where
   // it will write all the resources.
   Context context = {
-    base_path,
-    archive_path,
-    setup_path,
+      base_path,
+      archive_path,
+      setup_path,
   };
 
   // Get the resources of type 'B7' (7zip archive).
@@ -492,8 +491,7 @@ ProcessExitResult RunSetup(const Configuration& configuration,
 
   // Append the command line param for the previous version of Chrome.
   if (configuration.previous_version() &&
-      (!cmd_line.append(L" --") ||
-       !cmd_line.append(kCmdPreviousVersion) ||
+      (!cmd_line.append(L" --") || !cmd_line.append(kCmdPreviousVersion) ||
        !cmd_line.append(L"=\"") ||
        !cmd_line.append(configuration.previous_version()) ||
        !cmd_line.append(L"\""))) {
@@ -534,8 +532,8 @@ bool IsAclSupportedForPath(const wchar_t* path) {
   DWORD flags = 0;
   return ::GetVolumePathName(path, volume.get(),
                              static_cast<DWORD>(volume.capacity())) &&
-         ::GetVolumeInformation(volume.get(), NULL, 0, NULL, NULL, &flags, NULL,
-                                0) &&
+         ::GetVolumeInformation(volume.get(), nullptr, 0, nullptr, nullptr,
+                                &flags, nullptr, 0) &&
          (flags & FILE_PERSISTENT_ACLS);
 }
 
@@ -551,7 +549,7 @@ bool GetCurrentOwnerSid(wchar_t** sid) {
   bool result = false;
   // We get the TokenOwner rather than the TokenUser because e.g. under UAC
   // elevation we want the admin to own the directory rather than the user.
-  ::GetTokenInformation(token, TokenOwner, NULL, 0, &size);
+  ::GetTokenInformation(token, TokenOwner, nullptr, 0, &size);
   if (size && GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
     if (TOKEN_OWNER* owner =
             reinterpret_cast<TOKEN_OWNER*>(::LocalAlloc(LPTR, size))) {
@@ -568,27 +566,29 @@ bool GetCurrentOwnerSid(wchar_t** sid) {
 // ACLs allowing access to only the current owner, admin, and system.
 // NOTE: On success the |sd| parameter must be freed with LocalFree().
 bool SetSecurityDescriptor(const wchar_t* path, PSECURITY_DESCRIPTOR* sd) {
-  *sd = NULL;
+  *sd = nullptr;
   // We succeed without doing anything if ACLs aren't supported.
   if (!IsAclSupportedForPath(path))
     return true;
 
-  wchar_t* sid = NULL;
+  wchar_t* sid = nullptr;
   if (!GetCurrentOwnerSid(&sid))
     return false;
 
   // The largest SID is under 200 characters, so 300 should give enough slack.
   StackString<300> sddl;
-  bool result = sddl.append(L"D:PAI"  // Protected, auto-inherited DACL.
+  bool result = sddl.append(
+                    L"D:PAI"         // Protected, auto-inherited DACL.
                     L"(A;;FA;;;BA)"  // Admin: Full control.
                     L"(A;OIIOCI;GA;;;BA)"
                     L"(A;;FA;;;SY)"  // System: Full control.
                     L"(A;OIIOCI;GA;;;SY)"
                     L"(A;OIIOCI;GA;;;CO)"  // Owner: Full control.
-                    L"(A;;FA;;;") && sddl.append(sid) && sddl.append(L")");
+                    L"(A;;FA;;;") &&
+                sddl.append(sid) && sddl.append(L")");
   if (result) {
     result = !!::ConvertStringSecurityDescriptorToSecurityDescriptor(
-        sddl.get(), SDDL_REVISION_1, sd, NULL);
+        sddl.get(), SDDL_REVISION_1, sd, nullptr);
   }
 
   ::LocalFree(sid);
@@ -605,7 +605,8 @@ bool SetSecurityDescriptor(const wchar_t* path, PSECURITY_DESCRIPTOR* sd) {
 // delete it and create a directory in its place.  So, we use our own mechanism
 // for creating a directory with a hopefully-unique name.  In the case of a
 // collision, we retry a few times with a new name before failing.
-bool CreateWorkDir(const wchar_t* base_path, PathString* work_dir,
+bool CreateWorkDir(const wchar_t* base_path,
+                   PathString* work_dir,
                    ProcessExitResult* exit_code) {
   *exit_code = ProcessExitResult(PATH_STRING_OVERFLOW);
   if (!work_dir->assign(base_path) || !work_dir->append(kTempPrefix))
@@ -626,8 +627,8 @@ bool CreateWorkDir(const wchar_t* base_path, PathString* work_dir,
   SECURITY_ATTRIBUTES sa = {};
   sa.nLength = sizeof(SECURITY_ATTRIBUTES);
   if (!SetSecurityDescriptor(base_path, &sa.lpSecurityDescriptor)) {
-    *exit_code = ProcessExitResult(UNABLE_TO_SET_DIRECTORY_ACL,
-                                   ::GetLastError());
+    *exit_code =
+        ProcessExitResult(UNABLE_TO_SET_DIRECTORY_ACL, ::GetLastError());
     return false;
   }
 
@@ -652,7 +653,7 @@ bool CreateWorkDir(const wchar_t* base_path, PathString* work_dir,
     work_dir->append(L".tmp");
 
     if (::CreateDirectory(work_dir->get(),
-                          sa.lpSecurityDescriptor ? &sa : NULL)) {
+                          sa.lpSecurityDescriptor ? &sa : nullptr)) {
       // Yay!  Now let's just append the backslash and we're done.
       work_dir->append(L"\\");
       *exit_code = ProcessExitResult(SUCCESS_EXIT_CODE);
@@ -667,11 +668,12 @@ bool CreateWorkDir(const wchar_t* base_path, PathString* work_dir,
 
 // Creates and returns a temporary directory in |work_dir| that can be used to
 // extract mini_installer payload. |work_dir| ends with a path separator.
-bool GetWorkDir(HMODULE module, PathString* work_dir,
+bool GetWorkDir(HMODULE module,
+                PathString* work_dir,
                 ProcessExitResult* exit_code) {
   PathString base_path;
-  DWORD len = ::GetTempPath(static_cast<DWORD>(base_path.capacity()),
-                            base_path.get());
+  DWORD len =
+      ::GetTempPath(static_cast<DWORD>(base_path.capacity()), base_path.get());
   if (!len || len >= base_path.capacity() ||
       !CreateWorkDir(base_path.get(), work_dir, exit_code)) {
     // Problem creating the work dir under TEMP path, so try using the
@@ -695,8 +697,7 @@ bool GetWorkDir(HMODULE module, PathString* work_dir,
 
 // Returns true for ".." and "." directories.
 bool IsCurrentOrParentDirectory(const wchar_t* dir) {
-  return dir &&
-         dir[0] == L'.' &&
+  return dir && dir[0] == L'.' &&
          (dir[1] == L'\0' || (dir[1] == L'.' && dir[2] == L'\0'));
 }
 
@@ -716,8 +717,9 @@ void RecursivelyDeleteDirectory(PathString* path) {
   if (find != INVALID_HANDLE_VALUE) {
     do {
       // Use the short name if available to make the most of our buffer.
-      const wchar_t* name = find_data.cAlternateFileName[0] ?
-          find_data.cAlternateFileName : find_data.cFileName;
+      const wchar_t* name = find_data.cAlternateFileName[0]
+                                ? find_data.cAlternateFileName
+                                : find_data.cFileName;
       if (IsCurrentOrParentDirectory(name))
         continue;
 
@@ -725,7 +727,8 @@ void RecursivelyDeleteDirectory(PathString* path) {
       if (!path->append(name))
         continue;  // Continue in spite of too long names.
 
-      if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+      if ((find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+          !(find_data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
         RecursivelyDeleteDirectory(path);
       } else {
         ::DeleteFile(path->get());
@@ -753,16 +756,21 @@ void DeleteDirectoriesWithPrefix(const wchar_t* parent_dir,
 
   WIN32_FIND_DATA find_data = {0};
   HANDLE find = ::FindFirstFileEx(spec.get(), FindExInfoStandard, &find_data,
-                                  FindExSearchLimitToDirectories, NULL, 0);
+                                  FindExSearchLimitToDirectories, nullptr, 0);
   if (find == INVALID_HANDLE_VALUE)
     return;
 
   PathString path;
   do {
-    if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+    // Skip over directories that have reparse points, since these represent
+    // such things as mounted folders, links, etc, and were therefore not
+    // created by a previous run of this installer.
+    if ((find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+        !(find_data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
       // Use the short name if available to make the most of our buffer.
-      const wchar_t* name = find_data.cAlternateFileName[0] ?
-          find_data.cAlternateFileName : find_data.cFileName;
+      const wchar_t* name = find_data.cAlternateFileName[0]
+                                ? find_data.cAlternateFileName
+                                : find_data.cFileName;
       if (IsCurrentOrParentDirectory(name))
         continue;
       if (path.assign(parent_dir) && path.append(name))
@@ -776,9 +784,9 @@ void DeleteDirectoriesWithPrefix(const wchar_t* parent_dir,
 // installer runs have failed to clean up.
 void DeleteOldChromeTempDirectories() {
   static const wchar_t* const kDirectoryPrefixes[] = {
-    kTempPrefix,
-    L"chrome_"  // Previous installers created directories with this prefix
-                // and there are still some lying around.
+      kTempPrefix,
+      L"chrome_"  // Previous installers created directories with this prefix
+                  // and there are still some lying around.
   };
 
   PathString temp;

@@ -1,3 +1,7 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 """Library for defining try builders.
 
 The `try_builder` function defined in this module enables defining a builder and
@@ -48,6 +52,7 @@ def declare_bucket(milestone_vars):
                   'service-account-chromeperf',
                   'service-account-cq',
               ],
+              projects = milestone_vars.try_triggering_projects,
           ),
           acl.entry(
               roles = acl.BUILDBUCKET_OWNER,
@@ -126,7 +131,7 @@ def _sorted_list_view_impl(ctx, *, console_name):
 _sorted_list_view = lucicfg.rule(impl=_sorted_list_view_impl)
 
 
-def _sort_consoles(ctx):
+def _sort_console_entries(ctx):
   milo = ctx.output['luci-milo.cfg']
   consoles = []
   for console in milo.consoles:
@@ -137,9 +142,8 @@ def _sort_consoles(ctx):
     if node:
       console.builders = sorted(console.builders, lambda b: b.name)
     consoles.append(console)
-  milo.consoles = sorted(consoles, lambda c: c.id)
 
-lucicfg.generator(_sort_consoles)
+lucicfg.generator(_sort_console_entries)
 
 
 def list_view(*, name, **kwargs):
@@ -288,6 +292,15 @@ def blink_mac_builder(*, name, **kwargs):
   )
 
 
+def chromium_builder(*, name, **kwargs):
+  return try_builder(
+      name = name,
+      goma_backend = builders.goma.backend.RBE_PROD,
+      mastername = 'tryserver.chromium',
+      **kwargs
+  )
+
+
 def chromium_android_builder(*, name, **kwargs):
   return try_builder(
       name = name,
@@ -368,10 +381,10 @@ def chromium_mac_ios_builder(
     properties=None,
     **kwargs):
   if not caches:
-    caches = [builders.xcode_cache.x11c29]
+    caches = [builders.xcode_cache.x11e146]
   if not properties:
     properties = {
-      'xcode_build_version': '11c29',
+      'xcode_build_version': '11e146',
     }
   return try_builder(
       name = name,
@@ -500,6 +513,7 @@ try_ = struct(
 
     blink_builder = blink_builder,
     blink_mac_builder = blink_mac_builder,
+    chromium_builder = chromium_builder,
     chromium_android_builder = chromium_android_builder,
     chromium_angle_builder = chromium_angle_builder,
     chromium_chromiumos_builder = chromium_chromiumos_builder,

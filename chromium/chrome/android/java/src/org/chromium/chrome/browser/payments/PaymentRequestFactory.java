@@ -7,13 +7,14 @@ package org.chromium.chrome.browser.payments;
 import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.components.payments.ErrorStrings;
 import org.chromium.components.payments.OriginSecurityChecker;
+import org.chromium.components.payments.PaymentFeatureList;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.mojo.system.MojoException;
@@ -105,8 +106,15 @@ public class PaymentRequestFactory implements InterfaceFactory<PaymentRequest> {
      */
     public static class PaymentRequestDelegateImpl implements PaymentRequestImpl.Delegate {
         @Override
-        public boolean isIncognito(@Nullable ChromeActivity activity) {
-            return activity != null && activity.getCurrentTabModel().isIncognito();
+        public boolean isOffTheRecord(@Nullable ChromeActivity activity) {
+            // To be conservative, the request with not accessible profile its profile is considered
+            // off-the-record, and thus user data would not be recorded in this case.
+            if (activity == null) return true;
+            TabModel tabModel = activity.getCurrentTabModel();
+            assert tabModel != null;
+            Profile profile = tabModel.getProfile();
+            if (profile == null) return true;
+            return profile.isOffTheRecord();
         }
 
         @Override
@@ -150,7 +158,7 @@ public class PaymentRequestFactory implements InterfaceFactory<PaymentRequest> {
             return null;
         }
 
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_PAYMENTS)) {
+        if (!PaymentFeatureList.isEnabled(PaymentFeatureList.WEB_PAYMENTS)) {
             return new InvalidPaymentRequest();
         }
 

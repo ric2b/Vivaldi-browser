@@ -33,7 +33,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
 
 /**
- * A utility class for querying information about the default browser setting.
+ * A utility class for querying information about the default browser setting.\
+ * TODO(crbug.com/1112519): Remove this and replace with DefaultBrowserInfo2.
  */
 public final class DefaultBrowserInfo {
     /**
@@ -98,7 +99,7 @@ public final class DefaultBrowserInfo {
                         // Caches whether Chrome is set as a default browser on the device.
                         boolean isDefault = info != null && info.match != 0
                                 && TextUtils.equals(
-                                           context.getPackageName(), info.activityInfo.packageName);
+                                        context.getPackageName(), info.activityInfo.packageName);
                         SharedPreferencesManager.getInstance().writeBoolean(
                                 ChromePreferenceKeys.CHROME_DEFAULT_BROWSER, isDefault);
 
@@ -195,8 +196,7 @@ public final class DefaultBrowserInfo {
                     RecordHistogram.recordEnumeratedHistogram("Mobile.DefaultBrowser.State",
                             getDefaultBrowserUmaState(info), MobileDefaultBrowserState.NUM_ENTRIES);
                 }
-            }
-                    .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+            }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
         } catch (RejectedExecutionException ex) {
             // Fail silently here since this is not a critical task.
         }

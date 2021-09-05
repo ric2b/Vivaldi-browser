@@ -17,17 +17,21 @@
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "browser/menus/vivaldi_menus.h"
+#include "chrome/browser/apps/platform_apps/audio_focus_web_contents_observer.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
+#include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/extensions/window_controller.h"
+#include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
+#include "chrome/browser/platform_util.h"
+#include "chrome/browser/printing/printing_init.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/renderer_preferences_util.h"
-#include "chrome/browser/ui/apps/chrome_app_delegate.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -46,6 +50,8 @@
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/printing/browser/print_composite_client.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
@@ -60,20 +66,21 @@
 #include "content/public/browser/site_instance.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
-#include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/extension_messages.h"
+#include "extensions/common/mojom/app_window.mojom.h"
 #include "extensions/helper/vivaldi_app_helper.h"
 #include "extensions/schema/window_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "renderer/vivaldi_render_messages.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/vivaldi_app_window_contents.h"
+#include "ui/views/controls/webview/webview.h"
 #include "ui/vivaldi_native_app_window_views.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -82,8 +89,6 @@
 #include "chrome/browser/win/jumplist_factory.h"
 #endif
 
-using extensions::AppWindow;
-using extensions::NativeAppWindow;
 using web_modal::WebContentsModalDialogManager;
 
 VivaldiAutofillBubbleHandler::VivaldiAutofillBubbleHandler() {}
@@ -140,13 +145,13 @@ std::unique_ptr<content::WebContents> CreateBrowserWebContents(
     // All windows for the same profile should share the same process.
     DCHECK(create_params.opener_render_process_id == extension_process_id);
     if (create_params.opener_render_process_id != extension_process_id) {
-      LOG(ERROR) << "AppWindow WebContents will be created in the process ("
+      LOG(ERROR) << "VivaldiWindow WebContents will be created in the process ("
                  << extension_process_id << ") != creator ("
                  << create_params.opener_render_process_id
                  << "). Routing disabled.";
     }
   } else {
-      LOG(INFO) << "AppWindow WebContents will be created in the process ("
+      LOG(INFO) << "VivaldiWindow WebContents will be created in the process ("
                  << extension_process_id << ")";
   }
 
@@ -173,7 +178,7 @@ std::unique_ptr<content::WebContents> CreateBrowserWebContents(
 
 // VivaldiBrowserWindow --------------------------------------------------------
 
-VivaldiBrowserWindow::VivaldiBrowserWindow() : app_window_contents_(this) {
+VivaldiBrowserWindow::VivaldiBrowserWindow() : web_contents_delegate_(this) {
   if (g_first_window_creation_time.is_null()) {
     g_first_window_creation_time = base::TimeTicks::Now();
   }
@@ -211,15 +216,12 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::CreateVivaldiBrowserWindow(
     std::unique_ptr<Browser> browser) {
   DCHECK(browser);
 
-  extensions::AppWindow::CreateParams params;
-  params.window_spec.minimum_size = gfx::Size(500, 300);
-  params.frame = extensions::AppWindow::FRAME_NONE;
-  if (browser->profile()->GetPrefs()->GetBoolean(
-                     vivaldiprefs::kWindowsUseNativeDecoration)) {
-    params.frame = extensions::AppWindow::FRAME_CHROME;
-  }
+  VivaldiBrowserWindowParams params;
+  params.minimum_size = gfx::Size(500, 300);
+  params.native_decorations = browser->profile()->GetPrefs()->GetBoolean(
+                     vivaldiprefs::kWindowsUseNativeDecoration);
   chrome::GetSavedWindowBoundsAndShowState(
-      browser.get(), &params.content_spec.bounds, &params.state);
+      browser.get(), &params.content_bounds, &params.state);
 
   VivaldiBrowserWindow* window = new VivaldiBrowserWindow();
   window->SetBrowser(std::move(browser));
@@ -229,13 +231,8 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::CreateVivaldiBrowserWindow(
   return window;
 }
 
-void VivaldiBrowserWindow::UpdateDraggableRegions(
-    const std::vector<extensions::DraggableRegion>& regions) {
-  native_app_window_->UpdateDraggableRegions(regions);
-}
-
 void VivaldiBrowserWindow::CreateWebContents(
-    const extensions::AppWindow::CreateParams& params,
+    const VivaldiBrowserWindowParams& params,
     content::RenderFrameHost* creator_frame) {
   DCHECK(browser_);
   DCHECK(!web_contents());
@@ -252,17 +249,25 @@ void VivaldiBrowserWindow::CreateWebContents(
   GURL app_url = extension_->url();
   DCHECK(app_url.possibly_invalid_spec() == vivaldi::kVivaldiAppURLDomain);
 
-  // TODO(pettern): Make a VivaldiAppDelegate, remove patches in
-  // ChromeAppDelegate.
-  app_delegate_ = std::make_unique<ChromeAppDelegate>(false);
+  web_contents_ =
+      CreateBrowserWebContents(browser_->profile(), creator_frame, app_url);
 
-  app_window_contents_.Initialize(
-      CreateBrowserWebContents(browser_->profile(), creator_frame, app_url));
+  web_contents_delegate_.Initialize();
 
   extensions::TabsPrivateAPI::SetupWebContents(web_contents());
 
   SetViewType(web_contents(), extensions::VIEW_TYPE_APP_WINDOW);
-  app_delegate_->InitWebContents(web_contents());
+
+  // The following lines are copied from ChromeAppDelegate::InitWebContents().
+  favicon::CreateContentFaviconDriverForWebContents(web_contents());
+#if BUILDFLAG(ENABLE_PRINTING)
+  printing::InitializePrinting(web_contents());
+#endif
+  extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
+      web_contents());
+  apps::AudioFocusWebContentsObserver::CreateForWebContents(web_contents());
+  zoom::ZoomController::CreateForWebContents(web_contents());
+  // end of lines copied from ChromeAppDelegate::InitWebContents().
 
   extensions::ExtensionWebContentsObserver::GetForWebContents(web_contents())
       ->dispatcher()
@@ -282,12 +287,9 @@ void VivaldiBrowserWindow::CreateWebContents(
       ->SetDelegate(this);
 
   extensions::VivaldiAppHelper::CreateForWebContents(web_contents());
-  zoom::ZoomController::CreateForWebContents(web_contents());
 
-  std::unique_ptr<VivaldiNativeAppWindowViews> native_view =
-      VivaldiNativeAppWindowViews::Create();
-  native_view->Init(this, params);
-  native_app_window_ = std::move(native_view);
+  views_ = VivaldiNativeAppWindowViews::Create();
+  views_->Init(this, params);
 
   browser_->set_initial_show_state(params.state);
 
@@ -304,7 +306,7 @@ void VivaldiBrowserWindow::OnExtensionUnloaded(
     const extensions::Extension* extension,
     extensions::UnloadedExtensionReason reason) {
   if (vivaldi::kVivaldiAppId == extension->id())
-    native_app_window_->Close();
+    views_->Close();
 }
 
 void VivaldiBrowserWindow::LoadContents(
@@ -339,23 +341,23 @@ void VivaldiBrowserWindow::Show() {
   // calls to Browser::GetLastActive() will return the wrong result if we do not
   // explicitly set it here.
   // A similar block also appears in BrowserWindowCocoa::Show().
-  BrowserList::SetLastActive(browser());
+  if (browser()) {
+    BrowserList::SetLastActive(browser());
+  }
 #endif
 
   // We delay showing it until the UI document has loaded.
   if (show_delay_timeout_)
     return;
 
-  Show(extensions::AppWindow::SHOW_ACTIVE);
-}
-
-void VivaldiBrowserWindow::Show(extensions::AppWindow::ShowType show_type) {
   if (has_been_shown_)
     return;
-  has_been_shown_ = true;
 
-  app_delegate_->OnShow();
+  has_been_shown_ = true;
   is_hidden_ = false;
+
+  keep_alive_ = std::make_unique<ScopedKeepAlive>(
+      KeepAliveOrigin::CHROME_APP_DELEGATE, KeepAliveRestartOption::DISABLED);
 
   ui::WindowShowState initial_show_state = browser_->initial_show_state();
   if (initial_show_state == ui::SHOW_STATE_FULLSCREEN)
@@ -365,38 +367,31 @@ void VivaldiBrowserWindow::Show(extensions::AppWindow::ShowType show_type) {
   else if (initial_show_state == ui::SHOW_STATE_MINIMIZED)
     Minimize();
 
-  switch (show_type) {
-    case extensions::AppWindow::SHOW_ACTIVE:
-      GetBaseWindow()->Show();
-      break;
-    case extensions::AppWindow::SHOW_INACTIVE:
-      GetBaseWindow()->ShowInactive();
-      break;
-  }
+  views_->Show();
 
   OnNativeWindowChanged();
 }
 
 void VivaldiBrowserWindow::Hide() {
   is_hidden_ = true;
-  GetBaseWindow()->Hide();
-  app_delegate_->OnHide();
+  views_->Hide();
+  keep_alive_.reset();
 }
 
 bool VivaldiBrowserWindow::IsVisible() const {
-  return GetBaseWindow()->IsVisible();
+  return views_->IsVisible();
 }
 
 void VivaldiBrowserWindow::SetBounds(const gfx::Rect& bounds) {
-  if (native_app_window_)
-    native_app_window_->SetBounds(bounds);
+  if (views_)
+    views_->SetBounds(bounds);
   return;
 }
 
 void VivaldiBrowserWindow::Close() {
   MovePinnedTabsToOtherWindowIfNeeded();
 
-  native_app_window_->Close();
+  views_->Close();
 }
 
 void VivaldiBrowserWindow::MovePinnedTabsToOtherWindowIfNeeded() {
@@ -456,18 +451,20 @@ void VivaldiBrowserWindow::ConfirmBrowserCloseWithPendingDownloads(
 }
 
 void VivaldiBrowserWindow::Activate() {
-  native_app_window_->Activate();
-  BrowserList::SetLastActive(browser_.get());
+  views_->Activate();
+  if (browser()) {
+    BrowserList::SetLastActive(browser());
+  }
 }
 
 void VivaldiBrowserWindow::Deactivate() {}
 
 bool VivaldiBrowserWindow::IsActive() const {
-  return native_app_window_ ? native_app_window_->IsActive() : false;
+  return views_ ? views_->IsActive() : false;
 }
 
 gfx::NativeWindow VivaldiBrowserWindow::GetNativeWindow() const {
-  return GetBaseWindow()->GetNativeWindow();
+  return views_->GetNativeWindow();
 }
 
 StatusBubble* VivaldiBrowserWindow::GetStatusBubble() {
@@ -475,60 +472,59 @@ StatusBubble* VivaldiBrowserWindow::GetStatusBubble() {
 }
 
 gfx::Rect VivaldiBrowserWindow::GetRestoredBounds() const {
-  if (native_app_window_) {
-    return native_app_window_->GetRestoredBounds();
+  if (views_) {
+    return views_->GetRestoredBounds();
   }
   return gfx::Rect();
 }
 
 ui::WindowShowState VivaldiBrowserWindow::GetRestoredState() const {
-  if (native_app_window_) {
-    return native_app_window_->GetRestoredState();
+  if (views_) {
+    return views_->GetRestoredState();
   }
   return ui::SHOW_STATE_DEFAULT;
 }
 
 gfx::Rect VivaldiBrowserWindow::GetBounds() const {
-  if (native_app_window_) {
-    gfx::Rect bounds = native_app_window_->GetBounds();
-    bounds.Inset(native_app_window_->GetFrameInsets());
+  if (views_) {
+    gfx::Rect bounds = views_->GetBounds();
+    bounds.Inset(views_->GetFrameInsets());
     return bounds;
   }
   return gfx::Rect();
 }
 
 bool VivaldiBrowserWindow::IsMaximized() const {
-  if (native_app_window_) {
-    return native_app_window_->IsMaximized();
+  if (views_) {
+    return views_->IsMaximized();
   }
   return false;
 }
 
 bool VivaldiBrowserWindow::IsMinimized() const {
-  if (native_app_window_) {
-    return native_app_window_->IsMinimized();
+  if (views_) {
+    return views_->IsMinimized();
   }
   return false;
 }
 
 void VivaldiBrowserWindow::Maximize() {
-  if (native_app_window_) {
-    return native_app_window_->Maximize();
+  if (views_) {
+    return views_->Maximize();
   }
 }
 
 void VivaldiBrowserWindow::Minimize() {
-  if (native_app_window_) {
-    return native_app_window_->Minimize();
+  if (views_) {
+    return views_->Minimize();
   }
 }
 
 void VivaldiBrowserWindow::Restore() {
   if (IsFullscreen()) {
-    native_app_window_->SetFullscreen(
-        extensions::AppWindow::FULLSCREEN_TYPE_NONE);
+    views_->SetFullscreen(false);
   } else {
-    GetBaseWindow()->Restore();
+    views_->Restore();
   }
 }
 
@@ -584,7 +580,8 @@ bool VivaldiBrowserWindow::HandleKeyboardEvent(
   extensions::TabsPrivateAPI::SendKeyboardShortcutEvent(browser_->profile(),
                                                         event, is_auto_repeat);
 
-  return native_app_window_->HandleKeyboardEvent(event);
+  return unhandled_keyboard_event_handler_.HandleKeyboardEvent(
+      event, views_->GetFocusManager());
 }
 
 bool VivaldiBrowserWindow::GetAcceleratorForCommandId(
@@ -662,17 +659,17 @@ void VivaldiBrowserWindow::DestroyBrowser() {
 }
 
 gfx::Size VivaldiBrowserWindow::GetContentsSize() const {
-  if (native_app_window_) {
+  if (views_) {
     // TODO(pettern): This is likely not correct, should be tab contents.
-    gfx::Rect bounds = native_app_window_->GetBounds();
-    bounds.Inset(native_app_window_->GetFrameInsets());
+    gfx::Rect bounds = views_->GetBounds();
+    bounds.Inset(views_->GetFrameInsets());
     return bounds.size();
   }
   return gfx::Size();
 }
 
 void VivaldiBrowserWindow::ShowEmojiPanel() {
-  native_app_window_->ShowEmojiPanel();
+  views_->ShowEmojiPanel();
 }
 
 std::string VivaldiBrowserWindow::GetWorkspace() const {
@@ -789,25 +786,33 @@ bool VivaldiBrowserWindow::IsToolbarShowing() const {
   return false;
 }
 
-NativeAppWindow* VivaldiBrowserWindow::GetBaseWindow() const {
-  return native_app_window_.get();
+views::View* VivaldiBrowserWindow::GetContentsView() const {
+  return views_.get();
+}
+
+gfx::NativeView VivaldiBrowserWindow::GetNativeView() {
+  return views_->GetNativeView();
+}
+
+views::View* VivaldiBrowserWindow::GetBubbleDialogAnchor() const {
+  return views_->web_view();
 }
 
 void VivaldiBrowserWindow::OnNativeWindowChanged(bool moved) {
-  // This may be called during Init before |native_app_window_| is set.
-  if (!native_app_window_)
+  // This may be called during Init before |views_| is set.
+  if (!views_)
     return;
 
-  if (native_app_window_) {
-    native_app_window_->UpdateEventTargeterWithInset();
+  if (views_) {
+    views_->UpdateEventTargeterWithInset();
   }
 
   WindowStateData old_state = window_state_data_;
   WindowStateData new_state;
-  new_state.is_fullscreen = native_app_window_->IsFullscreenOrPending();
-  new_state.is_minimized = native_app_window_->IsMinimized();
-  new_state.is_maximized = native_app_window_->IsMaximized();
-  new_state.bounds = native_app_window_->GetBounds();
+  new_state.is_fullscreen = views_->IsFullscreenOrPending();
+  new_state.is_minimized = views_->IsMinimized();
+  new_state.is_maximized = views_->IsMaximized();
+  new_state.bounds = views_->GetBounds();
 
   // Call the delegate so it can dispatch events to the js side
   // for any change in state.
@@ -835,7 +840,7 @@ void VivaldiBrowserWindow::OnNativeClose() {
   if (modal_dialog_manager) {
     modal_dialog_manager->SetDelegate(nullptr);
   }
-  app_window_contents_.NativeWindowClosed();
+  web_contents_.reset();
   show_delay_timeout_.reset();
 
   // For a while we used a direct "delete this" here. That causes the browser_
@@ -853,8 +858,9 @@ void VivaldiBrowserWindow::DeleteThis() {
 
 void VivaldiBrowserWindow::OnNativeWindowActivationChanged(bool active) {
   UpdateActivation(active);
-  if (active)
-    BrowserList::SetLastActive(browser_.get());
+  if (active && browser()) {
+    BrowserList::SetLastActive(browser());
+  }
 }
 
 void VivaldiBrowserWindow::UpdateActivation(bool is_active) {
@@ -865,8 +871,8 @@ void VivaldiBrowserWindow::UpdateActivation(bool is_active) {
 }
 
 void VivaldiBrowserWindow::UpdateTitleBar() {
-  native_app_window_->UpdateWindowTitle();
-  native_app_window_->UpdateWindowIcon();
+  views_->UpdateWindowTitle();
+  views_->UpdateWindowIcon();
 }
 
 base::string16 VivaldiBrowserWindow::GetTitle() {
@@ -904,17 +910,28 @@ void VivaldiBrowserWindow::OnActiveTabChanged(
 void VivaldiBrowserWindow::SetWebContentsBlocked(
     content::WebContents* web_contents,
     bool blocked) {
-  app_delegate_->SetWebContentsBlocked(web_contents, blocked);
+  // The implementation is copied from
+  // ChromeAppDelegate::SetWebContentsBlocked().
+  if (!blocked)
+    web_contents->Focus();
+  // RenderViewHost may be NULL during shutdown.
+  content::RenderFrameHost* host = web_contents->GetMainFrame();
+  if (host) {
+    mojo::Remote<extensions::mojom::AppWindow> app_window;
+    host->GetRemoteInterfaces()->GetInterface(
+        app_window.BindNewPipeAndPassReceiver());
+    app_window->SetVisuallyDeemphasized(blocked);
+  }
 }
 
 bool VivaldiBrowserWindow::IsWebContentsVisible(
     content::WebContents* web_contents) {
-  return app_delegate_->IsWebContentsVisible(web_contents);
+  return platform_util::IsVisible(web_contents->GetNativeView());
 }
 
 web_modal::WebContentsModalDialogHost*
 VivaldiBrowserWindow::GetWebContentsModalDialogHost() {
-  return native_app_window_.get();
+  return &views_->modal_dialog_host_;
 }
 
 void VivaldiBrowserWindow::EnterFullscreen(
@@ -929,13 +946,11 @@ void VivaldiBrowserWindow::ExitFullscreen() {
 }
 
 void VivaldiBrowserWindow::SetFullscreen(bool enable) {
-  native_app_window_->SetFullscreen(
-      enable ? extensions::AppWindow::FULLSCREEN_TYPE_WINDOW_API
-             : extensions::AppWindow::FULLSCREEN_TYPE_NONE);
+  views_->SetFullscreen(enable);
 }
 
 bool VivaldiBrowserWindow::IsFullscreen() const {
-  return native_app_window_.get() ? native_app_window_->IsFullscreen() : false;
+  return views_ ? views_->IsFullscreen() : false;
 }
 
 extensions::WindowController*
@@ -1093,7 +1108,7 @@ SharingDialog* VivaldiBrowserWindow::ShowSharingDialog(
 }
 
 bool VivaldiBrowserWindow::IsOnCurrentWorkspace() const {
-  return native_app_window_->IsOnCurrentWorkspace();
+  return views_->IsOnCurrentWorkspace();
 }
 
 void VivaldiBrowserWindow::UpdatePageActionIcon(PageActionIconType type) {

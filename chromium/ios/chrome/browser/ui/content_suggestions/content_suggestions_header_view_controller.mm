@@ -105,6 +105,14 @@ using base::UserMetricsAction;
   return self.headerView.toolBarView;
 }
 
+- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  [super traitCollectionDidChange:previousTraitCollection];
+  if (self.traitCollection.horizontalSizeClass !=
+      previousTraitCollection.horizontalSizeClass) {
+    [self updateFakeboxDisplay];
+  }
+}
+
 - (void)willTransitionToTraitCollection:(UITraitCollection*)newCollection
               withTransitionCoordinator:
                   (id<UIViewControllerTransitionCoordinator>)coordinator {
@@ -429,16 +437,22 @@ using base::UserMetricsAction;
     [self.headerView setFakeboxHighlighted:[object isHighlighted]];
 }
 
-// If Google is not the default search engine, hide the logo, doodle and
-// fakebox. Make them appear if Google is set as default.
+// If display is compact size, shows fakebox. If display is regular size,
+// shows fakebox if the logo is visible and hides otherwise
+- (void)updateFakeboxDisplay {
+  [self.doodleHeightConstraint
+      setConstant:content_suggestions::doodleHeight(self.logoIsShowing)];
+  self.fakeOmnibox.hidden =
+      IsRegularXRegularSizeClass(self) && !self.logoIsShowing;
+  [self.collectionSynchronizer invalidateLayout];
+}
+
+// If Google is not the default search engine, hides the logo, doodle and
+// fakebox. Makes them appear if Google is set as default.
 - (void)updateLogoAndFakeboxDisplay {
   if (self.logoVendor.showingLogo != self.logoIsShowing) {
     self.logoVendor.showingLogo = self.logoIsShowing;
-    [self.doodleHeightConstraint
-        setConstant:content_suggestions::doodleHeight(self.logoIsShowing)];
-    if (IsRegularXRegularSizeClass(self))
-      [self.fakeOmnibox setHidden:!self.logoIsShowing];
-    [self.collectionSynchronizer invalidateLayout];
+    [self updateFakeboxDisplay];
   }
 }
 
@@ -533,17 +547,24 @@ using base::UserMetricsAction;
     };
   }
 
-  void (^completionBlock)() = ^{
-    self.headerView.omnibox.hidden = YES;
-    self.headerView.cancelButton.hidden = YES;
-    self.headerView.searchHintLabel.alpha = 1;
-    self.headerView.voiceSearchButton.alpha = 1;
-    self.disableScrollAnimation = NO;
-    [self.dispatcher fakeboxFocused];
-    if (IsSplitToolbarMode()) {
-      [self.dispatcher onFakeboxAnimationComplete];
-    }
-  };
+  void (^completionBlock)(UIViewAnimatingPosition) =
+      ^(UIViewAnimatingPosition finalPosition) {
+        self.headerView.omnibox.hidden = YES;
+        self.headerView.cancelButton.hidden = YES;
+        self.headerView.searchHintLabel.alpha = 1;
+        self.headerView.voiceSearchButton.alpha = 1;
+        self.disableScrollAnimation = NO;
+        if (finalPosition == UIViewAnimatingPositionEnd &&
+            [self.delegate isScrolledToTop]) {
+          // Check to see if the collection are still scrolled to the top --
+          // it's possible (and difficult) to unfocus the omnibox and initiate a
+          // -shiftTilesDown before the animation here completes.
+          [self.dispatcher fakeboxFocused];
+          if (IsSplitToolbarMode()) {
+            [self.dispatcher onFakeboxAnimationComplete];
+          }
+        }
+      };
 
   [self.collectionSynchronizer shiftTilesUpWithAnimations:animations
                                                completion:completionBlock];
@@ -628,9 +649,11 @@ using base::UserMetricsAction;
 - (UIPointerStyle*)pointerInteraction:(UIPointerInteraction*)interaction
                        styleForRegion:(UIPointerRegion*)region
     API_AVAILABLE(ios(13.4)) {
-  UIBezierPath* path = [UIBezierPath
-      bezierPathWithRoundedRect:interaction.view.bounds
-                   cornerRadius:interaction.view.bounds.size.height];
+  // Without this, the hover effect looks slightly oversized.
+  CGRect rect = CGRectInset(interaction.view.bounds, 1, 1);
+  UIBezierPath* path =
+      [UIBezierPath bezierPathWithRoundedRect:rect
+                                 cornerRadius:rect.size.height];
   UIPreviewParameters* parameters = [[UIPreviewParameters alloc] init];
   parameters.visiblePath = path;
   UITargetedPreview* preview =

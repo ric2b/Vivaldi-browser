@@ -16,6 +16,7 @@
 #include "chrome/browser/ui/sync/browser_synced_window_delegates_getter.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/url_constants.h"
+#include "components/dom_distiller/core/url_constants.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/sync/model/model_type_store_service.h"
@@ -41,7 +42,8 @@ bool ShouldSyncURLImpl(const GURL& url) {
   return url.is_valid() && !url.SchemeIs(content::kChromeUIScheme) &&
          !url.SchemeIs(chrome::kChromeNativeScheme) && !url.SchemeIsFile() &&
          !(url.SchemeIs(extensions::kExtensionScheme) &&
-         vivaldi::IsVivaldiApp(url.host()));
+           vivaldi::IsVivaldiApp(url.host())) &&
+         !url.SchemeIs(dom_distiller::kDomDistillerScheme);
 }
 
 // Chrome implementation of SyncSessionsClient.

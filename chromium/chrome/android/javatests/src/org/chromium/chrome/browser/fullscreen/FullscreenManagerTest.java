@@ -12,11 +12,12 @@ import android.graphics.Region;
 import android.os.Build;
 import android.os.SystemClock;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.LargeTest;
-import android.support.test.filters.MediumTest;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+
+import androidx.test.filters.LargeTest;
+import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -29,23 +30,20 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeController;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.omnibox.UrlBar;
-import org.chromium.chrome.browser.prerender.PrerenderTestHelper;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.tab.TabTestUtils;
 import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.FullscreenTestUtils;
-import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.content_public.browser.GestureListenerManager;
 import org.chromium.content_public.browser.GestureStateListener;
@@ -59,7 +57,6 @@ import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.content_public.browser.test.util.UiUtils;
 import org.chromium.content_public.browser.test.util.WebContentsUtils;
-import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -72,11 +69,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 @CommandLineFlags.Add({
         ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
 })
-@RetryOnFailure
 public class FullscreenManagerTest {
     @Rule
-    public ChromeActivityTestRule<? extends ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule(ChromeTabbedActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     private static final String LONG_HTML_WITH_AUTO_FOCUS_INPUT_TEST_PAGE =
             UrlUtils.encodeHtmlDataUri("<html>"
@@ -249,7 +244,6 @@ public class FullscreenManagerTest {
 
     @Test
     //@LargeTest
-    //@RetryOnFailure
     @DisabledTest(message = "crbug.com/901280")
     public void testHideBrowserControlsAfterFlingBoosting() {
         // Test that fling boosting doesn't break the scroll state management
@@ -428,47 +422,58 @@ public class FullscreenManagerTest {
 
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
         final TabWebContentsDelegateAndroid delegate = TabTestUtils.getTabWebContentsDelegate(tab);
-        PostTask.runOrPostTask(
-                UiThreadTaskTraits.DEFAULT, () -> { delegate.rendererUnresponsive(); });
+        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, delegate::rendererUnresponsive);
         FullscreenManagerTestUtils.waitForBrowserControlsPosition(mActivityTestRule, 0);
 
-        PostTask.runOrPostTask(
-                UiThreadTaskTraits.DEFAULT, () -> { delegate.rendererResponsive(); });
+        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, delegate::rendererResponsive);
 
         // TODO(tedchoc): This is running into timing issues with the renderer offset logic.
-        //waitForBrowserControlsToBeMoveable(getActivity().getActivityTab());
+        // waitForBrowserControlsToBeMoveable(getActivity().getActivityTab());
     }
 
-    /*
+    @Test
     @LargeTest
     @Feature({"Fullscreen"})
-    @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    */
-    @Test
-    @DisabledTest(message = "crbug.com/642336")
-    public void testPrerenderedPageSupportsManualHiding() throws InterruptedException {
+    @FlakyTest(message = "https://crbug.com/1099447")
+    public void testControlsShownOnUnresponsiveRendererUponExitingTabSwitcherMode()
+            throws Exception {
         FullscreenManagerTestUtils.disableBrowserOverrides();
-        mActivityTestRule.startMainActivityOnBlankPage();
+        mActivityTestRule.startMainActivityWithURL(LONG_HTML_TEST_PAGE);
 
-        EmbeddedTestServer testServer =
-                EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
-        try {
-            final Tab tab = mActivityTestRule.getActivity().getActivityTab();
-            final String testUrl = testServer.getURL(
-                    "/chrome/test/data/android/very_long_google.html");
-            PrerenderTestHelper.prerenderUrl(testUrl, tab);
-            Assert.assertTrue("loadUrl did not use pre-rendered page.",
-                    PrerenderTestHelper.isLoadUrlResultPrerendered(
-                            mActivityTestRule.loadUrl(testUrl)));
+        ChromeFullscreenManager fullscreenManager =
+                mActivityTestRule.getActivity().getFullscreenManager();
+        Assert.assertEquals(fullscreenManager.getTopControlOffset(), 0f, 0);
 
-            UrlBar urlBar = (UrlBar) mActivityTestRule.getActivity().findViewById(R.id.url_bar);
-            OmniboxTestUtils.toggleUrlBarFocus(urlBar, false);
-            OmniboxTestUtils.waitForFocusAndKeyboardActive(urlBar, false);
+        FullscreenManagerTestUtils.scrollBrowserControls(mActivityTestRule, false);
 
-            FullscreenManagerTestUtils.waitForBrowserControlsToBeMoveable(mActivityTestRule, tab);
-        } finally {
-            testServer.stopAndDestroyServer();
-        }
+        setTabSwitcherModeAndWait(true);
+        Tab tab = mActivityTestRule.getActivity().getActivityTab();
+        final TabWebContentsDelegateAndroid delegate = TabTestUtils.getTabWebContentsDelegate(tab);
+        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, delegate::rendererUnresponsive);
+        setTabSwitcherModeAndWait(false);
+
+        FullscreenManagerTestUtils.waitForBrowserControlsPosition(mActivityTestRule, 0);
+
+        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, delegate::rendererResponsive);
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"Fullscreen"})
+    public void testEnterPendingPersistentFullscreen() {
+        FullscreenManagerTestUtils.disableBrowserOverrides();
+        mActivityTestRule.startMainActivityWithURL(LONG_FULLSCREEN_API_HTML_TEST_PAGE);
+
+        // Tests entering fullscreen when browser controls are visible. The request goes through
+        // after the controls are hidden.
+        ChromeFullscreenManager fullscreenManager =
+                mActivityTestRule.getActivity().getFullscreenManager();
+        Assert.assertEquals(0f, fullscreenManager.getTopControlOffset(), 0);
+
+        Tab tab = mActivityTestRule.getActivity().getActivityTab();
+        TouchCommon.singleClickView(tab.getView());
+        final TabWebContentsDelegateAndroid delegate = TabTestUtils.getTabWebContentsDelegate(tab);
+        FullscreenTestUtils.waitForPersistentFullscreen(delegate, true);
     }
 
     /* @LargeTest
@@ -568,5 +573,18 @@ public class FullscreenManagerTest {
                 return !controller.isFocusedNodeEditable();
             }
         });
+    }
+
+    /**
+     * Enter or exit the tab switcher with animations and wait for the scene to change.
+     * @param inSwitcher Whether to enter or exit the tab switcher.
+     */
+    private void setTabSwitcherModeAndWait(boolean inSwitcher) {
+        OverviewModeController controller = mActivityTestRule.getActivity().getLayoutManager();
+        if (inSwitcher) {
+            TestThreadUtils.runOnUiThreadBlocking(() -> controller.showOverview(false));
+        } else {
+            TestThreadUtils.runOnUiThreadBlocking(() -> controller.hideOverview(false));
+        }
     }
 }

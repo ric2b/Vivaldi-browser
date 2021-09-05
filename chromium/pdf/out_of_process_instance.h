@@ -111,6 +111,7 @@ class OutOfProcessInstance : public pp::Instance,
   void UpdateTickMarks(const std::vector<pp::Rect>& tickmarks) override;
   void NotifyNumberOfFindResultsChanged(int total, bool final_result) override;
   void NotifySelectedFindResultChanged(int current_find_index) override;
+  void NotifyTouchSelectionOccurred() override;
   void GetDocumentPassword(
       pp::CompletionCallbackWithOutput<pp::Var> callback) override;
   void Beep() override;
@@ -143,8 +144,9 @@ class OutOfProcessInstance : public pp::Instance,
   uint32_t GetBackgroundColor() override;
   void IsSelectingChanged(bool is_selecting) override;
   void SelectionChanged(const pp::Rect& left, const pp::Rect& right) override;
-  void IsEditModeChanged(bool is_edit_mode) override;
+  void EnteredEditMode() override;
   float GetToolbarHeightInScreenCoords() override;
+  void DocumentFocusChanged(bool document_has_focus) override;
 
   // PreviewModeClient::Client implementation.
   void PreviewDocumentLoadComplete() override;
@@ -153,13 +155,24 @@ class OutOfProcessInstance : public pp::Instance,
   // Helper functions for implementing PPP_PDF.
   void RotateClockwise();
   void RotateCounterclockwise();
-  void SetTwoUpView(bool enable_two_up_view);
 
   // Creates a file name for saving a PDF file, given the source URL. Exposed
   // for testing.
   static std::string GetFileNameFromUrl(const std::string& url);
 
  private:
+  // Message handlers.
+  void HandleBackgroundColorChangedMessage(const pp::VarDictionary& dict);
+  void HandleDisplayAnnotations(const pp::VarDictionary& dict);
+  void HandleGetNamedDestinationMessage(const pp::VarDictionary& dict);
+  void HandleGetPasswordCompleteMessage(const pp::VarDictionary& dict);
+  void HandleGetSelectedTextMessage();
+  void HandleLoadPreviewPageMessage(const pp::VarDictionary& dict);
+  void HandlePrintMessage(const pp::VarDictionary& dict);
+  void HandleResetPrintPreviewModeMessage(const pp::VarDictionary& dict);
+  void HandleSetTwoUpViewMessage(const pp::VarDictionary& dict);
+  void HandleViewportMessage(const pp::VarDictionary& dict);
+
   void ResetRecentlySentFindUpdate(int32_t);
 
   // Called whenever the plugin geometry changes to update the location of the
@@ -184,7 +197,7 @@ class OutOfProcessInstance : public pp::Instance,
   // frame's origin.
   pp::URLLoader CreateURLLoaderInternal();
 
-  bool ShouldSaveEdits() const;
+  bool CanSaveEdits() const;
   void SaveToFile(const std::string& token);
   void SaveToBuffer(const std::string& token);
   void ConsumeSaveToken(const std::string& token);
@@ -208,6 +221,13 @@ class OutOfProcessInstance : public pp::Instance,
     LOAD_STATE_LOADING,
     LOAD_STATE_COMPLETE,
     LOAD_STATE_FAILED,
+  };
+
+  // Must match SaveRequestType in chrome/browser/resources/pdf/constants.js.
+  enum class SaveRequestType {
+    kAnnotation = 0,
+    kOriginal = 1,
+    kEdited = 2,
   };
 
   // Set new zoom scale.

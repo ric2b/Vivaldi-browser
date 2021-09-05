@@ -64,10 +64,12 @@
 <translation id="2522350507219695259">Kalibreringen er fuldført</translation>
 <translation id="252373100621549798">Ukendt skærm</translation>
 <translation id="2545651323591713692">Udsæt</translation>
+<translation id="2570734079541893434">Administrer indstillinger</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{om 1 t.}one{om # t.}other{om # t.}}</translation>
 <translation id="2583543531130364912">Kalibrer din touchskærm</translation>
 <translation id="2666092431469916601">Top</translation>
 <translation id="2701330563083355633">Delt fra <ph name="DEVICE_NAME" /></translation>
+<translation id="271033894570825754">Nyt</translation>
 <translation id="2743387203779672305">Kopiér til udklipsholderen</translation>
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Åbn mappe</translation>
@@ -135,6 +137,7 @@
 <translation id="5463830097259460683">Emojis og symboler</translation>
 <translation id="5476505524087279545">fjern markering</translation>
 <translation id="547979256943495781">Hylden er til højre</translation>
+<translation id="5528053674512161860">Siden kunne ikke indlæses, da udviklerbrugerflademodulet (dev_ui) ikke er installeret</translation>
 <translation id="5574202486608032840"><ph name="IDS_SHORT_PRODUCT_OS_NAME" />-system</translation>
 <translation id="5583640892426849032">Returtast</translation>
 <translation id="5613020302032141669">Venstrepil</translation>
@@ -152,10 +155,12 @@
 <translation id="6040143037577758943">Luk</translation>
 <translation id="6119846243427417423">aktivér</translation>
 <translation id="6129953537138746214">Mellemrum</translation>
+<translation id="6134259848159370930">Søg på din enhed, i dine apps, i indstillingerne og på nettet.</translation>
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/sek.</translation>
 <translation id="6156262341071374681">Vis alle apps</translation>
 <translation id="6165508094623778733">Flere oplysninger</translation>
+<translation id="6166852626429024716">Søg på din enhed, i dine apps, i indstillingerne, på nettet...</translation>
 <translation id="6264365405983206840">Vælg &amp;alle</translation>
 <translation id="6351032674660237738">APPFORSLAG</translation>
 <translation id="6364916375976753737">Scroll Left</translation>
@@ -192,7 +197,6 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{1 min. tilbage}one{# min. tilbage}other{# min. tilbage}}</translation>
 <translation id="7319740667687257810">Appliste, delvis visning</translation>
-<translation id="7352651011704765696">Der opstod en fejl</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{for 1 min. siden}one{for # min. siden}other{for # min. siden}}</translation>
 <translation id="7389409599945284130">– <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{1 minut tilbage}one{# minutter tilbage}other{# minutter tilbage}}</translation>
@@ -205,6 +209,7 @@
 <translation id="7848989271541991537">Flyttet til side <ph name="PAGE_NUMBER" />, række <ph name="ROW_NUMBER" />, kolonne <ph name="COLUMN_NUMBER" />.</translation>
 <translation id="7879499977785298635">Bloker ikke</translation>
 <translation id="7907591526440419938">Åbn fil</translation>
+<translation id="7952747673138230804">Chrome OS viser forslag til nyt indhold, du kan tjekke ud. Der sendes kun statistik til forbedring af forslag, hvis du har valgt at dele dine brugsdata. <ph name="MANAGE_SETTINGS" /></translation>
 <translation id="7969046989155602842">Kommando</translation>
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{Der er mere end 1 ulæst notifikation}one{Der er mere end # ulæst notifikation}other{Der er mere end # ulæste notifikationer}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{om 1 min}one{om # min}other{om # min}}</translation>
@@ -231,6 +236,7 @@
 <translation id="8602707065186045623"><ph name="SAVEAS_EXTENSION_TYPE" /> Fil (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8649597172973390955">Hylden vises altid</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> kB/sek.</translation>
+<translation id="8685326675965865247">Søg på din enhed, i dine apps, i indstillingerne og på nettet. Brug piletasterne til at navigere i dine apps.</translation>
 <translation id="8725488761726303204">+<ph name="NUMBER" /> mere</translation>
 <translation id="8730621377337864115">Udfør</translation>
 <translation id="8772073294905169192">{HOURS,plural, =1{1 t}one{# t}other{# t}}</translation>

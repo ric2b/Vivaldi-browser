@@ -6,7 +6,7 @@
 #define CHROME_BROWSER_CHROMEOS_NET_NETWORK_DIAGNOSTICS_NETWORK_DIAGNOSTICS_IMPL_H_
 
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/chromeos/net/network_diagnostics/network_diagnostics.mojom.h"
+#include "chromeos/services/network_health/public/mojom/network_diagnostics.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 
@@ -16,6 +16,8 @@ namespace network_diagnostics {
 class NetworkDiagnosticsImpl : public mojom::NetworkDiagnosticsRoutines {
  public:
   NetworkDiagnosticsImpl();
+  NetworkDiagnosticsImpl(const NetworkDiagnosticsImpl&) = delete;
+  NetworkDiagnosticsImpl& operator=(const NetworkDiagnosticsImpl&) = delete;
   ~NetworkDiagnosticsImpl() override;
 
   // Binds this instance, an implementation of
@@ -30,12 +32,13 @@ class NetworkDiagnosticsImpl : public mojom::NetworkDiagnosticsRoutines {
   void GatewayCanBePinged(GatewayCanBePingedCallback callback) override;
   void HasSecureWiFiConnection(
       HasSecureWiFiConnectionCallback callback) override;
+  void DnsResolverPresent(DnsResolverPresentCallback callback) override;
+  void DnsLatency(DnsLatencyCallback callback) override;
+  void DnsResolution(DnsResolutionCallback callback) override;
 
  private:
   mojo::ReceiverSet<mojom::NetworkDiagnosticsRoutines> receivers_;
   base::WeakPtrFactory<NetworkDiagnosticsImpl> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(NetworkDiagnosticsImpl);
 };
 
 }  // namespace network_diagnostics

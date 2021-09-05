@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.omnibox.suggestions.base;
 
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.widget.ImageView;
 
@@ -15,12 +16,16 @@ import androidx.core.view.ViewCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionCommonProperties;
+import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProperties.Action;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.RoundedCornerImageView;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor.ViewBinder;
+
+import java.util.List;
 
 /**
  * Binds base suggestion view properties.
@@ -48,30 +53,66 @@ public final class BaseSuggestionViewBinder<T extends View>
         } else if (BaseSuggestionViewProperties.ICON == propertyKey) {
             updateSuggestionIcon(model, view);
             updateContentViewPadding(model, view.getDecoratedSuggestionView());
-        } else if (BaseSuggestionViewProperties.ACTION_ICON == propertyKey) {
-            updateActionIcon(model, view);
-        } else if (BaseSuggestionViewProperties.ACTION_CALLBACK == propertyKey) {
-            final Runnable callback = model.get(BaseSuggestionViewProperties.ACTION_CALLBACK);
-            if (callback != null) {
-                view.getActionImageView().setOnClickListener(v -> callback.run());
-            } else {
-                view.getActionImageView().setOnClickListener(null);
-            }
         } else if (BaseSuggestionViewProperties.DENSITY == propertyKey) {
             updateContentViewPadding(model, view.getDecoratedSuggestionView());
         } else if (SuggestionCommonProperties.LAYOUT_DIRECTION == propertyKey) {
             ViewCompat.setLayoutDirection(
                     view, model.get(SuggestionCommonProperties.LAYOUT_DIRECTION));
             updateContentViewPadding(model, view.getDecoratedSuggestionView());
-        } else if (SuggestionCommonProperties.USE_DARK_COLORS == propertyKey) {
-            updateSuggestionIcon(model, view);
-            updateActionIcon(model, view);
+        } else if (SuggestionCommonProperties.OMNIBOX_THEME == propertyKey) {
+            updateColorScheme(model, view);
+        } else if (BaseSuggestionViewProperties.ACTIONS == propertyKey) {
+            bindActionButtons(model, view, model.get(BaseSuggestionViewProperties.ACTIONS));
         }
     }
 
-    /** Returns which color scheme should be used to tint drawables. */
-    private static boolean isDarkMode(PropertyModel model) {
-        return model.get(SuggestionCommonProperties.USE_DARK_COLORS);
+    /** Bind Action Icons for the suggestion view. */
+    private static <T extends View> void bindActionButtons(
+            PropertyModel model, BaseSuggestionView<T> view, List<Action> actions) {
+        final int actionCount = actions != null ? actions.size() : 0;
+        view.setActionButtonsCount(actionCount);
+
+        // Drawable retrieved once here (expensive) and will be copied multiple times (cheap).
+        Drawable backgroundDrawable = getSelectableBackgroundDrawable(view, model);
+
+        final List<ImageView> actionViews = view.getActionButtons();
+        for (int index = 0; index < actionCount; index++) {
+            final ImageView actionView = actionViews.get(index);
+            final Action action = actions.get(index);
+            actionView.setOnClickListener(v -> action.callback.run());
+            actionView.setContentDescription(
+                    view.getContext().getResources().getString(action.accessibilityDescription));
+            actionView.setBackground(copyDrawable(backgroundDrawable));
+            updateIcon(actionView, action.icon,
+                    ChromeColors.getPrimaryIconTintRes(!useDarkColors(model)));
+        }
+    }
+
+    /** Update visual theme to reflect dark mode UI theme update. */
+    private static <T extends View> void updateColorScheme(
+            PropertyModel model, BaseSuggestionView<T> view) {
+        updateSuggestionIcon(model, view);
+        Drawable backgroundDrawable = getSelectableBackgroundDrawable(view, model);
+        view.getDecoratedSuggestionView().setBackground(backgroundDrawable);
+
+        final List<Action> actions = model.get(BaseSuggestionViewProperties.ACTIONS);
+        // Setting ACTIONS and updating actionViews can happen later. Appropriate color scheme will
+        // be applied then.
+        if (actions == null) return;
+
+        final List<ImageView> actionViews = view.getActionButtons();
+        for (int index = 0; index < actionViews.size(); index++) {
+            ImageView actionView = actionViews.get(index);
+            actionView.setBackground(copyDrawable(backgroundDrawable));
+            updateIcon(actionView, actions.get(index).icon,
+                    ChromeColors.getPrimaryIconTintRes(!useDarkColors(model)));
+        }
+    }
+
+    /** @return Whether currently used color scheme is considered to be dark. */
+    private static boolean useDarkColors(PropertyModel model) {
+        return !OmniboxResourceProvider.isDarkMode(
+                model.get(SuggestionCommonProperties.OMNIBOX_THEME));
     }
 
     /** Update attributes of decorated suggestion icon. */
@@ -103,15 +144,7 @@ public final class BaseSuggestionViewBinder<T extends View>
             rciv.setRoundedCorners(radius, radius, radius, radius);
         }
 
-        updateIcon(rciv, sds, ChromeColors.getSecondaryIconTintRes(!isDarkMode(model)));
-    }
-
-    /** Update attributes of decorated suggestion icon. */
-    private static <T extends View> void updateActionIcon(
-            PropertyModel model, BaseSuggestionView<T> baseView) {
-        final ImageView view = baseView.getActionImageView();
-        final SuggestionDrawableState sds = model.get(BaseSuggestionViewProperties.ACTION_ICON);
-        updateIcon(view, sds, ChromeColors.getPrimaryIconTintRes(!isDarkMode(model)));
+        updateIcon(rciv, sds, ChromeColors.getSecondaryIconTintRes(!useDarkColors(model)));
     }
 
     /**
@@ -158,6 +191,33 @@ public final class BaseSuggestionViewBinder<T extends View>
 
         final int minimumHeight = view.getResources().getDimensionPixelSize(minimumHeightRes);
         view.getContentView().setMinimumHeight(minimumHeight);
+    }
+
+    /**
+     * Retrieves selecatable background drawable from resources. If possible prefer
+     * {@link #copyDrawable(Drawable)} over this operation, as it offers an order of magnitude
+     * better performance in incognito.
+     * The drawable should be used only once, all other uses should make a copy.
+     *
+     * @param view A view that provides context.
+     * @param model A property model to look up relevant properties.
+     * @return A selectable background drawable.
+     */
+    private static Drawable getSelectableBackgroundDrawable(View view, PropertyModel model) {
+        return OmniboxResourceProvider.resolveAttributeToDrawable(view.getContext(),
+                model.get(SuggestionCommonProperties.OMNIBOX_THEME),
+                R.attr.selectableItemBackground);
+    }
+
+    /**
+     * Creates a copy of the drawable. The drawable should be used only once, all other uses should
+     * make a copy.
+     *
+     * @param original Original drawable to be copied.
+     * @return Copied drawable.
+     */
+    private static Drawable copyDrawable(Drawable original) {
+        return original.getConstantState().newDrawable();
     }
 
     /** Update image view using supplied drawable state object. */

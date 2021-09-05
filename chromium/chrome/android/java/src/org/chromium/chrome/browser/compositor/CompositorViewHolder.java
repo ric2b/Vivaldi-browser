@@ -37,7 +37,11 @@ import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.compat.ApiHelperForN;
 import org.chromium.base.compat.ApiHelperForO;
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
 import org.chromium.chrome.browser.compositor.Invalidator.Client;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerHost;
@@ -47,7 +51,6 @@ import org.chromium.chrome.browser.compositor.layouts.content.ContentOffsetProvi
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.device.DeviceClassManager;
-import org.chromium.chrome.browser.fullscreen.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -60,7 +63,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.chrome.browser.ui.TabObscuringHandler;
-import org.chromium.chrome.browser.util.AccessibilityUtil;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.widget.InsetObserverView;
 import org.chromium.components.content_capture.ContentCaptureConsumer;
 import org.chromium.components.content_capture.ContentCaptureConsumerImpl;
@@ -88,7 +91,7 @@ import java.util.Set;
 public class CompositorViewHolder extends FrameLayout
         implements ContentOffsetProvider, LayoutManagerHost, LayoutRenderHost, Invalidator.Host,
                    BrowserControlsStateProvider.Observer, InsetObserverView.WindowInsetObserver,
-                   AccessibilityUtil.Observer, TabObscuringHandler.Observer {
+                   ChromeAccessibilityUtil.Observer, TabObscuringHandler.Observer {
     private static final long SYSTEM_UI_VIEWPORT_UPDATE_DELAY_MS = 500;
 
     /**
@@ -136,6 +139,8 @@ public class CompositorViewHolder extends FrameLayout
 
     private TabModelSelector mTabModelSelector;
     private @Nullable ChromeFullscreenManager mFullscreenManager;
+    private ObservableSupplierImpl<ChromeFullscreenManager> mFullscreenManagerSupplier =
+            new ObservableSupplierImpl<>();
     private View mAccessibilityView;
     private CompositorAccessibilityProvider mNodeProvider;
 
@@ -162,6 +167,8 @@ public class CompositorViewHolder extends FrameLayout
     private boolean mHasDrawnOnce;
 
     private boolean mIsInVr;
+
+    private boolean mControlsResizeView;
 
     // Indicates if ContentCaptureConsumer should be created, we only try to create it once.
     private boolean mShouldCreateContentCaptureConsumer = true;
@@ -721,7 +728,7 @@ public class CompositorViewHolder extends FrameLayout
                 ? mFullscreenManager.getTopControlsMinHeight()
                         + mFullscreenManager.getBottomControlsMinHeight()
                 : 0;
-        int controlsHeight = controlsResizeView()
+        int controlsHeight = mControlsResizeView
                 ? getTopControlsHeightPixels() + getBottomControlsHeightPixels()
                 : totalMinHeight;
 
@@ -811,6 +818,9 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     private void onUpdateViewportSize() {
+        if (mFullscreenManager != null) {
+            mControlsResizeView = BrowserControlsUtils.controlsResizeView(mFullscreenManager);
+        }
         // Reflect the changes that may have happened in in view/control size.
         Point viewportSize = getViewportSize();
         setSize(getWebContents(), getContentView(), viewportSize.x, viewportSize.y);
@@ -989,6 +999,11 @@ public class CompositorViewHolder extends FrameLayout
         return mFullscreenManager;
     }
 
+    @Override
+    public ObservableSupplier<ChromeFullscreenManager> getFullscreenManagerSupplier() {
+        return mFullscreenManagerSupplier;
+    }
+
     /**
      * Sets a fullscreen handler.
      * @param fullscreen A fullscreen handler.
@@ -997,6 +1012,7 @@ public class CompositorViewHolder extends FrameLayout
         mFullscreenManager = fullscreen;
         mFullscreenManager.addObserver(this);
         mFullscreenManager.setViewportSizeDelegate(this::onUpdateViewportSize);
+        mFullscreenManagerSupplier.set(mFullscreenManager);
         onViewportChanged();
     }
 
@@ -1021,7 +1037,7 @@ public class CompositorViewHolder extends FrameLayout
      * @return {@code true} if browser controls shrink Blink view's size.
      */
     public boolean controlsResizeView() {
-        return mFullscreenManager != null && mFullscreenManager.controlsResizeView();
+        return mControlsResizeView;
     }
 
     @Override
@@ -1091,9 +1107,9 @@ public class CompositorViewHolder extends FrameLayout
             TabCreatorManager tabCreatorManager, TabContentManager tabContentManager,
             ViewGroup androidContentContainer,
             ContextualSearchManagementDelegate contextualSearchManager) {
-        assert mLayoutManager != null;
+        assert mLayoutManager != null && mControlContainer != null;
         mLayoutManager.init(tabModelSelector, tabCreatorManager, tabContentManager,
-                androidContentContainer, contextualSearchManager,
+                androidContentContainer, mControlContainer, contextualSearchManager,
                 mCompositorView.getResourceManager().getDynamicResourceLoader());
 
         mTabModelSelector = tabModelSelector;
@@ -1291,7 +1307,7 @@ public class CompositorViewHolder extends FrameLayout
         }
     }
 
-    // AccessibilityUtil.Observer
+    // ChromeAccessibilityUtil.Observer
 
     @Override
     public void onAccessibilityModeChanged(boolean enabled) {

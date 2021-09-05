@@ -110,11 +110,6 @@ const base::Feature kCacheStorageParallelOps{"CacheStorageParallelOps",
 const base::Feature kCacheStorageEagerReading{
     "CacheStorageEagerReading", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables scheduling the operation at high priority when a cache.match() is
-// initiated from a FetchEvent handler with a matching request URL.
-const base::Feature kCacheStorageHighPriorityMatch{
-    "CacheStorageHighPriorityMatch", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // If Canvas2D Image Chromium is allowed, this feature controls whether it is
 // enabled.
 const base::Feature kCanvas2DImageChromium {
@@ -129,6 +124,9 @@ const base::Feature kCanvas2DImageChromium {
 // Enables the use of out of process rasterization for canvas.
 const base::Feature kCanvasOopRasterization{"CanvasOopRasterization",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kClickPointerEvent{"ClickPointerEvent",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, code cache does not use a browsing_data filter for deletions.
 extern const base::Feature kCodeCacheDeletionWithoutFilter{
@@ -265,21 +263,13 @@ const base::Feature kHistoryPreventSandboxedNavigation{
 const base::Feature kIdleDetection{"IdleDetection",
                                    base::FEATURE_ENABLED_BY_DEFAULT};
 
-// This flag is used to set field parameters to choose predictor we use when
-// kResamplingInputEvents is disabled. It's used for gatherig accuracy metrics
-// on finch and also for choosing predictor type for predictedEvents API without
-// enabling resampling. It does not have any effect when the resampling flag is
-// enabled.
-const base::Feature kInputPredictorTypeChoice{
-    "InputPredictorTypeChoice", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Kill switch for the GetInstalledRelatedApps API.
 const base::Feature kInstalledApp{"InstalledApp",
                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Allow Windows specific implementation for the GetInstalledRelatedApps API.
 const base::Feature kInstalledAppProvider{"InstalledAppProvider",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Show warning about clearing data from installed apps in the clear browsing
 // data flow. The warning will be shown in a second dialog.
@@ -324,8 +314,14 @@ const base::Feature kLazyInitializeMediaControls{
 const base::Feature kLegacyWindowsDWriteFontFallback{
     "LegacyWindowsDWriteFontFallback", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kLogJsConsoleMessages{"LogJsConsoleMessages",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kLogJsConsoleMessages {
+  "LogJsConsoleMessages",
+#if defined(OS_ANDROID)
+      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
 
 // Enables lowering the priority of the resources in iframes.
 const base::Feature kLowPriorityIframes{"LowPriorityIframes",
@@ -403,10 +399,6 @@ const base::Feature kOverscrollHistoryNavigation {
       base::FEATURE_ENABLED_BY_DEFAULT
 #endif
 };
-
-// Whether ParkableStrings in blink can be written out to disk.
-const base::Feature kParkableStringsToDisk{"ParkableStringsToDisk",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Whether web apps can run periodic tasks upon network connectivity.
 const base::Feature kPeriodicBackgroundSync{"PeriodicBackgroundSync",
@@ -506,9 +498,10 @@ const base::Feature kRenderDocument{"RenderDocument",
 const base::Feature kRequestUnbufferedDispatch{
     "RequestUnbufferedDispatch", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables resampling input events on main thread.
-const base::Feature kResamplingInputEvents{"ResamplingInputEvents",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+// Respect the MacOS system setting for subpixel text anti-aliasing.
+// https://crbug.com/1079418.
+const base::Feature kRespectMacLCDTextSetting{
+    "RespectMacLCDTextSetting", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Run video capture service in the Browser process as opposed to a dedicated
 // utility process
@@ -609,9 +602,19 @@ const base::Feature kSiteIsolationEnforcementForFileSystemApi{
 const base::Feature kSpareRendererForSitePerProcess{
     "SpareRendererForSitePerProcess", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables Storage Pressure Event.
+const base::Feature kStoragePressureEvent{"StoragePressureEvent",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables Storage Pressure notifications and settings pages.
-const base::Feature kStoragePressureUI{"StoragePressureUI",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kStoragePressureUI {
+  "StoragePressureUI",
+#if defined(OS_ANDROID)
+      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
 
 // Enables the out-of-process Storage Service.
 const base::Feature kStorageServiceOutOfProcess{
@@ -625,6 +628,10 @@ const base::Feature kStorageServiceSandbox{"StorageServiceSandbox",
 // Controls whether site isolation should use origins instead of scheme and
 // eTLD+1.
 const base::Feature kStrictOriginIsolation{"StrictOriginIsolation",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables subresource loading with Web Bundles.
+const base::Feature kSubresourceWebBundles{"SubresourceWebBundles",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Dispatch touch events to "SyntheticGestureController" for events from
@@ -687,23 +694,13 @@ const base::Feature kUserAgentClientHint{"UserAgentClientHint",
 const base::Feature kVideoPlaybackQuality{"VideoPlaybackQuality",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables V8's low memory mode for subframes. This is used only
-// in conjunction with the --site-per-process feature.
-const base::Feature kV8LowMemoryModeForSubframes{
-    "V8LowMemoryModeForSubframes", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enables future V8 VM features
 const base::Feature kV8VmFuture{"V8VmFuture",
                                 base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable WebAssembly baseline compilation and tier up.
+// Enable WebAssembly baseline compilation (Liftoff).
 const base::Feature kWebAssemblyBaseline{"WebAssemblyBaseline",
-#ifdef ARCH_CPU_X86_FAMILY
-                                         base::FEATURE_ENABLED_BY_DEFAULT
-#else
-                                         base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable WebAssembly lazy compilation (JIT on first call).
 const base::Feature kWebAssemblyLazyCompilation{

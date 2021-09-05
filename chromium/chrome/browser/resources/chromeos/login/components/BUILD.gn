@@ -11,6 +11,7 @@ js_type_check("closure_compile") {
     ":hd-iron-icon",
     ":html-echo",
     ":login_screen_behavior",
+    ":multi_step_behavior",
     ":oobe_buttons",
     ":oobe_dialog",
     ":oobe_dialog_host_behavior",
@@ -49,6 +50,9 @@ js_library("login_screen_behavior") {
   ]
 }
 
+js_library("multi_step_behavior") {
+}
+
 js_library("oobe_buttons") {
   deps = [ ":oobe_i18n_behavior" ]
 }
@@ -56,9 +60,9 @@ js_library("oobe_buttons") {
 js_library("oobe_dialog") {
   deps = [
     ":fake_oobe",
-    "//ui/webui/resources/cr_elements:cr_scrollable_behavior",
     "//ui/webui/resources/cr_elements/cr_lazy_render:cr_lazy_render",
   ]
+  externs_list = [ "$externs_path/pending.js" ]
 }
 
 js_library("oobe_dialog_host_behavior") {

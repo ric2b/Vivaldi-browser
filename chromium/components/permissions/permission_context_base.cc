@@ -78,6 +78,10 @@ const char kPermissionBlockedFeaturePolicyMessage[] =
     "%s permission has been blocked because of a Feature Policy applied to the "
     "current document. See https://goo.gl/EuHzyv for more details.";
 
+const char kPermissionBlockedPortalsMessage[] =
+    "%s permission has been blocked because it was requested inside a portal. "
+    "Portals don't currently support permission requests.";
+
 void LogPermissionBlockedMessage(content::WebContents* web_contents,
                                  const char* message,
                                  ContentSettingsType type) {
@@ -167,6 +171,11 @@ void PermissionContextBase::RequestPermission(
                                     kPermissionBlockedFeaturePolicyMessage,
                                     content_settings_type_);
         break;
+      case PermissionStatusSource::PORTAL:
+        LogPermissionBlockedMessage(web_contents,
+                                    kPermissionBlockedPortalsMessage,
+                                    content_settings_type_);
+        break;
       case PermissionStatusSource::INSECURE_ORIGIN:
       case PermissionStatusSource::UNSPECIFIED:
       case PermissionStatusSource::VIRTUAL_URL_DIFFERENT_ORIGIN:
@@ -200,10 +209,26 @@ void PermissionContextBase::RequestPermission(
   // Vivaldi does the permission handling in WebViewPermissionHelper, not
   // PermissionManager, except for geolocation, notifications and plugins which
   // we do in |PermissionContextBase::DecidePermission|.
+
+  bool is_handled_in_webviewpermission_helper = false;
   if (vivaldi::IsVivaldiRunning()) {
+    switch (content_settings_type_) {
+      case ContentSettingsType::MEDIASTREAM_MIC:
+      case ContentSettingsType::MEDIASTREAM_CAMERA:
+      case ContentSettingsType::NOTIFICATIONS:
+      case ContentSettingsType::GEOLOCATION:
+      case ContentSettingsType::PLUGINS:
+        is_handled_in_webviewpermission_helper = true;
+        break;
+      default:
+        // The rest is handled by the non-vivaldi path.
+        break;
+    }
+  }
+  if (is_handled_in_webviewpermission_helper) {
     PermissionContextBase::DecidePermission(web_contents, id, requesting_origin,
-      embedding_origin, user_gesture,
-      std::move(callback));
+                                            embedding_origin, user_gesture,
+                                            std::move(callback));
   } else {
   DecidePermission(web_contents, id, requesting_origin, embedding_origin,
                    user_gesture, std::move(callback));
@@ -242,6 +267,12 @@ PermissionResult PermissionContextBase::GetPermissionStatus(
   if (render_frame_host) {
     content::WebContents* web_contents =
         content::WebContents::FromRenderFrameHost(render_frame_host);
+
+    // Permissions are denied for portals.
+    if (web_contents && web_contents->IsPortal()) {
+      return PermissionResult(CONTENT_SETTING_BLOCK,
+                              PermissionStatusSource::PORTAL);
+    }
 
     // Automatically deny all HTTP or HTTPS requests where the virtual URL and
     // the loaded URL are for different origins. The loaded URL is the one

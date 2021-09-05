@@ -68,10 +68,6 @@ void FakeSyncEngine::ActivateProxyDataType(ModelType type) {}
 
 void FakeSyncEngine::DeactivateProxyDataType(ModelType type) {}
 
-UserShare* FakeSyncEngine::GetUserShare() const {
-  return nullptr;
-}
-
 const SyncStatus& FakeSyncEngine::GetDetailedStatus() const {
   return default_sync_status_;
 }
@@ -80,8 +76,6 @@ void FakeSyncEngine::HasUnsyncedItemsForTest(
     base::OnceCallback<void(bool)> cb) const {}
 
 void FakeSyncEngine::GetModelSafeRoutingInfo(ModelSafeRoutingInfo* out) const {}
-
-void FakeSyncEngine::FlushDirectory() const {}
 
 void FakeSyncEngine::RequestBufferedProtocolEventsAndEnableForwarding() {}
 

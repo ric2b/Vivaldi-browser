@@ -44,7 +44,7 @@ DocumentLoadTiming::DocumentLoadTiming(DocumentLoader& document_loader)
       tick_clock_(base::DefaultTickClock::GetInstance()),
       document_loader_(document_loader) {}
 
-void DocumentLoadTiming::Trace(Visitor* visitor) {
+void DocumentLoadTiming::Trace(Visitor* visitor) const {
   visitor->Trace(document_loader_);
 }
 
@@ -135,6 +135,12 @@ void DocumentLoadTiming::SetNavigationStart(base::TimeTicks navigation_start) {
   DCHECK(!reference_wall_time_.is_zero());
   reference_wall_time_ = MonotonicTimeToPseudoWallTime(navigation_start);
   reference_monotonic_time_ = navigation_start;
+  NotifyDocumentTimingChanged();
+}
+
+void DocumentLoadTiming::MarkBackForwardCacheRestoreNavigationStart(
+    base::TimeTicks navigation_start) {
+  bfcache_restore_navigation_starts_.push_back(navigation_start);
   NotifyDocumentTimingChanged();
 }
 

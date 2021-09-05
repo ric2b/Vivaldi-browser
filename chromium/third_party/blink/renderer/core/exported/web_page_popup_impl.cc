@@ -34,6 +34,7 @@
 #include "cc/animation/animation_host.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/trees/ukm_manager.h"
+#include "third_party/blink/public/mojom/input/input_handler.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/web_render_widget_scheduling_state.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/web/web_view_client.h"
@@ -70,6 +71,7 @@
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/keyboard_codes.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/web_test_support.h"
@@ -216,20 +218,17 @@ class PagePopupChromeClient final : public EmptyChromeClient {
   void SetToolTip(LocalFrame&,
                   const String& tooltip_text,
                   TextDirection dir) override {
-    if (popup_->WidgetClient()) {
-      popup_->WidgetClient()->SetToolTipText(tooltip_text,
-                                             ToBaseTextDirection(dir));
-    }
+    popup_->widget_base_->SetToolTipText(tooltip_text, dir);
   }
 
   void InjectGestureScrollEvent(LocalFrame& local_frame,
                                 WebGestureDevice device,
                                 const gfx::Vector2dF& delta,
-                                ScrollGranularity granularity,
+                                ui::ScrollGranularity granularity,
                                 cc::ElementId scrollable_area_element_id,
                                 WebInputEvent::Type injected_type) override {
-    popup_->WidgetClient()->InjectGestureScrollEvent(
-        device, delta, granularity, scrollable_area_element_id, injected_type);
+    popup_->InjectGestureScrollEvent(device, delta, granularity,
+                                     scrollable_area_element_id, injected_type);
   }
 
   WebPagePopupImpl* popup_;
@@ -314,15 +313,37 @@ void WebPagePopupImpl::Initialize(WebViewImpl* web_view,
   ProvideContextFeaturesTo(*page_, std::make_unique<PagePopupFeaturesClient>());
   DEFINE_STATIC_LOCAL(Persistent<LocalFrameClient>, empty_local_frame_client,
                       (MakeGarbageCollected<EmptyLocalFrameClient>()));
+
   // Creating new WindowAgentFactory because page popup content is owned by the
-  // user agent and should be isolated from the main frame.
+  // user agent and should be isolated from the main frame. However, if we are a
+  // page popup in LayoutTests ensure we use the popup owner's frame for looking
+  // up the Agent so tests can possibly access the document via internals API.
+  WindowAgentFactory* window_agent_factory = nullptr;
+  if (WebTestSupport::IsRunningWebTest()) {
+    Document& owner_document = popup_client_->OwnerElement().GetDocument();
+    window_agent_factory = &owner_document.GetFrame()->window_agent_factory();
+  }
+
   auto* frame = MakeGarbageCollected<LocalFrame>(
       empty_local_frame_client, *page_,
       /* FrameOwner* */ nullptr, base::UnguessableToken::Create(),
-      /* WindowAgentFactory* */ nullptr,
+      window_agent_factory,
       /* InterfaceRegistry* */ nullptr);
   frame->SetPagePopupOwner(popup_client_->OwnerElement());
   frame->SetView(MakeGarbageCollected<LocalFrameView>(*frame));
+
+  if (WebTestSupport::IsRunningWebTest()) {
+    // In order for the shared WindowAgentFactory for tests to work correctly,
+    // we need to also copy settings used in WindowAgent selection over to the
+    // popup frame.
+    Settings* owner_settings =
+        popup_client_->OwnerElement().GetDocument().GetFrame()->GetSettings();
+    frame->GetSettings()->SetWebSecurityEnabled(
+        owner_settings->GetWebSecurityEnabled());
+    frame->GetSettings()->SetAllowUniversalAccessFromFileURLs(
+        owner_settings->GetAllowUniversalAccessFromFileURLs());
+  }
+
   frame->Init();
   frame->View()->SetParentVisible(true);
   frame->View()->SetSelfVisible(true);
@@ -366,6 +387,53 @@ WebPagePopupImpl::RendererWidgetSchedulingState() {
 
 void WebPagePopupImpl::SetCursor(const ui::Cursor& cursor) {
   widget_base_->SetCursor(cursor);
+}
+
+bool WebPagePopupImpl::HandlingInputEvent() {
+  return widget_base_->input_handler().handling_input_event();
+}
+
+void WebPagePopupImpl::SetHandlingInputEvent(bool handling) {
+  widget_base_->input_handler().set_handling_input_event(handling);
+}
+
+void WebPagePopupImpl::ProcessInputEventSynchronously(
+    const WebCoalescedInputEvent& event,
+    HandledEventCallback callback) {
+  widget_base_->input_handler().HandleInputEvent(event, std::move(callback));
+}
+
+void WebPagePopupImpl::UpdateTextInputState() {
+  widget_base_->UpdateTextInputState();
+}
+
+void WebPagePopupImpl::UpdateCompositionInfo() {
+  widget_base_->UpdateCompositionInfo(/*immediate_request=*/false);
+}
+
+void WebPagePopupImpl::UpdateSelectionBounds() {
+  widget_base_->UpdateSelectionBounds();
+}
+
+void WebPagePopupImpl::ShowVirtualKeyboard() {
+  widget_base_->ShowVirtualKeyboard();
+}
+
+void WebPagePopupImpl::ForceTextInputStateUpdate() {
+  widget_base_->ForceTextInputStateUpdate();
+}
+
+void WebPagePopupImpl::RequestCompositionUpdates(bool immediate_request,
+                                                 bool monitor_updates) {
+  widget_base_->RequestCompositionUpdates(immediate_request, monitor_updates);
+}
+
+void WebPagePopupImpl::SetFocus(bool focus) {
+  widget_base_->SetFocus(focus);
+}
+
+bool WebPagePopupImpl::HasFocus() {
+  return widget_base_->has_focus();
 }
 
 void WebPagePopupImpl::SetCompositorVisible(bool visible) {
@@ -413,6 +481,21 @@ AXObject* WebPagePopupImpl::RootAXObject() {
 }
 
 void WebPagePopupImpl::SetWindowRect(const IntRect& rect_in_screen) {
+  if (!closing_) {
+    IntRect owner_window_rect_in_screen = OwnerWindowRectInScreen();
+    Document& document = popup_client_->OwnerElement().GetDocument();
+    if (owner_window_rect_in_screen.Contains(rect_in_screen)) {
+      UseCounter::Count(document,
+                        WebFeature::kPopupDoesNotExceedOwnerWindowBounds);
+    } else {
+      WebFeature feature =
+          document.GetFrame()->IsMainFrame()
+              ? WebFeature::kPopupExceedsOwnerWindowBounds
+              : WebFeature::kPopupExceedsOwnerWindowBoundsForIframe;
+      UseCounter::Count(document, feature);
+    }
+  }
+
   WidgetClient()->SetWindowRect(rect_in_screen);
 }
 
@@ -496,6 +579,45 @@ void WebPagePopupImpl::DispatchRafAlignedInput(base::TimeTicks frame_time) {
   WidgetClient()->DispatchRafAlignedInput(frame_time);
 }
 
+bool WebPagePopupImpl::WillHandleGestureEvent(const WebGestureEvent& event) {
+  return WidgetClient()->WillHandleGestureEvent(event);
+}
+
+bool WebPagePopupImpl::WillHandleMouseEvent(const WebMouseEvent& event) {
+  return WidgetClient()->WillHandleMouseEvent(event);
+}
+
+void WebPagePopupImpl::ObserveGestureEventAndResult(
+    const WebGestureEvent& gesture_event,
+    const gfx::Vector2dF& unused_delta,
+    const cc::OverscrollBehavior& overscroll_behavior,
+    bool event_processed) {
+  WidgetClient()->DidHandleGestureScrollEvent(
+      gesture_event, unused_delta, overscroll_behavior, event_processed);
+}
+
+void WebPagePopupImpl::QueueSyntheticEvent(
+    std::unique_ptr<blink::WebCoalescedInputEvent> event) {
+  WidgetClient()->QueueSyntheticEvent(std::move(event));
+}
+
+void WebPagePopupImpl::GetWidgetInputHandler(
+    mojo::PendingReceiver<mojom::blink::WidgetInputHandler> request,
+    mojo::PendingRemote<mojom::blink::WidgetInputHandlerHost> host) {
+  WidgetClient()->GetWidgetInputHandler(std::move(request), std::move(host));
+}
+
+bool WebPagePopupImpl::HasCurrentImeGuard(
+    bool request_to_show_virtual_keyboard) {
+  return WidgetClient()->HasCurrentImeGuard(request_to_show_virtual_keyboard);
+}
+
+void WebPagePopupImpl::SendCompositionRangeChanged(
+    const gfx::Range& range,
+    const std::vector<gfx::Rect>& character_bounds) {
+  WidgetClient()->SendCompositionRangeChanged(range, character_bounds);
+}
+
 WebInputEventResult WebPagePopupImpl::HandleCharEvent(
     const WebKeyboardEvent& event) {
   if (suppress_next_keypress_event_) {
@@ -509,12 +631,16 @@ WebInputEventResult WebPagePopupImpl::HandleGestureEvent(
     const WebGestureEvent& event) {
   if (closing_)
     return WebInputEventResult::kNotHandled;
-  if ((event.GetType() == WebInputEvent::Type::kGestureTap ||
-       event.GetType() == WebInputEvent::Type::kGestureTapDown) &&
-      !IsViewportPointInWindow(event.PositionInWidget().x(),
-                               event.PositionInWidget().y())) {
-    Cancel();
-    return WebInputEventResult::kNotHandled;
+  if (event.GetType() == WebInputEvent::Type::kGestureTap ||
+      event.GetType() == WebInputEvent::Type::kGestureTapDown) {
+    if (!IsViewportPointInWindow(event.PositionInWidget().x(),
+                                 event.PositionInWidget().y())) {
+      Cancel();
+      return WebInputEventResult::kNotHandled;
+    }
+    CheckScreenPointInOwnerWindowAndCount(
+        event.PositionInScreen(),
+        WebFeature::kPopupGestureTapExceedsOwnerWindowBounds);
   }
   WebGestureEvent scaled_event =
       TransformWebGestureEvent(MainFrame().View(), event);
@@ -524,18 +650,26 @@ WebInputEventResult WebPagePopupImpl::HandleGestureEvent(
 void WebPagePopupImpl::HandleMouseDown(LocalFrame& main_frame,
                                        const WebMouseEvent& event) {
   if (IsViewportPointInWindow(event.PositionInWidget().x(),
-                              event.PositionInWidget().y()))
+                              event.PositionInWidget().y())) {
+    CheckScreenPointInOwnerWindowAndCount(
+        event.PositionInScreen(),
+        WebFeature::kPopupMouseDownExceedsOwnerWindowBounds);
     PageWidgetEventHandler::HandleMouseDown(main_frame, event);
-  else
+  } else {
     Cancel();
+  }
 }
 
 WebInputEventResult WebPagePopupImpl::HandleMouseWheel(
     LocalFrame& main_frame,
     const WebMouseWheelEvent& event) {
   if (IsViewportPointInWindow(event.PositionInWidget().x(),
-                              event.PositionInWidget().y()))
+                              event.PositionInWidget().y())) {
+    CheckScreenPointInOwnerWindowAndCount(
+        event.PositionInScreen(),
+        WebFeature::kPopupMouseWheelExceedsOwnerWindowBounds);
     return PageWidgetEventHandler::HandleMouseWheel(main_frame, event);
+  }
   Cancel();
   return WebInputEventResult::kNotHandled;
 }
@@ -569,6 +703,23 @@ bool WebPagePopupImpl::IsViewportPointInWindow(int x, int y) {
       .Contains(IntPoint(point_in_window.x, point_in_window.y));
 }
 
+void WebPagePopupImpl::CheckScreenPointInOwnerWindowAndCount(
+    const gfx::PointF& point_in_screen,
+    WebFeature feature) const {
+  if (closing_)
+    return;
+
+  IntRect owner_window_rect = OwnerWindowRectInScreen();
+  if (!owner_window_rect.Contains(point_in_screen.x(), point_in_screen.y()))
+    UseCounter::Count(popup_client_->OwnerElement().GetDocument(), feature);
+}
+
+IntRect WebPagePopupImpl::OwnerWindowRectInScreen() const {
+  LocalFrameView* view = popup_client_->OwnerElement().GetDocument().View();
+  IntRect frame_rect = view->FrameRect();
+  return view->FrameToScreen(frame_rect);
+}
+
 WebInputEventResult WebPagePopupImpl::DispatchBufferedTouchEvents() {
   if (closing_)
     return WebInputEventResult::kNotHandled;
@@ -583,12 +734,13 @@ WebInputEventResult WebPagePopupImpl::HandleInputEvent(
   return PageWidgetDelegate::HandleInputEvent(*this, event, &MainFrame());
 }
 
-void WebPagePopupImpl::SetFocus(bool enable) {
+void WebPagePopupImpl::FocusChanged(bool enable) {
   if (!page_)
     return;
   if (enable)
     page_->GetFocusController().SetActive(true);
   page_->GetFocusController().SetFocused(enable);
+  WidgetClient()->FocusChanged(enable);
 }
 
 WebURL WebPagePopupImpl::GetURLForDebugTrace() {
@@ -657,7 +809,7 @@ void WebPagePopupImpl::ClosePopup() {
     // because web authors can't listen the events.
     EventDispatchForbiddenScope::AllowUserAgentEvents allow_events;
 
-    MainFrame().Loader().StopAllLoaders();
+    MainFrame().Loader().StopAllLoaders(/*abort_client=*/true);
     PagePopupController::From(*page_)->ClearPagePopupClient();
     DestroyPage();
   }
@@ -699,6 +851,16 @@ void WebPagePopupImpl::Cancel() {
 
 WebRect WebPagePopupImpl::WindowRectInScreen() const {
   return WidgetClient()->WindowRect();
+}
+
+void WebPagePopupImpl::InjectGestureScrollEvent(
+    WebGestureDevice device,
+    const gfx::Vector2dF& delta,
+    ScrollGranularity granularity,
+    cc::ElementId scrollable_area_element_id,
+    WebInputEvent::Type injected_type) {
+  widget_base_->input_handler().InjectGestureScrollEvent(
+      device, delta, granularity, scrollable_area_element_id, injected_type);
 }
 
 // WebPagePopup ----------------------------------------------------------------

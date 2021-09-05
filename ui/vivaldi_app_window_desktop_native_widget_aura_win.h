@@ -16,8 +16,9 @@ namespace views {
 class DesktopWindowTreeHost;
 }
 
-// AppWindowDesktopNativeWidgetAura is a DesktopNativeWidgetAura subclass that
-// handles creating the right type of tree hosts for app windows on Windows.
+// A DesktopNativeWidgetAura subclass that handles creating the right type of
+// tree hosts for app windows on Windows. It is based on
+// AppWindowDesktopNativeWidgetAuraWin.
 class VivaldiAppWindowDesktopNativeWidgetAuraWin
     : public views::DesktopNativeWidgetAura {
  public:

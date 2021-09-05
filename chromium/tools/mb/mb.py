@@ -27,10 +27,12 @@ import sys
 import subprocess
 import tempfile
 import traceback
-import urllib2
 import zipfile
 
-from collections import OrderedDict
+if sys.version_info.major == 2:
+  from urllib2 import urlopen
+else:
+  from urllib.request import urlopen
 
 CHROMIUM_SRC_DIR = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
@@ -549,55 +551,6 @@ class MetaBuildWrapper(object):
       if zip_dir:
         self.RemoveDirectory(zip_dir)
 
-  def _AddBaseSoftware(self, cmd):
-    # HACK(iannucci): These packages SHOULD NOT BE HERE.
-    # Remove method once Swarming Pool Task Templates are implemented.
-    # crbug.com/812428
-
-    # Read vpython version from pinned depot_tools manifest. Better than
-    # duplicating the pin here. The pin file format is simple enough to parse
-    # it inline here.
-    manifest_path = self.PathJoin(self.chromium_src_dir, 'third_party',
-                                  'depot_tools', 'cipd_manifest.txt')
-    vpython_pkg = vpython_version = None
-    for line in self.ReadFile(manifest_path).splitlines():
-      # lines look like:
-      # name/of/package version
-      if 'vpython' in line and 'git_revision' in line:
-        vpython_pkg, vpython_version = line.split()
-        break
-    if vpython_pkg is None:
-      raise ValueError('unable to read vpython pin from %s' % (manifest_path, ))
-
-    # Add in required base software. This should be kept in sync with the
-    # `chromium_swarming` recipe module in build.git. All references to
-    # `swarming_module` below are purely due to this.
-    cipd_packages = [
-      ('infra/python/cpython/${platform}',
-       'version:2.7.15.chromium14'),
-      ('infra/tools/luci/logdog/butler/${platform}',
-       'git_revision:e1abc57be62d198b5c2f487bfb2fa2d2eb0e867c'),
-    ]
-    cipd_packages.append((vpython_pkg, vpython_version))
-    cipd_packages.append((vpython_pkg.replace('vpython', 'vpython-native'),
-                          vpython_version))
-
-    for pkg, vers in cipd_packages:
-      cmd.append('--cipd-package=.swarming_module:%s:%s' % (pkg, vers))
-
-    # Add packages to $PATH
-    cmd.extend([
-      '--env-prefix=PATH', '.swarming_module',
-      '--env-prefix=PATH', '.swarming_module/bin',
-    ])
-
-    # Add cache directives for vpython.
-    vpython_cache_path = '.swarming_module_cache/vpython'
-    cmd.extend([
-      '--named-cache=swarming_module_cache_vpython', vpython_cache_path,
-      '--env-prefix=VPYTHON_VIRTUALENV_ROOT', vpython_cache_path,
-    ])
-
   def _RunUnderSwarming(self, build_dir, target):
     isolate_server = 'isolateserver.appspot.com'
     namespace = 'default-gzip'
@@ -609,11 +562,8 @@ class MetaBuildWrapper(object):
     #
     # TODO(dpranke): Also, add support for sharding and merging results.
     dimensions = []
-    swarming_pool = ''
     for k, v in self._DefaultDimensions() + self.args.dimensions:
       dimensions += ['-d', k, v]
-      if k == 'pool':
-        swarming_pool = v
 
     archive_json_path = self.ToSrcRelPath(
         '%s/%s.archive.json' % (build_dir, target))
@@ -677,10 +627,6 @@ class MetaBuildWrapper(object):
           '-S', swarming_server,
           '--tags=purpose:user-debug-mb',
       ] + dimensions
-    # TODO(crbug.com/812428): Remove this once all pools have migrated to task
-    # templates.
-    if not swarming_pool.endswith('.template'):
-      self._AddBaseSoftware(cmd)
     if self.args.extra_args:
       cmd += ['--'] + self.args.extra_args
     self.Print('')
@@ -1171,7 +1117,7 @@ class MetaBuildWrapper(object):
         rpaths = [
             target + '.runtime_deps',
             stamp_runtime_deps]
-      elif (target_type == 'script' or target_type == 'windowed_script'
+      elif (target_type == 'script'
             or isolate_map[target].get('label_type') == 'group'):
         # For script targets, the build target is usually a group,
         # for which gn generates the runtime_deps next to the stamp file
@@ -1276,11 +1222,11 @@ class MetaBuildWrapper(object):
               'chromevox_test_data/',
               'gen/ui/file_manager/file_manager/',
               'resources/chromeos/',
-              'resources/chromeos/accessibility/autoclick/',
+              'resources/chromeos/accessibility/accessibility_common/',
               'resources/chromeos/accessibility/chromevox/',
               'resources/chromeos/accessibility/select_to_speak/',
               'test_data/chrome/browser/resources/chromeos/accessibility/'
-              'autoclick/',
+              'accessibility_common/',
               'test_data/chrome/browser/resources/chromeos/accessibility/'
               'chromevox/',
               'test_data/chrome/browser/resources/chromeos/accessibility/'
@@ -1446,12 +1392,12 @@ class MetaBuildWrapper(object):
     is_mac = self.platform == 'darwin'
     is_win = self.platform == 'win32' or 'target_os="win"' in vals['gn_args']
 
-    # This should be true if tests with type='windowed_test_launcher' or
-    # type='windowed_script' are expected to run using xvfb. For example,
-    # Linux Desktop, X11 CrOS and Ozone CrOS builds on Linux (xvfb is not used
-    # on CrOS HW or VMs). Note that one Ozone build can be used to run
-    # different backends. Currently, tests are executed for the headless and
-    # X11 backends and both can run under Xvfb on Linux.
+    # This should be true if tests with type='windowed_test_launcher' are
+    # expected to run using xvfb. For example, Linux Desktop, X11 CrOS and
+    # Ozone CrOS builds on Linux (xvfb is not used on CrOS HW or VMs). Note
+    # that one Ozone build can be used to run different backends. Currently,
+    # tests are executed for the headless and X11 backends and both can run
+    # under Xvfb on Linux.
     # TODO(tonikitoo,msisov,fwang): Find a way to run tests for the Wayland
     # backend.
     use_xvfb = (self.platform == 'linux2' and not is_android and not is_fuchsia
@@ -1507,7 +1453,7 @@ class MetaBuildWrapper(object):
       # mimicking what generated_script would do
       script = 'bin/run_{}'.format(target)
       cmdline += ['../../testing/test_env.py', script]
-    elif is_android and test_type not in ('script', 'windowed_script'):
+    elif is_android and test_type != 'script':
       if asan:
         cmdline += [os.path.join('bin', 'run_with_asan'), '--']
       cmdline += [
@@ -1518,14 +1464,14 @@ class MetaBuildWrapper(object):
           '--store-tombstones']
       if clang_coverage or java_coverage:
         cmdline += ['--coverage-dir', '${ISOLATED_OUTDIR}']
-    elif is_fuchsia and test_type not in ('script', 'windowed_script'):
+    elif is_fuchsia and test_type != 'script':
       cmdline += [
           '../../testing/test_env.py',
           os.path.join('bin', 'run_%s' % target),
           '--test-launcher-bot-mode',
           '--system-log-file', '${ISOLATED_OUTDIR}/system_log'
       ]
-    elif is_cros_device and test_type not in ('script', 'windowed_script'):
+    elif is_cros_device and test_type != 'script':
       cmdline += [
           '../../testing/test_env.py',
           os.path.join('bin', 'run_%s' % target),
@@ -1561,17 +1507,11 @@ class MetaBuildWrapper(object):
           '--tsan=%d' % tsan,
           '--cfi-diag=%d' % cfi_diag,
       ]
-    elif use_xvfb and test_type == 'windowed_script':
-      extra_files.append('../../testing/xvfb.py')
-      cmdline += [
-          '../../testing/xvfb.py',
-          '../../' + self.ToSrcRelPath(isolate_map[target]['script'])
-      ]
-    elif test_type in ('script', 'windowed_script'):
+    elif test_type == 'script':
       # If we're testing a CrOS simplechrome build, assume we need to prepare a
       # DUT for testing. So prepend the command to run with the test wrapper.
       if is_cros_device:
-        cmdline = [
+        cmdline += [
             os.path.join('bin', 'cros_test_wrapper'),
             '--logs-dir=${ISOLATED_OUTDIR}',
         ]
@@ -1853,7 +1793,7 @@ class MetaBuildWrapper(object):
 
   def Fetch(self, url):
     # This function largely exists so it can be overridden for testing.
-    f = urllib2.urlopen(url)
+    f = urlopen(url)
     contents = f.read()
     f.close()
     return contents
@@ -1861,7 +1801,7 @@ class MetaBuildWrapper(object):
   def MaybeMakeDirectory(self, path):
     try:
       os.makedirs(path)
-    except OSError, e:
+    except OSError as e:
       if e.errno != errno.EEXIST:
         raise
 

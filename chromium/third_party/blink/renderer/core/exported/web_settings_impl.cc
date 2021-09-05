@@ -588,10 +588,6 @@ bool WebSettingsImpl::ShrinksViewportContentToFit() const {
   return settings_->GetShrinksViewportContentToFit();
 }
 
-void WebSettingsImpl::SetShouldRespectImageOrientation(bool enabled) {
-  settings_->SetShouldRespectImageOrientation(enabled);
-}
-
 void WebSettingsImpl::SetPictureInPictureEnabled(bool enabled) {
   settings_->SetPictureInPictureEnabled(enabled);
 }
@@ -782,6 +778,10 @@ void WebSettingsImpl::SetPreferredColorScheme(
 void WebSettingsImpl::SetNavigationControls(
     NavigationControls navigation_controls) {
   settings_->SetNavigationControls(navigation_controls);
+}
+
+void WebSettingsImpl::SetAriaModalPrunesAXTree(bool enabled) {
+  settings_->SetAriaModalPrunesAXTree(enabled);
 }
 
 STATIC_ASSERT_ENUM(WebSettings::ImageAnimationPolicy::kAllowed,

@@ -160,7 +160,7 @@ bool SaveAndDeleteImage(scoped_refptr<base::RefCountedBytes> image_bytes,
     return false;
   }
   if (!old_image_path.empty() && old_image_path != image_path) {
-    if (!base::DeleteFile(old_image_path, false /* recursive */)) {
+    if (!base::DeleteFile(old_image_path)) {
       LOG(ERROR) << "Failed to delete old image: "
                  << old_image_path.AsUTF8Unsafe();
       return false;
@@ -955,8 +955,8 @@ void UserImageManagerImpl::DeleteUserImageAndLocalStateEntry(
   image_properties->GetString(kImagePathNodeName, &image_path);
   if (!image_path.empty()) {
     background_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(base::IgnoreResult(&base::DeleteFile),
-                                  base::FilePath(image_path), false));
+        FROM_HERE, base::BindOnce(base::GetDeleteFileCallback(),
+                                  base::FilePath(image_path)));
   }
   update->RemoveWithoutPathExpansion(user_id(), nullptr);
 }

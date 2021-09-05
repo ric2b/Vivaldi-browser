@@ -70,7 +70,7 @@ using content::OpenURLParams;
 using content::WebContents;
 
 // If non-null there is a drag underway.
-static TabDragController* g_tab_drag_controller = NULL;
+static TabDragController* g_tab_drag_controller = nullptr;
 
 namespace {
 
@@ -398,8 +398,8 @@ TabDragController::TabDragController()
       was_source_maximized_(false),
       was_source_fullscreen_(false),
       did_restore_window_(false),
-      tab_strip_to_attach_to_after_exit_(NULL),
-      move_loop_widget_(NULL),
+      tab_strip_to_attach_to_after_exit_(nullptr),
+      move_loop_widget_(nullptr),
       is_mutating_(false),
       attach_x_(-1),
       attach_index_(-1) {
@@ -408,7 +408,7 @@ TabDragController::TabDragController()
 
 TabDragController::~TabDragController() {
   if (g_tab_drag_controller == this)
-    g_tab_drag_controller = NULL;
+    g_tab_drag_controller = nullptr;
 
   if (move_loop_widget_)
     move_loop_widget_->RemoveObserver(this);
@@ -421,6 +421,7 @@ TabDragController::~TabDragController() {
         attached_context_ ? attached_context_ : source_context_;
     capture_context->AsView()->GetWidget()->ReleaseCapture();
   }
+  CHECK(!IsInObserverList());
 }
 
 void TabDragController::Init(TabDragContext* source_context,
@@ -1320,7 +1321,7 @@ void TabDragController::Detach(ReleaseCapture release_capture) {
 
   ClearTabDraggingInfo();
   attached_context_->DraggedTabsDetached();
-  attached_context_ = NULL;
+  attached_context_ = nullptr;
   attached_views_.clear();
 }
 
@@ -1441,7 +1442,7 @@ void TabDragController::RunMoveLoop(const gfx::Vector2d& drag_offset) {
     // Activate may trigger a focus loss, destroying us.
     if (!ref)
       return;
-    tab_strip_to_attach_to_after_exit_ = NULL;
+    tab_strip_to_attach_to_after_exit_ = nullptr;
   } else if (current_state_ == DragState::kWaitingToStop) {
     EndDrag(result == views::Widget::MOVE_LOOP_CANCELED ? END_DRAG_CANCEL
                                                         : END_DRAG_COMPLETE);
@@ -2022,6 +2023,9 @@ Browser* TabDragController::CreateBrowserForDrag(
   // window is a maximized or fullscreen window since it will prevent window
   // moving/resizing on Chrome OS. See crbug.com/1023871 for details.
   create_params.initial_show_state = ui::SHOW_STATE_DEFAULT;
+  // Don't copy the initial workspace since the *current* workspace might be
+  // different and copying the workspace will move the tab to the initial one.
+  create_params.initial_workspace = "";
   Browser* browser = new Browser(create_params);
   is_dragging_new_browser_ = true;
   // If the window is created maximized then the bounds we supplied are ignored.
@@ -2232,10 +2236,16 @@ TabDragController::GetTabGroupForTargetIndex(const std::vector<int>& selected) {
   int left_most_selected_x_position =
       left_most_selected_tab->x() + tab_left_inset;
 
-  if (left_most_selected_x_position <= left_edge - buffer)
+  if ((left_most_selected_x_position <= left_edge - buffer) &&
+      left_group.has_value() &&
+      !attached_model->IsGroupCollapsed(left_group.value())) {
     return left_group;
-  if (left_most_selected_x_position >= left_edge + buffer)
+  }
+  if ((left_most_selected_x_position >= left_edge + buffer) &&
+      right_group.has_value() &&
+      !attached_model->IsGroupCollapsed(right_group.value())) {
     return right_group;
+  }
   return base::nullopt;
 }
 
@@ -2252,7 +2262,7 @@ bool TabDragController::CanAttachTo(gfx::NativeWindow window) {
   // Do not allow dragging into a window with a modal dialog, it causes a
   // weird behavior.  See crbug.com/336691
 #if defined(USE_AURA)
-  if (wm::GetModalTransient(window) != nullptr)
+  if (wm::GetModalTransient(window))
     return false;
 #else
   TabStripModel* model = other_browser->tab_strip_model();

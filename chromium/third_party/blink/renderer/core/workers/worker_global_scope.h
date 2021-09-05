@@ -83,6 +83,7 @@ class CORE_EXPORT WorkerGlobalScope
   bool IsClosing() const final { return closing_; }
   void Dispose() override;
   WorkerThread* GetThread() const final { return thread_; }
+  const base::UnguessableToken& GetDevToolsToken() const override;
 
   void ExceptionUnhandled(int exception_id);
 
@@ -179,7 +180,7 @@ class CORE_EXPORT WorkerGlobalScope
   base::TimeTicks TimeOrigin() const { return time_origin_; }
   WorkerSettings* GetWorkerSettings() const { return worker_settings_.get(); }
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   virtual InstalledScriptsManager* GetInstalledScriptsManager() {
     return nullptr;

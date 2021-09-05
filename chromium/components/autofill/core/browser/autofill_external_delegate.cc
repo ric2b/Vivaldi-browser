@@ -39,6 +39,9 @@ namespace autofill {
 
 namespace {
 
+using AutoselectFirstSuggestion =
+    AutofillClient::PopupOpenArgs::AutoselectFirstSuggestion;
+
 // Returns true if the suggestion entry is an Autofill warning message.
 // Warning messages should display on top of suggestion list.
 bool IsAutofillWarningEntry(int frontend_id) {
@@ -162,9 +165,10 @@ void AutofillExternalDelegate::OnSuggestionsReturned(
 
   // Send to display.
   if (query_field_.is_focusable && GetAutofillDriver()->CanShowAutofillUi()) {
-    manager_->client()->ShowAutofillPopup(
+    autofill::AutofillClient::PopupOpenArgs open_args(
         element_bounds_, query_field_.text_direction, suggestions,
-        autoselect_first_suggestion, popup_type_, GetWeakPtr());
+        AutoselectFirstSuggestion(autoselect_first_suggestion), popup_type_);
+    manager_->client()->ShowAutofillPopup(open_args, GetWeakPtr());
   }
 }
 
@@ -193,7 +197,9 @@ void AutofillExternalDelegate::SetCurrentDataListValues(
 }
 
 void AutofillExternalDelegate::OnPopupShown() {
-  // If a popup was shown, then we showed either autofill or autocomplete.
+  // Popups are expected to be Autofill or Autocomplete.
+  DCHECK_NE(GetPopupType(), PopupType::kPasswords);
+
   OnAutofillAvailabilityEvent(
       has_autofill_suggestions_ ? mojom::AutofillState::kAutofillAvailable
                                 : mojom::AutofillState::kAutocompleteAvailable);

@@ -49,9 +49,32 @@
 #include "ui/base/win/shell.h"
 #endif
 
+#if defined(OS_CHROMEOS)
+#include "ash/public/cpp/metrics_util.h"
+#include "base/optional.h"
+#endif
+
 namespace {
 // Maximum number of lines that a title label occupies.
 constexpr int kHoverCardTitleMaxLines = 2;
+
+#if defined(OS_CHROMEOS)
+// UMA histograms that record animation smoothness for fade-in and fade-out
+// animations of tab hover card.
+constexpr char kHoverCardFadeInSmoothnessHistogramName[] =
+    "Chrome.Tabs.AnimationSmoothness.HoverCard.FadeIn";
+constexpr char kHoverCardFadeOutSmoothnessHistogramName[] =
+    "Chrome.Tabs.AnimationSmoothness.HoverCard.FadeOut";
+
+void RecordFadeInSmoothness(int smoothness) {
+  UMA_HISTOGRAM_PERCENTAGE(kHoverCardFadeInSmoothnessHistogramName, smoothness);
+}
+
+void RecordFadeOutSmoothness(int smoothness) {
+  UMA_HISTOGRAM_PERCENTAGE(kHoverCardFadeOutSmoothnessHistogramName,
+                           smoothness);
+}
+#endif
 
 bool AreHoverCardImagesEnabled() {
   return base::FeatureList::IsEnabled(features::kTabHoverCardImages);
@@ -120,8 +143,9 @@ class TabHoverCardBubbleView::WidgetFadeAnimationDelegate
   explicit WidgetFadeAnimationDelegate(views::Widget* hover_card)
       : AnimationDelegateViews(hover_card->GetRootView()),
         widget_(hover_card),
-        fade_animation_(std::make_unique<gfx::LinearAnimation>(this)) {}
-  ~WidgetFadeAnimationDelegate() override {}
+        fade_animation_(std::make_unique<gfx::LinearAnimation>(this)) {
+  }
+  ~WidgetFadeAnimationDelegate() override = default;
 
   enum class FadeAnimationState {
     // No animation is running.
@@ -153,6 +177,12 @@ class TabHoverCardBubbleView::WidgetFadeAnimationDelegate
     widget_->Show();
     fade_animation_ = std::make_unique<gfx::LinearAnimation>(this);
     fade_animation_->SetDuration(kFadeInDuration);
+#if defined(OS_CHROMEOS)
+    throughput_tracker_.emplace(
+        widget_->GetCompositor()->RequestNewThroughputTracker());
+    throughput_tracker_->Start(ash::metrics_util::ForSmoothness(
+        base::BindRepeating(&RecordFadeInSmoothness)));
+#endif
     fade_animation_->Start();
   }
 
@@ -164,6 +194,12 @@ class TabHoverCardBubbleView::WidgetFadeAnimationDelegate
     fade_animation_ = std::make_unique<gfx::LinearAnimation>(this);
     set_animation_state(FadeAnimationState::FADE_OUT);
     fade_animation_->SetDuration(kFadeOutDuration);
+#if defined(OS_CHROMEOS)
+    throughput_tracker_.emplace(
+        widget_->GetCompositor()->RequestNewThroughputTracker());
+    throughput_tracker_->Start(ash::metrics_util::ForSmoothness(
+        base::BindRepeating(&RecordFadeOutSmoothness)));
+#endif
     fade_animation_->Start();
   }
 
@@ -172,6 +208,9 @@ class TabHoverCardBubbleView::WidgetFadeAnimationDelegate
       return;
 
     fade_animation_->Stop();
+#if defined(OS_CHROMEOS)
+    throughput_tracker_->Cancel();
+#endif
     set_animation_state(FadeAnimationState::IDLE);
     widget_->SetOpacity(1.0f);
   }
@@ -197,10 +236,16 @@ class TabHoverCardBubbleView::WidgetFadeAnimationDelegate
 
   void AnimationEnded(const gfx::Animation* animation) override {
     AnimationProgressed(animation);
+#if defined(OS_CHROMEOS)
+    throughput_tracker_->Stop();
+#endif
     set_animation_state(FadeAnimationState::IDLE);
   }
 
   views::Widget* const widget_;
+#if defined(OS_CHROMEOS)
+  base::Optional<ui::ThroughputTracker> throughput_tracker_;
+#endif
   std::unique_ptr<gfx::LinearAnimation> fade_animation_;
   FadeAnimationState animation_state_ = FadeAnimationState::IDLE;
 

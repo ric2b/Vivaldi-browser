@@ -322,9 +322,9 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // Useful when a pending job is to be cancelled (on reset or error).
   void DestroyPendingBuffers();
 
-  // Execute job in hardware on target |va_surface_id| and destroy pending
-  // buffers. Return false if Execute() fails.
-  bool ExecuteAndDestroyPendingBuffers(VASurfaceID va_surface_id);
+  // Executes job in hardware on target |va_surface_id| and destroys pending
+  // buffers. Returns false if Execute() fails.
+  virtual bool ExecuteAndDestroyPendingBuffers(VASurfaceID va_surface_id);
 
 #if defined(USE_X11)
   // Put data from |va_surface_id| into |x_pixmap| of size
@@ -343,28 +343,37 @@ class MEDIA_GPU_EXPORT VaapiWrapper
                                                VAImageFormat* format,
                                                const gfx::Size& size);
 
-  // Upload contents of |frame| into |va_surface_id| for encode.
-  bool UploadVideoFrameToSurface(const VideoFrame& frame,
-                                 VASurfaceID va_surface_id,
-                                 const gfx::Size& va_surface_size);
+  // Uploads contents of |frame| into |va_surface_id| for encode.
+  virtual bool UploadVideoFrameToSurface(const VideoFrame& frame,
+                                         VASurfaceID va_surface_id,
+                                         const gfx::Size& va_surface_size);
 
-  // Create a buffer of |size| bytes to be used as encode output.
-  bool CreateVABuffer(size_t size, VABufferID* buffer_id);
+  // Creates a buffer of |size| bytes to be used as encode output.
+  virtual bool CreateVABuffer(size_t size, VABufferID* buffer_id);
 
-  // Download the contents of the buffer with given |buffer_id| into a buffer of
-  // size |target_size|, pointed to by |target_ptr|. The number of bytes
+  // Gets the encoded frame linear size of the buffer with given |buffer_id|.
+  // |sync_surface_id| will be used as a sync point, i.e. it will have to become
+  // idle before starting the acquirement. |sync_surface_id| should be the
+  // source surface passed to the encode job. Returns 0 if it fails for any
+  // reason.
+  virtual uint64_t GetEncodedChunkSize(VABufferID buffer_id,
+                                       VASurfaceID sync_surface_id);
+
+  // Downloads the contents of the buffer with given |buffer_id| into a buffer
+  // of size |target_size|, pointed to by |target_ptr|. The number of bytes
   // downloaded will be returned in |coded_data_size|. |sync_surface_id| will
   // be used as a sync point, i.e. it will have to become idle before starting
   // the download. |sync_surface_id| should be the source surface passed
-  // to the encode job.
-  bool DownloadFromVABuffer(VABufferID buffer_id,
-                            VASurfaceID sync_surface_id,
-                            uint8_t* target_ptr,
-                            size_t target_size,
-                            size_t* coded_data_size);
+  // to the encode job. Returns false if it fails for any reason. For example,
+  // the linear size of the resulted encoded frame is larger than |target_size|.
+  virtual bool DownloadFromVABuffer(VABufferID buffer_id,
+                                    VASurfaceID sync_surface_id,
+                                    uint8_t* target_ptr,
+                                    size_t target_size,
+                                    size_t* coded_data_size);
 
   // Deletes the VA buffer identified by |buffer_id|.
-  void DestroyVABuffer(VABufferID buffer_id);
+  virtual void DestroyVABuffer(VABufferID buffer_id);
 
   // Destroy all previously-allocated (and not yet destroyed) buffers.
   void DestroyVABuffers();
@@ -374,23 +383,27 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // For H.264 encoding, the value represents the maximum number of reference
   // frames for both the reference picture list 0 (bottom 16 bits) and the
   // reference picture list 1 (top 16 bits).
-  bool GetVAEncMaxNumOfRefFrames(VideoCodecProfile profile,
-                                 size_t* max_ref_frames);
+  virtual bool GetVAEncMaxNumOfRefFrames(VideoCodecProfile profile,
+                                         size_t* max_ref_frames);
+
+  // Checks if the driver supports frame rotation.
+  bool IsRotationSupported();
 
   // Blits a VASurface |va_surface_src| into another VASurface
-  // |va_surface_dest| applying pixel format conversion, cropping and scaling
-  // if needed. |src_rect| and |dest_rect| are optional. They can be used to
-  // specify the area used in the blit.
+  // |va_surface_dest| applying pixel format conversion, rotation, cropping
+  // and scaling if needed. |src_rect| and |dest_rect| are optional. They can
+  // be used to specify the area used in the blit.
   bool BlitSurface(const VASurface& va_surface_src,
                    const VASurface& va_surface_dest,
                    base::Optional<gfx::Rect> src_rect = base::nullopt,
-                   base::Optional<gfx::Rect> dest_rect = base::nullopt);
+                   base::Optional<gfx::Rect> dest_rect = base::nullopt,
+                   VideoRotation rotation = VIDEO_ROTATION_0);
 
   // Initialize static data before sandbox is enabled.
   static void PreSandboxInitialization();
 
   // vaDestroySurfaces() a vector or a single VASurfaceID.
-  void DestroySurfaces(std::vector<VASurfaceID> va_surfaces);
+  virtual void DestroySurfaces(std::vector<VASurfaceID> va_surfaces);
   virtual void DestroySurface(VASurfaceID va_surface_id);
 
  protected:
@@ -424,12 +437,6 @@ class MEDIA_GPU_EXPORT VaapiWrapper
       EXCLUSIVE_LOCKS_REQUIRED(va_lock_);
 
   void DestroyPendingBuffers_Locked() EXCLUSIVE_LOCKS_REQUIRED(va_lock_);
-
-  // Attempt to set render mode to "render to texture.". Failure is non-fatal.
-  void TryToSetVADisplayAttributeToLocalGPU();
-
-  // Check low-power encode support for |profile| and |mode|.
-  bool IsLowPowerEncSupported(VAProfile va_profile, CodecMode mode) const;
 
   const CodecMode mode_;
 

@@ -192,6 +192,9 @@
       <message name="IDS_DETAILS_LINK" desc="In 1) Settings > Clean up computer (desktop), a link to open details of incompatible applications. In 2) Settings > Lite mode (mobile), static title for data usage breakdown." meaning="Short for 'view details'. Link; static title.">
         Details
       </message>
+      <message name="IDS_CHANGE_LINK" desc="Any link text giving option to the user to edit some settings. [CHAR-LIMIT=20]">
+        Change
+      </message>
       <message name="IDS_DONE" desc="Label for a button to save a change or finish editing data. Used in multiple contexts. [CHAR-LIMIT=20]">
         Done
       </message>
@@ -254,6 +257,9 @@
       </message>
       <message name="IDS_ADD" desc="Prompt for the user to add something, like a new address. [CHAR-LIMIT=20]">
         Add
+      </message>
+      <message name="IDS_CHANGE" desc="Prompt for the user to change something. [CHAR-LIMIT=20]">
+        Change
       </message>
       <message name="IDS_SHARE" desc="Content description for a button to share item(s). [CHAR-LIMIT=20]">
         Share
@@ -378,6 +384,9 @@
       <message name="IDS_MENU_HELP" desc="Menu item for opening the help page. [CHAR-LIMIT=27]">
         Help &amp; feedback
       </message>
+      <message name="IDS_AUTOMATICALLY_BLOCKED" desc="Description displayed next to an origin when it was placed under embargo by Chrome. This indicates to the user that the origin is blocked automatically instead of being the result of the user's decision.">
+        Automatically blocked
+      </message>
 
       <!-- Downloads UI -->
       <message name="IDS_DOWNLOAD_NOTIFICATION_CANCEL_BUTTON" desc="Text on the button that cancels a download.">
@@ -435,6 +444,9 @@
       <message name="IDS_PAGE_INFO_PREVIEW_MESSAGE" desc="This text is displayed in the page info bubble when the currently viewed page has been modified by Google to be a lighter and faster version of the original page. The word 'Lite' should match the translation in TC ID 1019734090540434451">
         Lite page provided by Google
       </message>
+      <message name="IDS_PAGE_INFO_LITE_MODE_HTTPS_IMAGE_COMPRESSION" desc="This text is displayed in the page info bubble when the currently viewed page has https images that were optimized by Google">
+        To save you data, this page's images have been optimized by Google.
+      </message>
       <message name="IDS_PAGE_INFO_OPEN_ONLINE_BUTTON" desc="Text in the button that attempts to open an online version of the offline website displayed in the tab.">
         Open Online
       </message>
@@ -472,47 +484,90 @@
         Blocked for current search engine
       </message>
 
-    <message name="IDS_COOKIES_TITLE" desc="Title for the Cookies settings screen [CHAR-LIMIT=32]">
-        Cookies
-    </message>
+      <message name="IDS_COOKIES_TITLE" desc="Title for the Cookies settings screen [CHAR-LIMIT=32]">
+          Cookies
+      </message>
 
-    <!-- Media Capture and Streams -->
-    <message name="IDS_MEDIA_CAPTURE_NOTIFICATION_APP_NAME_SEPARATOR" desc="A separator between the app name and notification message.">
-      <ph name="APP_NAME">%1$s<ex>Chrome</ex></ph> - <ph name="NOTIFICATION_MESSAGE">%2$s<ex>Accessing video input</ex></ph>
-    </message>
-    <message name="IDS_VIDEO_CAPTURE_NOTIFICATION_TITLE" desc="Text to be shown as a notification when a WebRTC video call is in progress.">
-      A site is using your camera
-    </message>
-    <message name="IDS_AUDIO_CAPTURE_NOTIFICATION_TITLE" desc="Text to be shown as a notification when a WebRTC audio call is in progress">
-      A site is using your microphone
-    </message>
-    <message name="IDS_VIDEO_AUDIO_CAPTURE_NOTIFICATION_TITLE" desc="Text to be shown as a notification when a WebRTC video and audio call is in progress">
-      A site is using your camera and microphone
-    </message>
-    <message name="IDS_MEDIA_CAPTURE_NOTIFICATION_CONTENT_TEXT" desc="Url of the current tab. The notification will display this text for the user to identify the tab to return to.">
-      Tap to return to <ph name="URL_OF_THE_CURRENT_TAB">%1$s<ex>https://apprtc.appspot.com</ex></ph>
-    </message>
-    <message name="IDS_MEDIA_CAPTURE_NOTIFICATION_CONTENT_TEXT_INCOGNITO" desc="The notification will display this text for the user to return to the incognito tab which has created the notification.">
-      Tap to return to the site
-    </message>
-    <message name="IDS_ACCESSIBILITY_STOP" desc="Accessible name for a button that stops playing or recording media.">
-      Stop
-    </message>
-    <message name="IDS_NOTIFICATION_INCOGNITO_TAB" desc="Text used as notifications source when the notification is from incognito tabs.">
-      Incognito tab
-    </message>
-    <message name="IDS_NOTIFICATION_CATEGORY_COMPLETED_DOWNLOADS" desc="Label for completed download notifications, within a list of notification categories. [CHAR-LIMIT=32]">
-      Completed downloads
-    </message>
-    <message name="IDS_NOTIFICATION_CATEGORY_DOWNLOADS" desc="Label for notifications shown when something is downloading, within a list of notification categories. [CHAR-LIMIT=32]">
-      Active downloads
-    </message>
-    <message name="IDS_NOTIFICATION_CATEGORY_WEBRTC_CAM_AND_MIC" desc="Label for notifications shown when media is being recorded from a camera or microphone, within a list of notification categories. [CHAR-LIMIT=32]">
-      Camera and microphone use
-    </message>
-    <message name="IDS_SCREEN_CAPTURE_NOTIFICATION_TITLE" desc="Text to be shown as a notification when screen capture is in progress.">
-      Sharing your screen
-    </message>
+      <!-- Media Capture and Streams -->
+      <message name="IDS_MEDIA_CAPTURE_NOTIFICATION_APP_NAME_SEPARATOR" desc="A separator between the app name and notification message.">
+        <ph name="APP_NAME">%1$s<ex>Chrome</ex></ph> - <ph name="NOTIFICATION_MESSAGE">%2$s<ex>Accessing video input</ex></ph>
+      </message>
+      <message name="IDS_VIDEO_CAPTURE_NOTIFICATION_TITLE" desc="Text to be shown as a notification when a WebRTC video call is in progress.">
+        A site is using your camera
+      </message>
+      <message name="IDS_AUDIO_CAPTURE_NOTIFICATION_TITLE" desc="Text to be shown as a notification when a WebRTC audio call is in progress">
+        A site is using your microphone
+      </message>
+      <message name="IDS_VIDEO_AUDIO_CAPTURE_NOTIFICATION_TITLE" desc="Text to be shown as a notification when a WebRTC video and audio call is in progress">
+        A site is using your camera and microphone
+      </message>
+      <message name="IDS_MEDIA_CAPTURE_NOTIFICATION_CONTENT_TEXT" desc="Url of the current tab. The notification will display this text for the user to identify the tab to return to.">
+        Tap to return to <ph name="URL_OF_THE_CURRENT_TAB">%1$s<ex>https://apprtc.appspot.com</ex></ph>
+      </message>
+      <message name="IDS_MEDIA_CAPTURE_NOTIFICATION_CONTENT_TEXT_INCOGNITO" desc="The notification will display this text for the user to return to the incognito tab which has created the notification.">
+        Tap to return to the site
+      </message>
+      <message name="IDS_ACCESSIBILITY_STOP" desc="Accessible name for a button that stops playing or recording media.">
+        Stop
+      </message>
+      <message name="IDS_NOTIFICATION_INCOGNITO_TAB" desc="Text used as notifications source when the notification is from incognito tabs.">
+        Incognito tab
+      </message>
+      <message name="IDS_NOTIFICATION_CATEGORY_COMPLETED_DOWNLOADS" desc="Label for completed download notifications, within a list of notification categories. [CHAR-LIMIT=32]">
+        Completed downloads
+      </message>
+      <message name="IDS_NOTIFICATION_CATEGORY_DOWNLOADS" desc="Label for notifications shown when something is downloading, within a list of notification categories. [CHAR-LIMIT=32]">
+        Active downloads
+      </message>
+      <message name="IDS_NOTIFICATION_CATEGORY_MEDIA_PLAYBACK" desc="Label for media playback notifications, within a list of notification categories. [CHAR-LIMIT=32]">
+        Playing media
+      </message>
+      <message name="IDS_NOTIFICATION_CATEGORY_WEBRTC_CAM_AND_MIC" desc="Label for notifications shown when media is being recorded from a camera or microphone, within a list of notification categories. [CHAR-LIMIT=32]">
+        Camera and microphone use
+      </message>
+      <message name="IDS_SCREEN_CAPTURE_NOTIFICATION_TITLE" desc="Text to be shown as a notification when screen capture is in progress.">
+        Sharing your screen
+      </message>
+
+      <message name="IDS_SHARE_LINK_CHOOSER_TITLE" desc="title for the share dialog when sharing the current address [CHAR-LIMIT=27]">
+        Share via
+      </message>
+
+      <!-- Messages for media playback (casting, MediaSession, etc) -->
+      <message name="IDS_ACCESSIBILITY_PLAY" desc="The play button that starts playing the media.">
+        Play
+      </message>
+      <message name="IDS_ACCESSIBILITY_PAUSE" desc="The pause button that pauses playing the media.">
+        Pause
+      </message>
+      <message name="IDS_ACCESSIBILITY_PREVIOUS_TRACK" desc="The previous track button that switches media to the previous track.">
+        Previous track
+      </message>
+      <message name="IDS_ACCESSIBILITY_NEXT_TRACK" desc="The next track button that switches media to the next track.">
+        Next track
+      </message>
+      <message name="IDS_ACCESSIBILITY_SEEK_FORWARD" desc="The seek forward button that seeks media to a later position.">
+        Seek forward
+      </message>
+      <message name="IDS_ACCESSIBILITY_SEEK_BACKWARD" desc="The seek backward button that seeks media to an earlier position.">
+        Seek backward
+      </message>
+      <message name="IDS_MEDIA_NOTIFICATION_INCOGNITO" desc="Text used as a placeholder for a media notification about playing media, when notification is shown from incognito tab.">
+        A site is playing media
+      </message>
+
+      <!-- BottomSheet -->
+      <message name="IDS_BOTTOM_SHEET_ACCESSIBILITY_DESCRIPTION" desc="Accessibility string read when the bottom sheet is focused informing the user that the sheet can be closed by swiping down.">
+        Swipe down to close.
+      </message>
+
+      <!-- Client certificate selection failure strings. -->
+      <message name="IDS_CLIENT_CERT_UNSUPPORTED_TITLE" desc="Title of a dialog box for when the operating system does not support client SSL certificate selection" formatter_data="android_java">
+        Unable to select certificate.
+      </message>
+      <message name="IDS_CLIENT_CERT_UNSUPPORTED_MESSAGE" desc="The message in a dialog box for when the operating system does not support client SSL certificate selection"  formatter_data="android_java">
+        Client side certificate selection is not supported by the operating system.
+      </message>
 
     </messages>
   </release>

@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">Zadávanie japončiny (americká klávesnica)</translation>
 <translation id="1047956942837015229">Prebieha odstraňovanie <ph name="COUNT" /> položiek...</translation>
 <translation id="1049926623896334335">Dokument aplikácie Word</translation>
+<translation id="1060368002126861100">Ak chcete otvoriť súbory pomocou aplikácie <ph name="APP_NAME" />, najprv ich presuňte do priečinka so súbormi systému Windows.</translation>
 <translation id="1062407476771304334">Nahradiť</translation>
 <translation id="1065449928621190041">kanadskofrancúzska klávesnica</translation>
 <translation id="1119069657431255176">Archív vo formáte Tar komprimovaný metódou Bzip2</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">Posúvač hľadania</translation>
 <translation id="1399648040768741453">Telugská klávesnica (fonetický prepis)</translation>
 <translation id="1430915738399379752">Tlačiť</translation>
+<translation id="1433600251059882049">Tento priečinok je zdieľaný systémami Linux a Windows</translation>
+<translation id="1435838927755162558">Zdieľanie priečinka aplikáciou Parallels Desktop</translation>
 <translation id="1439494416798956626">Presunuté do priečinka: <ph name="FOLDER_NAME" />.</translation>
 <translation id="1441841714100794440">Vietnamská klávesnica (Telex)</translation>
 <translation id="1455548678241328678">nórska klávesnica</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">Tento súbor nie je k dispozícii v režime offline.</translation>
 <translation id="184633654410729720">Thajská klávesnica (Kedmanee)</translation>
 <translation id="1847880352285315359">Uložené</translation>
+<translation id="1853795129690976061">Tento priečinok je zdieľaný systémom Linux</translation>
 <translation id="1864756863218646478">Súbor sa nepodarilo nájsť.</translation>
 <translation id="1921986354447415460">Turecká klávesnica (typ F)</translation>
 <translation id="1924372192547904021">Disk <ph name="DRIVE_NAME" /> bol naformátovaný</translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">Klávesnica pre sinhálčinu</translation>
 <translation id="240770291734945588">Voľné miesto: <ph name="SPACE_AVAILABLE" /></translation>
 <translation id="2425665904502185219">Celková veľkosť súboru</translation>
+<translation id="2428749644083375155">Kopírujú sa položky (<ph name="NUMBER_OF_ITEMS" />) do priečinka <ph name="FOLDER_NAME" /></translation>
 <translation id="2448312741937722512">Typ</translation>
 <translation id="2453576648990281505">Súbor už existuje</translation>
 <translation id="2464079411014186876">Zmrzlina</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">Geografia</translation>
 <translation id="3057861065630527966">Zálohovať fotky a videá</translation>
 <translation id="3064388234319122767">Prepis (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Súbory systému Windows</translation>
 <translation id="3078461028045006476">Zdieľať s rozšírením <ph name="EXTENSION_NAME" /></translation>
 <translation id="3088034400796962477">Prepis (salam ← سلام)</translation>
 <translation id="3116361045094675131">britská klávesnica</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">Upozornenie: Tieto súbory sú dočasné a môžu byť automaticky odstránené na uvoľnenie priestoru na disku.  <ph name="BEGIN_LINK" />Ďalšie informácie<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Priečinok</translation>
 <translation id="3549797760399244642">Prejsť na adresu drive.google.com...</translation>
+<translation id="3553048479571901246">Ak chcete otvoriť súbory pomocou aplikácie <ph name="APP_NAME" />, najprv ich skopírujte do priečinka so súbormi systému Windows.</translation>
 <translation id="357479282490346887">Litovčina</translation>
 <translation id="3583509704582854624">Zadávanie alfanumerických znakov (japonská klávesnica)</translation>
 <translation id="3603385196401704894">Kanadská francúzska klávesnica</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">Verzia</translation>
 <translation id="3801082500826908679">Faerčina</translation>
 <translation id="3809272675881623365">Králik</translation>
+<translation id="3810973564298564668">Spravovať</translation>
 <translation id="3811494700605067549">1 vybratý súbor</translation>
 <translation id="3815016854028376614">Metóda vstupu Zhuyin</translation>
 <translation id="3825863595139017598">Mongolská klávesnica</translation>
@@ -246,7 +254,7 @@
 <translation id="3830674330436234648">Prehrávanie nie je k dispozícii</translation>
 <translation id="3833761542219863804">Prepis (mausam → ਮੌਸਮ)</translation>
 <translation id="383652340667548381">Srbčina</translation>
-<translation id="385051799172605136">Naspäť</translation>
+<translation id="385051799172605136">Späť</translation>
 <translation id="3855472144336161447">Nemecká klávesnica Neo 2</translation>
 <translation id="3856075812838139784">Iba na čítanie</translation>
 <translation id="3858678421048828670">talianska klávesnica</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">Prilepiť</translation>
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Prehrávač zvuku</translation>
+<translation id="3984317463833596033">Udeľte aplikácii Parallels Desktop povolenie upravovať súbory v priečinku <ph name="FOLDER_NAME" /></translation>
 <translation id="4002066346123236978">Názov</translation>
-<translation id="4065397611279318371">Ak chcete otvárať súbory pomocou aplikácií <ph name="APP_NAME" />, najprv ich presuňte do priečinka <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Metóda vstupu kantončiny</translation>
 <translation id="4072248638558688893">Tamilská klávesnica (fonetický prepis)</translation>
 <translation id="4124935795427217608">Jednorožec</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">Hangul 2 Set</translation>
 <translation id="4477219268485577442">Bulharská fonetická klávesnica</translation>
 <translation id="4479812471636796472">americká klávesnica s rozložením klávesov Dvorak</translation>
+<translation id="4481711095103932593">Tento priečinok je zdieľaný systémom Windows</translation>
 <translation id="4487088045714738411">belgická klávesnica</translation>
 <translation id="4522570452068850558">Podrobnosti</translation>
 <translation id="4552678318981539154">Kúpiť väčší ukladací priestor</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346">Položka <ph name="ENTRY_NAME" /> bola pridaná do výberu.</translation>
 <translation id="4582497162516204941">Nainštalovať pomocou systému Linux (beta)</translation>
 <translation id="4594543368593301662">Zobrazujú sa výsledky pre dopyt <ph name="SEARCH_TERM" />.</translation>
+<translation id="4603392156942865207"><ph name="FILE_NAME" /> sa kopíruje do priečinka <ph name="FOLDER_NAME" /></translation>
 <translation id="4631887759990505102">Interpret</translation>
 <translation id="4656293982926141856">Tento počítač</translation>
 <translation id="4669606053856530811">Členovia zdroja <ph name="SOURCE_NAME" /> stratia prístup, pokiaľ s nimi tieto položky nezačnete zdieľať.</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">Automatická oprava</translation>
 <translation id="4881695831933465202">Otvoriť</translation>
 <translation id="4886021172213954916">Tamilská klávesnica (písací stroj)</translation>
-<translation id="4892969127351273348">Nedá sa otvoriť pomocou aplikácie <ph name="APP_NAME" /></translation>
+<translation id="4900532980794411603">Zdieľať pomocou aplikácie Parallels Desktop</translation>
 <translation id="4905417359854579806">Môžete začať zálohovať (počet: <ph name="FILE_COUNT" />)</translation>
 <translation id="4924638091161556692">Pevné</translation>
 <translation id="4935975195727477204">Kvet gazánie</translation>
 <translation id="4943368462779413526">Futbal</translation>
+<translation id="4961158930123534723">1 priečinok sa zdieľa aplikáciou Parallels Desktop</translation>
 <translation id="4969785127455456148">Album</translation>
 <translation id="497244430928947428">Malajálamska klávesnica (fonetický prepis)</translation>
 <translation id="4973523518332075481">Použite názov s maximálne <ph name="MAX_LENGTH" /> znakmi</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">Počítače</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">Operácia trvá dlhšie, ako sa očakávalo. Chcete ju zrušiť?</translation>
+<translation id="5036159836254554629">Spravovať zdieľanie aplikáciou Parallels Desktop</translation>
 <translation id="5038625366300922036">Zobraziť viac...</translation>
 <translation id="5061708541166515394">Kontrast</translation>
 <translation id="5068919226082848014">Pizza</translation>
 <translation id="5081517858322016911">Počet odstraňovaných súborov: <ph name="TOTAL_FILE_SIZE" /></translation>
+<translation id="508423945471810158">Presúvajú sa položky (<ph name="NUMBER_OF_ITEMS" />) do priečinka <ph name="FOLDER_NAME" /></translation>
 <translation id="509429900233858213">Vyskytla sa chyba.</translation>
 <translation id="5098629044894065541">Hebrejčina</translation>
 <translation id="5123433949759960244">Basketbal</translation>
@@ -368,7 +381,7 @@
 <translation id="5177526793333269655">Zobrazenie miniatúr</translation>
 <translation id="5194713942430106590">Kliknutím zoradíte stĺpec vo vzostupnom poradí.</translation>
 <translation id="5218183485292899140">Švajčiarska francúzska klávesnica</translation>
-<translation id="5234764350956374838">Zatvoriť</translation>
+<translation id="5234764350956374838">Ignorovať</translation>
 <translation id="5241298539944515331">Vietnamská klávesnica (VIQR)</translation>
 <translation id="5253070652067921974">Autor</translation>
 <translation id="5257456363153333584">Vážka</translation>
@@ -453,6 +466,7 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="6054173164583630569">francúzska klávesnica</translation>
 <translation id="6074825444536523002">Formulár Google</translation>
 <translation id="6096979789310008754">Text vyhľadávania bol vymazaný, zobrazujú sa všetky súbory a priečinky</translation>
+<translation id="610101264611565198"><ph name="FILE_NAME" /> sa presúva do priečnika <ph name="FOLDER_NAME" /></translation>
 <translation id="6111770213269631447">Prepis (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">Medzera</translation>
 <translation id="6133173853026656527">Prebieha presúvanie súboru <ph name="FILE_NAME" />...</translation>
@@ -493,6 +507,7 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="656398493051028875">Prebieha odstraňovanie súboru <ph name="FILENAME" />...</translation>
 <translation id="6581162200855843583">Odkaz na službu Disk Google</translation>
 <translation id="6607272825297743757">Informácie o súbore</translation>
+<translation id="6609332149380188670">Aplikáciou Parallels Desktop zdieľate tento počet priečinkov: <ph name="NUMBER_OF_ITEMS" /></translation>
 <translation id="6629841649550503054">Všetko bolo zálohované na <ph name="BEGIN_LINK" />Disk Google<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Vymazať</translation>
 <translation id="6650726141019353908">Ružový motýľ</translation>
@@ -536,6 +551,7 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Inštalácia zlyhala.</translation>
 <translation id="7040138676081995583">Otvoriť pomocou aplikácie...</translation>
+<translation id="7059566040011178088">Kratšie ako <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">Počet vybratých položiek: <ph name="COUNT" /></translation>
 <translation id="7106346894903675391">Kúpiť väčší ukladací priestor...</translation>
 <translation id="7126604456862387217">„&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;“ – &lt;em&gt;hľadať na Disku&lt;/em&gt;</translation>
@@ -646,6 +662,7 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="8193175696669055101">Model zariadenia</translation>
 <translation id="8208580316430297579">Plagát</translation>
 <translation id="8223479393428528563">Ak chcete tieto súbory uložiť na používanie offline, prejdite online, kliknite na súbory pravým tlačidlom a vyberte možnosť <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
+<translation id="8231972167769262174">Približne <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Prerušiť</translation>
 <translation id="8261506727792406068">Odstrániť</translation>
 <translation id="8269755669432358899">Zbaliť panely so spätnou väzbou týkajúcou sa súborov</translation>
@@ -672,6 +689,7 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="8475647382427415476">Disku Google sa v tejto chvíli nepodarilo synchronizovať súbor <ph name="FILENAME" />. Pokúsi sa o to znova neskôr.</translation>
 <translation id="8477649328507734757">Kruhy</translation>
 <translation id="8487700953926739672">K dispozícii offline</translation>
+<translation id="8490342535582768689">Udeľte aplikácii Parallels Desktop povolenie upravovať súbory na Disku Google. Zmeny sa budú synchronizovať do vašich ďalších zariadení.</translation>
 <translation id="8521441079177373948">Anglická klávesnica</translation>
 <translation id="8525306231823319788">Celá obrazovka</translation>
 <translation id="8551494947769799688">Lotyština</translation>
@@ -724,7 +742,7 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="939736085109172342">Nový priečinok</translation>
 <translation id="942954117721265519">V tomto adresári nie sú žiadne obrázky.</translation>
 <translation id="943972244133411984">Upravil(a):</translation>
-<translation id="945522503751344254">Poslať spätnú väzbu</translation>
+<translation id="945522503751344254">Odoslať spätnú väzbu</translation>
 <translation id="947144732524271678">Bol vybraný rozsah <ph name="ENTRY_COUNT" /> položiek od <ph name="FROM_ENTRY_NAME" /> do <ph name="TO_ENTRY_NAME" />.</translation>
 <translation id="981121421437150478">Offline</translation>
 <translation id="988685240266037636">Súbor s názvom <ph name="FILE_NAME" /> už existuje. Chcete ho nahradiť?</translation>

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="uk">
-<translation id="1169602411434249000">Блокувати відстеження</translation>
 <translation id="1397811292916898096">Шукати в <ph name="PRODUCT_NAME" /></translation>
 <translation id="1598449788754183301">Звичайні/приватні вкладки</translation>
 <translation id="1644574205037202324">Історія</translation>
@@ -19,9 +18,12 @@
 <translation id="4526803704855831732">Приватні вкладки</translation>
 <translation id="4883379392681899581">Покинути приватний режим</translation>
 <translation id="4943872375798546930">Немає результатів</translation>
+<translation id="49576331685473090">Блокування вмісту</translation>
+<translation id="4960569554487356883">Увімкнути дозвіл для Vivaldi у <ph name="BEGIN_LINK" />Налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="5118676864324397542">Сховище <ph name="APP_NAME" /></translation>
 <translation id="5233638681132016545">Нова вкладка</translation>
 <translation id="5495228542153126976">Ви перейшли в приватний режим</translation>
+<translation id="5553467336321715093">Увімкнути дозволи для Vivaldi у <ph name="BEGIN_LINK" />Налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="572328651809341494">Останні вкладки</translation>
 <translation id="5840488417521835756">Дізнавайтеся більше про певну тему не полишаючи сторінку, яку переглядаєте. Швидкий пошук у Vivaldi працює тільки коли пошук Google встановлено типовою пошуковою системою. Оберіть слово, і воно разом із контекстом буде відправлене у пошукову систему.
 

@@ -126,6 +126,7 @@ content
 contentVisibility
 counterIncrement
 counterReset
+counterSet
 cssFloat
 cssText
 cursor
@@ -234,7 +235,6 @@ markerEnd
 markerMid
 markerStart
 mask
-maskSourceType
 maskType
 mathStyle
 mathSuperscriptShiftStyle
@@ -340,6 +340,7 @@ scrollPaddingTop
 scrollSnapAlign
 scrollSnapStop
 scrollSnapType
+scrollbarGutter
 setProperty
 shapeImageThreshold
 shapeMargin

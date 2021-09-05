@@ -15,9 +15,9 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/child_accounts/time_limits/app_activity_registry.h"
 #include "chrome/browser/chromeos/child_accounts/time_limits/app_time_notification_delegate.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
 #include "chromeos/dbus/system_clock/system_clock_client.h"
 #include "chromeos/settings/timezone_settings.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 
 class Profile;
 class PrefRegistrySimple;
@@ -31,14 +31,14 @@ class OneShotTimer;
 
 namespace gfx {
 class ImageSkia;
-} // namespace gfx
+}  // namespace gfx
 
 namespace chromeos {
 namespace app_time {
 
 extern const char kAppsWithTimeLimitMetric[];
 extern const char kBlockedAppsCountMetric[];
-extern const char kPolicyUpdateCountMetric[];
+extern const char kPolicyChangeCountMetric[];
 extern const char kEngagementMetric[];
 
 class AppServiceWrapper;

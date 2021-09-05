@@ -5,6 +5,8 @@
 #include "content/renderer/worker/shared_worker_factory_impl.h"
 
 #include "base/memory/ptr_util.h"
+#include "content/renderer/loader/resource_dispatcher.h"
+#include "content/renderer/render_thread_impl.h"
 #include "content/renderer/worker/embedded_shared_worker_stub.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
@@ -33,8 +35,8 @@ void SharedWorkerFactoryImpl::CreateSharedWorker(
         preference_watcher_receiver,
     mojo::PendingRemote<blink::mojom::WorkerContentSettingsProxy>
         content_settings,
-    blink::mojom::ServiceWorkerProviderInfoForClientPtr
-        service_worker_provider_info,
+    blink::mojom::ServiceWorkerContainerInfoForClientPtr
+        service_worker_container_info,
     const base::Optional<base::UnguessableToken>& appcache_host_id,
     blink::mojom::WorkerMainScriptLoadParamsPtr main_script_load_params,
     std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
@@ -49,12 +51,14 @@ void SharedWorkerFactoryImpl::CreateSharedWorker(
       std::move(info), constructor_origin, user_agent, ua_metadata,
       pause_on_start, devtools_worker_token, *renderer_preferences,
       std::move(preference_watcher_receiver), std::move(content_settings),
-      std::move(service_worker_provider_info),
+      std::move(service_worker_container_info),
       appcache_host_id.value_or(base::UnguessableToken()),
       std::move(main_script_load_params),
       std::move(subresource_loader_factories), std::move(controller_info),
-      std::move(host), std::move(receiver),
-      std::move(browser_interface_broker));
+      std::move(host), std::move(receiver), std::move(browser_interface_broker),
+      RenderThreadImpl::current()
+          ->resource_dispatcher()
+          ->cors_exempt_header_list());
 }
 
 }  // namespace content

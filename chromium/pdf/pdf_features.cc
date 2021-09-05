@@ -13,16 +13,14 @@ const base::Feature kAccessiblePDFForm = {"AccessiblePDFForm",
 const base::Feature kAccessiblePDFHighlight = {
     "AccessiblePDFHighlight", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kPDFAnnotations = {"PDFAnnotations",
-#if defined(OS_CHROMEOS)
-                                       base::FEATURE_ENABLED_BY_DEFAULT
-#else
-                                       base::FEATURE_DISABLED_BY_DEFAULT
-#endif  // defined(OS_CHROMEOS)
-};
+const base::Feature kPdfHonorJsContentSettings = {
+    "PdfHonorJsContentSettings", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kPDFTwoUpView = {"PDFTwoUpView",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kPDFViewerUpdate = {"PDFViewerUpdate",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kSaveEditedPDFForm = {"SaveEditedPDFForm",
 #if defined(OS_CHROMEOS)
@@ -33,7 +31,7 @@ const base::Feature kSaveEditedPDFForm = {"SaveEditedPDFForm",
 };
 
 const base::Feature kTabAcrossPDFAnnotations = {
-    "TabAcrossPDFAnnotations", base::FEATURE_DISABLED_BY_DEFAULT};
+    "TabAcrossPDFAnnotations", base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace features
 }  // namespace chrome_pdf

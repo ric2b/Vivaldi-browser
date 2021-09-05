@@ -87,8 +87,13 @@ function prefsTest() {
   chrome.chromeosInfoPrivate.set('a11yScreenMagnifierEnabled', true);
   chrome.chromeosInfoPrivate.set('a11yAutoClickEnabled', true);
   chrome.chromeosInfoPrivate.set('a11yVirtualKeyboardEnabled', true);
+  chrome.chromeosInfoPrivate.set('a11yCaretHighlightEnabled', true);
+  chrome.chromeosInfoPrivate.set('a11yCursorHighlightEnabled', true);
+  chrome.chromeosInfoPrivate.set('a11yFocusHighlightEnabled', true);
+  chrome.chromeosInfoPrivate.set('a11ySelectToSpeakEnabled', true);
+  chrome.chromeosInfoPrivate.set('a11ySwitchAccessEnabled', true);
+  chrome.chromeosInfoPrivate.set('a11yCursorColorEnabled', true);
   chrome.chromeosInfoPrivate.set('sendFunctionKeys', true);
-  chrome.chromeosInfoPrivate.set('cameraMediaConsolidated', true);
   chrome.chromeosInfoPrivate.get(
       ['a11yLargeCursorEnabled',
        'a11yStickyKeysEnabled',
@@ -97,8 +102,13 @@ function prefsTest() {
        'a11yScreenMagnifierEnabled',
        'a11yAutoClickEnabled',
        'a11yVirtualKeyboardEnabled',
-       'sendFunctionKeys',
-       'cameraMediaConsolidated'],
+       'a11yCaretHighlightEnabled',
+       'a11yCursorHighlightEnabled',
+       'a11yFocusHighlightEnabled',
+       'a11ySelectToSpeakEnabled',
+       'a11ySwitchAccessEnabled',
+       'a11yCursorColorEnabled',
+       'sendFunctionKeys'],
       pass(
         function(values) {
           chrome.test.assertEq(values['a11yLargeCursorEnabled'], true);
@@ -108,8 +118,13 @@ function prefsTest() {
           chrome.test.assertEq(values['a11yScreenMagnifierEnabled'], true);
           chrome.test.assertEq(values['a11yAutoClickEnabled'], true);
           chrome.test.assertEq(values['a11yVirtualKeyboardEnabled'], true);
+          chrome.test.assertEq(values['a11yCaretHighlightEnabled'], true);
+          chrome.test.assertEq(values['a11yCursorHighlightEnabled'], true);
+          chrome.test.assertEq(values['a11yFocusHighlightEnabled'], true);
+          chrome.test.assertEq(values['a11ySelectToSpeakEnabled'], true);
+          chrome.test.assertEq(values['a11ySwitchAccessEnabled'], true);
+          chrome.test.assertEq(values['a11yCursorColorEnabled'], true);
           chrome.test.assertEq(values['sendFunctionKeys'], true);
-          chrome.test.assertEq(values['cameraMediaConsolidated'], true);
         }
       ));
 }
@@ -132,8 +147,8 @@ var tests = generateTestsForKeys(['hwid',
                                   'a11yScreenMagnifierEnabled',
                                   'a11yAutoClickEnabled',
                                   'a11yVirtualKeyboardEnabled',
+                                  'a11yCursorColorEnabled',
                                   'sendFunctionKeys',
-                                  'cameraMediaConsolidated',
                                   'timezone',
                                   'supportedTimezones'])
 

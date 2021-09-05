@@ -70,11 +70,6 @@ CreditCardAccessManager::CreditCardAccessManager(
           base::WaitableEvent::InitialState::NOT_SIGNALED),
       can_fetch_unmask_details_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                                 base::WaitableEvent::InitialState::SIGNALED) {
-#if !defined(OS_IOS)
-  // This is to initialize StrikeDatabase is if it hasn't been already, so that
-  // its cache would be loaded and ready to use when the first CCAM is created.
-  client_->GetStrikeDatabase();
-#endif
 }
 
 CreditCardAccessManager::~CreditCardAccessManager() {}
@@ -154,7 +149,7 @@ bool CreditCardAccessManager::GetDeletionConfirmationText(
     return false;
 
   if (title)
-    title->assign(card->NetworkAndLastFourDigits());
+    title->assign(card->CardIdentifierStringForAutofillDisplay());
   if (body) {
     body->assign(l10n_util::GetStringUTF16(
         IDS_AUTOFILL_DELETE_CREDIT_CARD_SUGGESTION_CONFIRMATION_BODY));

@@ -255,9 +255,6 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   // update widget and compositor size.
   void UpdateWindowGeometry();
 
-  // Vivaldi
-  void VerifyWindowSize();
-
  private:
   friend class views::test::BridgedNativeWidgetTestApi;
 

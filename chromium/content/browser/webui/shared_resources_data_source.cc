@@ -12,6 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/notreached.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
@@ -28,6 +29,9 @@
 #include "content/public/common/url_constants.h"
 #include "mojo/public/js/grit/mojo_bindings_resources.h"
 #include "mojo/public/js/grit/mojo_bindings_resources_map.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
+#include "skia/grit/skia_resources.h"
+#include "skia/grit/skia_resources_map.h"
 #include "ui/base/layout.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/resources/grit/webui_resources.h"
@@ -141,6 +145,17 @@ const std::map<int, std::string> CreateMojoResourceIdToAliasMap() {
   };
 }
 
+const std::map<int, std::string> CreateSkiaResourceIdToAliasMap() {
+  return std::map<int, std::string>{
+      {IDR_SKIA_BITMAP_MOJOM_LITE_JS,
+       "mojo/skia/public/mojom/bitmap.mojom-lite.js"},
+      {IDR_SKIA_IMAGE_INFO_MOJOM_LITE_JS,
+       "mojo/skia/public/mojom/image_info.mojom-lite.js"},
+      {IDR_SKIA_SKCOLOR_MOJOM_LITE_JS,
+       "mojo/skia/public/mojom/skcolor.mojom-lite.js"},
+  };
+}
+
 #if defined(OS_CHROMEOS)
 const std::map<int, std::string> CreateChromeosMojoResourceIdToAliasMap() {
   return std::map<int, std::string>{
@@ -186,6 +201,12 @@ const std::map<int, std::string> CreateChromeosMojoResourceIdToAliasMap() {
       {IDR_IP_ADDRESS_MOJOM_LITE_JS,
        "mojo/services/network/public/mojom/"
        "ip_address.mojom-lite.js"},
+      {IDR_NETWORK_HEALTH_MOJOM_HTML,
+       "mojo/chromeos/services/network_health/public/mojom/"
+       "network_health.mojom.html"},
+      {IDR_NETWORK_HEALTH_MOJOM_LITE_JS,
+       "mojo/chromeos/services/network_health/public/mojom/"
+       "network_health.mojom-lite.js"},
   };
 }
 #endif  // !defined(OS_CHROMEOS)
@@ -270,6 +291,8 @@ const ResourcesMap* CreateResourcesMap() {
   AddAliasedResourcesToMap(CreateMojoResourceIdToAliasMap(),
                            kMojoBindingsResources, kMojoBindingsResourcesSize,
                            result);
+  AddAliasedResourcesToMap(CreateSkiaResourceIdToAliasMap(), kSkiaResources,
+                           kSkiaResourcesSize, result);
 #if defined(OS_CHROMEOS)
   AddAliasedResourcesToMap(CreateChromeosMojoResourceIdToAliasMap(),
                            kChromeosResources, kChromeosResourcesSize, result);
@@ -291,14 +314,39 @@ int GetIdrForPath(const std::string& path) {
 
 }  // namespace
 
-SharedResourcesDataSource::SharedResourcesDataSource() {
+// static
+std::unique_ptr<SharedResourcesDataSource>
+SharedResourcesDataSource::CreateForChromeScheme() {
+  return std::make_unique<SharedResourcesDataSource>(PassKey(),
+                                                     kChromeUIScheme);
 }
 
-SharedResourcesDataSource::~SharedResourcesDataSource() {
+// static
+std::unique_ptr<SharedResourcesDataSource>
+SharedResourcesDataSource::CreateForChromeUntrustedScheme() {
+  return std::make_unique<SharedResourcesDataSource>(PassKey(),
+                                                     kChromeUIUntrustedScheme);
 }
+
+SharedResourcesDataSource::SharedResourcesDataSource(PassKey,
+                                                     const std::string& scheme)
+    : scheme_(scheme) {}
+
+SharedResourcesDataSource::~SharedResourcesDataSource() = default;
 
 std::string SharedResourcesDataSource::GetSource() {
-  return kChromeUIResourcesHost;
+  // URLDataManagerBackend assumes that chrome:// data sources return just the
+  // hostname for GetSource().
+  if (scheme_ == kChromeUIScheme)
+    return kChromeUIResourcesHost;
+
+  // We only expect chrome-untrusted:// scheme at this point.
+  DCHECK_EQ(kChromeUIUntrustedScheme, scheme_);
+
+  // Other schemes (i.e. chrome-untrusted://) return the scheme and host
+  // together.
+  return base::StrCat(
+      {scheme_, url::kStandardSchemeSeparator, kChromeUIResourcesHost});
 }
 
 void SharedResourcesDataSource::StartDataRequest(
@@ -386,12 +434,12 @@ bool SharedResourcesDataSource::ShouldServeMimeTypeAsContentTypeHeader() {
 
 std::string SharedResourcesDataSource::GetAccessControlAllowOriginForOrigin(
     const std::string& origin) {
-  // For now we give access only for "chrome://*" origins.
+  // For now we give access only for origins with the allowed scheme.
   // According to CORS spec, Access-Control-Allow-Origin header doesn't support
   // wildcards, so we need to set its value explicitly by passing the |origin|
   // back.
-  std::string allowed_origin_prefix = kChromeUIScheme;
-  allowed_origin_prefix += "://";
+  const std::string allowed_origin_prefix =
+      base::StrCat({scheme_, url::kStandardSchemeSeparator});
   if (!base::StartsWith(origin, allowed_origin_prefix,
                         base::CompareCase::SENSITIVE)) {
     return "null";
@@ -399,8 +447,13 @@ std::string SharedResourcesDataSource::GetAccessControlAllowOriginForOrigin(
   return origin;
 }
 
-std::string SharedResourcesDataSource::GetContentSecurityPolicyWorkerSrc() {
-  return "worker-src blob: 'self';";
+std::string SharedResourcesDataSource::GetContentSecurityPolicy(
+    network::mojom::CSPDirectiveName directive) {
+  if (directive == network::mojom::CSPDirectiveName::WorkerSrc) {
+    return "worker-src blob: 'self';";
+  }
+
+  return content::URLDataSource::GetContentSecurityPolicy(directive);
 }
 
 #if defined(OS_CHROMEOS)

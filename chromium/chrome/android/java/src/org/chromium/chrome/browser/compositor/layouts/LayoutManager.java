@@ -18,6 +18,8 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsVisibilityManager;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelContentViewDelegate;
@@ -51,6 +53,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
+import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.base.LocalizationUtils;
@@ -145,12 +148,25 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
     private final CompositorAnimationHandler mAnimationHandler;
 
     /**
+     * Current tab to provide Toolbar overlay with. Unlike TabModelSelector#getCurrentTab
+     * which returns null right after a tab is closed, this keeps the reference until
+     * TabModelObserver#didCloseTab is triggered for Toolbar overlay to have a chance
+     * to retrieve the right textbox color from it.
+     */
+    private Tab mCurrentTab;
+
+    /**
      * Protected class to handle {@link TabModelObserver} related tasks. Extending classes will
      * need to override any related calls to add new functionality */
     protected class LayoutManagerTabModelObserver implements TabModelObserver {
         @Override
         public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
-            if (tab.getId() != lastId) tabSelected(tab.getId(), lastId, tab.isIncognito());
+            if (type == TabSelectionType.FROM_OMNIBOX) {
+                switchToTab(tab, lastId);
+            } else if (tab.getId() != lastId) {
+                tabSelected(tab.getId(), lastId, tab.isIncognito());
+            }
+            mCurrentTab = tab;
         }
 
         @Override
@@ -193,6 +209,8 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
         @Override
         public void didCloseTab(int tabId, boolean incognito) {
             tabClosed(tabId, incognito, false);
+            mCurrentTab =
+                    getTabModelSelector() != null ? getTabModelSelector().getCurrentTab() : null;
         }
 
         @Override
@@ -367,15 +385,18 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
      * @param creator                  A {@link TabCreatorManager} instance.
      * @param content                  A {@link TabContentManager} instance.
      * @param androidContentContainer  A {@link ViewGroup} for Android views to be bound to.
+     * @param controlContainer         A {@link ControlContainer} for browser controls' layout.
      * @param contextualSearchDelegate A {@link ContextualSearchManagementDelegate} instance.
      * @param dynamicResourceLoader    A {@link DynamicResourceLoader} instance.
      */
     public void init(TabModelSelector selector, TabCreatorManager creator,
             TabContentManager content, ViewGroup androidContentContainer,
+            ControlContainer controlContainer,
             ContextualSearchManagementDelegate contextualSearchDelegate,
             DynamicResourceLoader dynamicResourceLoader) {
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
-        mToolbarOverlay = new ToolbarSceneLayer(mContext, this, renderHost);
+        mToolbarOverlay = new ToolbarSceneLayer(
+                mContext, this, renderHost, controlContainer, () -> mCurrentTab);
 
         // Initialize Layouts
         mStaticLayout.onFinishNativeInitialization();
@@ -475,6 +496,7 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
             getTabModelSelector().getTabModelFilterProvider().removeTabModelFilterObserver(
                     mTabModelFilterObserver);
         }
+        mCurrentTab = null;
     }
 
     /**
@@ -821,18 +843,19 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
             mActiveLayout = layout;
         }
 
-        ChromeFullscreenManager fullscreenManager = mHost.getFullscreenManager();
-        if (fullscreenManager != null) {
-            mPreviousLayoutShowingToolbar = !fullscreenManager.areBrowserControlsOffScreen();
+        BrowserControlsVisibilityManager controlsVisibilityManager = mHost.getFullscreenManager();
+        if (controlsVisibilityManager != null) {
+            mPreviousLayoutShowingToolbar =
+                    !BrowserControlsUtils.areBrowserControlsOffScreen(controlsVisibilityManager);
 
             // Release any old fullscreen token we were holding.
-            fullscreenManager.getBrowserVisibilityDelegate().releasePersistentShowingToken(
+            controlsVisibilityManager.getBrowserVisibilityDelegate().releasePersistentShowingToken(
                     mControlsShowingToken);
 
             // Grab a new fullscreen token if this layout can't be in fullscreen.
             if (getActiveLayout().forceShowBrowserControlsAndroidView()) {
-                mControlsShowingToken =
-                        fullscreenManager.getBrowserVisibilityDelegate().showControlsPersistent();
+                mControlsShowingToken = controlsVisibilityManager.getBrowserVisibilityDelegate()
+                                                .showControlsPersistent();
             }
         }
 
@@ -977,8 +1000,23 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
         }
     }
 
+    @VisibleForTesting
+    public LayoutTab getLayoutTabForTesting(int tabId) {
+        return mTabCache.get(tabId);
+    }
+
     // Vivaldi Removes the {@link SceneOverlay}.
     protected void removeGlobalSceneOverlay(SceneOverlay helper) {
         mStaticLayout.removeSceneOverlay(helper);
+    }
+
+    /**
+     * Should be called when a tab switch event is triggered, only can switch to the Tab which in
+     * the current TabModel.
+     * @param tab        The tab that will be switched to.
+     * @param lastTabId  The id of the tab that was switched from.
+     */
+    protected void switchToTab(Tab tab, int lastTabId) {
+        tabSelected(tab.getId(), lastTabId, tab.isIncognito());
     }
 }

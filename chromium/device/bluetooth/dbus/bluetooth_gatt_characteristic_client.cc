@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -14,6 +15,7 @@
 #include "dbus/bus.h"
 #include "dbus/object_manager.h"
 #include "dbus/values_util.h"
+#include "third_party/cros_system_api/dbus/bluetooth/dbus-constants.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace bluez {
@@ -113,6 +115,7 @@ class BluetoothGattCharacteristicClientImpl
   // BluetoothGattCharacteristicClient override.
   void WriteValue(const dbus::ObjectPath& object_path,
                   const std::vector<uint8_t>& value,
+                  base::StringPiece type_option,
                   base::OnceClosure callback,
                   ErrorCallback error_callback) override {
     dbus::ObjectProxy* object_proxy =
@@ -128,8 +131,14 @@ class BluetoothGattCharacteristicClientImpl
     dbus::MessageWriter writer(&method_call);
     writer.AppendArrayOfBytes(value.data(), value.size());
 
-    // Append empty option dict
+    // Append option dict
     base::DictionaryValue dict;
+    if (!type_option.empty()) {
+      // NB: the "type" option was added in BlueZ 5.51. Older versions of BlueZ
+      // will ignore this option.
+      dict.SetStringKey(bluetooth_gatt_characteristic::kOptionType,
+                        type_option);
+    }
     dbus::AppendValueData(&writer, dict);
 
     object_proxy->CallMethodWithErrorCallback(

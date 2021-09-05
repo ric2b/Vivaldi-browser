@@ -28,10 +28,7 @@ const std::vector<SearchConcept>& GetPrintingSearchConcepts() {
        mojom::SearchResultIcon::kPrinter,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kAddPrinter},
-       {IDS_OS_SETTINGS_TAG_PRINTING_ADD_PRINTER_ALT1,
-        IDS_OS_SETTINGS_TAG_PRINTING_ADD_PRINTER_ALT2,
-        SearchConcept::kAltTagEnd}},
+       {.setting = mojom::Setting::kAddPrinter}},
       {IDS_OS_SETTINGS_TAG_PRINTING_SAVED_PRINTERS,
        mojom::kPrintingDetailsSubpagePath,
        mojom::SearchResultIcon::kPrinter,
@@ -41,7 +38,7 @@ const std::vector<SearchConcept>& GetPrintingSearchConcepts() {
       {IDS_OS_SETTINGS_TAG_PRINTING,
        mojom::kPrintingDetailsSubpagePath,
        mojom::SearchResultIcon::kPrinter,
-       mojom::SearchResultDefaultRank::kHigh,
+       mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kPrintingDetails},
        {IDS_OS_SETTINGS_TAG_PRINTING_ALT1, IDS_OS_SETTINGS_TAG_PRINTING_ALT2,
@@ -76,9 +73,10 @@ PrintingSection::PrintingSection(Profile* profile,
                                  CupsPrintersManager* printers_manager)
     : OsSettingsSection(profile, search_tag_registry),
       printers_manager_(printers_manager) {
-  registry()->AddSearchTags(GetPrintingSearchConcepts());
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.AddSearchTags(GetPrintingSearchConcepts());
   if (IsPrintManagementEnabled())
-    registry()->AddSearchTags(GetPrintingManagementSearchConcepts());
+    updater.AddSearchTags(GetPrintingManagementSearchConcepts());
 }
 
 PrintingSection::~PrintingSection() = default;
@@ -244,6 +242,39 @@ void PrintingSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 void PrintingSection::AddHandlers(content::WebUI* web_ui) {
   web_ui->AddMessageHandler(
       std::make_unique<CupsPrintersHandler>(profile(), printers_manager_));
+}
+
+int PrintingSection::GetSectionNameMessageId() const {
+  return IDS_SETTINGS_PRINTING;
+}
+
+mojom::Section PrintingSection::GetSection() const {
+  return mojom::Section::kPrinting;
+}
+
+mojom::SearchResultIcon PrintingSection::GetSectionIcon() const {
+  return mojom::SearchResultIcon::kPrinter;
+}
+
+std::string PrintingSection::GetSectionPath() const {
+  return mojom::kPrintingSectionPath;
+}
+
+void PrintingSection::RegisterHierarchy(HierarchyGenerator* generator) const {
+  generator->RegisterTopLevelSetting(mojom::Setting::kPrintJobs);
+
+  // Printing details.
+  generator->RegisterTopLevelSubpage(IDS_SETTINGS_PRINTING_CUPS_PRINTERS,
+                                     mojom::Subpage::kPrintingDetails,
+                                     mojom::SearchResultIcon::kPrinter,
+                                     mojom::SearchResultDefaultRank::kMedium,
+                                     mojom::kPrintingDetailsSubpagePath);
+  static constexpr mojom::Setting kPrintingDetailsSettings[] = {
+      mojom::Setting::kAddPrinter,
+      mojom::Setting::kSavedPrinters,
+  };
+  RegisterNestedSettingBulk(mojom::Subpage::kPrintingDetails,
+                            kPrintingDetailsSettings, generator);
 }
 
 }  // namespace settings

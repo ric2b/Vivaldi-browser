@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/enterprise/connectors/common.h"
+
+#include "base/notreached.h"
 #include "chrome/browser/enterprise/connectors/connectors_prefs.h"
 
 namespace enterprise_connectors {
@@ -13,6 +15,7 @@ AnalysisSettings& AnalysisSettings::operator=(AnalysisSettings&&) = default;
 AnalysisSettings::~AnalysisSettings() = default;
 
 ReportingSettings::ReportingSettings() = default;
+ReportingSettings::ReportingSettings(GURL url) : reporting_url(url) {}
 ReportingSettings::ReportingSettings(ReportingSettings&&) = default;
 ReportingSettings& ReportingSettings::operator=(ReportingSettings&&) = default;
 ReportingSettings::~ReportingSettings() = default;
@@ -25,6 +28,16 @@ const char* ConnectorPref(AnalysisConnector connector) {
       return kOnFileDownloadedPref;
     case AnalysisConnector::FILE_ATTACHED:
       return kOnFileAttachedPref;
+    case AnalysisConnector::ANALYSIS_CONNECTOR_UNSPECIFIED:
+      NOTREACHED() << "Using unspecified analysis connector";
+      return "";
+  }
+}
+
+const char* ConnectorPref(ReportingConnector connector) {
+  switch (connector) {
+    case ReportingConnector::SECURITY_EVENT:
+      return kOnSecurityEventPref;
   }
 }
 

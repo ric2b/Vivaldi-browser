@@ -246,7 +246,7 @@ class TestVariationsFieldTrialCreator : public VariationsFieldTrialCreator {
   bool SetupFieldTrials() {
     TestPlatformFieldTrials platform_field_trials;
     return VariationsFieldTrialCreator::SetupFieldTrials(
-        "", "", "", std::set<std::string>(), std::vector<std::string>(),
+        "", "", "", std::vector<std::string>(),
         std::vector<base::FeatureList::FeatureOverrideInfo>(), nullptr,
         std::make_unique<base::FeatureList>(), &platform_field_trials,
         safe_seed_manager_);
@@ -487,7 +487,7 @@ TEST_F(FieldTrialCreatorTest, SetupFieldTrials_LoadsCountryOnFirstRun) {
   // the interaction between these two classes is what's being tested.
   auto seed_store = std::make_unique<VariationsSeedStore>(
       &prefs_, std::move(initial_seed),
-      /*on_initial_seed_stored=*/base::DoNothing());
+      /*signature_verification_enabled=*/false);
   VariationsFieldTrialCreator field_trial_creator(
       &prefs_, &variations_service_client, std::move(seed_store),
       UIStringOverrider());
@@ -497,7 +497,7 @@ TEST_F(FieldTrialCreatorTest, SetupFieldTrials_LoadsCountryOnFirstRun) {
   // |initial_seed| included the country code for India, this study should be
   // active.
   EXPECT_TRUE(field_trial_creator.SetupFieldTrials(
-      "", "", "", std::set<std::string>(), std::vector<std::string>(),
+      "", "", "", std::vector<std::string>(),
       std::vector<base::FeatureList::FeatureOverrideInfo>(), nullptr,
       std::make_unique<base::FeatureList>(), &platform_field_trials,
       &safe_seed_manager));

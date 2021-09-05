@@ -80,13 +80,13 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
 #include "components/favicon/content/content_favicon_driver.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/user_manager/user_manager.h"
@@ -260,12 +260,10 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
       // version of status monitor.
       browser_status_monitor_ =
           std::make_unique<MultiProfileBrowserStatusMonitor>(this);
-      browser_status_monitor_->Initialize();
     } else {
       // Create our v1/v2 application / browser monitors which will inform the
       // launcher of status changes.
       browser_status_monitor_ = std::make_unique<BrowserStatusMonitor>(this);
-      browser_status_monitor_->Initialize();
     }
     return;
   }
@@ -278,14 +276,12 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
     // of status monitor.
     browser_status_monitor_ =
         std::make_unique<MultiProfileBrowserStatusMonitor>(this);
-    browser_status_monitor_->Initialize();
     extension_app_window_controller.reset(
         new MultiProfileAppWindowLauncherController(this));
   } else {
     // Create our v1/v2 application / browser monitors which will inform the
     // launcher of status changes.
     browser_status_monitor_ = std::make_unique<BrowserStatusMonitor>(this);
-    browser_status_monitor_->Initialize();
     extension_app_window_controller.reset(
         new ExtensionAppWindowLauncherController(this));
   }
@@ -335,6 +331,7 @@ ChromeLauncherController::~ChromeLauncherController() {
 void ChromeLauncherController::Init() {
   CreateBrowserShortcutLauncherItem();
   UpdateAppLaunchersFromSync();
+  browser_status_monitor_->Initialize();
 }
 
 ash::ShelfID ChromeLauncherController::CreateAppLauncherItem(
@@ -516,7 +513,7 @@ void ChromeLauncherController::UpdateAppState(content::WebContents* contents,
   // If the tab changed apps, remove its association with the previous app item.
   if (web_contents_to_app_id_.find(contents) != web_contents_to_app_id_.end()) {
     ash::ShelfID old_id(web_contents_to_app_id_[contents]);
-    if (old_id != shelf_id && GetItem(old_id) != nullptr) {
+    if (old_id != shelf_id && GetItem(old_id)) {
       // Since GetAppState() will use |web_contents_to_app_id_| we remove
       // the connection before calling it.
       web_contents_to_app_id_.erase(contents);
@@ -703,7 +700,7 @@ bool ChromeLauncherController::IsWebContentHandledByApplication(
 
 bool ChromeLauncherController::ContentCanBeHandledByGmailApp(
     content::WebContents* web_contents) {
-  if (GetItem(ash::ShelfID(kGmailAppId)) != nullptr) {
+  if (GetItem(ash::ShelfID(kGmailAppId))) {
     const GURL url = web_contents->GetURL();
     // We need to extend the application matching for the gMail app beyond the
     // manifest file's specification. This is required because of the namespace
@@ -941,7 +938,7 @@ void ChromeLauncherController::OnAppUninstalledPrepared(
   // outstanding locks which needs to be removed.
   const Profile* profile = Profile::FromBrowserContext(browser_context);
   ash::ShelfID shelf_id(app_id);
-  if (GetItem(shelf_id) != nullptr)
+  if (GetItem(shelf_id))
     CloseWindowedAppsFromRemovedExtension(app_id, profile);
 
   // Some apps may be removed locally. Unpin the item without removing the pin
@@ -1077,7 +1074,6 @@ void ChromeLauncherController::OnSyncModelUpdated() {
 }
 
 void ChromeLauncherController::OnIsSyncingChanged() {
-  // TODO(jamescook): Should this move below the is_syncing check?
   UpdateAppLaunchersFromSync();
 
   // Wait until the initial sync happens.
@@ -1107,6 +1103,10 @@ void ChromeLauncherController::UpdateAppLaunchersFromSync() {
   // cyclically trigger sync changes (eg. ShelfItemAdded calls SyncPinPosition).
   ScopedPinSyncDisabler scoped_pin_sync_disabler = GetScopedPinSyncDisabler();
 
+  apps::AppServiceProxy* proxy =
+      apps::AppServiceProxyFactory::GetForProfile(profile());
+  DCHECK(proxy);
+
   const std::vector<ash::ShelfID> pinned_apps =
       GetPinnedAppsFromSync(launcher_controller_helper_.get());
 
@@ -1116,6 +1116,15 @@ void ChromeLauncherController::UpdateAppLaunchersFromSync() {
   // pin, move existing pin to current position specified by |index| or create
   // the new pin at that position.
   for (const auto& pref_shelf_id : pinned_apps) {
+    // Do not show apps in the shelf if they are explicitly forbidden.
+    bool hide = false;
+    proxy->AppRegistryCache().ForOneApp(
+        pref_shelf_id.app_id, [&hide](const apps::AppUpdate& update) {
+          hide = update.ShowInShelf() == apps::mojom::OptionalBool::kFalse;
+        });
+    if (hide)
+      continue;
+
     // Update apps icon if applicable.
     OnAppUpdated(profile(), pref_shelf_id.app_id);
 

@@ -23,7 +23,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
-#include "components/version_info/channel.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/api/declarative_net_request/constants.h"
 #include "extensions/browser/api/declarative_net_request/flat_ruleset_indexer.h"
@@ -36,7 +35,6 @@
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_resource.h"
-#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/install_warning.h"
 #include "extensions/common/manifest_constants.h"
@@ -142,8 +140,7 @@ ReadJSONRulesResult ParseRulesFromJSON(const base::FilePath& json_path,
       }
 
       const bool is_regex_rule = !!parsed_rule.condition.regex_filter;
-      if (is_regex_rule &&
-          ++regex_rule_count > dnr_api::MAX_NUMBER_OF_REGEX_RULES) {
+      if (is_regex_rule && ++regex_rule_count > GetRegexRuleLimit()) {
         // Only add the install warning once.
         if (!regex_rule_count_exceeded) {
           regex_rule_count_exceeded = true;
@@ -317,7 +314,7 @@ RulesetSource RulesetSource::CreateStatic(
       extension.path().Append(info.relative_path),
       extension.path().Append(
           file_util::GetIndexedRulesetRelativePath(info.id.value())),
-      info.id, dnr_api::MAX_NUMBER_OF_RULES, extension.id(), info.enabled);
+      info.id, GetStaticRuleLimit(), extension.id(), info.enabled);
 }
 
 // static
@@ -330,7 +327,7 @@ RulesetSource RulesetSource::CreateDynamic(content::BrowserContext* context,
   return RulesetSource(
       dynamic_ruleset_directory.AppendASCII(kDynamicRulesJSONFilename),
       dynamic_ruleset_directory.AppendASCII(kDynamicIndexedRulesFilename),
-      kDynamicRulesetID, dnr_api::MAX_NUMBER_OF_DYNAMIC_RULES, extension_id,
+      kDynamicRulesetID, GetDynamicRuleLimit(), extension_id,
       true /* enabled_by_default */);
 }
 
@@ -413,15 +410,6 @@ ParseInfo RulesetSource::IndexAndPersistRules(
       bool inserted = id_set.insert(rule_id).second;
       if (!inserted)
         return ParseInfo(ParseResult::ERROR_DUPLICATE_IDS, &rule_id);
-
-      // Ensure modifyHeaders actions don't have any side-effects on Stable
-      // since it's under development.
-      // TODO(crbug.com/947591): Remove the channel check once implementation
-      // of modifyHeaders action is complete.
-      if (rule.action.type == dnr_api::RULE_ACTION_TYPE_MODIFYHEADERS &&
-          GetCurrentChannel() == version_info::Channel::STABLE) {
-        continue;
-      }
 
       IndexedRule indexed_rule;
       ParseResult parse_result = IndexedRule::CreateIndexedRule(

@@ -18,13 +18,16 @@ import android.view.ViewStructure;
 import android.view.autofill.AutofillValue;
 import android.webkit.ValueCallback;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.Callback;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.components.autofill.AutofillActionModeCallback;
 import org.chromium.components.autofill.AutofillProvider;
-import org.chromium.components.autofill.AutofillProviderImpl;
+import org.chromium.components.browser_ui.http_auth.LoginPrompt;
+import org.chromium.components.browser_ui.media.MediaSessionHelper;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
 import org.chromium.components.browser_ui.util.ComposedBrowserControlsVisibilityDelegate;
 import org.chromium.components.embedder_support.contextmenu.ContextMenuParams;
@@ -55,7 +58,9 @@ import org.chromium.weblayer_private.interfaces.INavigationControllerClient;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
 import org.chromium.weblayer_private.interfaces.ITab;
 import org.chromium.weblayer_private.interfaces.ITabClient;
+import org.chromium.weblayer_private.interfaces.IWebMessageCallbackClient;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
+import org.chromium.weblayer_private.interfaces.ScrollNotificationType;
 import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 
 import java.util.ArrayList;
@@ -67,7 +72,7 @@ import java.util.Map;
  * Implementation of ITab.
  */
 @JNINamespace("weblayer")
-public final class TabImpl extends ITab.Stub {
+public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
     private static int sNextId = 1;
     // Map from id to TabImpl.
     private static final Map<Integer, TabImpl> sTabMap = new HashMap<Integer, TabImpl>();
@@ -83,6 +88,7 @@ public final class TabImpl extends ITab.Stub {
     private TabViewAndroidDelegate mViewAndroidDelegate;
     // BrowserImpl this TabImpl is in. This is only null during creation.
     private BrowserImpl mBrowser;
+    private LoginPrompt mLoginPrompt;
     /**
      * The AutofillProvider that integrates with system-level autofill. This is null until
      * updateFromBrowser() is invoked.
@@ -107,10 +113,12 @@ public final class TabImpl extends ITab.Stub {
     private boolean mWaitingForMatchRects;
     private InterceptNavigationDelegateClientImpl mInterceptNavigationDelegateClient;
     private InterceptNavigationDelegateImpl mInterceptNavigationDelegate;
+    private InfoBarContainer mInfoBarContainer;
+    private MediaSessionHelper mMediaSessionHelper;
 
     private boolean mPostContainerViewInitDone;
 
-    private AccessibilityUtil.Observer mAccessibilityObserver;
+    private WebLayerAccessibilityUtil.Observer mAccessibilityObserver;
 
     private static class InternalAccessDelegateImpl
             implements ViewEventSink.InternalAccessDelegate {
@@ -165,6 +173,37 @@ public final class TabImpl extends ITab.Stub {
                 viewController.onBottomControlsChanged(bottomControlsOffsetY);
             }
         }
+
+        @Override
+        public void onBackgroundColorChanged(int color) {
+            if (WebLayerFactoryImpl.getClientMajorVersion() >= 85) {
+                try {
+                    mClient.onBackgroundColorChanged(color);
+                } catch (RemoteException e) {
+                    throw new APICallException(e);
+                }
+            }
+        }
+
+        @Override
+        protected void onVerticalScrollDirectionChanged(
+                boolean directionUp, float currentScrollRatio) {
+            if (WebLayerFactoryImpl.getClientMajorVersion() >= 85) {
+                try {
+                    mClient.onScrollNotification(directionUp
+                                    ? ScrollNotificationType.DIRECTION_CHANGED_UP
+                                    : ScrollNotificationType.DIRECTION_CHANGED_DOWN,
+                            currentScrollRatio);
+                } catch (RemoteException e) {
+                    throw new APICallException(e);
+                }
+            }
+        }
+    }
+
+    public static TabImpl fromWebContents(WebContents webContents) {
+        if (webContents == null || webContents.isDestroyed()) return null;
+        return TabImplJni.get().fromWebContents(webContents);
     }
 
     public static TabImpl getTabById(int tabId) {
@@ -223,12 +262,21 @@ public final class TabImpl extends ITab.Stub {
         mInterceptNavigationDelegateClient.initializeWithDelegate(mInterceptNavigationDelegate);
         sTabMap.put(mId, this);
 
+        mInfoBarContainer = new InfoBarContainer(this);
         mAccessibilityObserver = (boolean enabled) -> {
             setBrowserControlsVisibilityConstraint(ImplControlsVisibilityReason.ACCESSIBILITY,
                     enabled ? BrowserControlsState.SHOWN : BrowserControlsState.BOTH);
         };
         // addObserver() calls to observer when added.
         WebLayerAccessibilityUtil.get().addObserver(mAccessibilityObserver);
+
+        // MediaSession only works if the client is new enough. Sadly, passing
+        // kDisableMediaSessionAPI does not fully disable the API, so a check is also necessary
+        // before installing this observer.
+        if (WebLayerFactoryImpl.getClientMajorVersion() >= 85) {
+            mMediaSessionHelper = new MediaSessionHelper(
+                    mWebContents, MediaSessionManager.createMediaSessionHelperDelegate(mId));
+        }
     }
 
     private void doInitAfterSettingContainerView() {
@@ -280,7 +328,7 @@ public final class TabImpl extends ITab.Stub {
                     // Set up |mAutofillProvider| to operate in the new Context. It's safe to assume
                     // the context won't change unless it is first nulled out, since the fragment
                     // must be detached before it can be reattached to a new Context.
-                    mAutofillProvider = new AutofillProviderImpl(
+                    mAutofillProvider = new AutofillProvider(
                             mBrowser.getContext(), mBrowser.getAutofillView(), "WebLayer");
                     TabImplJni.get().onAutofillProviderChanged(mNativeTab, mAutofillProvider);
                 }
@@ -333,17 +381,27 @@ public final class TabImpl extends ITab.Stub {
         assert mBrowser != null;
         TabImplJni.get().setBrowserControlsContainerViews(
                 mNativeTab, topControlsContainerViewHandle, bottomControlsContainerViewHandle);
+        mInfoBarContainer.onTabDidGainActive();
         updateWebContentsVisibility();
-        mWebContents.onShow();
     }
 
     /**
      * Called when this TabImpl is no longer the active TabImpl.
      */
     public void onDidLoseActive() {
+        if (mAutofillProvider != null) {
+            mAutofillProvider.hidePopup();
+        }
+
         hideFindInPageUiAndNotifyClient();
-        mWebContents.onHide();
         updateWebContentsVisibility();
+
+        // This method is called as part of the final phase of TabImpl destruction, at which
+        // point mInfoBarContainer has already been destroyed.
+        if (mInfoBarContainer != null) {
+            mInfoBarContainer.onTabDidLoseActive();
+        }
+
         TabImplJni.get().setBrowserControlsContainerViews(mNativeTab, 0, 0);
     }
 
@@ -351,7 +409,8 @@ public final class TabImpl extends ITab.Stub {
      * Returns whether this Tab is visible.
      */
     public boolean isVisible() {
-        return (mBrowser.getActiveTab() == this && mBrowser.isStarted());
+        return (mBrowser.getActiveTab() == this
+                && (mBrowser.isStarted() || mBrowser.isFragmentStoppedForConfigurationChange()));
     }
 
     private void updateWebContentsVisibility() {
@@ -379,8 +438,15 @@ public final class TabImpl extends ITab.Stub {
         return mWebContents;
     }
 
-    long getNativeTab() {
+    // Public for tests.
+    @VisibleForTesting
+    public long getNativeTab() {
         return mNativeTab;
+    }
+
+    @VisibleForTesting
+    public InfoBarContainer getInfoBarContainerForTesting() {
+        return mInfoBarContainer;
     }
 
     @Override
@@ -522,6 +588,7 @@ public final class TabImpl extends ITab.Stub {
 
     @Override
     public boolean dismissTransientUi() {
+        StrictModeWorkaround.apply();
         BrowserViewController viewController = getViewController();
         if (viewController != null && viewController.dismissTabModalOverlay()) return true;
 
@@ -541,7 +608,31 @@ public final class TabImpl extends ITab.Stub {
 
     @Override
     public String getGuid() {
+        StrictModeWorkaround.apply();
         return TabImplJni.get().getGuid(mNativeTab);
+    }
+
+    @Override
+    public boolean setData(Map data) {
+        StrictModeWorkaround.apply();
+        String[] flattenedMap = new String[data.size() * 2];
+        int i = 0;
+        for (Map.Entry<String, String> entry : ((Map<String, String>) data).entrySet()) {
+            flattenedMap[i++] = entry.getKey();
+            flattenedMap[i++] = entry.getValue();
+        }
+        return TabImplJni.get().setData(mNativeTab, flattenedMap);
+    }
+
+    @Override
+    public Map getData() {
+        StrictModeWorkaround.apply();
+        String[] data = TabImplJni.get().getData(mNativeTab);
+        Map<String, String> map = new HashMap<>();
+        for (int i = 0; i < data.length; i += 2) {
+            map.put(data[i], data[i + 1]);
+        }
+        return map;
     }
 
     @Override
@@ -551,6 +642,18 @@ public final class TabImpl extends ITab.Stub {
                 (ValueCallback<Pair<Bitmap, Integer>>) ObjectWrapper.unwrap(
                         valueCallback, ValueCallback.class);
         TabImplJni.get().captureScreenShot(mNativeTab, scale, unwrappedCallback);
+    }
+
+    @Override
+    public boolean canTranslate() {
+        StrictModeWorkaround.apply();
+        return TabImplJni.get().canTranslate(mNativeTab);
+    }
+
+    @Override
+    public void showTranslateUi() {
+        StrictModeWorkaround.apply();
+        TabImplJni.get().showTranslateUi(mNativeTab);
     }
 
     @CalledByNative
@@ -634,6 +737,53 @@ public final class TabImpl extends ITab.Stub {
         getBrowser().destroyTab(this);
     }
 
+    @CalledByNative
+    private void showHttpAuthPrompt(String host, String url) {
+        mLoginPrompt = new LoginPrompt(mBrowser.getContext(), host, url, this);
+        mLoginPrompt.show();
+    }
+
+    @CalledByNative
+    private void closeHttpAuthPrompt() {
+        mLoginPrompt = null;
+    }
+
+    @Override
+    public void cancel() {
+        TabImplJni.get().cancelHttpAuth(mNativeTab);
+    }
+
+    @Override
+    public void proceed(String username, String password) {
+        TabImplJni.get().setHttpAuth(mNativeTab, username, password);
+    }
+
+    @Override
+    public void registerWebMessageCallback(
+            String jsObjectName, List<String> allowedOrigins, IWebMessageCallbackClient client) {
+        if (jsObjectName.isEmpty()) {
+            throw new IllegalArgumentException("JS object name must not be empty");
+        }
+        if (allowedOrigins.isEmpty()) {
+            throw new IllegalArgumentException("At least one origin must be specified");
+        }
+        for (String origin : allowedOrigins) {
+            if (TextUtils.isEmpty(origin)) {
+                throw new IllegalArgumentException("Origin must not be non-empty");
+            }
+        }
+        String registerError = TabImplJni.get().registerWebMessageCallback(mNativeTab, jsObjectName,
+                allowedOrigins.toArray(new String[allowedOrigins.size()]), client);
+        if (!TextUtils.isEmpty(registerError)) {
+            throw new IllegalArgumentException(registerError);
+        }
+    }
+
+    @Override
+    public void unregisterWebMessageCallback(String jsObjectName) {
+        TabImplJni.get().unregisterWebMessageCallback(mNativeTab, jsObjectName);
+    }
+
     public void destroy() {
         // Ensure that this method isn't called twice.
         assert mInterceptNavigationDelegate != null;
@@ -667,6 +817,9 @@ public final class TabImpl extends ITab.Stub {
 
         mInterceptNavigationDelegateClient.destroy();
         mInterceptNavigationDelegate = null;
+
+        mInfoBarContainer.destroy();
+        mInfoBarContainer = null;
 
         mMediaStreamManager.destroy();
         mMediaStreamManager = null;
@@ -734,6 +887,11 @@ public final class TabImpl extends ITab.Stub {
         onBrowserControlsStateUpdated(mBrowserControlsVisibility.get());
     }
 
+    @VisibleForTesting
+    public boolean canBrowserControlsScrollForTesting() {
+        return mBrowserControlsVisibility.get() == BrowserControlsState.BOTH;
+    }
+
     private void onBrowserControlsStateUpdated(int state) {
         // If something has overridden the FIP's SHOWN constraint, cancel FIP. This causes FIP to
         // dismiss when entering fullscreen.
@@ -770,8 +928,14 @@ public final class TabImpl extends ITab.Stub {
         return (mBrowser.getActiveTab() == this) ? mBrowser.getViewController() : null;
     }
 
+    @VisibleForTesting
+    public boolean canInfoBarContainerScrollForTesting() {
+        return mInfoBarContainer.getContainerViewForTesting().isAllowedToAutoHide();
+    }
+
     @NativeMethods
     interface Natives {
+        TabImpl fromWebContents(WebContents webContents);
         long createTab(long profile, TabImpl caller);
         void setJavaImpl(long nativeTabImpl, TabImpl impl);
         void onAutofillProviderChanged(long nativeTabImpl, AutofillProvider autofillProvider);
@@ -786,6 +950,15 @@ public final class TabImpl extends ITab.Stub {
         String getGuid(long nativeTabImpl);
         void captureScreenShot(long nativeTabImpl, float scale,
                 ValueCallback<Pair<Bitmap, Integer>> valueCallback);
+        boolean setData(long nativeTabImpl, String[] data);
+        String[] getData(long nativeTabImpl);
         boolean isRendererControllingBrowserControlsOffsets(long nativeTabImpl);
+        void setHttpAuth(long nativeTabImpl, String username, String password);
+        void cancelHttpAuth(long nativeTabImpl);
+        String registerWebMessageCallback(long nativeTabImpl, String jsObjectName,
+                String[] allowedOrigins, IWebMessageCallbackClient client);
+        void unregisterWebMessageCallback(long nativeTabImpl, String jsObjectName);
+        boolean canTranslate(long nativeTabImpl);
+        void showTranslateUi(long nativeTabImpl);
     }
 }

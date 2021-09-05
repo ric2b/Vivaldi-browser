@@ -10,6 +10,8 @@
 #include "base/macros.h"
 #include "cc/input/input_handler.h"
 #include "cc/input/snap_fling_controller.h"
+#include "cc/paint/element_id.h"
+#include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/platform/input/elastic_overscroll_controller.h"
 #include "third_party/blink/public/platform/input/synchronous_input_handler_proxy.h"
@@ -36,6 +38,7 @@ class InputHandlerProxyTest;
 class InputHandlerProxyEventQueueTest;
 class InputHandlerProxyMomentumScrollJankTest;
 class TestInputHandlerProxy;
+class UnifiedScrollingInputHandlerProxyTest;
 }  // namespace test
 
 class CompositorThreadEventQueue;
@@ -124,16 +127,31 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
     // pass it to the next consumer (either overscrolling or bubbling the event
     // to the next renderer).
     DID_HANDLE_SHOULD_BUBBLE,
+
+    // Used only in scroll unification; the compositor couldn't determine the
+    // scroll node to handle the event and requires a second try with an
+    // ElementId provided by a hit test in Blink.
+    REQUIRES_MAIN_THREAD_HIT_TEST,
   };
-  using EventDispositionCallback =
-      base::OnceCallback<void(EventDisposition,
-                              WebScopedInputEvent WebInputEvent,
-                              const ui::LatencyInfo&,
-                              std::unique_ptr<DidOverscrollParams>,
-                              const blink::WebInputEventAttribution&)>;
-  void HandleInputEventWithLatencyInfo(WebScopedInputEvent event,
-                                       const ui::LatencyInfo& latency_info,
-                                       EventDispositionCallback callback);
+  using EventDispositionCallback = base::OnceCallback<void(
+      EventDisposition,
+      std::unique_ptr<blink::WebCoalescedInputEvent> event,
+      std::unique_ptr<DidOverscrollParams>,
+      const blink::WebInputEventAttribution&)>;
+  void HandleInputEventWithLatencyInfo(
+      std::unique_ptr<blink::WebCoalescedInputEvent> event,
+      EventDispositionCallback callback);
+
+  // In scroll unification, a scroll begin event may initially return unhandled
+  // due to requiring the main thread to perform a hit test. In that case, the
+  // client will perform the hit test by calling into Blink. When it has a
+  // result, it can try handling the event again by calling back through this
+  // method.
+  void ContinueScrollBeginAfterMainThreadHitTest(
+      std::unique_ptr<blink::WebCoalescedInputEvent> event,
+      EventDispositionCallback callback,
+      cc::ElementIdType hit_tests_result);
+
   void InjectScrollbarGestureScroll(
       const blink::WebInputEvent::Type type,
       const gfx::PointF& position_in_widget,
@@ -194,6 +212,7 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
  private:
   friend class test::TestInputHandlerProxy;
   friend class test::InputHandlerProxyTest;
+  friend class test::UnifiedScrollingInputHandlerProxyTest;
   friend class test::InputHandlerProxyEventQueueTest;
   friend class test::InputHandlerProxyMomentumScrollJankTest;
 
@@ -235,13 +254,11 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
   void SetTickClockForTesting(const base::TickClock* tick_clock);
 
   // |is_touching_scrolling_layer| indicates if one of the points that has
-  // been touched hits a currently scrolling layer.
-  // |white_listed_touch_action| is the touch_action we are sure will be
-  // allowed for the given touch event.
-  EventDisposition HitTestTouchEvent(
-      const blink::WebTouchEvent& touch_event,
-      bool* is_touching_scrolling_layer,
-      cc::TouchAction* white_listed_touch_action);
+  // been touched hits a currently scrolling layer. |allowed_touch_action| is
+  // the touch_action we are sure will be allowed for the given touch event.
+  EventDisposition HitTestTouchEvent(const blink::WebTouchEvent& touch_event,
+                                     bool* is_touching_scrolling_layer,
+                                     cc::TouchAction* allowed_touch_action);
 
   EventDisposition RouteToTypeSpecificHandler(
       EventWithCallback* event_with_callback,
@@ -315,6 +332,14 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
   // main thread, or all events (touch start/end/move).
   bool skip_touch_filter_discrete_ = false;
   bool skip_touch_filter_all_ = false;
+
+  // This bit is set when the input handler proxy has requested that the client
+  // perform a hit test for a scroll begin on the main thread. During that
+  // time, scroll updates need to be queued. The reply from the main thread
+  // will come by calling ContinueScrollBeginAfterMainThreadHitTest where the
+  // queue will be flushed and this bit cleared. Used only in scroll
+  // unification.
+  bool hit_testing_scroll_begin_on_main_thread_ = false;
 
   // Helpers for the momentum scroll jank UMAs.
   std::unique_ptr<MomentumScrollJankTracker> momentum_scroll_jank_tracker_;

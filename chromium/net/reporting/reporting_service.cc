@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/json/json_reader.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/tick_clock.h"
@@ -81,18 +82,14 @@ class ReportingServiceImpl : public ReportingService {
 
   void ProcessHeader(const GURL& url,
                      const std::string& header_string) override {
-    if (header_string.size() > kMaxJsonSize) {
-      ReportingHeaderParser::RecordHeaderDiscardedForJsonTooBig();
+    if (header_string.size() > kMaxJsonSize)
       return;
-    }
 
     std::unique_ptr<base::Value> header_value =
         base::JSONReader::ReadDeprecated("[" + header_string + "]",
                                          base::JSON_PARSE_RFC, kMaxJsonDepth);
-    if (!header_value) {
-      ReportingHeaderParser::RecordHeaderDiscardedForJsonInvalid();
+    if (!header_value)
       return;
-    }
 
     DVLOG(1) << "Received Reporting policy for " << url.GetOrigin();
     // TODO(chlily): Get the proper NetworkIsolationKey from the caller.
@@ -101,7 +98,7 @@ class ReportingServiceImpl : public ReportingService {
         NetworkIsolationKey::Todo(), url, std::move(header_value)));
   }
 
-  void RemoveBrowsingData(int data_type_mask,
+  void RemoveBrowsingData(uint64_t data_type_mask,
                           const base::RepeatingCallback<bool(const GURL&)>&
                               origin_filter) override {
     DoOrBacklogTask(base::BindOnce(&ReportingServiceImpl::DoRemoveBrowsingData,
@@ -109,7 +106,7 @@ class ReportingServiceImpl : public ReportingService {
                                    origin_filter));
   }
 
-  void RemoveAllBrowsingData(int data_type_mask) override {
+  void RemoveAllBrowsingData(uint64_t data_type_mask) override {
     DoOrBacklogTask(
         base::BindOnce(&ReportingServiceImpl::DoRemoveAllBrowsingData,
                        base::Unretained(this), data_type_mask));
@@ -174,14 +171,14 @@ class ReportingServiceImpl : public ReportingService {
   }
 
   void DoRemoveBrowsingData(
-      int data_type_mask,
+      uint64_t data_type_mask,
       const base::RepeatingCallback<bool(const GURL&)>& origin_filter) {
     DCHECK(initialized_);
     ReportingBrowsingDataRemover::RemoveBrowsingData(
         context_->cache(), data_type_mask, origin_filter);
   }
 
-  void DoRemoveAllBrowsingData(int data_type_mask) {
+  void DoRemoveAllBrowsingData(uint64_t data_type_mask) {
     DCHECK(initialized_);
     ReportingBrowsingDataRemover::RemoveAllBrowsingData(context_->cache(),
                                                         data_type_mask);

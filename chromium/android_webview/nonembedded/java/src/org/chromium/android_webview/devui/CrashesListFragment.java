@@ -44,6 +44,8 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.AsyncTask;
+import org.chromium.components.version_info.Channel;
+import org.chromium.components.version_info.VersionConstants;
 import org.chromium.ui.widget.Toast;
 
 import java.util.ArrayList;
@@ -82,6 +84,29 @@ public class CrashesListFragment extends DevUiBaseFragment {
     private static void logCrashCollectionState(@CollectionState int state) {
         RecordHistogram.recordEnumeratedHistogram(
                 "Android.WebView.DevUi.CrashList.CollectionState", state, CollectionState.COUNT);
+    }
+
+    // These values are persisted to logs. Entries should not be renumbered and
+    // numeric values should never be reused.
+    @IntDef({CrashInteraction.FORCE_UPLOAD_BUTTON, CrashInteraction.FORCE_UPLOAD_NO_DIALOG,
+            CrashInteraction.FORCE_UPLOAD_DIALOG_METERED_NETWORK,
+            CrashInteraction.FORCE_UPLOAD_DIALOG_CANCEL, CrashInteraction.FILE_BUG_REPORT_BUTTON,
+            CrashInteraction.FILE_BUG_REPORT_DIALOG_PROCEED,
+            CrashInteraction.FILE_BUG_REPORT_DIALOG_DISMISS})
+    private @interface CrashInteraction {
+        int FORCE_UPLOAD_BUTTON = 0;
+        int FORCE_UPLOAD_NO_DIALOG = 1;
+        int FORCE_UPLOAD_DIALOG_METERED_NETWORK = 2;
+        int FORCE_UPLOAD_DIALOG_CANCEL = 3;
+        int FILE_BUG_REPORT_BUTTON = 4;
+        int FILE_BUG_REPORT_DIALOG_PROCEED = 5;
+        int FILE_BUG_REPORT_DIALOG_DISMISS = 6;
+        int COUNT = 7;
+    }
+
+    private static void logCrashInteraction(@CrashInteraction int action) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "Android.WebView.DevUi.CrashList.CrashInteraction", action, CrashInteraction.COUNT);
     }
 
     @Override
@@ -229,7 +254,10 @@ public class CrashesListFragment extends DevUiBaseFragment {
             // Report button is only clickable if the crash report is uploaded.
             if (crashInfo.uploadState == UploadState.UPLOADED) {
                 bugButton.setEnabled(true);
-                bugButton.setOnClickListener(v -> { buildCrashBugDialog(crashInfo).show(); });
+                bugButton.setOnClickListener(v -> {
+                    logCrashInteraction(CrashInteraction.FILE_BUG_REPORT_BUTTON);
+                    buildCrashBugDialog(crashInfo).show();
+                });
             } else {
                 bugButton.setEnabled(false);
             }
@@ -246,11 +274,22 @@ public class CrashesListFragment extends DevUiBaseFragment {
                                         "You are connected to a metered network or cellular data."
                                         + " Do you want to proceed?")
                                 .setPositiveButton("Upload",
-                                        (dialog, id) -> attemptUploadCrash(crashInfo.localId))
-                                .setNegativeButton("Cancel", (dialog, id) -> dialog.dismiss())
+                                        (dialog, id) -> {
+                                            logCrashInteraction(
+                                                    CrashInteraction
+                                                            .FORCE_UPLOAD_DIALOG_METERED_NETWORK);
+                                            attemptUploadCrash(crashInfo.localId);
+                                        })
+                                .setNegativeButton("Cancel",
+                                        (dialog, id) -> {
+                                            logCrashInteraction(
+                                                    CrashInteraction.FORCE_UPLOAD_DIALOG_CANCEL);
+                                            dialog.dismiss();
+                                        })
                                 .create()
                                 .show();
                     } else {
+                        logCrashInteraction(CrashInteraction.FORCE_UPLOAD_NO_DIALOG);
                         attemptUploadCrash(crashInfo.localId);
                     }
                 });
@@ -326,7 +365,19 @@ public class CrashesListFragment extends DevUiBaseFragment {
                 @WorkerThread
                 protected List<CrashInfo> doInBackground() {
                     WebViewCrashInfoCollector crashCollector = new WebViewCrashInfoCollector();
-                    return crashCollector.loadCrashesInfo(MAX_CRASHES_NUMBER);
+                    // Only show crashes from the same WebView channel, which usually means the
+                    // same package.
+                    List<CrashInfo> crashes = crashCollector.loadCrashesInfo(crashInfo -> {
+                        @Channel
+                        int channel = getCrashInfoChannel(crashInfo);
+                        // Always show the crash if the channel is unknown (to handle missing
+                        // channel info for example for crashes from older versions).
+                        return channel == Channel.DEFAULT || channel == VersionConstants.CHANNEL;
+                    });
+                    if (crashes.size() > MAX_CRASHES_NUMBER) {
+                        return crashes.subList(0, MAX_CRASHES_NUMBER);
+                    }
+                    return crashes;
                 }
 
                 @Override
@@ -350,6 +401,22 @@ public class CrashesListFragment extends DevUiBaseFragment {
                 return "Skipped upload";
         }
         return null;
+    }
+
+    @Channel
+    private static int getCrashInfoChannel(@NonNull CrashInfo c) {
+        switch (c.getCrashKeyOrDefault(CrashInfo.WEBVIEW_CHANNEL_KEY, "default")) {
+            case "canary":
+                return Channel.CANARY;
+            case "dev":
+                return Channel.DEV;
+            case "beta":
+                return Channel.BETA;
+            case "stable":
+                return Channel.STABLE;
+            default:
+                return Channel.DEFAULT;
+        }
     }
 
     // Helper method to find and set text for two line list item. If a null String is passed, the
@@ -427,9 +494,14 @@ public class CrashesListFragment extends DevUiBaseFragment {
         dialogBuilder.setMessage(
                 "This crash has already been reported to our crash system. Do you want to share "
                 + "more information, such as steps to reproduce the crash?");
-        dialogBuilder.setPositiveButton("Provide more info",
-                (dialog, id) -> startActivity(new CrashBugUrlFactory(crashInfo).getReportIntent()));
-        dialogBuilder.setNegativeButton("Dismiss", (dialog, id) -> dialog.dismiss());
+        dialogBuilder.setPositiveButton("Provide more info", (dialog, id) -> {
+            logCrashInteraction(CrashInteraction.FILE_BUG_REPORT_DIALOG_PROCEED);
+            startActivity(new CrashBugUrlFactory(crashInfo).getReportIntent());
+        });
+        dialogBuilder.setNegativeButton("Dismiss", (dialog, id) -> {
+            logCrashInteraction(CrashInteraction.FILE_BUG_REPORT_DIALOG_DISMISS);
+            dialog.dismiss();
+        });
         return dialogBuilder.create();
     }
 

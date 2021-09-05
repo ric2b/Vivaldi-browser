@@ -299,6 +299,7 @@ std::map<std::string, DescHandlerFunc> GetHandlers() {
           {variables::kDataKeys, DefaultHandler},
           {variables::kRebase, DefaultHandler},
           {variables::kWalkKeys, DefaultHandler},
+          {variables::kWeakFrameworks, DefaultHandler},
           {variables::kWriteOutputConversion, DefaultHandler},
           {"runtime_deps", DefaultHandler}};
 }
@@ -386,6 +387,7 @@ bool PrintTarget(const Target* target,
   HandleProperty(variables::kDataKeys, handler_map, v, dict);
   HandleProperty(variables::kRebase, handler_map, v, dict);
   HandleProperty(variables::kWalkKeys, handler_map, v, dict);
+  HandleProperty(variables::kWeakFrameworks, handler_map, v, dict);
   HandleProperty(variables::kWriteOutputConversion, handler_map, v, dict);
 
 #undef HandleProperty
@@ -447,6 +449,7 @@ bool PrintConfig(const Config* config,
   HandleProperty(variables::kLibDirs, handler_map, v, dict);
   HandleProperty(variables::kPrecompiledHeader, handler_map, v, dict);
   HandleProperty(variables::kPrecompiledSource, handler_map, v, dict);
+  HandleProperty(variables::kWeakFrameworks, handler_map, v, dict);
 
 #undef HandleProperty
 
@@ -508,6 +511,7 @@ Possibilities for <what to show>
   testonly
   visibility
   walk_keys
+  weak_frameworks
 
   runtime_deps
       Compute all runtime deps for the given target. This is a computed list
@@ -533,8 +537,9 @@ Target flags
   --blame
       Used with any value specified on a config, this will name the config that
       causes that target to get the flag. This doesn't currently work for libs,
-      lib_dirs, frameworks and framework_dirs because those are inherited and
-      are more complicated to figure out the blame (patches welcome).
+      lib_dirs, frameworks, weak_frameworks and framework_dirs because those are
+      inherited and are more complicated to figure out the blame (patches
+      welcome).
 
 Configs
 

@@ -110,17 +110,14 @@
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
-#include "third_party/blink/public/web/web_ime_text_span.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/blink/public/web/web_plugin_script_forbidden_scope.h"
 #include "third_party/blink/public/web/web_print_params.h"
 #include "third_party/blink/public/web/web_print_preset_options.h"
-#include "third_party/blink/public/web/web_print_scaling_option.h"
 #include "third_party/blink/public/web/web_script_source.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/khronos/GLES2/gl2.h"
-#include "ui/base/cursor/cursor_lookup.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/blink/web_input_event.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -175,7 +172,6 @@ using blink::WebLocalFrame;
 using blink::WebPlugin;
 using blink::WebPluginContainer;
 using blink::WebPrintParams;
-using blink::WebPrintScalingOption;
 using blink::WebString;
 using blink::WebURLError;
 using blink::WebAssociatedURLLoaderClient;
@@ -286,13 +282,13 @@ STATIC_ASSERT_MATCHING_ENUM(kMiddlePanningHorizontal,
 
 #undef STATIC_ASSERT_MATCHING_ENUM
 
-STATIC_ASSERT_ENUM(blink::kWebPrintScalingOptionNone,
+STATIC_ASSERT_ENUM(printing::mojom::PrintScalingOption::kNone,
                    PP_PRINTSCALINGOPTION_NONE);
-STATIC_ASSERT_ENUM(blink::kWebPrintScalingOptionFitToPrintableArea,
+STATIC_ASSERT_ENUM(printing::mojom::PrintScalingOption::kFitToPrintableArea,
                    PP_PRINTSCALINGOPTION_FIT_TO_PRINTABLE_AREA);
-STATIC_ASSERT_ENUM(blink::kWebPrintScalingOptionSourceSize,
+STATIC_ASSERT_ENUM(printing::mojom::PrintScalingOption::kSourceSize,
                    PP_PRINTSCALINGOPTION_SOURCE_SIZE);
-STATIC_ASSERT_ENUM(blink::kWebPrintScalingOptionFitToPaper,
+STATIC_ASSERT_ENUM(printing::mojom::PrintScalingOption::kFitToPaper,
                    PP_PRINTSCALINGOPTION_FIT_TO_PAPER);
 
 #undef STATIC_ASSERT_ENUM
@@ -561,7 +557,8 @@ PepperPluginInstanceImpl::PepperPluginInstanceImpl(
         !render_frame_->GetLocalRootRenderWidget()->is_hidden();
 
     // Set the initial focus.
-    SetContentAreaFocus(render_frame_->GetLocalRootRenderWidget()->has_focus());
+    SetContentAreaFocus(
+        render_frame_->GetLocalRootRenderWidget()->GetWebWidget()->HasFocus());
 
     if (!module_->IsProxied()) {
       created_in_process_instance_ = true;
@@ -935,7 +932,7 @@ bool PepperPluginInstanceImpl::HandleDocumentLoad(
 bool PepperPluginInstanceImpl::SendCompositionEventToPlugin(
     PP_InputEvent_Type type,
     const base::string16& text) {
-  std::vector<blink::WebImeTextSpan> empty;
+  std::vector<ui::ImeTextSpan> empty;
   return SendCompositionEventWithImeTextSpanInformationToPlugin(
       type, text, empty, static_cast<int>(text.size()),
       static_cast<int>(text.size()));
@@ -945,7 +942,7 @@ bool PepperPluginInstanceImpl::
     SendCompositionEventWithImeTextSpanInformationToPlugin(
         PP_InputEvent_Type type,
         const base::string16& text,
-        const std::vector<blink::WebImeTextSpan>& ime_text_spans,
+        const std::vector<ui::ImeTextSpan>& ime_text_spans,
         int selection_start,
         int selection_end) {
   // Keep a reference on the stack. See NOTE above.
@@ -994,8 +991,7 @@ bool PepperPluginInstanceImpl::
 
   // Set the composition target.
   for (size_t i = 0; i < ime_text_spans.size(); ++i) {
-    if (ime_text_spans[i].thickness ==
-        ui::mojom::ImeTextSpanThickness::kThick) {
+    if (ime_text_spans[i].thickness == ui::ImeTextSpan::Thickness::kThick) {
       auto it = std::find(event.composition_segment_offsets.begin(),
                           event.composition_segment_offsets.end(),
                           utf8_offsets[2 * i + 2]);
@@ -1036,7 +1032,7 @@ bool PepperPluginInstanceImpl::HandleCompositionStart(
 
 bool PepperPluginInstanceImpl::HandleCompositionUpdate(
     const base::string16& text,
-    const std::vector<blink::WebImeTextSpan>& ime_text_spans,
+    const std::vector<ui::ImeTextSpan>& ime_text_spans,
     int selection_start,
     int selection_end) {
   return SendCompositionEventWithImeTextSpanInformationToPlugin(
@@ -2321,7 +2317,7 @@ bool PepperPluginInstanceImpl::SimulateIMEEvent(
         return false;
       render_frame_->SimulateImeCommitText(
           base::UTF8ToUTF16(input_event.character_text),
-          std::vector<blink::WebImeTextSpan>(), gfx::Range());
+          std::vector<ui::ImeTextSpan>(), gfx::Range());
       break;
     default:
       return false;
@@ -2344,13 +2340,13 @@ void PepperPluginInstanceImpl::SimulateImeSetCompositionEvent(
   base::string16 utf16_text =
       base::UTF8ToUTF16AndAdjustOffsets(input_event.character_text, &offsets);
 
-  std::vector<blink::WebImeTextSpan> ime_text_spans;
+  std::vector<ui::ImeTextSpan> ime_text_spans;
   for (size_t i = 2; i + 1 < offsets.size(); ++i) {
-    blink::WebImeTextSpan ime_text_span;
+    ui::ImeTextSpan ime_text_span;
     ime_text_span.start_offset = offsets[i];
     ime_text_span.end_offset = offsets[i + 1];
     if (input_event.composition_target_segment == static_cast<int32_t>(i - 2))
-      ime_text_span.thickness = ui::mojom::ImeTextSpanThickness::kThick;
+      ime_text_span.thickness = ui::ImeTextSpan::Thickness::kThick;
     ime_text_spans.push_back(ime_text_span);
   }
 
@@ -2723,7 +2719,7 @@ PP_Bool PepperPluginInstanceImpl::SetCursor(PP_Instance instance,
   SkBitmap bitmap(image_data->GetMappedBitmap());
   // Make a deep copy, so that the cursor remains valid even after the original
   // image data gets freed.
-  SkBitmap dst = GetCursorBitmap(*custom_cursor);
+  SkBitmap dst = custom_cursor->custom_bitmap();
   if (!dst.tryAllocPixels(bitmap.info()) ||
       !bitmap.readPixels(dst.info(), dst.getPixels(), dst.rowBytes(), 0, 0)) {
     return PP_FALSE;

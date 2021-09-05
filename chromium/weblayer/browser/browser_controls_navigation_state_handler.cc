@@ -18,11 +18,10 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
 #include "weblayer/browser/browser_controls_navigation_state_handler_delegate.h"
+#include "weblayer/browser/weblayer_features.h"
 
 namespace weblayer {
 namespace {
-const base::Feature kImmediatelyHideBrowserControlsForTest{
-    "ImmediatelyHideBrowserControlsForTest", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // The time that must elapse after a navigation before the browser controls can
 // be hidden. This value matches what chrome has in
@@ -92,14 +91,6 @@ void BrowserControlsNavigationStateHandler::DidChangeVisibleSecurityState() {
   UpdateState();
 }
 
-void BrowserControlsNavigationStateHandler::DidAttachInterstitialPage() {
-  UpdateState();
-}
-
-void BrowserControlsNavigationStateHandler::DidDetachInterstitialPage() {
-  UpdateState();
-}
-
 void BrowserControlsNavigationStateHandler::RenderProcessGone(
     base::TerminationStatus status) {
   is_crashed_ = true;
@@ -153,7 +144,6 @@ BrowserControlsNavigationStateHandler::CalculateCurrentState() {
 
   if (force_show_during_load_ || web_contents()->IsFullscreen() ||
       web_contents()->IsFocusedElementEditable() ||
-      web_contents()->ShowingInterstitialPage() ||
       web_contents()->IsBeingDestroyed() || web_contents()->IsCrashed()) {
     return content::BROWSER_CONTROLS_STATE_SHOWN;
   }
@@ -176,7 +166,6 @@ BrowserControlsNavigationStateHandler::CalculateCurrentState() {
       return content::BROWSER_CONTROLS_STATE_SHOWN;
 
     case security_state::NONE:
-    case security_state::EV_SECURE:
     case security_state::SECURE:
     case security_state::SECURE_WITH_POLICY_INSTALLED_CERT:
     case security_state::SECURITY_LEVEL_COUNT:

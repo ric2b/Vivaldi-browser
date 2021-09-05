@@ -3,6 +3,9 @@
 # tags: [ Release Debug ]
 # results: [ Timeout Crash Pass Failure Slow Skip ]
 
+# Needs rebaseline, but images depend on multiple flags.
+crbug.com/1087413 css3/blending/background-blend-mode-gradient-gradient.html [ Failure Pass ]
+
 # One portion of the image is offset.
 crbug.com/1002522 fast/canvas/canvas-toDataURL-webp.html [ Skip ]
 
@@ -14,3 +17,7 @@ crbug.com/1026375 [ Win ] media/video-currentTime-delay.html [ Timeout Pass ]
 crbug.com/1026375 [ Win ] media/encrypted-media/encrypted-media-playback-setmediakeys-before-src.html [ Timeout Pass ]
 crbug.com/1026375 [ Win ] media/controls/video-enter-exit-fullscreen-while-hovering-shows-controls.html [ Failure Pass ]
 crbug.com/1026375 [ Win ] media/video-pause-immediately.html [ Failure Pass ]
+
+# Failing on Linux & Windows.
+crbug.com/1086181 [ Linux ] media/controls-layout-direction.html [ Failure ]
+crbug.com/1086181 [ Win10 ] media/controls-layout-direction.html [ Failure ]

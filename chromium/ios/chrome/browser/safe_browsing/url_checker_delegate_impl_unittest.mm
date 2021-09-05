@@ -11,11 +11,11 @@
 #import "base/test/ios/wait_util.h"
 #include "components/safe_browsing/core/common/thread_utils.h"
 #include "components/safe_browsing/core/db/database_manager.h"
+#import "components/safe_browsing/ios/browser/safe_browsing_url_allow_list.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/prerender/fake_prerender_service.h"
 #import "ios/chrome/browser/prerender/prerender_service_factory.h"
 #import "ios/chrome/browser/safe_browsing/safe_browsing_unsafe_resource_container.h"
-#import "ios/chrome/browser/safe_browsing/safe_browsing_url_allow_list.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/test/fakes/test_navigation_manager.h"
 #import "ios/web/public/test/fakes/test_web_state.h"
@@ -235,8 +235,8 @@ TEST_F(UrlCheckerDelegateImplTest,
   // Verify that a copy of |resource| without its callback has been added to the
   // container.
   EXPECT_TRUE(container()->GetMainFrameUnsafeResource());
-  std::unique_ptr<UnsafeResource> resource_copy =
-      container()->ReleaseMainFrameUnsafeResource();
+  const UnsafeResource* resource_copy =
+      container()->GetMainFrameUnsafeResource();
   ASSERT_TRUE(resource_copy);
   EXPECT_EQ(resource.url, resource_copy->url);
   EXPECT_EQ(resource.callback_thread, resource_copy->callback_thread);
@@ -282,8 +282,8 @@ TEST_F(UrlCheckerDelegateImplTest,
   // Verify that a copy of |resource| without its callback has been added to the
   // container.
   EXPECT_TRUE(container()->GetSubFrameUnsafeResource(item_.get()));
-  std::unique_ptr<UnsafeResource> resource_copy =
-      container()->ReleaseSubFrameUnsafeResource(item_.get());
+  const UnsafeResource* resource_copy =
+      container()->GetSubFrameUnsafeResource(item_.get());
   ASSERT_TRUE(resource_copy);
   EXPECT_EQ(resource.url, resource_copy->url);
   EXPECT_EQ(resource.callback_thread, resource_copy->callback_thread);

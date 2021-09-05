@@ -8,6 +8,21 @@
 
 namespace content {
 
+DedicatedWorkerServiceImpl::DedicatedWorkerInfo::DedicatedWorkerInfo(
+    int worker_process_id,
+    GlobalFrameRoutingId ancestor_render_frame_host_id)
+    : worker_process_id(worker_process_id),
+      ancestor_render_frame_host_id(ancestor_render_frame_host_id) {}
+
+DedicatedWorkerServiceImpl::DedicatedWorkerInfo::DedicatedWorkerInfo(
+    const DedicatedWorkerInfo& info) = default;
+DedicatedWorkerServiceImpl::DedicatedWorkerInfo&
+DedicatedWorkerServiceImpl::DedicatedWorkerInfo::operator=(
+    const DedicatedWorkerInfo& info) = default;
+
+DedicatedWorkerServiceImpl::DedicatedWorkerInfo::~DedicatedWorkerInfo() =
+    default;
+
 DedicatedWorkerServiceImpl::DedicatedWorkerServiceImpl() = default;
 
 DedicatedWorkerServiceImpl::~DedicatedWorkerServiceImpl() = default;
@@ -25,9 +40,13 @@ void DedicatedWorkerServiceImpl::EnumerateDedicatedWorkers(Observer* observer) {
     DedicatedWorkerId dedicated_worker_id = kv.first;
     const DedicatedWorkerInfo& dedicated_worker_info = kv.second;
 
-    observer->OnWorkerStarted(
+    observer->OnWorkerCreated(
         dedicated_worker_id, dedicated_worker_info.worker_process_id,
         dedicated_worker_info.ancestor_render_frame_host_id);
+    if (dedicated_worker_info.final_response_url) {
+      observer->OnFinalResponseURLDetermined(
+          dedicated_worker_id, *dedicated_worker_info.final_response_url);
+    }
   }
 }
 
@@ -35,40 +54,43 @@ DedicatedWorkerId DedicatedWorkerServiceImpl::GenerateNextDedicatedWorkerId() {
   return dedicated_worker_id_generator_.GenerateNextId();
 }
 
-void DedicatedWorkerServiceImpl::NotifyWorkerStarted(
+void DedicatedWorkerServiceImpl::NotifyWorkerCreated(
     DedicatedWorkerId dedicated_worker_id,
     int worker_process_id,
     GlobalFrameRoutingId ancestor_render_frame_host_id) {
   bool inserted =
       dedicated_worker_infos_
           .emplace(dedicated_worker_id,
-                   DedicatedWorkerInfo{worker_process_id,
-                                       ancestor_render_frame_host_id})
+                   DedicatedWorkerInfo(worker_process_id,
+                                       ancestor_render_frame_host_id))
           .second;
   DCHECK(inserted);
 
   for (Observer& observer : observers_) {
-    observer.OnWorkerStarted(dedicated_worker_id, worker_process_id,
+    observer.OnWorkerCreated(dedicated_worker_id, worker_process_id,
                              ancestor_render_frame_host_id);
   }
 }
 
-void DedicatedWorkerServiceImpl::NotifyWorkerTerminating(
+void DedicatedWorkerServiceImpl::NotifyBeforeWorkerDestroyed(
     DedicatedWorkerId dedicated_worker_id,
     GlobalFrameRoutingId ancestor_render_frame_host_id) {
   size_t removed = dedicated_worker_infos_.erase(dedicated_worker_id);
   DCHECK_EQ(removed, 1u);
 
   for (Observer& observer : observers_) {
-    observer.OnBeforeWorkerTerminated(dedicated_worker_id,
-                                      ancestor_render_frame_host_id);
+    observer.OnBeforeWorkerDestroyed(dedicated_worker_id,
+                                     ancestor_render_frame_host_id);
   }
 }
 
 void DedicatedWorkerServiceImpl::NotifyWorkerFinalResponseURLDetermined(
     DedicatedWorkerId dedicated_worker_id,
     const GURL& url) {
-  DCHECK(base::Contains(dedicated_worker_infos_, dedicated_worker_id));
+  auto it = dedicated_worker_infos_.find(dedicated_worker_id);
+  DCHECK(it != dedicated_worker_infos_.end());
+
+  it->second.final_response_url = url;
 
   for (Observer& observer : observers_)
     observer.OnFinalResponseURLDetermined(dedicated_worker_id, url);

@@ -76,7 +76,7 @@ bool SkiaGlRenderer::Initialize() {
   gr_context_ = GrContext::MakeGL(std::move(native_interface), options);
   DCHECK(gr_context_);
 
-  PostRenderFrameTask(gfx::SwapResult::SWAP_ACK, nullptr);
+  PostRenderFrameTask(gfx::SwapCompletionResult(gfx::SwapResult::SWAP_ACK));
   return true;
 }
 
@@ -106,7 +106,7 @@ void SkiaGlRenderer::RenderFrame() {
   } else {
     Draw(sk_surface_->getCanvas(), NextFraction());
   }
-  gr_context_->flush();
+  gr_context_->flushAndSubmit();
   glFinish();
 
   if (gl_surface_->SupportsAsyncSwap()) {
@@ -117,17 +117,14 @@ void SkiaGlRenderer::RenderFrame() {
                        weak_ptr_factory_.GetWeakPtr()));
   } else {
     PostRenderFrameTask(
-        gl_surface_->SwapBuffers(base::BindOnce(
-            &SkiaGlRenderer::OnPresentation, weak_ptr_factory_.GetWeakPtr())),
-        nullptr);
+        gfx::SwapCompletionResult(gl_surface_->SwapBuffers(base::BindOnce(
+            &SkiaGlRenderer::OnPresentation, weak_ptr_factory_.GetWeakPtr()))));
   }
 }
 
-void SkiaGlRenderer::PostRenderFrameTask(
-    gfx::SwapResult result,
-    std::unique_ptr<gfx::GpuFence> gpu_fence) {
-  if (gpu_fence)
-    gpu_fence->Wait();
+void SkiaGlRenderer::PostRenderFrameTask(gfx::SwapCompletionResult result) {
+  if (result.gpu_fence)
+    result.gpu_fence->Wait();
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&SkiaGlRenderer::RenderFrame,

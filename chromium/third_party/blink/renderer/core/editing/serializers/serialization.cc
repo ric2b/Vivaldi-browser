@@ -91,7 +91,7 @@ class AttributeChange {
 
   void Apply() { element_->setAttribute(name_, AtomicString(value_)); }
 
-  void Trace(Visitor* visitor) { visitor->Trace(element_); }
+  void Trace(Visitor* visitor) const { visitor->Trace(element_); }
 
  private:
   Member<Element> element_;
@@ -414,8 +414,9 @@ DocumentFragment* CreateFragmentFromMarkupWithContext(
                                    node_after_context))
     return nullptr;
 
-  auto* tagged_document =
-      MakeGarbageCollected<Document>(DocumentInit::Create());
+  auto* tagged_document = MakeGarbageCollected<Document>(
+      DocumentInit::Create().WithExecutionContext(
+          document.GetExecutionContext()));
   tagged_document->SetContextFeatures(document.GetContextFeatures());
 
   auto* root =
@@ -450,7 +451,8 @@ DocumentFragment* CreateFragmentFromMarkupWithContext(
 String CreateMarkup(const Node* node,
                     ChildrenOnly children_only,
                     AbsoluteURLs should_resolve_urls,
-                    IncludeShadowRoots include_shadow_roots) {
+                    IncludeShadowRoots include_shadow_roots,
+                    ClosedRootsSet include_closed_roots) {
   if (!node)
     return "";
 
@@ -458,7 +460,7 @@ String CreateMarkup(const Node* node,
                                 IsA<HTMLDocument>(node->GetDocument())
                                     ? SerializationType::kHTML
                                     : SerializationType::kXML,
-                                include_shadow_roots);
+                                include_shadow_roots, include_closed_roots);
   return accumulator.SerializeNodes<EditingStrategy>(*node, children_only);
 }
 
@@ -608,6 +610,11 @@ DocumentFragment* CreateFragmentForInnerOuterHTML(
     const char* method,
     ExceptionState& exception_state) {
   DCHECK(context_element);
+  if (IsA<HTMLTemplateElement>(*context_element) &&
+      !context_element->GetExecutionContext()) {
+    return nullptr;
+  }
+
   Document& document =
       IsA<HTMLTemplateElement>(*context_element)
           ? context_element->GetDocument().EnsureTemplateDocument()

@@ -82,6 +82,9 @@ _NEGATIVE_FILTER = [
     'ChromeDriverTest.testAlertOnNewWindow',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2532
     'ChromeDriverPageLoadTimeoutTest.testRefreshWithPageLoadTimeout',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=3517
+    'ChromeDriverTest.testPrint',
+    'ChromeDriverTest.testPrintInvalidArgument',
 ]
 
 
@@ -127,16 +130,13 @@ _INTEGRATION_NEGATIVE_FILTER = [
     # already tested by other test cases.
     'ChromeDriverTest.testGetCurrentWindowHandle',
     'ChromeDriverTest.testStartStop',
-    # https://crbug.com/867511
-    'ChromeDriverTest.testWindowMaximize',
-    # LaunchApp is an obsolete API.
-    'ChromeExtensionsCapabilityTest.testCanLaunchApp',
     # PerfTest takes a long time, requires extra setup, and adds little value
     # to integration testing.
     'PerfTest.*',
     # HeadlessInvalidCertificateTest is sometimes flaky.
     'HeadlessInvalidCertificateTest.*',
     # Similar issues with HeadlessChromeDriverTest.
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=3519
     'HeadlessChromeDriverTest.*',
     # Flaky: https://crbug.com/899919
     'SessionHandlingTest.testGetSessions',
@@ -1463,6 +1463,10 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     self.assertNotEqual(old_rect_list, new_rect_list)
 
     self._driver.SetWindowRect(*old_rect_list)
+    for i in range(10):
+      if old_rect_list == self._driver.GetWindowRect():
+        break
+      time.sleep(0.1)
     self.assertEquals(old_rect_list, self._driver.GetWindowRect())
 
   def testConsoleLogSources(self):
@@ -1617,7 +1621,9 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     # A workaround for crbug.com/177511; when setting offline, the throughputs
     # must be 0.
     self._driver.SetNetworkConditions(0, 0, 0, offline=True)
-    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/page_test.html'))
+    self.assertRaises(chromedriver.ChromeDriverException,
+                      self._driver.Load,
+                      self.GetHttpUrlForFile('/chromedriver/page_test.html'))
     # The "X is not available" title is set after the page load event fires, so
     # we have to explicitly wait for this to change. We can't rely on the
     # navigation tracker to block the call to Load() above.
@@ -1945,7 +1951,7 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1272). RFC 6761
     # requires domain registrars to keep 'invalid.' unregistered (see
     # https://tools.ietf.org/html/rfc6761#section-6.4).
-    self._driver.Load('http://invalid./')
+    self.assertRaises(chromedriver.ChromeDriverException, self._driver.Load, 'http://invalid./')
     self.assertEquals('http://invalid./', self._driver.GetCurrentUrl())
 
   def testCanClickAlertInIframes(self):
@@ -2197,6 +2203,34 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     redElement = self._driver.FindElement('css selector', '#A')
     analysisResult = self.takeScreenshotAndVerifyCorrect(redElement)
     self.assertEquals('PASS', analysisResult)
+
+  def testPrint(self):
+    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
+    pdf = self._driver.PrintPDF({
+                                  'orientation': 'landscape',
+                                  'scale': 1.1,
+                                  'margin': {
+                                    'top': 1.1,
+                                    'bottom': 2.2,
+                                    'left': 3.3,
+                                    'right': 4.4
+                                  },
+                                  'background': True,
+                                  'shrinkToFit': False,
+                                  'pageRanges': [1],
+                                  'page': {
+                                    'width': 15.6,
+                                    'height': 20.6
+                                  }
+                                })
+    decoded_pdf = base64.b64decode(pdf)
+    self.assertTrue(decoded_pdf.startswith("%PDF"))
+    self.assertTrue(decoded_pdf.endswith("%%EOF"))
+
+  def testPrintInvalidArgument(self):
+    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
+    self.assertRaises(chromedriver.InvalidArgument,
+                      self._driver.PrintPDF, {'pageRanges': ['x-y']})
 
   def testGenerateTestReport(self):
     self._driver.Load(self.GetHttpUrlForFile(
@@ -2843,7 +2877,6 @@ class ChromeDriverW3cTest(ChromeDriverBaseTestWithWebServer):
           '\'<p contentEditable="true"> <i>hello-></i> '
           '<b>send_this_value </b> </p>\';'
           'var input = document.getElementsByTagName("i")[0];'
-          'input.focus();'
           'return input;')
       element.SendKeys('hello')
       self.assertEquals(u'hello->hello', element.GetText())
@@ -2858,7 +2891,7 @@ class ChromeDriverW3cTest(ChromeDriverBaseTestWithWebServer):
           'input.focus();'
           'return input;')
       element.SendKeys('hello')
-      self.assertEquals(u'hello ->hello', element.GetText())
+      self.assertEquals(u'hellohello ->', element.GetText())
 
   def testUnexpectedAlertOpenExceptionMessage(self):
     self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
@@ -3521,19 +3554,6 @@ class ChromeExtensionsCapabilityTest(ChromeDriverBaseTestWithWebServer):
     zip_1 = os.path.join(_TEST_DATA_DIR, 'ext_test_1.zip')
     self.CreateDriver(chrome_extensions=[self._PackExtension(zip_1)])
 
-  def testCanLaunchApp(self):
-    app_path = os.path.join(_TEST_DATA_DIR, 'test_app')
-    driver = self.CreateDriver(chrome_switches=['load-extension=%s' % app_path],
-      experimental_options=
-        {"useUnsupportedLaunchAppDeprecationWorkaround": True})
-    old_handles = driver.GetWindowHandles()
-    self.assertEqual(1, len(old_handles))
-    driver.LaunchApp('gegjcdcfeiojglhifpmibkadodekakpc')
-    new_window_handle = self.WaitForNewWindow(driver, old_handles)
-    driver.SwitchToWindow(new_window_handle)
-    body_element = driver.FindElement('tag name', 'body')
-    self.assertEqual('It works!', body_element.GetText())
-
   def testCanInspectBackgroundPage(self):
     crx = os.path.join(_TEST_DATA_DIR, 'ext_bg_page.crx')
     driver = self.CreateDriver(
@@ -3574,14 +3594,6 @@ class ChromeExtensionsCapabilityTest(ChromeDriverBaseTestWithWebServer):
     self.assertEqual('one', driver.ExecuteScript("return window['global_var']"))
     driver.SwitchToFrame('iframe')
     self.assertEqual('two', driver.ExecuteScript("return window['iframe_var']"))
-
-  def testDontUseAutomationExtension(self):
-    driver = self.CreateDriver(
-        experimental_options={'useAutomationExtension': False})
-    driver.Load('chrome:version')
-    command_line = driver.FindElement('css selector', '#command_line').GetText()
-    self.assertNotIn('load-extension', command_line)
-
 
 class ChromeLogPathCapabilityTest(ChromeDriverBaseTest):
   """Tests that chromedriver properly processes chromeOptions.logPath."""
@@ -4214,6 +4226,33 @@ class HeadlessChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     # Restore a known size so next tests won't fail
     self._driver.SetWindowRect(*old_rect_list)
 
+  def testPrintHeadless(self):
+    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
+    pdf = self._driver.PrintPDF({
+                                  'orientation': 'landscape',
+                                  'scale': 1.1,
+                                  'margin': {
+                                    'top': 1.1,
+                                    'bottom': 2.2,
+                                    'left': 3.3,
+                                    'right': 4.4
+                                  },
+                                  'background': True,
+                                  'shrinkToFit': False,
+                                  'pageRanges': [1],
+                                  'page': {
+                                    'width': 15.6,
+                                    'height': 20.6
+                                  }
+                                })
+    decoded_pdf = base64.b64decode(pdf)
+    self.assertTrue(decoded_pdf.startswith("%PDF"))
+    self.assertTrue(decoded_pdf.endswith("%%EOF"))
+
+  def testPrintInvalidArgumentHeadless(self):
+    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
+    self.assertRaises(chromedriver.InvalidArgument,
+                      self._driver.PrintPDF, {'pageRanges': ['x-y']})
 
 class SupportIPv4AndIPv6(ChromeDriverBaseTest):
   def testSupportIPv4AndIPv6(self):

@@ -116,7 +116,7 @@ RTCIceTransport* RTCIceTransport::Create(ExecutionContext* context) {
   PeerConnectionDependencyFactory::GetInstance()->EnsureInitialized();
   scoped_refptr<base::SingleThreadTaskRunner> host_thread =
       PeerConnectionDependencyFactory::GetInstance()
-          ->GetWebRtcWorkerTaskRunner();
+          ->GetWebRtcNetworkTaskRunner();
   return MakeGarbageCollected<RTCIceTransport>(
       context, std::move(proxy_thread), std::move(host_thread),
       std::make_unique<DefaultIceTransportAdapterCrossThreadFactory>());
@@ -132,7 +132,7 @@ RTCIceTransport* RTCIceTransport::Create(
   PeerConnectionDependencyFactory::GetInstance()->EnsureInitialized();
   scoped_refptr<base::SingleThreadTaskRunner> host_thread =
       PeerConnectionDependencyFactory::GetInstance()
-          ->GetWebRtcWorkerTaskRunner();
+          ->GetWebRtcNetworkTaskRunner();
   return MakeGarbageCollected<RTCIceTransport>(
       context, std::move(proxy_thread), std::move(host_thread),
       std::make_unique<DtlsIceTransportAdapterCrossThreadFactory>(
@@ -303,8 +303,12 @@ static webrtc::PeerConnectionInterface::IceServer ConvertIceServer(
   for (const String& url_string : url_strings) {
     converted_ice_server.urls.push_back(url_string.Utf8());
   }
-  converted_ice_server.username = ice_server->username().Utf8();
-  converted_ice_server.password = ice_server->credential().Utf8();
+  if (ice_server->hasUsername()) {
+    converted_ice_server.username = ice_server->username().Utf8();
+  }
+  if (ice_server->hasCredential()) {
+    converted_ice_server.password = ice_server->credential().Utf8();
+  }
   return converted_ice_server;
 }
 
@@ -580,7 +584,7 @@ bool RTCIceTransport::HasPendingActivity() const {
   return !!proxy_;
 }
 
-void RTCIceTransport::Trace(Visitor* visitor) {
+void RTCIceTransport::Trace(Visitor* visitor) const {
   visitor->Trace(local_candidates_);
   visitor->Trace(remote_candidates_);
   visitor->Trace(local_parameters_);

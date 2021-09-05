@@ -7,9 +7,11 @@
 #include <limits.h>
 
 #include <memory>
+#include <ostream>
 #include <vector>
 
 #include "base/check.h"
+#include "base/component_export.h"
 #include "third_party/icu/source/common/unicode/unistr.h"
 #include "third_party/icu/source/i18n/unicode/msgfmt.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -17,7 +19,7 @@
 
 namespace ui {
 
-UI_BASE_EXPORT bool formatter_force_fallback = false;
+COMPONENT_EXPORT(UI_BASE) bool formatter_force_fallback = false;
 
 struct Pluralities {
   int id;

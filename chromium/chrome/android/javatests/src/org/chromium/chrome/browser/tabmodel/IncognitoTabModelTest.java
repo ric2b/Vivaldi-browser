@@ -4,8 +4,8 @@
 
 package org.chromium.chrome.browser.tabmodel;
 
-import android.support.test.filters.MediumTest;
-import android.support.test.filters.SmallTest;
+import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -15,12 +15,11 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tab.TabState;
+import org.chromium.chrome.browser.tab.TabStateExtractor;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
@@ -68,7 +67,6 @@ public class IncognitoTabModelTest {
     @Test
     @SmallTest
     @Feature({"OffTheRecord"})
-    @RetryOnFailure
     public void testCloseAllDuringAddTabDoesNotCrash() {
         createTabOnUiThread();
         Assert.assertEquals(1, mTabModel.getCount());
@@ -84,7 +82,8 @@ public class IncognitoTabModelTest {
         createTabOnUiThread();
         // Need to wait for contentsState to be initialized for the tab to restore correctly.
         CriteriaHelper.pollUiThread(() -> {
-            return TabState.from(mActivityTestRule.getActivity().getActivityTab()).contentsState
+            return TabStateExtractor.from(mActivityTestRule.getActivity().getActivityTab())
+                           .contentsState
                     != null;
         });
         ChromeTabbedActivity newActivity =

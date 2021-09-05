@@ -109,6 +109,9 @@ UnifiedSystemTrayBubble::UnifiedSystemTrayBubble(UnifiedSystemTray* tray,
   TrayBackgroundView::InitializeBubbleAnimations(bubble_widget_);
   bubble_view_->InitializeAndShowBubble();
 
+  // Notify accessibility features that the status tray has opened.
+  bubble_view_->NotifyAccessibilityEvent(ax::mojom::Event::kShow, true);
+
   tray->tray_event_filter()->AddBubble(this);
   tray->shelf()->AddObserver(this);
   Shell::Get()->tablet_mode_controller()->AddObserver(this);
@@ -125,6 +128,7 @@ UnifiedSystemTrayBubble::~UnifiedSystemTrayBubble() {
     bubble_widget_->RemoveObserver(this);
     bubble_widget_->Close();
   }
+  CHECK(!IsInObserverList());
 }
 
 gfx::Rect UnifiedSystemTrayBubble::GetBoundsInScreen() const {
@@ -318,8 +322,7 @@ void UnifiedSystemTrayBubble::OnWindowActivated(ActivationReason reason,
   }
 
   // Don't close the bubble if the message center is gaining activation.
-  if (features::IsUnifiedMessageCenterRefactorEnabled() &&
-      tray_->IsMessageCenterBubbleShown()) {
+  if (tray_->IsMessageCenterBubbleShown()) {
     views::Widget* message_center_widget =
         tray_->message_center_bubble()->GetBubbleWidget();
     if (message_center_widget ==
@@ -338,6 +341,9 @@ void UnifiedSystemTrayBubble::OnWindowActivated(ActivationReason reason,
 }
 
 void UnifiedSystemTrayBubble::RecordTimeToClick() {
+  tray_->MaybeRecordFirstInteraction(
+      UnifiedSystemTray::FirstInteractionType::kQuickSettings);
+
   // Ignore if the tray bubble is not opened by click.
   if (!time_shown_by_click_)
     return;

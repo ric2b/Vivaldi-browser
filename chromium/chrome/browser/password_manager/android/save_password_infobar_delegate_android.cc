@@ -43,7 +43,12 @@ void SavePasswordInfoBarDelegate::Create(
 }
 
 SavePasswordInfoBarDelegate::~SavePasswordInfoBarDelegate() {
-  password_manager::metrics_util::LogSaveUIDismissalReason(infobar_response_);
+  password_manager::metrics_util::LogSaveUIDismissalReason(
+      infobar_response_, /*user_state=*/base::nullopt);
+  if (form_to_save_->WasUnblacklisted()) {
+    password_manager::metrics_util::LogSaveUIDismissalReasonAfterUnblacklisting(
+        infobar_response_);
+  }
   if (auto* recorder = form_to_save_->GetMetricsRecorder()) {
     recorder->RecordUIDismissalReason(infobar_response_);
   }
@@ -56,15 +61,13 @@ SavePasswordInfoBarDelegate::SavePasswordInfoBarDelegate(
     : PasswordManagerInfoBarDelegate(),
       form_to_save_(std::move(form_to_save)),
       infobar_response_(password_manager::metrics_util::NO_DIRECT_INTERACTION) {
-  base::string16 message;
   PasswordTitleType type =
       form_to_save_->GetPendingCredentials().federation_origin.opaque()
           ? PasswordTitleType::SAVE_PASSWORD
           : PasswordTitleType::SAVE_ACCOUNT;
-  GetSavePasswordDialogTitleTextAndLinkRange(web_contents->GetVisibleURL(),
-                                             form_to_save_->GetOrigin(), type,
-                                             &message);
-  SetMessage(message);
+  SetMessage(GetSavePasswordDialogTitleText(
+      web_contents->GetVisibleURL(),
+      url::Origin::Create(form_to_save_->GetURL()), type));
 
   if (type == PasswordTitleType::SAVE_PASSWORD &&
       is_smartlock_branding_enabled) {

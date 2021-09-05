@@ -18,6 +18,7 @@
 #include "gn/filesystem_utils.h"
 #include "gn/ninja_target_command_util.h"
 #include "gn/path_output.h"
+#include "gn/string_output_buffer.h"
 #include "gn/substitution_writer.h"
 
 // Structure of JSON output file
@@ -51,6 +52,22 @@ struct CompileFlags {
   std::string frameworks;
 };
 
+// Helper template function to call RecursiveTargetConfigToStream<std::string>
+// and return the JSON-escaped resulting string.
+//
+// NOTE: The Windows compiler cannot properly deduce the first parameter type
+// so pass it at each call site to ensure proper builds for this platform.
+template <typename T, typename Writer>
+std::string FlagsGetter(const Target* target,
+                        const std::vector<T>& (ConfigValues::*getter)() const,
+                        const Writer& writer) {
+  std::string result;
+  std::ostringstream out;
+  RecursiveTargetConfigToStream<T>(target, getter, writer, out);
+  base::EscapeJSONString(out.str(), false, &result);
+  return result;
+};
+
 void SetupCompileFlags(const Target* target,
                        PathOutput& path_output,
                        EscapeOptions opts,
@@ -58,78 +75,69 @@ void SetupCompileFlags(const Target* target,
   bool has_precompiled_headers =
       target->config_values().has_precompiled_headers();
 
-  std::ostringstream defines_out;
-  RecursiveTargetConfigToStream<std::string>(target, &ConfigValues::defines,
-                                             DefineWriter(ESCAPE_SPACE, true),
-                                             defines_out);
-  base::EscapeJSONString(defines_out.str(), false, &flags.defines);
+  flags.defines = FlagsGetter<std::string>(target, &ConfigValues::defines,
+                                           DefineWriter(ESCAPE_SPACE, true));
 
-  std::ostringstream framework_dirs_out;
-  RecursiveTargetConfigToStream<SourceDir>(
-      target, &ConfigValues::framework_dirs,
-      FrameworkDirsWriter(path_output, "-F"), framework_dirs_out);
-  base::EscapeJSONString(framework_dirs_out.str(), false,
-                         &flags.framework_dirs);
+  flags.framework_dirs =
+      FlagsGetter<SourceDir>(target, &ConfigValues::framework_dirs,
+                             FrameworkDirsWriter(path_output, "-F"));
 
-  std::ostringstream frameworks_out;
-  RecursiveTargetConfigToStream<std::string>(
+  flags.frameworks = FlagsGetter<std::string>(
       target, &ConfigValues::frameworks,
-      FrameworksWriter(ESCAPE_SPACE, true, "-framework "), frameworks_out);
-  base::EscapeJSONString(frameworks_out.str(), false, &flags.frameworks);
+      FrameworksWriter(ESCAPE_SPACE, true, "-framework"));
+  flags.frameworks += FlagsGetter<std::string>(
+      target, &ConfigValues::weak_frameworks,
+      FrameworksWriter(ESCAPE_SPACE, true, "-weak_framework"));
 
-  std::ostringstream includes_out;
-  RecursiveTargetConfigToStream<SourceDir>(target, &ConfigValues::include_dirs,
-                                           IncludeWriter(path_output),
-                                           includes_out);
-  base::EscapeJSONString(includes_out.str(), false, &flags.includes);
+  flags.includes = FlagsGetter<SourceDir>(target, &ConfigValues::include_dirs,
+                                          IncludeWriter(path_output));
 
-  std::ostringstream cflags_out;
-  WriteOneFlag(target, &CSubstitutionCFlags, false, Tool::kToolNone,
-               &ConfigValues::cflags, opts, path_output, cflags_out,
-               /*write_substitution=*/false);
-  base::EscapeJSONString(cflags_out.str(), false, &flags.cflags);
+  // Helper lambda to call WriteOneFlag() and return the resulting
+  // escaped JSON string.
+  auto one_flag = [&](const Substitution* substitution,
+                      bool has_precompiled_headers, const char* tool_name,
+                      const std::vector<std::string>& (ConfigValues::*getter)()
+                          const) -> std::string {
+    std::string result;
+    std::ostringstream out;
+    WriteOneFlag(target, substitution, has_precompiled_headers, tool_name,
+                 getter, opts, path_output, out, /*write_substitution=*/false);
+    base::EscapeJSONString(out.str(), false, &result);
+    return result;
+  };
 
-  std::ostringstream cflags_c_out;
-  WriteOneFlag(target, &CSubstitutionCFlagsC, has_precompiled_headers,
-               CTool::kCToolCc, &ConfigValues::cflags_c, opts, path_output,
-               cflags_c_out, /*write_substitution=*/false);
-  base::EscapeJSONString(cflags_c_out.str(), false, &flags.cflags_c);
+  flags.cflags = one_flag(&CSubstitutionCFlags, false, Tool::kToolNone,
+                          &ConfigValues::cflags);
 
-  std::ostringstream cflags_cc_out;
-  WriteOneFlag(target, &CSubstitutionCFlagsCc, has_precompiled_headers,
-               CTool::kCToolCxx, &ConfigValues::cflags_cc, opts, path_output,
-               cflags_cc_out, /*write_substitution=*/false);
-  base::EscapeJSONString(cflags_cc_out.str(), false, &flags.cflags_cc);
+  flags.cflags_c = one_flag(&CSubstitutionCFlagsC, has_precompiled_headers,
+                            CTool::kCToolCc, &ConfigValues::cflags_c);
 
-  std::ostringstream cflags_objc_out;
-  WriteOneFlag(target, &CSubstitutionCFlagsObjC, has_precompiled_headers,
-               CTool::kCToolObjC, &ConfigValues::cflags_objc, opts, path_output,
-               cflags_objc_out,
-               /*write_substitution=*/false);
-  base::EscapeJSONString(cflags_objc_out.str(), false, &flags.cflags_objc);
+  flags.cflags_cc = one_flag(&CSubstitutionCFlagsCc, has_precompiled_headers,
+                             CTool::kCToolCxx, &ConfigValues::cflags_cc);
 
-  std::ostringstream cflags_objcc_out;
-  WriteOneFlag(target, &CSubstitutionCFlagsObjCc, has_precompiled_headers,
-               CTool::kCToolObjCxx, &ConfigValues::cflags_objcc, opts,
-               path_output, cflags_objcc_out, /*write_substitution=*/false);
-  base::EscapeJSONString(cflags_objcc_out.str(), false, &flags.cflags_objcc);
+  flags.cflags_objc =
+      one_flag(&CSubstitutionCFlagsObjC, has_precompiled_headers,
+               CTool::kCToolObjC, &ConfigValues::cflags_objc);
+
+  flags.cflags_objcc =
+      one_flag(&CSubstitutionCFlagsObjCc, has_precompiled_headers,
+               CTool::kCToolObjCxx, &ConfigValues::cflags_objcc);
 }
 
 void WriteFile(const SourceFile& source,
                PathOutput& path_output,
-               std::string* compile_commands) {
+               std::ostream& out) {
   std::ostringstream rel_source_path;
-  path_output.WriteFile(rel_source_path, source);
-  compile_commands->append("    \"file\": \"");
-  compile_commands->append(rel_source_path.str());
+  out << "    \"file\": \"";
+  path_output.WriteFile(out, source);
 }
 
-void WriteDirectory(std::string build_dir, std::string* compile_commands) {
-  compile_commands->append("\",");
-  compile_commands->append(kPrettyPrintLineEnding);
-  compile_commands->append("    \"directory\": \"");
-  compile_commands->append(build_dir);
-  compile_commands->append("\",");
+void WriteDirectory(std::string build_dir, std::ostream& out) {
+  out << "\",";
+  out << kPrettyPrintLineEnding;
+  out << "    \"directory\": \"";
+  out << build_dir;
+  out << "\",";
 }
 
 void WriteCommand(const Target* target,
@@ -140,40 +148,42 @@ void WriteCommand(const Target* target,
                   SourceFile::Type source_type,
                   const char* tool_name,
                   EscapeOptions opts,
-                  std::string* compile_commands) {
+                  std::ostream& out) {
   EscapeOptions no_quoting(opts);
   no_quoting.inhibit_quoting = true;
   const Tool* tool = target->toolchain()->GetTool(tool_name);
-  std::ostringstream command_out;
+
+  out << kPrettyPrintLineEnding;
+  out << "    \"command\": \"";
 
   for (const auto& range : tool->command().ranges()) {
     // TODO: this is emitting a bonus space prior to each substitution.
     if (range.type == &SubstitutionLiteral) {
-      EscapeStringToStream(command_out, range.literal, no_quoting);
+      EscapeJSONStringToStream(out, range.literal, no_quoting);
     } else if (range.type == &SubstitutionOutput) {
-      path_output.WriteFiles(command_out, tool_outputs);
+      path_output.WriteFiles(out, tool_outputs);
     } else if (range.type == &CSubstitutionDefines) {
-      command_out << flags.defines;
+      out << flags.defines;
     } else if (range.type == &CSubstitutionFrameworkDirs) {
-      command_out << flags.framework_dirs;
+      out << flags.framework_dirs;
     } else if (range.type == &CSubstitutionFrameworks) {
-      command_out << flags.frameworks;
+      out << flags.frameworks;
     } else if (range.type == &CSubstitutionIncludeDirs) {
-      command_out << flags.includes;
+      out << flags.includes;
     } else if (range.type == &CSubstitutionCFlags) {
-      command_out << flags.cflags;
+      out << flags.cflags;
     } else if (range.type == &CSubstitutionCFlagsC) {
       if (source_type == SourceFile::SOURCE_C)
-        command_out << flags.cflags_c;
+        out << flags.cflags_c;
     } else if (range.type == &CSubstitutionCFlagsCc) {
       if (source_type == SourceFile::SOURCE_CPP)
-        command_out << flags.cflags_cc;
+        out << flags.cflags_cc;
     } else if (range.type == &CSubstitutionCFlagsObjC) {
       if (source_type == SourceFile::SOURCE_M)
-        command_out << flags.cflags_objc;
+        out << flags.cflags_objc;
     } else if (range.type == &CSubstitutionCFlagsObjCc) {
       if (source_type == SourceFile::SOURCE_MM)
-        command_out << flags.cflags_objcc;
+        out << flags.cflags_objcc;
     } else if (range.type == &SubstitutionLabel ||
                range.type == &SubstitutionLabelName ||
                range.type == &SubstitutionRootGenDir ||
@@ -189,7 +199,7 @@ void WriteCommand(const Target* target,
                range.type == &SubstitutionSourceGenDir ||
                range.type == &SubstitutionSourceOutDir ||
                range.type == &SubstitutionSourceTargetRelative) {
-      EscapeStringToStream(command_out,
+      EscapeStringToStream(out,
                            SubstitutionWriter::GetCompilerSubstitution(
                                target, source, range.type),
                            opts);
@@ -201,20 +211,13 @@ void WriteCommand(const Target* target,
       continue;
     }
   }
-  compile_commands->append(kPrettyPrintLineEnding);
-  compile_commands->append("    \"command\": \"");
-  compile_commands->append(command_out.str());
 }
 
-}  // namespace
-
-void CompileCommandsWriter::RenderJSON(const BuildSettings* build_settings,
-                                       std::vector<const Target*>& all_targets,
-                                       std::string* compile_commands) {
-  // TODO: Determine out an appropriate size to reserve.
-  compile_commands->reserve(all_targets.size() * 100);
-  compile_commands->append("[");
-  compile_commands->append(kPrettyPrintLineEnding);
+void OutputJSON(const BuildSettings* build_settings,
+                std::vector<const Target*>& all_targets,
+                std::ostream& out) {
+  out << '[';
+  out << kPrettyPrintLineEnding;
   bool first = true;
   auto build_dir = build_settings->GetFullPath(build_settings->build_dir())
                        .StripTrailingSeparators();
@@ -253,27 +256,37 @@ void CompileCommandsWriter::RenderJSON(const BuildSettings* build_settings,
         continue;
 
       if (!first) {
-        compile_commands->append(",");
-        compile_commands->append(kPrettyPrintLineEnding);
+        out << ',';
+        out << kPrettyPrintLineEnding;
       }
       first = false;
-      compile_commands->append("  {");
-      compile_commands->append(kPrettyPrintLineEnding);
+      out << "  {";
+      out << kPrettyPrintLineEnding;
 
-      WriteFile(source, path_output, compile_commands);
-      WriteDirectory(base::StringPrintf("%" PRIsFP, PATH_CSTR(build_dir)),
-                     compile_commands);
+      WriteFile(source, path_output, out);
+      WriteDirectory(base::StringPrintf("%" PRIsFP, PATH_CSTR(build_dir)), out);
       WriteCommand(target, source, flags, tool_outputs, path_output,
-                   source_type, tool_name, opts, compile_commands);
-      compile_commands->append("\"");
-      compile_commands->append(kPrettyPrintLineEnding);
-      compile_commands->append("  }");
+                   source_type, tool_name, opts, out);
+      out << "\"";
+      out << kPrettyPrintLineEnding;
+      out << "  }";
     }
   }
 
-  compile_commands->append(kPrettyPrintLineEnding);
-  compile_commands->append("]");
-  compile_commands->append(kPrettyPrintLineEnding);
+  out << kPrettyPrintLineEnding;
+  out << "]";
+  out << kPrettyPrintLineEnding;
+}
+
+}  // namespace
+
+std::string CompileCommandsWriter::RenderJSON(
+    const BuildSettings* build_settings,
+    std::vector<const Target*>& all_targets) {
+  StringOutputBuffer json;
+  std::ostream out(&json);
+  OutputJSON(build_settings, all_targets, out);
+  return json.str();
 }
 
 bool CompileCommandsWriter::RunAndWriteFiles(
@@ -298,17 +311,21 @@ bool CompileCommandsWriter::RunAndWriteFiles(
                          base::SPLIT_WANT_NONEMPTY)) {
     target_filters_set.insert(target);
   }
-  std::string json;
+
+  StringOutputBuffer json;
+  std::ostream output_to_json(&json);
   if (target_filters_set.empty()) {
-    RenderJSON(build_settings, all_targets, &json);
+    OutputJSON(build_settings, all_targets, output_to_json);
   } else {
     std::vector<const Target*> preserved_targets =
         FilterTargets(all_targets, target_filters_set);
-    RenderJSON(build_settings, preserved_targets, &json);
+    OutputJSON(build_settings, preserved_targets, output_to_json);
   }
 
-  if (!WriteFileIfChanged(output_path, json, err))
-    return false;
+  if (!json.ContentsEqual(output_path)) {
+    if (!json.WriteToFile(output_path, err))
+      return false;
+  }
   return true;
 }
 

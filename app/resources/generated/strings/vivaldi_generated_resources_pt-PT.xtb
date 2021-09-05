@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(Modo Privado)</translation>
 <translation id="1620510694547887537">Câmara</translation>
 <translation id="1627276047960621195">Descritores de ficheiros</translation>
-<translation id="1635033183663317347">Instalada pelo supervisor.</translation>
 <translation id="1682548588986054654">Nova janela privada</translation>
 <translation id="1698122934742150150">Apenas para a sessão no modo de navegação privada atual</translation>
 <translation id="1706625117072057435">Níveis de ampliação</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">Extensão: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Pedido de partilha de ecrã de <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Co&amp;lar e ir para <ph name="URL" /></translation>
-<translation id="3725367690636977613">páginas</translation>
 <translation id="3727187387656390258">Inspecionar pop-up</translation>
 <translation id="3744111561329211289">Sincronização em segundo plano</translation>
 <translation id="3760460896538743390">Inspecionar &amp;Página de Fundo</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Aceitar para o grupo</translation>
-<translation id="4091434297613116013">folhas de papel</translation>
 <translation id="4096508467498758490">Desativar extensões de modo de programador</translation>
 <translation id="4100839878934973028">Outro programa do computador adicionou uma aplicação que pode alterar o funcionamento do Vivaldi.</translation>
 <translation id="4109898769411476438">Fechar o navegador antes da importação</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
 <translation id="7309257895202129721">Mostrar &amp;controlos</translation>
 <translation id="7311079019872751559">Acesso de plug-in sem isolamento de processos</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Ocorreu um erro ao tentar imprimir. Verifique a impressora e tente novamente.</translation>
 <translation id="7412226954991670867">Memória GPU</translation>
 <translation id="7421925624202799674">&amp;Ver código fonte da página</translation>
@@ -433,7 +429,6 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8071432093239591881">Imprimir como imagem</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Gerir extensões</translation>
-<translation id="8180239481735238521">página</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Transferência em curso} other {Transferências em curso}}</translation>
 <translation id="8230134520748321204">Guardar a palavra-passe para <ph name="ORIGIN" />?</translation>
@@ -466,7 +461,6 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8798099450830957504">Padrão</translation>
 <translation id="8800004011501252845">A mostrar destinos para</translation>
 <translation id="8808478386290700967">Web Store</translation>
-<translation id="8813811964357448561">folha de papel</translation>
 <translation id="8823514049557262177">Copiar te&amp;xto da ligação</translation>
 <translation id="8823704566850948458">Sugerir palavra-passe…</translation>
 <translation id="8859174528519900719">Subestrutura: <ph name="SUBFRAME_SITE" /></translation>

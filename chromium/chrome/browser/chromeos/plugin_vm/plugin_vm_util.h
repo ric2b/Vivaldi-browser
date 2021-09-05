@@ -10,6 +10,7 @@
 
 #include "base/callback.h"
 #include "base/observer_list_types.h"
+#include "base/optional.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -25,11 +26,12 @@ namespace plugin_vm {
 
 class PluginVmPolicySubscription;
 
+// This is used by both the Plugin VM app and its installer.
 // Generated as crx_file::id_util::GenerateId("org.chromium.plugin_vm");
-constexpr char kPluginVmAppId[] = "lgjpclljbbmphhnalkeplcmnjpfmmaek";
+extern const char kPluginVmShelfAppId[];
 
 // Name of the Plugin VM.
-constexpr char kPluginVmName[] = "PvmDefault";
+extern const char kPluginVmName[];
 
 const net::NetworkTrafficAnnotationTag kPluginVmNetworkTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("plugin_vm_image_download", R"(
@@ -70,8 +72,9 @@ bool IsPluginVmRunning(Profile* profile);
 
 void ShowPluginVmInstallerView(Profile* profile);
 
-// Checks if an window is for Plugin VM.
-bool IsPluginVmWindow(const aura::Window* window);
+// Checks if an window is for the Plugin VM app. Note that it returns false for
+// the Plugin VM installer.
+bool IsPluginVmAppWindow(const aura::Window* window);
 
 // Retrieves the license key to be used for Plugin VM. If
 // none is set this will return an empty string.
@@ -95,8 +98,9 @@ bool FakeUserIdIsSet();
 // Used to clean up the Plugin VM Drive download directory if it did not get
 // removed when it should have, perhaps due to a crash.
 void RemoveDriveDownloadDirectoryIfExists();
-bool IsDriveUrl(const GURL& url);
-std::string GetIdFromDriveUrl(const GURL& url);
+
+// Returns nullopt if not a drive URL.
+base::Optional<std::string> GetIdFromDriveUrl(const GURL& url);
 
 // A subscription for changes to PluginVm policy that may affect
 // IsPluginVmAllowedForProfile.

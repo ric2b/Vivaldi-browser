@@ -15,11 +15,13 @@
 #include "media/base/video_decoder.h"
 #include "media/filters/ffmpeg_video_decoder.h"
 #include "media/media_buildflags.h"
+#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_encoded_video_chunk.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_encoded_video_config.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_decoder_init.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/modules/webcodecs/encoded_video_chunk.h"
+#include "third_party/blink/renderer/modules/webcodecs/video_decoder_broker.h"
 #include "third_party/blink/renderer/modules/webcodecs/video_frame.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -64,15 +66,6 @@ media::VideoDecoderConfig ToVideoDecoderConfig(
       media::EncryptionScheme::kUnencrypted);
 }
 
-std::unique_ptr<media::VideoDecoder> CreateVideoDecoder(
-    media::MediaLog* media_log) {
-#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
-  return std::make_unique<media::FFmpegVideoDecoder>(media_log);
-#else
-  return nullptr;
-#endif  // BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
-}
-
 }  // namespace
 
 // static
@@ -101,51 +94,45 @@ int32_t VideoDecoder::decodeQueueSize() {
   return requested_decodes_;
 }
 
-int32_t VideoDecoder::decodeProcessingCount() {
-  return pending_decodes_.size();
-}
-
-ScriptPromise VideoDecoder::configure(const EncodedVideoConfig* config,
-                                      ExceptionState&) {
+void VideoDecoder::configure(const EncodedVideoConfig* config,
+                             ExceptionState&) {
   DVLOG(1) << __func__;
   Request* request = MakeGarbageCollected<Request>();
   request->type = Request::Type::kConfigure;
   request->config = config;
-  return EnqueueRequest(request);
+  requests_.push_back(request);
+  ProcessRequests();
 }
 
-ScriptPromise VideoDecoder::decode(const EncodedVideoChunk* chunk,
-                                   ExceptionState&) {
+void VideoDecoder::decode(const EncodedVideoChunk* chunk, ExceptionState&) {
   DVLOG(3) << __func__;
-  requested_decodes_++;
   Request* request = MakeGarbageCollected<Request>();
   request->type = Request::Type::kDecode;
   request->chunk = chunk;
-  return EnqueueRequest(request);
+  requests_.push_back(request);
+  ++requested_decodes_;
+  ProcessRequests();
 }
 
 ScriptPromise VideoDecoder::flush(ExceptionState&) {
   DVLOG(3) << __func__;
   Request* request = MakeGarbageCollected<Request>();
   request->type = Request::Type::kFlush;
-  return EnqueueRequest(request);
-}
-
-ScriptPromise VideoDecoder::reset(ExceptionState&) {
-  DVLOG(3) << __func__;
-  requested_resets_++;
-  Request* request = MakeGarbageCollected<Request>();
-  request->type = Request::Type::kReset;
-  return EnqueueRequest(request);
-}
-
-ScriptPromise VideoDecoder::EnqueueRequest(Request* request) {
   ScriptPromiseResolver* resolver =
       MakeGarbageCollected<ScriptPromiseResolver>(script_state_);
   request->resolver = resolver;
   requests_.push_back(request);
   ProcessRequests();
   return resolver->Promise();
+}
+
+void VideoDecoder::reset(ExceptionState&) {
+  DVLOG(3) << __func__;
+  Request* request = MakeGarbageCollected<Request>();
+  request->type = Request::Type::kReset;
+  requests_.push_back(request);
+  ++requested_resets_;
+  ProcessRequests();
 }
 
 void VideoDecoder::ProcessRequests() {
@@ -189,16 +176,9 @@ bool VideoDecoder::ProcessConfigureRequest(Request* request) {
 
   if (!decoder_) {
     media_log_ = std::make_unique<media::NullMediaLog>();
-    decoder_ = CreateVideoDecoder(media_log_.get());
-    if (!decoder_) {
-      request->resolver.Release()->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "Codec initialization failed."));
-      // TODO(sandersd): This is a bit awkward because |request| is still in the
-      // queue.
-      HandleError();
-      return false;
-    }
+    decoder_ = std::make_unique<VideoDecoderBroker>(
+        *ExecutionContext::From(script_state_),
+        Platform::Current()->GetGpuFactories());
 
     // Processing continues in OnInitializeDone().
     // TODO(sandersd): OnInitializeDone() may be called reentrantly, in which
@@ -236,11 +216,10 @@ bool VideoDecoder::ProcessDecodeRequest(Request* request) {
   DCHECK(request->chunk);
   DCHECK_GT(requested_decodes_, 0);
 
-  // TODO(sandersd): If a reset has been requested, resolve immediately.
+  // TODO(sandersd): If a reset has been requested, complete immediately.
 
   if (!decoder_) {
-    // TODO(sandersd): Add explanation (no valid configuration).
-    request->resolver.Release()->Reject();
+    // TODO(sandersd): Emit an error?
     return true;
   }
 
@@ -348,14 +327,11 @@ void VideoDecoder::OnInitializeDone(media::Status status) {
   if (!status.is_ok()) {
     // TODO(tmathmeyer) this drops the media error - should we consider logging
     // it or converting it to the DOMException type somehow?
-    pending_request_.Release()->resolver.Release()->Reject(
-        MakeGarbageCollected<DOMException>(DOMExceptionCode::kNotSupportedError,
-                                           "Codec initialization failed."));
     HandleError();
     return;
   }
 
-  pending_request_.Release()->resolver.Release()->Resolve();
+  pending_request_.Release();
   ProcessRequests();
 }
 
@@ -370,7 +346,6 @@ void VideoDecoder::OnDecodeDone(uint32_t id, media::DecodeStatus status) {
   }
 
   auto it = pending_decodes_.find(id);
-  it->value->resolver.Release()->Resolve();
   pending_decodes_.erase(it);
   ProcessRequests();
 }
@@ -394,7 +369,7 @@ void VideoDecoder::OnResetDone() {
   DCHECK(pending_request_);
   DCHECK_EQ(pending_request_->type, Request::Type::kReset);
 
-  pending_request_.Release()->resolver.Release()->Resolve();
+  pending_request_.Release();
   ProcessRequests();
 }
 
@@ -404,7 +379,7 @@ void VideoDecoder::OnOutput(scoped_refptr<media::VideoFrame> frame) {
                                        MakeGarbageCollected<VideoFrame>(frame));
 }
 
-void VideoDecoder::Trace(Visitor* visitor) {
+void VideoDecoder::Trace(Visitor* visitor) const {
   visitor->Trace(script_state_);
   visitor->Trace(output_cb_);
   visitor->Trace(error_cb_);
@@ -414,7 +389,7 @@ void VideoDecoder::Trace(Visitor* visitor) {
   ScriptWrappable::Trace(visitor);
 }
 
-void VideoDecoder::Request::Trace(Visitor* visitor) {
+void VideoDecoder::Request::Trace(Visitor* visitor) const {
   visitor->Trace(config);
   visitor->Trace(chunk);
   visitor->Trace(resolver);

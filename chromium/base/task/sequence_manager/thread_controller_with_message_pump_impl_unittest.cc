@@ -4,18 +4,23 @@
 
 #include "base/task/sequence_manager/thread_controller_with_message_pump_impl.h"
 
+#include <queue>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/single_thread_task_runner.h"
+#include "base/task/sequence_manager/thread_controller_power_monitor.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/mock_callback.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-#include <queue>
 
 using testing::_;
 using testing::Invoke;
@@ -30,7 +35,7 @@ class ThreadControllerForTest
     : public internal::ThreadControllerWithMessagePumpImpl {
  public:
   ThreadControllerForTest(std::unique_ptr<MessagePump> pump,
-                          SequenceManager::Settings& settings)
+                          const SequenceManager::Settings& settings)
       : ThreadControllerWithMessagePumpImpl(std::move(pump), settings) {}
 
   using ThreadControllerWithMessagePumpImpl::DoIdleWork;
@@ -38,6 +43,10 @@ class ThreadControllerForTest
   using ThreadControllerWithMessagePumpImpl::EnsureWorkScheduled;
   using ThreadControllerWithMessagePumpImpl::Quit;
   using ThreadControllerWithMessagePumpImpl::Run;
+
+  using ThreadControllerWithMessagePumpImpl::MainThreadOnlyForTesting;
+  using ThreadControllerWithMessagePumpImpl::
+      ThreadControllerPowerMonitorForTesting;
 };
 
 class MockMessagePump : public MessagePump {
@@ -78,11 +87,15 @@ class FakeSequencedTaskSource : public internal::SequencedTaskSource {
   explicit FakeSequencedTaskSource(TickClock* clock) : clock_(clock) {}
   ~FakeSequencedTaskSource() override = default;
 
-  Task* SelectNextTask() override {
+  Task* SelectNextTask(SelectTaskOption option) override {
     if (tasks_.empty())
       return nullptr;
     if (tasks_.front().delayed_run_time > clock_->NowTicks())
       return nullptr;
+    if (option == SequencedTaskSource::SelectTaskOption::kSkipDelayedTask &&
+        !tasks_.front().delayed_run_time.is_null()) {
+      return nullptr;
+    }
     running_stack_.push_back(std::move(tasks_.front()));
     tasks_.pop();
     return &running_stack_.back();
@@ -90,9 +103,14 @@ class FakeSequencedTaskSource : public internal::SequencedTaskSource {
 
   void DidRunTask() override { running_stack_.pop_back(); }
 
-  TimeDelta DelayTillNextTask(LazyNow* lazy_now) const override {
+  TimeDelta DelayTillNextTask(LazyNow* lazy_now,
+                              SelectTaskOption option) const override {
     if (tasks_.empty())
       return TimeDelta::Max();
+    if (option == SequencedTaskSource::SelectTaskOption::kSkipDelayedTask &&
+        !tasks_.front().delayed_run_time.is_null()) {
+      return TimeDelta::Max();
+    }
     if (tasks_.front().delayed_run_time.is_null())
       return TimeDelta();
     if (lazy_now->Now() > tasks_.front().delayed_run_time)
@@ -110,7 +128,13 @@ class FakeSequencedTaskSource : public internal::SequencedTaskSource {
              delayed_run_time, EnqueueOrder::FromIntForTesting(13)));
   }
 
-  bool HasPendingHighResolutionTasks() override { return false; }
+  bool HasPendingHighResolutionTasks() override {
+    return has_pending_high_resolution_tasks;
+  }
+
+  void SetHasPendingHighResolutionTasks(bool state) {
+    has_pending_high_resolution_tasks = state;
+  }
 
   bool OnSystemIdle() override { return false; }
 
@@ -118,6 +142,7 @@ class FakeSequencedTaskSource : public internal::SequencedTaskSource {
   TickClock* clock_;
   std::queue<Task> tasks_;
   std::vector<Task> running_stack_;
+  bool has_pending_high_resolution_tasks = false;
 };
 
 TimeTicks Seconds(int seconds) {
@@ -141,6 +166,15 @@ class ThreadControllerWithMessagePumpTest : public testing::Test {
         task_source_(&clock_) {
     thread_controller_.SetWorkBatchSize(1);
     thread_controller_.SetSequencedTaskSource(&task_source_);
+  }
+
+  void SetUp() override {
+    internal::ThreadControllerPowerMonitor::OverrideUsePowerMonitorForTesting(
+        true);
+  }
+
+  void TearDown() override {
+    internal::ThreadControllerPowerMonitor::ResetForTesting();
   }
 
  protected:
@@ -576,6 +610,132 @@ TEST_F(ThreadControllerWithMessagePumpTest, RunWithTimeout) {
         EXPECT_FALSE(thread_controller_.DoIdleWork());
       }));
   thread_controller_.Run(true, TimeDelta::FromSeconds(15));
+}
+
+#if defined(OS_WIN)
+TEST_F(ThreadControllerWithMessagePumpTest, SetHighResolutionTimer) {
+  MockCallback<OnceClosure> task;
+  task_source_.AddTask(FROM_HERE, task.Get(), Seconds(5));
+
+  ThreadTaskRunnerHandle handle(MakeRefCounted<FakeTaskRunner>());
+
+  EXPECT_CALL(*message_pump_, Run(_))
+      .WillOnce(Invoke([&](MessagePump::Delegate* delegate) {
+        // Should initially not be in high resolution.
+        EXPECT_FALSE(
+            thread_controller_.MainThreadOnlyForTesting().in_high_res_mode);
+
+        // Ensures timer resolution is set to high resolution.
+        task_source_.SetHasPendingHighResolutionTasks(true);
+        EXPECT_FALSE(delegate->DoIdleWork());
+        EXPECT_TRUE(
+            thread_controller_.MainThreadOnlyForTesting().in_high_res_mode);
+
+        // Ensures time resolution is set back to low resolution.
+        task_source_.SetHasPendingHighResolutionTasks(false);
+        EXPECT_FALSE(delegate->DoIdleWork());
+        EXPECT_FALSE(
+            thread_controller_.MainThreadOnlyForTesting().in_high_res_mode);
+
+        EXPECT_CALL(*message_pump_, Quit());
+        thread_controller_.Quit();
+      }));
+
+  RunLoop run_loop;
+  run_loop.Run();
+}
+#endif  // OS_WIN
+
+#if defined(OS_WIN)
+TEST_F(ThreadControllerWithMessagePumpTest,
+       SetHighResolutionTimerWithPowerSuspend) {
+  MockCallback<OnceClosure> task;
+  task_source_.AddTask(FROM_HERE, task.Get(), Seconds(5));
+
+  ThreadTaskRunnerHandle handle(MakeRefCounted<FakeTaskRunner>());
+
+  EXPECT_CALL(*message_pump_, Run(_))
+      .WillOnce(Invoke([&](MessagePump::Delegate* delegate) {
+        // Should initially not be in high resolution.
+        EXPECT_FALSE(
+            thread_controller_.MainThreadOnlyForTesting().in_high_res_mode);
+
+        // The power suspend notification is sent.
+        thread_controller_.ThreadControllerPowerMonitorForTesting()
+            ->OnSuspend();
+
+        // The timer resolution should NOT be updated during power suspend.
+        task_source_.SetHasPendingHighResolutionTasks(true);
+        EXPECT_FALSE(delegate->DoIdleWork());
+        EXPECT_FALSE(
+            thread_controller_.MainThreadOnlyForTesting().in_high_res_mode);
+
+        // The power resume notification is sent.
+        thread_controller_.ThreadControllerPowerMonitorForTesting()->OnResume();
+
+        // Ensures timer resolution is set to high resolution.
+        EXPECT_FALSE(delegate->DoIdleWork());
+        EXPECT_TRUE(
+            thread_controller_.MainThreadOnlyForTesting().in_high_res_mode);
+
+        EXPECT_CALL(*message_pump_, Quit());
+        thread_controller_.Quit();
+      }));
+
+  RunLoop run_loop;
+  run_loop.Run();
+}
+#endif  // OS_WIN
+
+TEST_F(ThreadControllerWithMessagePumpTest,
+       ScheduleDelayedWorkWithPowerSuspend) {
+  ThreadTaskRunnerHandle handle(MakeRefCounted<FakeTaskRunner>());
+
+  MockCallback<OnceClosure> task1;
+  task_source_.AddTask(FROM_HERE, task1.Get(), Seconds(10));
+  MockCallback<OnceClosure> task2;
+  task_source_.AddTask(FROM_HERE, task2.Get(), Seconds(15));
+
+  clock_.SetNowTicks(Seconds(5));
+
+  // Call a no-op DoWork. Expect that it doesn't do any work.
+  EXPECT_CALL(task1, Run()).Times(0);
+  EXPECT_CALL(task2, Run()).Times(0);
+  EXPECT_EQ(thread_controller_.DoWork().delayed_run_time, Seconds(10));
+  testing::Mock::VerifyAndClearExpectations(&task1);
+  testing::Mock::VerifyAndClearExpectations(&task2);
+
+  // Simulate a power suspend.
+  thread_controller_.ThreadControllerPowerMonitorForTesting()->OnSuspend();
+
+  // Delayed task is not yet ready to be executed.
+  EXPECT_CALL(task1, Run()).Times(0);
+  EXPECT_CALL(task2, Run()).Times(0);
+  EXPECT_EQ(thread_controller_.DoWork().delayed_run_time, TimeTicks::Max());
+  testing::Mock::VerifyAndClearExpectations(&task1);
+  testing::Mock::VerifyAndClearExpectations(&task2);
+
+  // Move time after the expiration delay of tasks.
+  clock_.SetNowTicks(Seconds(17));
+
+  // Should not process delayed tasks. The process is still in suspended power
+  // state.
+  EXPECT_CALL(task1, Run()).Times(0);
+  EXPECT_CALL(task2, Run()).Times(0);
+  EXPECT_EQ(thread_controller_.DoWork().delayed_run_time, TimeTicks::Max());
+  testing::Mock::VerifyAndClearExpectations(&task1);
+  testing::Mock::VerifyAndClearExpectations(&task2);
+
+  // Simulate a power resume.
+  thread_controller_.ThreadControllerPowerMonitorForTesting()->OnResume();
+
+  // No longer in suspended state. Controller should process both delayed tasks.
+  EXPECT_CALL(task1, Run()).Times(1);
+  EXPECT_CALL(task2, Run()).Times(1);
+  EXPECT_TRUE(thread_controller_.DoWork().is_immediate());
+  EXPECT_EQ(thread_controller_.DoWork().delayed_run_time, TimeTicks::Max());
+  testing::Mock::VerifyAndClearExpectations(&task1);
+  testing::Mock::VerifyAndClearExpectations(&task2);
 }
 
 }  // namespace sequence_manager

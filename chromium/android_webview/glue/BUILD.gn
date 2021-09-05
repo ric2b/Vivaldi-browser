@@ -7,7 +7,7 @@ import("//android_webview/variables.gni")
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
 
-android_library("glue") {
+android_library("glue_java") {
   deps = [
     "//android_webview:android_webview_product_config_java",
     "//android_webview:browser_java",
@@ -18,7 +18,7 @@ android_library("glue") {
     "//base:base_java",
     "//base:jni_java",
     "//components/autofill/android:autofill_java",
-    "//components/autofill/android:provider_java",
+    "//components/autofill/android/provider:java",
     "//components/content_capture/android:java",
     "//components/embedder_support/android:application_java",
     "//content/public/android:content_java",

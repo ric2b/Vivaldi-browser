@@ -28,6 +28,7 @@
 #include "components/feed/core/proto/v2/ui.pb.h"
 #include "components/feed/core/proto/v2/wire/action_request.pb.h"
 #include "components/feed/core/proto/v2/wire/request.pb.h"
+#include "components/feed/core/proto/v2/wire/there_and_back_again_data.pb.h"
 #include "components/feed/core/shared_prefs/pref_names.h"
 #include "components/feed/core/v2/config.h"
 #include "components/feed/core/v2/feed_network.h"
@@ -239,6 +240,8 @@ class TestFeedNetwork : public FeedNetwork {
     // time we want to inject a translated response for ease of test-writing.
     query_request_sent = request;
     QueryRequestResult result;
+    result.response_info.status_code = 200;
+    result.response_info.response_body_bytes = 100;
     result.response_info.fetch_duration = base::TimeDelta::FromMilliseconds(42);
     if (injected_response_) {
       result.response_body = std::make_unique<feedwire::Response>(
@@ -359,8 +362,8 @@ class FakeRefreshTaskScheduler : public RefreshTaskScheduler {
 
 class TestMetricsReporter : public MetricsReporter {
  public:
-  explicit TestMetricsReporter(const base::TickClock* clock)
-      : MetricsReporter(clock) {}
+  explicit TestMetricsReporter(const base::TickClock* clock, PrefService* prefs)
+      : MetricsReporter(clock, prefs) {}
 
   // MetricsReporter.
   void ContentSliceViewed(SurfaceId surface_id, int index_in_stream) override {
@@ -400,10 +403,15 @@ class TestMetricsReporter : public MetricsReporter {
 class FeedStreamTest : public testing::Test, public FeedStream::Delegate {
  public:
   void SetUp() override {
+    // Reset to default config, since tests can change it.
+    SetFeedConfigForTesting(Config());
+
     feed::prefs::RegisterFeedSharedProfilePrefs(profile_prefs_.registry());
     feed::RegisterProfilePrefs(profile_prefs_.registry());
-    CHECK_EQ(kTestTimeEpoch, task_environment_.GetMockClock()->Now());
+    metrics_reporter_ = std::make_unique<TestMetricsReporter>(
+        task_environment_.GetMockTickClock(), &profile_prefs_);
 
+    CHECK_EQ(kTestTimeEpoch, task_environment_.GetMockClock()->Now());
     CreateStream();
   }
 
@@ -436,7 +444,7 @@ class FeedStreamTest : public testing::Test, public FeedStream::Delegate {
     chrome_info.channel = version_info::Channel::STABLE;
     chrome_info.version = base::Version({99, 1, 9911, 2});
     stream_ = std::make_unique<FeedStream>(
-        &refresh_scheduler_, &metrics_reporter_, this, &profile_prefs_,
+        &refresh_scheduler_, metrics_reporter_.get(), this, &profile_prefs_,
         &network_, store_.get(), task_environment_.GetMockClock(),
         task_environment_.GetMockTickClock(), chrome_info);
 
@@ -495,8 +503,8 @@ class FeedStreamTest : public testing::Test, public FeedStream::Delegate {
  protected:
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
-  TestMetricsReporter metrics_reporter_{task_environment_.GetMockTickClock()};
   TestingPrefServiceSimple profile_prefs_;
+  std::unique_ptr<TestMetricsReporter> metrics_reporter_;
   TestFeedNetwork network_;
   TestWireResponseTranslator response_translator_;
 
@@ -531,7 +539,7 @@ TEST_F(FeedStreamTest, DoNotRefreshIfArticlesListIsHidden) {
   stream_->ExecuteRefreshTask();
   EXPECT_TRUE(refresh_scheduler_.refresh_task_complete);
   EXPECT_EQ(LoadStreamStatus::kLoadNotAllowedArticlesListHidden,
-            metrics_reporter_.background_refresh_status);
+            metrics_reporter_->background_refresh_status);
 }
 
 TEST_F(FeedStreamTest, BackgroundRefreshSuccess) {
@@ -544,7 +552,7 @@ TEST_F(FeedStreamTest, BackgroundRefreshSuccess) {
   // network.
   ASSERT_TRUE(refresh_scheduler_.refresh_task_complete);
   EXPECT_EQ(LoadStreamStatus::kLoadedFromNetwork,
-            metrics_reporter_.background_refresh_status);
+            metrics_reporter_->background_refresh_status);
   EXPECT_TRUE(response_translator_.InjectedResponseConsumed());
   EXPECT_FALSE(stream_->GetModel());
   TestSurface surface(stream_.get());
@@ -558,7 +566,7 @@ TEST_F(FeedStreamTest, BackgroundRefreshNotAttemptedWhenModelIsLoading) {
   stream_->ExecuteRefreshTask();
   WaitForIdleTaskQueue();
 
-  EXPECT_EQ(metrics_reporter_.background_refresh_status,
+  EXPECT_EQ(metrics_reporter_->background_refresh_status,
             LoadStreamStatus::kModelAlreadyLoaded);
 }
 
@@ -570,7 +578,7 @@ TEST_F(FeedStreamTest, BackgroundRefreshNotAttemptedAfterModelIsLoaded) {
   stream_->ExecuteRefreshTask();
   WaitForIdleTaskQueue();
 
-  EXPECT_EQ(metrics_reporter_.background_refresh_status,
+  EXPECT_EQ(metrics_reporter_->background_refresh_status,
             LoadStreamStatus::kModelAlreadyLoaded);
 }
 
@@ -837,7 +845,7 @@ TEST_F(FeedStreamTest, LoadFromNetworkFailsDueToProtoTranslation) {
   WaitForIdleTaskQueue();
 
   EXPECT_EQ(LoadStreamStatus::kProtoTranslationFailed,
-            metrics_reporter_.load_stream_status);
+            metrics_reporter_->load_stream_status);
 }
 
 TEST_F(FeedStreamTest, DoNotLoadFromNetworkWhenOffline) {
@@ -847,7 +855,7 @@ TEST_F(FeedStreamTest, DoNotLoadFromNetworkWhenOffline) {
   WaitForIdleTaskQueue();
 
   EXPECT_EQ(LoadStreamStatus::kCannotLoadFromNetworkOffline,
-            metrics_reporter_.load_stream_status);
+            metrics_reporter_->load_stream_status);
   EXPECT_EQ("loading -> cant-refresh", surface.DescribeUpdates());
 }
 
@@ -858,7 +866,7 @@ TEST_F(FeedStreamTest, DoNotLoadStreamWhenArticleListIsHidden) {
   WaitForIdleTaskQueue();
 
   EXPECT_EQ(LoadStreamStatus::kLoadNotAllowedArticlesListHidden,
-            metrics_reporter_.load_stream_status);
+            metrics_reporter_->load_stream_status);
   EXPECT_EQ("no-cards", surface.DescribeUpdates());
 }
 
@@ -869,7 +877,7 @@ TEST_F(FeedStreamTest, DoNotLoadStreamWhenEulaIsNotAccepted) {
   WaitForIdleTaskQueue();
 
   EXPECT_EQ(LoadStreamStatus::kLoadNotAllowedEulaNotAccepted,
-            metrics_reporter_.load_stream_status);
+            metrics_reporter_->load_stream_status);
   EXPECT_EQ("no-cards", surface.DescribeUpdates());
 }
 
@@ -900,7 +908,7 @@ TEST_F(FeedStreamTest, DoNotLoadFromNetworkAfterHistoryIsDeleted) {
   EXPECT_EQ("loading -> no-cards", surface.DescribeUpdates());
 
   EXPECT_EQ(LoadStreamStatus::kCannotLoadFromNetworkSupressedForHistoryDelete,
-            metrics_reporter_.load_stream_status);
+            metrics_reporter_->load_stream_status);
 
   surface.Detach();
   task_environment_.FastForwardBy(base::TimeDelta::FromSeconds(2));
@@ -1028,7 +1036,7 @@ TEST_F(FeedStreamTest, ReportSliceViewedIdentifiesCorrectIndex) {
   stream_->ReportSliceViewed(
       surface.GetSurfaceId(),
       surface.initial_state->updated_slices(1).slice().slice_id());
-  EXPECT_EQ(1, metrics_reporter_.slice_viewed_index);
+  EXPECT_EQ(1, metrics_reporter_->slice_viewed_index);
 }
 
 TEST_F(FeedStreamTest, LoadMoreAppendsContent) {
@@ -1145,6 +1153,26 @@ TEST_F(FeedStreamTest, LoadMoreSendsTokens) {
                           .next_page_token());
 }
 
+TEST_F(FeedStreamTest, LoadMoreAbortsIfNoNextPageToken) {
+  {
+    std::unique_ptr<StreamModelUpdateRequest> initial_state =
+        MakeTypicalInitialModelState();
+    initial_state->stream_data.clear_next_page_token();
+    response_translator_.InjectResponse(std::move(initial_state));
+  }
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  CallbackReceiver<bool> callback;
+  stream_->LoadMore(surface.GetSurfaceId(), callback.Bind());
+  WaitForIdleTaskQueue();
+
+  // LoadMore fails, and does not make an additional request.
+  EXPECT_EQ(base::Optional<bool>(false), callback.GetResult());
+  ASSERT_EQ(1, network_.send_query_call_count);
+  EXPECT_EQ("loading -> 2 slices", surface.DescribeUpdates());
+}
+
 TEST_F(FeedStreamTest, LoadMoreFail) {
   response_translator_.InjectResponse(MakeTypicalInitialModelState());
   TestSurface surface(stream_.get());
@@ -1252,15 +1280,17 @@ TEST_F(FeedStreamTest, StorePendingAction) {
 TEST_F(FeedStreamTest, StorePendingActionAndUploadNow) {
   network_.consistency_token = "token-11";
 
-  CallbackReceiver<UploadActionsTask::Result> cr;
-  stream_->UploadAction(MakeFeedAction(42ul), true, cr.Bind());
+  // Call |ProcessThereAndBackAgain()|, which triggers Upload() with
+  // upload_now=true.
+  {
+    feedwire::ThereAndBackAgainData msg;
+    *msg.mutable_action_payload() = MakeFeedAction(42ul).action_payload();
+    stream_->ProcessThereAndBackAgain(msg.SerializeAsString());
+  }
   WaitForIdleTaskQueue();
 
-  ASSERT_TRUE(cr.GetResult());
-  EXPECT_EQ(1ul, cr.GetResult()->upload_attempt_count);
-  EXPECT_EQ(UploadActionsStatus::kUpdatedConsistencyToken,
-            cr.GetResult()->status);
-
+  // Verify the action was uploaded.
+  EXPECT_EQ(1, network_.action_request_call_count);
   std::vector<feedstore::StoredAction> result =
       ReadStoredActions(stream_->GetStore());
   ASSERT_EQ(0ul, result.size());
@@ -1423,6 +1453,76 @@ TEST_F(FeedStreamTest, MetadataLoadedWhenDatabaseInitialized) {
   ASSERT_TRUE(stream_->GetMetadata());
   EXPECT_EQ("token", stream_->GetMetadata()->GetConsistencyToken());
   EXPECT_EQ(1, stream_->GetMetadata()->GetNextActionId().GetUnsafeValue());
+}
+
+TEST_F(FeedStreamTest, ModelUnloadsAfterTimeout) {
+  Config config;
+  config.model_unload_timeout = base::TimeDelta::FromSeconds(1);
+  SetFeedConfigForTesting(config);
+
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  surface.Detach();
+
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(999));
+  WaitForIdleTaskQueue();
+  EXPECT_TRUE(stream_->GetModel());
+
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(2));
+  WaitForIdleTaskQueue();
+  EXPECT_FALSE(stream_->GetModel());
+}
+
+TEST_F(FeedStreamTest, ModelDoesNotUnloadIfSurfaceIsAttached) {
+  Config config;
+  config.model_unload_timeout = base::TimeDelta::FromSeconds(1);
+  SetFeedConfigForTesting(config);
+
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  surface.Detach();
+
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(999));
+  WaitForIdleTaskQueue();
+  EXPECT_TRUE(stream_->GetModel());
+
+  surface.Attach(stream_.get());
+
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(2));
+  WaitForIdleTaskQueue();
+  EXPECT_TRUE(stream_->GetModel());
+}
+
+TEST_F(FeedStreamTest, ModelUnloadsAfterSecondTimeout) {
+  Config config;
+  config.model_unload_timeout = base::TimeDelta::FromSeconds(1);
+  SetFeedConfigForTesting(config);
+
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  surface.Detach();
+
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(999));
+  WaitForIdleTaskQueue();
+  EXPECT_TRUE(stream_->GetModel());
+
+  // Attaching another surface will prolong the unload time for another second.
+  surface.Attach(stream_.get());
+  surface.Detach();
+
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(999));
+  WaitForIdleTaskQueue();
+  EXPECT_TRUE(stream_->GetModel());
+
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(2));
+  WaitForIdleTaskQueue();
+  EXPECT_FALSE(stream_->GetModel());
 }
 
 }  // namespace

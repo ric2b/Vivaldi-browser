@@ -18,6 +18,7 @@
 #import "ios/web/js_messaging/page_script_util.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/web_client.h"
+#import "ios/web/web_state/ui/wk_content_rule_list_provider.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider_observer.h"
 #import "ios/web/webui/crw_web_ui_scheme_handler.h"
 
@@ -90,7 +91,9 @@ WKWebViewConfigurationProvider::FromBrowserState(BrowserState* browser_state) {
 
 WKWebViewConfigurationProvider::WKWebViewConfigurationProvider(
     BrowserState* browser_state)
-    : browser_state_(browser_state) {}
+    : browser_state_(browser_state),
+      content_rule_list_provider_(
+          std::make_unique<WKContentRuleListProvider>(browser_state)) {}
 
 WKWebViewConfigurationProvider::~WKWebViewConfigurationProvider() = default;
 
@@ -143,16 +146,7 @@ void WKWebViewConfigurationProvider::ResetWithWebViewConfiguration(
   [configuration_ setAllowsInlineMediaPlayback:YES];
   // setJavaScriptCanOpenWindowsAutomatically is required to support popups.
   [[configuration_ preferences] setJavaScriptCanOpenWindowsAutomatically:YES];
-  // Main frame script depends upon scripts injected into all frames, so the
-  // "AllFrames" scripts must be injected first.
-  [[configuration_ userContentController]
-      addUserScript:InternalGetDocumentStartScriptForAllFrames(browser_state_)];
-  [[configuration_ userContentController]
-      addUserScript:InternalGetDocumentStartScriptForMainFrame(browser_state_)];
-  [[configuration_ userContentController]
-      addUserScript:InternalGetDocumentEndScriptForAllFrames(browser_state_)];
-  [[configuration_ userContentController]
-      addUserScript:InternalGetDocumentEndScriptForMainFrame(browser_state_)];
+  UpdateScripts();
 
   if (!scheme_handler_) {
     scoped_refptr<network::SharedURLLoaderFactory> shared_loader_factory =
@@ -167,6 +161,9 @@ void WKWebViewConfigurationProvider::ResetWithWebViewConfiguration(
     [configuration_ setURLSchemeHandler:scheme_handler_
                            forURLScheme:base::SysUTF8ToNSString(scheme)];
   }
+
+  content_rule_list_provider_->SetUserContentController(
+      configuration_.userContentController);
 
   for (auto& observer : observers_)
     observer.DidCreateNewConfiguration(this, configuration_);
@@ -203,6 +200,25 @@ WKWebViewConfigurationProvider::GetScriptMessageRouter() {
         initWithUserContentController:userContentController];
   }
   return router_;
+}
+
+WKContentRuleListProvider*
+WKWebViewConfigurationProvider::GetContentRuleListProvider() {
+  return content_rule_list_provider_.get();
+}
+
+void WKWebViewConfigurationProvider::UpdateScripts() {
+  [configuration_.userContentController removeAllUserScripts];
+  // Main frame script depends upon scripts injected into all frames, so the
+  // "AllFrames" scripts must be injected first.
+  [configuration_.userContentController
+      addUserScript:InternalGetDocumentStartScriptForAllFrames(browser_state_)];
+  [configuration_.userContentController
+      addUserScript:InternalGetDocumentStartScriptForMainFrame(browser_state_)];
+  [configuration_.userContentController
+      addUserScript:InternalGetDocumentEndScriptForAllFrames(browser_state_)];
+  [configuration_.userContentController
+      addUserScript:InternalGetDocumentEndScriptForMainFrame(browser_state_)];
 }
 
 void WKWebViewConfigurationProvider::Purge() {

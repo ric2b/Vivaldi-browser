@@ -61,8 +61,13 @@ bool operator==(const RequestAction::HeaderInfo& lhs,
 
 std::ostream& operator<<(std::ostream& output,
                          const RequestAction::HeaderInfo& header_info) {
-  return output << dnr_api::ToString(header_info.operation) << ":"
-                << header_info.header;
+  output << "\nRequestAction::HeaderInfo\n";
+  output << "\t|operation| " << dnr_api::ToString(header_info.operation)
+         << "\n";
+  output << "\t|header| " << header_info.header << "\n";
+  output << "\t|value| "
+         << (header_info.value ? *header_info.value : std::string("nullopt"));
+  return output;
 }
 
 // Note: This is not declared in the anonymous namespace so that we can use it
@@ -83,8 +88,8 @@ bool operator==(const RequestAction& lhs, const RequestAction& rhs) {
                               std::vector<RequestAction::HeaderInfo> b) {
     auto header_info_comparator = [](const RequestAction::HeaderInfo& lhs,
                                      const RequestAction::HeaderInfo& rhs) {
-      return std::make_pair(lhs.header, lhs.operation) >
-             std::make_pair(rhs.header, rhs.operation);
+      return std::make_tuple(lhs.header, lhs.operation, lhs.value) >
+             std::make_tuple(rhs.header, rhs.operation, rhs.value);
     };
 
     std::sort(a.begin(), a.end(), header_info_comparator);
@@ -138,9 +143,9 @@ std::ostream& operator<<(std::ostream& output, const RequestAction& action) {
   output << "|index_priority| " << action.index_priority << "\n";
   output << "|ruleset_id| " << action.ruleset_id << "\n";
   output << "|extension_id| " << action.extension_id << "\n";
-  output << "|request_headers_to_modify| "
+  output << "|request_headers_to_modify|"
          << ::testing::PrintToString(action.request_headers_to_modify) << "\n";
-  output << "|response_headers_to_modify| "
+  output << "|response_headers_to_modify|"
          << ::testing::PrintToString(action.response_headers_to_modify);
   return output;
 }
@@ -238,18 +243,6 @@ std::ostream& operator<<(std::ostream& output, const ParseResult& result) {
     case ParseResult::ERROR_INVALID_REGEX_FILTER:
       output << "ERROR_INVALID_REGEX_FILTER";
       break;
-    case ParseResult::ERROR_NO_HEADERS_SPECIFIED:
-      output << "ERROR_NO_HEADERS_SPECIFIED";
-      break;
-    case ParseResult::ERROR_EMPTY_REQUEST_HEADERS_LIST:
-      output << "ERROR_EMPTY_REQUEST_HEADERS_LIST";
-      break;
-    case ParseResult::ERROR_EMPTY_RESPONSE_HEADERS_LIST:
-      output << "ERROR_EMPTY_RESPONSE_HEADERS_LIST";
-      break;
-    case ParseResult::ERROR_INVALID_HEADER_NAME:
-      output << "ERROR_INVALID_HEADER_NAME";
-      break;
     case ParseResult::ERROR_REGEX_TOO_LARGE:
       output << "ERROR_REGEX_TOO_LARGE";
       break;
@@ -264,6 +257,54 @@ std::ostream& operator<<(std::ostream& output, const ParseResult& result) {
       break;
     case ParseResult::ERROR_INVALID_ALLOW_ALL_REQUESTS_RESOURCE_TYPE:
       output << "ERROR_INVALID_ALLOW_ALL_REQUESTS_RESOURCE_TYPE";
+      break;
+    case ParseResult::ERROR_NO_HEADERS_SPECIFIED:
+      output << "ERROR_NO_HEADERS_SPECIFIED";
+      break;
+    case ParseResult::ERROR_EMPTY_REQUEST_HEADERS_LIST:
+      output << "ERROR_EMPTY_REQUEST_HEADERS_LIST";
+      break;
+    case ParseResult::ERROR_EMPTY_RESPONSE_HEADERS_LIST:
+      output << "ERROR_EMPTY_RESPONSE_HEADERS_LIST";
+      break;
+    case ParseResult::ERROR_INVALID_HEADER_NAME:
+      output << "ERROR_INVALID_HEADER_NAME";
+      break;
+    case ParseResult::ERROR_INVALID_HEADER_VALUE:
+      output << "ERROR_INVALID_HEADER_VALUE";
+      break;
+    case ParseResult::ERROR_HEADER_VALUE_NOT_SPECIFIED:
+      output << "ERROR_HEADER_VALUE_NOT_SPECIFIED";
+      break;
+    case ParseResult::ERROR_HEADER_VALUE_PRESENT:
+      output << "ERROR_HEADER_VALUE_PRESENT";
+      break;
+    case ParseResult::ERROR_APPEND_REQUEST_HEADER_UNSUPPORTED:
+      output << "ERROR_APPEND_REQUEST_HEADER_UNSUPPORTED";
+      break;
+  }
+  return output;
+}
+
+std::ostream& operator<<(std::ostream& output, LoadRulesetResult result) {
+  switch (result) {
+    case LoadRulesetResult::kSuccess:
+      output << "kSuccess";
+      break;
+    case LoadRulesetResult::kErrorInvalidPath:
+      output << "kErrorInvalidPath";
+      break;
+    case LoadRulesetResult::kErrorCannotReadFile:
+      output << "kErrorCannotReadFile";
+      break;
+    case LoadRulesetResult::kErrorChecksumMismatch:
+      output << "kErrorChecksumMismatch";
+      break;
+    case LoadRulesetResult::kErrorVersionMismatch:
+      output << "kErrorVersionMismatch";
+      break;
+    case LoadRulesetResult::kErrorChecksumNotFound:
+      output << "kErrorChecksumNotFound";
       break;
   }
   return output;
@@ -285,7 +326,7 @@ bool AreAllIndexedStaticRulesetsValid(
     std::unique_ptr<RulesetMatcher> matcher;
     if (RulesetMatcher::CreateVerifiedMatcher(std::move(source),
                                               expected_checksum, &matcher) !=
-        RulesetMatcher::kLoadSuccess) {
+        LoadRulesetResult::kSuccess) {
       return false;
     }
   }
@@ -318,10 +359,9 @@ bool CreateVerifiedMatcher(const std::vector<TestRule>& rules,
     *expected_checksum = result.ruleset_checksum;
 
   // Create verified matcher.
-  RulesetMatcher::LoadRulesetResult load_result =
-      RulesetMatcher::CreateVerifiedMatcher(source, result.ruleset_checksum,
-                                            matcher);
-  return load_result == RulesetMatcher::kLoadSuccess;
+  LoadRulesetResult load_result = RulesetMatcher::CreateVerifiedMatcher(
+      source, result.ruleset_checksum, matcher);
+  return load_result == LoadRulesetResult::kSuccess;
 }
 
 RulesetSource CreateTemporarySource(RulesetID id,
@@ -335,18 +375,25 @@ RulesetSource CreateTemporarySource(RulesetID id,
 
 dnr_api::ModifyHeaderInfo CreateModifyHeaderInfo(
     dnr_api::HeaderOperation operation,
-    std::string header) {
+    std::string header,
+    base::Optional<std::string> value) {
   dnr_api::ModifyHeaderInfo header_info;
 
   header_info.operation = operation;
   header_info.header = header;
+
+  if (value)
+    header_info.value = std::make_unique<std::string>(*value);
 
   return header_info;
 }
 
 bool EqualsForTesting(const dnr_api::ModifyHeaderInfo& lhs,
                       const dnr_api::ModifyHeaderInfo& rhs) {
-  return lhs.operation == rhs.operation && lhs.header == rhs.header;
+  bool are_values_equal = lhs.value && rhs.value ? *lhs.value == *rhs.value
+                                                 : lhs.value == rhs.value;
+  return lhs.operation == rhs.operation && lhs.header == rhs.header &&
+         are_values_equal;
 }
 
 RulesetManagerObserver::RulesetManagerObserver(RulesetManager* manager)

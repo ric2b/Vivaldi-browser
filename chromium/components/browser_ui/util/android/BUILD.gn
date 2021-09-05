@@ -10,6 +10,9 @@ android_library("java") {
     "java/src/org/chromium/components/browser_ui/util/ComposedBrowserControlsVisibilityDelegate.java",
     "java/src/org/chromium/components/browser_ui/util/ConversionUtils.java",
     "java/src/org/chromium/components/browser_ui/util/DownloadUtils.java",
+    "java/src/org/chromium/components/browser_ui/util/date/CalendarFactory.java",
+    "java/src/org/chromium/components/browser_ui/util/date/CalendarUtils.java",
+    "java/src/org/chromium/components/browser_ui/util/date/StringUtils.java",
   ]
 
   deps = [
@@ -17,6 +20,7 @@ android_library("java") {
     "//base:base_java",
     "//components/embedder_support/android:util_java",
     "//content/public/android:content_java",
+    "//third_party/android_deps:androidx_core_core_java",
   ]
 }
 
@@ -44,5 +48,9 @@ java_library("junit") {
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
     "//base/test:test_support_java",
+    "//content/public/android:content_java",
+    "//third_party/android_deps:robolectric_all_java",
+    "//third_party/junit",
+    "//third_party/mockito:mockito_java",
   ]
 }

@@ -80,7 +80,6 @@
 #include "content/renderer/frame_swap_message_queue.h"
 #include "content/renderer/input/widget_input_handler_manager.h"
 #include "content/renderer/loader/resource_dispatcher.h"
-#include "content/renderer/low_memory_mode_controller.h"
 #include "content/renderer/media/audio/audio_renderer_mixer_manager.h"
 #include "content/renderer/media/gpu/gpu_video_accelerator_factories_impl.h"
 #include "content/renderer/media/render_media_client.h"
@@ -126,6 +125,7 @@
 #include "services/viz/public/cpp/gpu/gpu.h"
 #include "skia/ext/skia_memory_dump_provider.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/platform/modules/video_capture/web_video_capture_impl_manager.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_cache.h"
@@ -151,7 +151,7 @@
 
 #if defined(OS_ANDROID)
 #include <cpu-features.h>
-#include "content/renderer/android/synchronous_layer_tree_frame_sink.h"
+#include "content/renderer/android/synchronous_layer_tree_frame_sink_impl.h"
 #include "content/renderer/media/android/stream_texture_factory.h"
 #include "media/base/android/media_codec_util.h"
 #endif
@@ -660,11 +660,12 @@ void RenderThreadImpl::Init() {
   is_threaded_animation_enabled_ =
       !command_line.HasSwitch(cc::switches::kDisableThreadedAnimation);
 
-  is_zero_copy_enabled_ = command_line.HasSwitch(switches::kEnableZeroCopy);
+  is_zero_copy_enabled_ =
+      command_line.HasSwitch(blink::switches::kEnableZeroCopy);
   is_partial_raster_enabled_ =
-      !command_line.HasSwitch(switches::kDisablePartialRaster);
+      !command_line.HasSwitch(blink::switches::kDisablePartialRaster);
   is_gpu_memory_buffer_compositor_resources_enabled_ = command_line.HasSwitch(
-      switches::kEnableGpuMemoryBufferCompositorResources);
+      blink::switches::kEnableGpuMemoryBufferCompositorResources);
 
 // On macOS this value is adjusted in `UpdateScrollbarTheme()`,
 // but the system default is true.
@@ -686,6 +687,11 @@ void RenderThreadImpl::Init() {
   } else {
 #if defined(OS_ANDROID)
     is_lcd_text_enabled_ = false;
+#elif defined(OS_MACOSX)
+    if (base::FeatureList::IsEnabled(features::kRespectMacLCDTextSetting))
+      is_lcd_text_enabled_ = IsSubpixelAntialiasingAvailable();
+    else
+      is_lcd_text_enabled_ = true;
 #else
     is_lcd_text_enabled_ = true;
 #endif
@@ -694,9 +700,10 @@ void RenderThreadImpl::Init() {
   if (command_line.HasSwitch(switches::kDisableGpuCompositing))
     is_gpu_compositing_disabled_ = true;
 
-  if (command_line.HasSwitch(switches::kGpuRasterizationMSAASampleCount)) {
+  if (command_line.HasSwitch(
+          blink::switches::kGpuRasterizationMSAASampleCount)) {
     std::string string_value = command_line.GetSwitchValueASCII(
-        switches::kGpuRasterizationMSAASampleCount);
+        blink::switches::kGpuRasterizationMSAASampleCount);
     bool parsed_msaa_sample_count =
         base::StringToInt(string_value, &gpu_rasterization_msaa_sample_count_);
     DCHECK(parsed_msaa_sample_count) << string_value;
@@ -767,6 +774,7 @@ void RenderThreadImpl::Init() {
 #endif  // USE_SYSTEM_PROPRIETARY_CODECS
 
   memory_pressure_listener_ = std::make_unique<base::MemoryPressureListener>(
+      FROM_HERE,
       base::BindRepeating(&RenderThreadImpl::OnMemoryPressure,
                           base::Unretained(this)),
       base::BindRepeating(&RenderThreadImpl::OnSyncMemoryPressure,
@@ -1091,6 +1099,8 @@ void RenderThreadImpl::RegisterSchemes() {
       WebString::FromASCII(kChromeUIUntrustedScheme));
   WebSecurityPolicy::RegisterURLSchemeAsNotAllowingJavascriptURLs(
       chrome_untrusted_scheme);
+  WebSecurityPolicy::RegisterURLSchemeAsSupportingFetchAPI(
+      chrome_untrusted_scheme);
 
   // devtools:
   WebString devtools_scheme(WebString::FromASCII(kChromeDevToolsScheme));
@@ -1288,7 +1298,7 @@ RenderThreadImpl::SharedMainThreadContextProvider() {
   bool support_raster_interface = true;
   bool support_oop_rasterization =
       base::FeatureList::IsEnabled(features::kCanvasOopRasterization);
-  bool support_gles2_interface = !support_oop_rasterization;
+  bool support_gles2_interface = false;
   bool support_grcontext = !support_oop_rasterization;
   // Enable automatic flushes to improve canvas throughput.
   // See https://crbug.com/880901
@@ -1530,11 +1540,6 @@ void RenderThreadImpl::SetIsLockedToSite() {
   blink_platform_impl_->SetIsLockedToSite();
 }
 
-void RenderThreadImpl::EnableV8LowMemoryMode() {
-  if (!low_memory_mode_controller_)
-    low_memory_mode_controller_.reset(new LowMemoryModeController());
-}
-
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
 void RenderThreadImpl::WriteClangProfilingProfile(
     WriteClangProfilingProfileCallback callback) {
@@ -1544,6 +1549,10 @@ void RenderThreadImpl::WriteClangProfilingProfile(
   std::move(callback).Run();
 }
 #endif
+
+void RenderThreadImpl::SetIsCrossOriginIsolated(bool value) {
+  blink::SetIsCrossOriginIsolated(value);
+}
 
 bool RenderThreadImpl::GetRendererMemoryMetrics(
     RendererMemoryMetrics* memory_metrics) const {
@@ -1874,11 +1883,10 @@ void RenderThreadImpl::RequestNewLayerTreeFrameSink(
         std::move(render_frame_metadata_observer_remote));
 
     std::move(callback).Run(
-        std::make_unique<SynchronousLayerTreeFrameSink>(
+        std::make_unique<SynchronousLayerTreeFrameSinkImpl>(
             std::move(context_provider), std::move(worker_context_provider),
             compositor_task_runner_, GetGpuMemoryBufferManager(),
-            sync_message_filter(), render_widget->routing_id(),
-            g_next_layer_tree_frame_sink_id++,
+            sync_message_filter(), g_next_layer_tree_frame_sink_id++,
             std::move(params.synthetic_begin_frame_source),
             render_widget->widget_input_handler_manager()
                 ->GetSynchronousCompositorRegistry(),
@@ -1953,9 +1961,10 @@ void RenderThreadImpl::CreateFrame(mojom::CreateFrameParamsPtr params) {
   RenderFrameImpl::CreateFrame(
       params->routing_id, std::move(interface_provider),
       std::move(browser_interface_broker), params->previous_routing_id,
-      params->opener_routing_id, params->parent_routing_id,
-      params->previous_sibling_routing_id, params->frame_token,
-      params->devtools_frame_token, params->replication_state, compositor_deps,
+      params->opener_frame_token.value_or(base::UnguessableToken()),
+      params->parent_routing_id, params->previous_sibling_routing_id,
+      params->frame_token, params->devtools_frame_token,
+      params->replication_state, compositor_deps,
       std::move(params->widget_params),
       std::move(params->frame_owner_properties),
       params->has_committed_real_load);
@@ -1964,14 +1973,14 @@ void RenderThreadImpl::CreateFrame(mojom::CreateFrameParamsPtr params) {
 void RenderThreadImpl::CreateFrameProxy(
     int32_t routing_id,
     int32_t render_view_routing_id,
-    int32_t opener_routing_id,
+    const base::Optional<base::UnguessableToken>& opener_frame_token,
     int32_t parent_routing_id,
     const FrameReplicationState& replicated_state,
     const base::UnguessableToken& frame_token,
     const base::UnguessableToken& devtools_frame_token) {
   RenderFrameProxy::CreateFrameProxy(
       routing_id, render_view_routing_id,
-      RenderFrameImpl::ResolveWebFrame(opener_routing_id), parent_routing_id,
+      opener_frame_token.value_or(base::UnguessableToken()), parent_routing_id,
       replicated_state, frame_token, devtools_frame_token);
 }
 
@@ -2020,6 +2029,11 @@ void RenderThreadImpl::SetUserAgent(const std::string& user_agent) {
 void RenderThreadImpl::SetUserAgentMetadata(
     const blink::UserAgentMetadata& user_agent_metadata) {
   user_agent_metadata_ = user_agent_metadata;
+}
+
+void RenderThreadImpl::SetCorsExemptHeaderList(
+    const std::vector<std::string>& list) {
+  resource_dispatcher_->SetCorsExemptHeaderList(list);
 }
 
 void RenderThreadImpl::UpdateScrollbarTheme(
@@ -2087,18 +2101,6 @@ void RenderThreadImpl::OnMemoryPressure(
       base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
     ReleaseFreeMemory();
   }
-}
-
-void RenderThreadImpl::RecordPurgeMemory(RendererMemoryMetrics before) {
-  RendererMemoryMetrics after;
-  if (!GetRendererMemoryMetrics(&after))
-    return;
-  int64_t mbytes = static_cast<int64_t>(before.total_allocated_mb) -
-                   static_cast<int64_t>(after.total_allocated_mb);
-  if (mbytes < 0)
-    mbytes = 0;
-  UMA_HISTOGRAM_MEMORY_LARGE_MB("Memory.Experimental.Renderer.PurgedMemory",
-                                mbytes);
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>

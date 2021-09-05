@@ -168,6 +168,7 @@ OmniboxPopupContentsView::~OmniboxPopupContentsView() {
   // closed the window, in which case it's been deleted, or it will soon.
   if (popup_)
     popup_->RemoveObserver(this);
+  CHECK(!IsInObserverList());
 }
 
 void OmniboxPopupContentsView::OpenMatch(
@@ -193,9 +194,14 @@ gfx::Image OmniboxPopupContentsView::GetMatchIcon(
   return model_->GetMatchIcon(match, vector_icon_color);
 }
 
-void OmniboxPopupContentsView::SetSelectedLine(size_t index) {
+void OmniboxPopupContentsView::SetSelectedLineForMouseOrTouch(size_t index) {
   DCHECK(HasMatchAt(index));
-  model_->SetSelectedLine(index, false, false);
+  // We do this to prevent de-focusing auxiliary buttons due to drag.
+  if (index == model_->selected_line())
+    return;
+
+  OmniboxPopupModel::LineState line_state = OmniboxPopupModel::NORMAL;
+  model_->SetSelection(OmniboxPopupModel::Selection(index, line_state));
 }
 
 bool OmniboxPopupContentsView::IsSelectedIndex(size_t index) const {
@@ -238,7 +244,13 @@ void OmniboxPopupContentsView::InvalidateLine(size_t line) {
     webui_view_->GetWebUIHandler()->InvalidateLine(line);
     return;
   }
-  result_view_at(line)->OnSelectionStateChanged();
+
+  // TODO(tommycli): This is weird, but https://crbug.com/1063071 shows that
+  // crashes like this have happened, so we add this to avoid it for now.
+  if (line >= children().size())
+    return;
+
+  static_cast<OmniboxRowView*>(children()[line])->OnSelectionStateChanged();
 }
 
 void OmniboxPopupContentsView::OnSelectionChanged(
@@ -265,6 +277,8 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
     // the omnibox popup window.  Close any existing popup.
     if (popup_) {
       NotifyAccessibilityEvent(ax::mojom::Event::kExpandedChanged, true);
+      // The active descendant should be cleared when the popup closes.
+      FireAXEventsForNewActiveDescendant(nullptr);
       popup_->CloseAnimated();  // This will eventually delete the popup.
       popup_.reset();
     }
@@ -309,8 +323,8 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
   const size_t result_size = model_->result().size();
   if (base::FeatureList::IsEnabled(omnibox::kWebUIOmniboxPopup)) {
     if (!webui_view_) {
-      AddChildView(webui_view_ = new WebUIOmniboxPopupView(
-                       location_bar_view_->profile()));
+      webui_view_ = AddChildView(std::make_unique<WebUIOmniboxPopupView>(
+          location_bar_view_->profile()));
     }
   } else {
     base::Optional<int> previous_row_group_id = base::nullopt;
@@ -321,7 +335,8 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
       // memory during browser startup. https://crbug.com/1021323
       if (children().size() == i) {
         AddChildView(std::make_unique<OmniboxRowView>(
-            std::make_unique<OmniboxResultView>(this, i), pref_service));
+            i, model(), std::make_unique<OmniboxResultView>(this, i),
+            pref_service));
       }
 
       OmniboxRowView* const row_view =
@@ -371,18 +386,23 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
     NotifyAccessibilityEvent(ax::mojom::Event::kExpandedChanged, true);
     if (!base::FeatureList::IsEnabled(omnibox::kWebUIOmniboxPopup) &&
         result_view_at(0)) {
-      result_view_at(0)->NotifyAccessibilityEvent(ax::mojom::Event::kSelection,
-                                                  true);
+      FireAXEventsForNewActiveDescendant(result_view_at(0));
     }
   }
   InvalidateLayout();
 }
 
 void OmniboxPopupContentsView::ProvideButtonFocusHint(size_t line) {
+  DCHECK(model()->selection().IsButtonFocused());
   if (base::FeatureList::IsEnabled(omnibox::kWebUIOmniboxPopup))
     return;  // TODO(tommycli): Not implemented yet for WebUI.
 
-  result_view_at(line)->ProvideButtonFocusHint();
+  views::View* active_button = static_cast<OmniboxRowView*>(children()[line])
+                                   ->GetActiveAuxiliaryButtonForAccessibility();
+  // TODO(tommycli): |active_button| can sometimes be nullptr, because the
+  // suggestion button row is not completely implemented.
+  if (active_button)
+    FireAXEventsForNewActiveDescendant(active_button);
 }
 
 void OmniboxPopupContentsView::OnMatchIconUpdated(size_t match_index) {
@@ -425,7 +445,7 @@ void OmniboxPopupContentsView::OnGestureEvent(ui::GestureEvent* event) {
     case ui::ET_GESTURE_TAP_DOWN:
     case ui::ET_GESTURE_SCROLL_BEGIN:
     case ui::ET_GESTURE_SCROLL_UPDATE:
-      SetSelectedLine(index);
+      SetSelectedLineForMouseOrTouch(index);
       break;
     case ui::ET_GESTURE_TAP:
     case ui::ET_GESTURE_SCROLL_END:
@@ -435,6 +455,14 @@ void OmniboxPopupContentsView::OnGestureEvent(ui::GestureEvent* event) {
       return;
   }
   event->SetHandled();
+}
+
+void OmniboxPopupContentsView::FireAXEventsForNewActiveDescendant(
+    View* descendant_view) {
+  if (descendant_view)
+    descendant_view->NotifyAccessibilityEvent(ax::mojom::Event::kSelection,
+                                              true);
+  NotifyAccessibilityEvent(ax::mojom::Event::kActiveDescendantChanged, true);
 }
 
 void OmniboxPopupContentsView::OnWidgetBoundsChanged(
@@ -467,9 +495,10 @@ gfx::Rect OmniboxPopupContentsView::GetTargetBounds() {
   // interior between each row of text.
   popup_height += RoundedOmniboxResultsFrame::GetNonResultSectionHeight();
 
-  // Add 4dp at the bottom for aesthetic reasons. https://crbug.com/1076646
+  // Add 8dp at the bottom for aesthetic reasons. https://crbug.com/1076646
   // It's expected that this space is dead unclickable/unhighlightable space.
-  popup_height += 4;
+  constexpr int kExtraBottomPadding = 8;
+  popup_height += kExtraBottomPadding;
 
   // The rounded popup is always offset the same amount from the omnibox.
   gfx::Rect content_rect = location_bar_view_->GetBoundsInScreen();
@@ -538,6 +567,12 @@ void OmniboxPopupContentsView::GetAccessibleNodeData(
   node_data->role = ax::mojom::Role::kListBox;
   if (IsOpen()) {
     node_data->AddState(ax::mojom::State::kExpanded);
+    OmniboxResultView* selected_result_view =
+        result_view_at(model_->selected_line());
+    if (selected_result_view)
+      node_data->AddIntAttribute(
+          ax::mojom::IntAttribute::kActivedescendantId,
+          selected_result_view->GetViewAccessibility().GetUniqueId().Get());
   } else {
     node_data->AddState(ax::mojom::State::kCollapsed);
     node_data->AddState(ax::mojom::State::kInvisible);

@@ -26,14 +26,13 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/navigation_simulator.h"
-#include "content/test/mock_widget_impl.h"
 #include "content/test/navigation_simulator_impl.h"
 #include "content/test/test_content_browser_client.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/filename_util.h"
-#include "third_party/blink/public/platform/web_drag_operation.h"
+#include "third_party/blink/public/common/page/web_drag_operation.h"
 #include "ui/base/page_transition_types.h"
 
 namespace content {
@@ -80,65 +79,6 @@ TEST_F(RenderViewHostTest, FilterAbout) {
                                                      main_test_rfh());
   ASSERT_TRUE(controller().GetVisibleEntry());
   EXPECT_EQ(GURL(kBlockedURL), controller().GetVisibleEntry()->GetURL());
-}
-
-// The RenderViewHost tells the renderer process about SetBackgroundOpaque()
-// changes.
-
-class FakeFrameWidget : public blink::mojom::FrameWidget {
- public:
-  explicit FakeFrameWidget(
-      mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget> frame_widget)
-      : receiver_(this, std::move(frame_widget)) {}
-  FakeFrameWidget(const FakeFrameWidget&) = delete;
-  void operator=(const FakeFrameWidget&) = delete;
-
-  bool GetBackgroundOpaque() const {
-    DCHECK_NE(value_, -1);
-    return value_;
-  }
-  void Reset() { value_ = -1; }
-
- private:
-  void DragSourceSystemDragEnded() override {}
-  void SetBackgroundOpaque(bool value) override { value_ = value; }
-  void SetInheritedEffectiveTouchActionForSubFrame(
-      const cc::TouchAction touch_action) override {}
-  void UpdateRenderThrottlingStatusForSubFrame(
-      bool is_throttled,
-      bool subtree_throttled) override {}
-  void SetIsInertForSubFrame(bool inert) override {}
-
-  mojo::AssociatedReceiver<blink::mojom::FrameWidget> receiver_;
-  int value_ = -1;
-};
-
-TEST_F(RenderViewHostTest, SetBackgroundOpaque) {
-  mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> blink_frame_widget_host;
-  auto blink_frame_widget_host_receiver =
-      blink_frame_widget_host
-          .BindNewEndpointAndPassDedicatedReceiverForTesting();
-  mojo::AssociatedRemote<blink::mojom::FrameWidget> blink_frame_widget;
-  auto blink_frame_widget_receiver =
-      blink_frame_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
-
-  test_rvh()->GetWidget()->BindFrameWidgetInterfaces(
-      std::move(blink_frame_widget_host_receiver), blink_frame_widget.Unbind());
-
-  FakeFrameWidget fake_frame_widget(std::move(blink_frame_widget_receiver));
-
-  for (bool value : {true, false}) {
-    SCOPED_TRACE(value);
-    // This method is part of RenderWidgetHostOwnerDelegate, provided to the
-    // main frame RenderWidgetHost, which uses it to inform the RenderView
-    // in the renderer process of the background opaque state.
-    test_rvh()->GetWidget()->GetAssociatedFrameWidget()->SetBackgroundOpaque(
-        value);
-    base::RunLoop().RunUntilIdle();
-
-    EXPECT_EQ(fake_frame_widget.GetBackgroundOpaque(), value);
-    fake_frame_widget.Reset();
-  }
 }
 
 // Ensure we do not grant bindings to a process shared with unprivileged views.

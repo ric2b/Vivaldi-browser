@@ -88,11 +88,9 @@ void AutofillHandlerProxy::OnDidPreviewAutofillFormData() {}
 
 void AutofillHandlerProxy::OnDidEndTextFieldEditing() {}
 
-void AutofillHandlerProxy::OnHidePopup() {}
-
-void AutofillHandlerProxy::OnSetDataList(
-    const std::vector<base::string16>& values,
-    const std::vector<base::string16>& labels) {}
+void AutofillHandlerProxy::OnHidePopup() {
+  provider_->OnHidePopup(this);
+}
 
 void AutofillHandlerProxy::SelectFieldOptionsDidChange(const FormData& form) {}
 

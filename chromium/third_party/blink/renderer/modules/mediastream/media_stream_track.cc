@@ -155,59 +155,59 @@ bool ConstraintsHaveImageCapture(const MediaTrackConstraints* constraints) {
 // Caller must take the ownership of the returned |WebAudioSourceProvider|
 // object.
 std::unique_ptr<WebAudioSourceProvider>
-CreateWebAudioSourceFromMediaStreamTrack(const WebMediaStreamTrack& track,
+CreateWebAudioSourceFromMediaStreamTrack(MediaStreamComponent* component,
                                          int context_sample_rate) {
-  WebPlatformMediaStreamTrack* media_stream_track = track.GetPlatformTrack();
+  WebPlatformMediaStreamTrack* media_stream_track =
+      component->GetPlatformTrack();
   if (!media_stream_track) {
     DLOG(ERROR) << "Native track missing for webaudio source.";
     return nullptr;
   }
 
-  WebMediaStreamSource source = track.Source();
-  DCHECK_EQ(source.GetType(), WebMediaStreamSource::kTypeAudio);
+  MediaStreamSource* source = component->Source();
+  DCHECK_EQ(source->GetType(), MediaStreamSource::kTypeAudio);
 
-  return std::make_unique<WebAudioMediaStreamAudioSink>(track,
+  return std::make_unique<WebAudioMediaStreamAudioSink>(component,
                                                         context_sample_rate);
 }
 
-void CloneNativeVideoMediaStreamTrack(const WebMediaStreamTrack& original,
-                                      WebMediaStreamTrack clone) {
-  DCHECK(!clone.GetPlatformTrack());
-  WebMediaStreamSource source = clone.Source();
-  DCHECK_EQ(source.GetType(), WebMediaStreamSource::kTypeVideo);
+void CloneNativeVideoMediaStreamTrack(MediaStreamComponent* original,
+                                      MediaStreamComponent* clone) {
+  DCHECK(!clone->GetPlatformTrack());
+  MediaStreamSource* source = clone->Source();
+  DCHECK_EQ(source->GetType(), MediaStreamSource::kTypeVideo);
   MediaStreamVideoSource* native_source =
       MediaStreamVideoSource::GetVideoSource(source);
   DCHECK(native_source);
   MediaStreamVideoTrack* original_track =
       MediaStreamVideoTrack::GetVideoTrack(original);
   DCHECK(original_track);
-  clone.SetPlatformTrack(std::make_unique<MediaStreamVideoTrack>(
+  clone->SetPlatformTrack(std::make_unique<MediaStreamVideoTrack>(
       native_source, original_track->adapter_settings(),
       original_track->noise_reduction(), original_track->is_screencast(),
       original_track->min_frame_rate(),
-      MediaStreamVideoSource::ConstraintsOnceCallback(), clone.IsEnabled()));
+      MediaStreamVideoSource::ConstraintsOnceCallback(), clone->Enabled()));
 }
 
 void DidSetMediaStreamTrackEnabled(MediaStreamComponent* component) {
-  const WebMediaStreamTrack track(component);
-  auto* native_track = WebPlatformMediaStreamTrack::GetTrack(track);
+  auto* native_track = WebPlatformMediaStreamTrack::GetTrack(component);
   if (native_track)
     native_track->SetEnabled(component->Enabled());
 }
 
-void DidCloneMediaStreamTrack(const WebMediaStreamTrack& original,
-                              const WebMediaStreamTrack& clone) {
-  DCHECK(!clone.IsNull());
-  DCHECK(!clone.GetPlatformTrack());
-  DCHECK(!clone.Source().IsNull());
+void DidCloneMediaStreamTrack(MediaStreamComponent* original,
+                              MediaStreamComponent* clone) {
+  DCHECK(clone);
+  DCHECK(!clone->GetPlatformTrack());
+  DCHECK(clone->Source());
 
-  switch (clone.Source().GetType()) {
-    case WebMediaStreamSource::kTypeAudio:
+  switch (clone->Source()->GetType()) {
+    case MediaStreamSource::kTypeAudio:
       // TODO(crbug.com/704136): Use per thread task runner.
       MediaStreamUtils::CreateNativeAudioMediaStreamTrack(
           clone, Thread::MainThread()->GetTaskRunner());
       break;
-    case WebMediaStreamSource::kTypeVideo:
+    case MediaStreamSource::kTypeVideo:
       CloneNativeVideoMediaStreamTrack(original, clone);
       break;
   }
@@ -219,11 +219,21 @@ MediaStreamTrack::MediaStreamTrack(ExecutionContext* context,
                                    MediaStreamComponent* component)
     : MediaStreamTrack(context,
                        component,
-                       component->Source()->GetReadyState()) {}
+                       component->Source()->GetReadyState(),
+                       /*pan_tilt_zoom_allowed=*/false) {}
 
 MediaStreamTrack::MediaStreamTrack(ExecutionContext* context,
                                    MediaStreamComponent* component,
-                                   MediaStreamSource::ReadyState ready_state)
+                                   bool pan_tilt_zoom_allowed)
+    : MediaStreamTrack(context,
+                       component,
+                       component->Source()->GetReadyState(),
+                       pan_tilt_zoom_allowed) {}
+
+MediaStreamTrack::MediaStreamTrack(ExecutionContext* context,
+                                   MediaStreamComponent* component,
+                                   MediaStreamSource::ReadyState ready_state,
+                                   bool pan_tilt_zoom_allowed)
     : ready_state_(ready_state),
       component_(component),
       execution_context_(context) {
@@ -236,9 +246,8 @@ MediaStreamTrack::MediaStreamTrack(ExecutionContext* context,
 
   if (component_->Source() &&
       component_->Source()->GetType() == MediaStreamSource::kTypeVideo) {
-    // ImageCapture::create() only throws if |this| track is not of video type.
-    NonThrowableExceptionState exception_state;
-    image_capture_ = ImageCapture::Create(context, this, exception_state);
+    image_capture_ = MakeGarbageCollected<ImageCapture>(context, this,
+                                                        pan_tilt_zoom_allowed);
   }
 }
 
@@ -393,8 +402,12 @@ void MediaStreamTrack::stopTrack(ExecutionContext* execution_context) {
 
 MediaStreamTrack* MediaStreamTrack::clone(ScriptState* script_state) {
   MediaStreamComponent* cloned_component = Component()->Clone();
+  bool pan_tilt_zoom_allowed =
+      image_capture_ ? image_capture_->HasPanTiltZoomPermissionGranted()
+                     : false;
   MediaStreamTrack* cloned_track = MakeGarbageCollected<MediaStreamTrack>(
-      ExecutionContext::From(script_state), cloned_component, ready_state_);
+      ExecutionContext::From(script_state), cloned_component, ready_state_,
+      pan_tilt_zoom_allowed);
   DidCloneMediaStreamTrack(Component(), cloned_component);
   return cloned_track;
 }
@@ -406,7 +419,7 @@ void MediaStreamTrack::SetConstraints(const MediaConstraints& constraints) {
 MediaTrackCapabilities* MediaStreamTrack::getCapabilities() const {
   MediaTrackCapabilities* capabilities = MediaTrackCapabilities::Create();
   if (image_capture_)
-    capabilities = image_capture_->GetMediaTrackCapabilities();
+    image_capture_->GetMediaTrackCapabilities(capabilities);
   auto platform_capabilities = component_->Source()->GetCapabilities();
 
   capabilities->setDeviceId(platform_capabilities.device_id);
@@ -803,7 +816,7 @@ ExecutionContext* MediaStreamTrack::GetExecutionContext() const {
   return execution_context_.Get();
 }
 
-void MediaStreamTrack::Trace(Visitor* visitor) {
+void MediaStreamTrack::Trace(Visitor* visitor) const {
   visitor->Trace(registered_media_streams_);
   visitor->Trace(component_);
   visitor->Trace(image_capture_);

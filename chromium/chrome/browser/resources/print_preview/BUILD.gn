@@ -44,7 +44,7 @@ if (optimize_webui) {
     ]
 
     deps = [
-      "../pdf/elements:web_components",
+      "../pdf:web_components",
       "ui:web_components",
     ]
     defines = chrome_grit_defines
@@ -74,7 +74,20 @@ js_type_check("print_preview_module_resources") {
     ":dark_mode_behavior",
     ":metrics",
     ":native_layer",
+    ":print_preview",
     ":print_preview_utils",
+  ]
+}
+
+js_library("print_preview") {
+  deps = [
+    ":cloud_print_interface",
+    ":native_layer",
+    "data:destination",
+    "data:destination_store",
+    "data:measurement_system",
+    "ui:app",
+    "ui:settings_select",
   ]
 }
 
@@ -118,6 +131,7 @@ js_library("native_layer") {
     "data:destination_match",
     "data:destination_policies",
     "data:measurement_system",
+    "data:printer_status_cros",
     "//ui/webui/resources/js:assert.m",
     "//ui/webui/resources/js:cr.m",
   ]

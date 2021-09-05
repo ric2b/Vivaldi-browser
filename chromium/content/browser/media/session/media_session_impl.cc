@@ -225,6 +225,22 @@ MediaSessionImpl::~MediaSessionImpl() {
   DCHECK(audio_focus_state_ == State::INACTIVE);
 }
 
+#if defined(OS_ANDROID)
+void MediaSessionImpl::ClearMediaSessionAndroid() {
+  session_android_.reset();
+}
+
+MediaSessionAndroid* MediaSessionImpl::GetMediaSessionAndroid() {
+  // |session_android_| can be null if a portal is activated, the java
+  // WebContents is destroyed and ClearMediaSessionAndroid is called.
+  // TODO(crbug.com/1091229): Remove this when we correctly support media
+  // sessions in portals.
+  if (!session_android_)
+    session_android_ = std::make_unique<MediaSessionAndroid>(this);
+  return session_android_.get();
+}
+#endif
+
 void MediaSessionImpl::WebContentsDestroyed() {
   // This should only work for tests. In production, all the players should have
   // already been removed before WebContents is destroyed.
@@ -280,6 +296,7 @@ void MediaSessionImpl::TitleWasSet(NavigationEntry* entry) {
 }
 
 void MediaSessionImpl::DidUpdateFaviconURL(
+    RenderFrameHost* rfh,
     const std::vector<blink::mojom::FaviconURLPtr>& candidates) {
   std::vector<media_session::MediaImage> icons;
 
@@ -831,7 +848,6 @@ MediaSessionImpl::MediaSessionImpl(WebContents* web_contents)
 #if defined(OS_ANDROID)
   session_android_.reset(new MediaSessionAndroid(this));
 #endif  // defined(OS_ANDROID)
-
   if (web_contents && web_contents->GetMainFrame() &&
       web_contents->GetMainFrame()->GetView()) {
     focused_ = web_contents->GetMainFrame()->GetView()->HasFocus();
@@ -845,7 +861,8 @@ void MediaSessionImpl::Initialize() {
   delegate_->MediaSessionInfoChanged(GetMediaSessionInfoSync());
 
   DCHECK(web_contents());
-  DidUpdateFaviconURL(web_contents()->GetFaviconURLs());
+  DidUpdateFaviconURL(web_contents()->GetMainFrame(),
+                      web_contents()->GetFaviconURLs());
 }
 
 AudioFocusDelegate::AudioFocusResult MediaSessionImpl::RequestSystemAudioFocus(

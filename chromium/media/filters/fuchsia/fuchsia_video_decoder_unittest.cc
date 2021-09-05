@@ -11,8 +11,8 @@
 #include "base/bind_helpers.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
-#include "base/fuchsia/default_context.h"
 #include "base/fuchsia/fuchsia_logging.h"
+#include "base/fuchsia/process_context.h"
 #include "base/test/task_environment.h"
 #include "components/viz/test/test_context_support.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
@@ -30,7 +30,7 @@ namespace {
 class TestBufferCollection {
  public:
   explicit TestBufferCollection(zx::channel collection_token) {
-    sysmem_allocator_ = base::fuchsia::ComponentContextForCurrentProcess()
+    sysmem_allocator_ = base::ComponentContextForProcess()
                             ->svc()
                             ->Connect<fuchsia::sysmem::Allocator>();
     sysmem_allocator_.set_error_handler([](zx_status_t status) {
@@ -148,7 +148,11 @@ class TestSharedImageInterface : public gpu::SharedImageInterface {
   }
 
   void RegisterSysmemBufferCollection(gfx::SysmemBufferCollectionId id,
-                                      zx::channel token) override {
+                                      zx::channel token,
+                                      gfx::BufferFormat format,
+                                      gfx::BufferUsage usage) override {
+    EXPECT_EQ(format, gfx::BufferFormat::YUV_420_BIPLANAR);
+    EXPECT_EQ(usage, gfx::BufferUsage::GPU_READ);
     std::unique_ptr<TestBufferCollection>& collection =
         sysmem_buffer_collections_[id];
     EXPECT_FALSE(collection);
@@ -166,6 +170,10 @@ class TestSharedImageInterface : public gpu::SharedImageInterface {
   gpu::SyncToken GenUnverifiedSyncToken() override {
     return gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO,
                           gpu::CommandBufferId(33), 1);
+  }
+
+  void WaitSyncToken(const gpu::SyncToken& sync_token) override {
+    NOTREACHED();
   }
 
   void Flush() override { NOTREACHED(); }

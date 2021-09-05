@@ -39,8 +39,6 @@ class Profile;
 //         * repeatY:   (optional) CSS background-repeat-y property.
 //         * positionX: (optional) CSS background-position-x property.
 //         * positionY: (optional) CSS background-position-y property.
-//   * chrome-untrusted://new-tab-page/iframe?<url>: Behaves like an iframe with
-//       src set to <url>.
 //   Each of those helpers only accept URLs with HTTPS or chrome-untrusted:.
 class UntrustedSource : public content::URLDataSource,
                         public OneGoogleBarServiceObserver,
@@ -52,8 +50,8 @@ class UntrustedSource : public content::URLDataSource,
   UntrustedSource& operator=(const UntrustedSource&) = delete;
 
   // content::URLDataSource:
-  std::string GetContentSecurityPolicyScriptSrc() override;
-  std::string GetContentSecurityPolicyChildSrc() override;
+  std::string GetContentSecurityPolicy(
+      network::mojom::CSPDirectiveName directive) override;
   std::string GetSource() override;
   void StartDataRequest(
       const GURL& url,
@@ -61,7 +59,6 @@ class UntrustedSource : public content::URLDataSource,
       content::URLDataSource::GotDataCallback callback) override;
   std::string GetMimeType(const std::string& path) override;
   bool AllowCaching() override;
-  std::string GetContentSecurityPolicyFrameAncestors() override;
   bool ShouldReplaceExistingSource() override;
   bool ShouldServiceRequest(const GURL& url,
                             content::BrowserContext* browser_context,

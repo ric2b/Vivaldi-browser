@@ -94,8 +94,9 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps() {
   }
 
   if (SystemWebAppManager::IsAppEnabled(SystemAppType::CAMERA)) {
-    infos.emplace(SystemAppType::CAMERA,
-                  SystemAppInfo("Camera", GURL("chrome://camera/pwa.html")));
+    infos.emplace(
+        SystemAppType::CAMERA,
+        SystemAppInfo("Camera", GURL("chrome://camera-app/pwa.html")));
     infos.at(SystemAppType::CAMERA).uninstall_and_replace = {
         extension_misc::kCameraAppId};
   }
@@ -142,6 +143,13 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps() {
         std::forward_as_tuple("PrintManagement",
                               GURL("chrome://print-management/pwa.html")));
     infos.at(SystemAppType::PRINT_MANAGEMENT).show_in_launcher = false;
+    infos.at(SystemAppType::PRINT_MANAGEMENT).minimum_window_size = {600, 320};
+  }
+
+  if (SystemWebAppManager::IsAppEnabled(SystemAppType::TELEMETRY)) {
+    infos.emplace(SystemAppType::TELEMETRY,
+                  SystemAppInfo("Telemetry",
+                                GURL("chrome://telemetry-extension/pwa.html")));
   }
 
 #if !defined(OFFICIAL_BUILD)
@@ -250,6 +258,9 @@ bool SystemWebAppManager::IsAppEnabled(SystemAppType type) {
     case SystemAppType::PRINT_MANAGEMENT:
       return base::FeatureList::IsEnabled(
           chromeos::features::kPrintJobManagementApp);
+    case SystemAppType::TELEMETRY:
+      return base::FeatureList::IsEnabled(
+          chromeos::features::kTelemetryExtension);
 #if !defined(OFFICIAL_BUILD)
     case SystemAppType::SAMPLE:
       NOTREACHED();
@@ -534,6 +545,10 @@ const std::string& SystemWebAppManager::CurrentLocale() const {
 void SystemWebAppManager::RecordSystemWebAppInstallMetrics(
     const std::map<GURL, InstallResultCode>& install_results,
     const base::TimeDelta& install_duration) const {
+  // Install duration should be non-negative. A low resolution clock could
+  // result in a |install_duration| of 0.
+  DCHECK_GE(install_duration.InMilliseconds(), 0);
+
   // Record the time spent to install system web apps.
   if (!shutting_down_) {
     base::UmaHistogramMediumTimes(kInstallDurationHistogramName,
@@ -596,7 +611,7 @@ void SystemWebAppManager::OnAppsSynchronized(
   }
 
   const base::TimeDelta install_duration =
-      install_start_time - base::TimeTicks::Now();
+      base::TimeTicks::Now() - install_start_time;
 
   if (IsEnabled()) {
     // TODO(qjw): Figure out where install_results come from, decide if

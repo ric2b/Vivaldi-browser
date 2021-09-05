@@ -93,7 +93,6 @@ class NetworkService;
 class NetworkServiceNetworkDelegate;
 class NetworkServiceProxyDelegate;
 class MdnsResponderManager;
-class NSSTempCertsCacheChromeOS;
 class P2PSocketManager;
 class ProxyLookupRequest;
 class QuicTransport;
@@ -138,13 +137,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   // Sets a global CertVerifier to use when initializing all profiles.
   static void SetCertVerifierForTesting(net::CertVerifier* cert_verifier);
 
-  // Whether the NetworkContext should be used for certain URL fetches of
-  // global scope (validating certs on some platforms, DNS over HTTPS).
-  // May only be set to true the first NetworkContext created using the
-  // NetworkService.  Destroying the NetworkContext with this set to true
-  // will destroy all other NetworkContexts.
-  bool IsPrimaryNetworkContext() const;
-
   net::URLRequestContext* url_request_context() { return url_request_context_; }
 
   NetworkService* network_service() { return network_service_; }
@@ -178,6 +170,14 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       mojo::PendingReceiver<mojom::URLLoaderFactory> receiver,
       mojom::URLLoaderFactoryParamsPtr params,
       scoped_refptr<ResourceSchedulerClient> resource_scheduler_client);
+
+  // Creates a URLLoaderFactory with params specific to the
+  // CertVerifierService. A URLLoaderFactory created by this function will be
+  // used by a CertNetFetcherURLLoader to perform AIA and OCSP fetching.
+  // These URLLoaderFactories should only ever be used by the
+  // CertVerifierService, and should never be passed to a renderer.
+  void CreateURLLoaderFactoryForCertNetFetcher(
+      mojo::PendingReceiver<mojom::URLLoaderFactory> factory_receiver);
 
   // Enables DoH probes to be sent using this context whenever the DNS
   // configuration contains DoH servers.
@@ -251,10 +251,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
                    base::Time expiry,
                    bool enforce,
                    const GURL& report_uri,
+                   const net::NetworkIsolationKey& network_isolation_key,
                    AddExpectCTCallback callback) override;
   void SetExpectCTTestReport(const GURL& report_uri,
                              SetExpectCTTestReportCallback callback) override;
   void GetExpectCTState(const std::string& domain,
+                        const net::NetworkIsolationKey& network_isolation_key,
                         GetExpectCTStateCallback callback) override;
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
   void CreateUDPSocket(
@@ -305,6 +307,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       const GURL& url,
       const url::Origin& origin,
       const net::NetworkIsolationKey& network_isolation_key,
+      std::vector<mojom::QuicTransportCertificateFingerprintPtr> fingerprints,
       mojo::PendingRemote<mojom::QuicTransportHandshakeClient> handshake_client)
       override;
   void CreateNetLogExporter(
@@ -359,6 +362,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       bool allow_credentials,
       const net::NetworkIsolationKey& network_isolation_key) override;
   void CreateP2PSocketManager(
+      const net::NetworkIsolationKey& network_isolation_key,
       mojo::PendingRemote<mojom::P2PTrustedSocketManagerClient> client,
       mojo::PendingReceiver<mojom::P2PTrustedSocketManager>
           trusted_socket_manager,
@@ -486,9 +490,14 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   PendingTrustTokenStore* trust_token_store() {
     return trust_token_store_.get();
   }
+  const PendingTrustTokenStore* trust_token_store() const {
+    return trust_token_store_.get();
+  }
 
  private:
-  URLRequestContextOwner MakeURLRequestContext();
+  URLRequestContextOwner MakeURLRequestContext(
+      mojo::PendingRemote<mojom::URLLoaderFactory>
+          url_loader_factory_for_cert_net_fetcher);
 
   // Invoked when the HTTP cache was cleared. Invokes |callback|.
   void OnHttpCacheCleared(ClearHttpCacheCallback callback,
@@ -642,13 +651,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
 #if defined(OS_CHROMEOS)
   CertVerifierWithTrustAnchors* cert_verifier_with_trust_anchors_ = nullptr;
-  // Additional certificates made available to NSS cert validation as temporary
-  // certificates.
-  std::unique_ptr<network::NSSTempCertsCacheChromeOS> nss_temp_certs_cache_;
 #endif
 
   // CertNetFetcher used by the context's CertVerifier. May be nullptr if
-  // CertNetFetcher is not used by the current platform.
+  // CertNetFetcher is not used by the current platform, or if the actual
+  // net::CertVerifier is instantiated outside of the network service.
   scoped_refptr<net::CertNetFetcherURLRequest> cert_net_fetcher_;
 
   // Created on-demand. Null if unused.

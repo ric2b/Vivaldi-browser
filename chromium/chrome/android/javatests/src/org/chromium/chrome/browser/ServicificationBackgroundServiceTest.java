@@ -4,9 +4,9 @@
 
 package org.chromium.chrome.browser;
 
-import android.support.test.filters.LargeTest;
-import android.support.test.filters.MediumTest;
-import android.support.test.filters.SmallTest;
+import androidx.test.filters.LargeTest;
+import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
 
 import com.google.android.gms.gcm.TaskParams;
 
@@ -21,7 +21,6 @@ import org.chromium.base.Log;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.init.ServiceManagerStartupUtils;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 
@@ -36,7 +35,6 @@ import java.nio.channels.FileChannel;
  * browser.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@RetryOnFailure
 public final class ServicificationBackgroundServiceTest {
     private ServicificationBackgroundService mServicificationBackgroundService;
     private RandomAccessFile mMappedSpareFile;

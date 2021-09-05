@@ -20,6 +20,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -170,6 +171,15 @@ GpuFeatureStatus GetGpuRasterizationFeatureStatus(
   if (blacklisted_features.count(GPU_FEATURE_TYPE_GPU_RASTERIZATION))
     return kGpuFeatureStatusBlacklisted;
 
+  // Enable gpu rasterization for vulkan, unless it is overridden by
+  // commandline.
+  if (base::FeatureList::IsEnabled(features::kVulkan) &&
+      !base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
+          features::kDefaultEnableGpuRasterization.name,
+          base::FeatureList::OVERRIDE_DISABLE_FEATURE)) {
+    return kGpuFeatureStatusEnabled;
+  }
+
   // Gpu Rasterization on platforms that are not fully enabled is controlled by
   // a finch experiment.
   if (!base::FeatureList::IsEnabled(features::kDefaultEnableGpuRasterization))
@@ -207,11 +217,14 @@ GpuFeatureStatus GetOopRasterizationFeatureStatus(
   else if (gpu_preferences.enable_oop_rasterization)
     return kGpuFeatureStatusEnabled;
 
-  // TODO(enne): Eventually oop rasterization will replace gpu rasterization,
-  // and so we will need to address the underlying bugs or turn of GPU
-  // rasterization for these cases.
-  if (blacklisted_features.count(GPU_FEATURE_TYPE_OOP_RASTERIZATION))
-    return kGpuFeatureStatusBlacklisted;
+  // Enable OOP rasterization for vulkan, unless it is overridden by
+  // commandline.
+  if (base::FeatureList::IsEnabled(features::kVulkan) &&
+      !base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
+          features::kDefaultEnableOopRasterization.name,
+          base::FeatureList::OVERRIDE_DISABLE_FEATURE)) {
+    return kGpuFeatureStatusEnabled;
+  }
 
   // OOP Rasterization on platforms that are not fully enabled is controlled by
   // a finch experiment.
@@ -1021,21 +1034,4 @@ std::string VulkanVersionToString(uint32_t vulkan_version) {
   }
 }
 #endif  // OS_WIN
-
-VulkanVersion ConvertToHistogramVulkanVersion(uint32_t vulkan_version) {
-  if (vulkan_version < VK_MAKE_VERSION(1, 0, 0))
-    return VulkanVersion::kVulkanVersionUnknown;
-  else if (vulkan_version < VK_MAKE_VERSION(1, 1, 0))
-    return VulkanVersion::kVulkanVersion_1_0_0;
-  else if (vulkan_version < VK_MAKE_VERSION(1, 2, 0))
-    return VulkanVersion::kVulkanVersion_1_1_0;
-  else if (vulkan_version < VK_MAKE_VERSION(1, 3, 0))
-    return VulkanVersion::kVulkanVersion_1_2_0;
-  else {
-    // Need to add 1.3.0+ to enum VulkanVersion.
-    NOTREACHED();
-    return VulkanVersion::kVulkanVersion_1_2_0;
-  }
-}
-
 }  // namespace gpu

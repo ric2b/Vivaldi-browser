@@ -91,10 +91,6 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
                         const std::string& folder_id) override;
   void SetStatus(AppListModelStatus status) override;
   void SetSearchEngineIsGoogle(bool is_google) override;
-  void SetSearchTabletAndClamshellAccessibleName(
-      const base::string16& tablet_accessible_name,
-      const base::string16& clamshell_accessible_name) override;
-  void SetSearchHintText(const base::string16& hint_text) override;
   void UpdateSearchBox(const base::string16& text,
                        bool initiated_by_user) override;
   void PublishSearchResults(
@@ -179,8 +175,9 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
       const std::string& result_id,
       GetContextMenuModelCallback callback) override;
   void ViewShown(int64_t display_id) override;
+  bool AppListTargetVisibility() const override;
   void ViewClosing() override;
-  void ViewClosed() override;
+  void ViewClosed() override {}
   const std::vector<SkColor>& GetWallpaperProminentColors() override;
   void ActivateItem(const std::string& id,
                     int event_flags,
@@ -206,10 +203,12 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
       const base::string16& raw_query,
       const SearchResultIdWithPositionIndices& results,
       int position_index) override;
+  void MaybeIncreasePrivacyInfoShownCounts() override;
   bool IsAssistantAllowedAndEnabled() const override;
   bool ShouldShowAssistantPrivacyInfo() const override;
-  void MaybeIncreaseAssistantPrivacyInfoShownCount() override;
   void MarkAssistantPrivacyInfoDismissed() override;
+  bool ShouldShowSuggestedContentInfo() const override;
+  void MarkSuggestedContentInfoDismissed() override;
   void OnStateTransitionAnimationCompleted(AppListViewState state) override;
   void OnViewStateChanged(AppListViewState state) override;
 

@@ -214,6 +214,9 @@ TEST(NinjaCreateBundleTargetWriter, AssetCatalog) {
   create_bundle.private_deps().push_back(LabelTargetPair(&bundle_data));
   create_bundle.private_deps().push_back(LabelTargetPair(action.get()));
   create_bundle.bundle_data().product_type().assign("com.apple.product-type");
+  create_bundle.bundle_data().xcasset_compiler_flags() =
+      SubstitutionList::MakeForTest("--app-icon", "foo");
+
   create_bundle.SetToolchain(setup.toolchain());
   ASSERT_TRUE(create_bundle.OnResolved(&err));
 
@@ -228,6 +231,7 @@ TEST(NinjaCreateBundleTargetWriter, AssetCatalog) {
       "../../foo/Foo.xcassets | obj/foo/data.stamp || "
       "obj/baz/bar.inputdeps.stamp\n"
       "  product_type = com.apple.product-type\n"
+      "  xcasset_compiler_flags = --app-icon foo\n"
       "build obj/baz/bar.stamp: stamp "
       "bar.bundle/Contents/Resources/Assets.car || "
       "obj/baz/bar.inputdeps.stamp\n"

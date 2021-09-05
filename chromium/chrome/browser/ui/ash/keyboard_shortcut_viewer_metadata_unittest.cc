@@ -11,7 +11,7 @@
 
 #include "ash/public/cpp/accelerators.h"
 #include "ash/shortcut_viewer/keyboard_shortcut_item.h"
-#include "ash/shortcut_viewer/strings/grit/ash_components_strings.h"
+#include "ash/shortcut_viewer/strings/grit/shortcut_viewer_strings.h"
 #include "base/hash/md5.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
@@ -23,9 +23,9 @@
 namespace {
 
 // The total number of Ash accelerators.
-constexpr int kAshAcceleratorsTotalNum = 117;
+constexpr int kAshAcceleratorsTotalNum = 118;
 // The hash of Ash accelerators.
-constexpr char kAshAcceleratorsHash[] = "d373edc491b25723d45223b590b288bd";
+constexpr char kAshAcceleratorsHash[] = "8c10cc51d4e84e4b94310bc91d15a0a8";
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 // Internal builds add an extra accelerator for the Feedback app.
 // The total number of Chrome accelerators (available on Chrome OS).

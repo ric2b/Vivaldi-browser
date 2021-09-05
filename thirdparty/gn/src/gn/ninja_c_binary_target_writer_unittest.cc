@@ -540,6 +540,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, FrameworksAndFrameworkDirs) {
   Target target(setup.settings(), Label(SourceDir("//foo/"), "shlib"));
   target.set_output_type(Target::SHARED_LIBRARY);
   target.config_values().frameworks().push_back("System.framework");
+  target.config_values().weak_frameworks().push_back("Whizbang.framework");
   target.private_deps().push_back(LabelTargetPair(&framework));
   target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
@@ -559,7 +560,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, FrameworksAndFrameworkDirs) {
       "build ./libshlib.so: solink | obj/bar/framework.stamp\n"
       "  ldflags = -F.\n"
       "  libs =\n"
-      "  frameworks = -framework System -framework Bar\n"
+      "  frameworks = -framework System -framework Bar "
+      "-weak_framework Whizbang\n"
       "  output_extension = .so\n"
       "  output_dir = \n";
 
@@ -1326,12 +1328,64 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustDeps) {
     library_target.SetToolchain(setup.toolchain());
     ASSERT_TRUE(library_target.OnResolved(&err));
 
+    Target rlib_target2(setup.settings(), Label(SourceDir("//qux/"), "lib2"));
+    rlib_target2.set_output_type(Target::RUST_LIBRARY);
+    rlib_target2.visibility().SetPublic();
+    SourceFile quxlib("//qux/lib.rs");
+    rlib_target2.sources().push_back(quxlib);
+    rlib_target2.source_types_used().Set(SourceFile::SOURCE_RS);
+    rlib_target2.rust_values().set_crate_root(quxlib);
+    rlib_target2.rust_values().crate_name() = "lib2";
+    rlib_target2.SetToolchain(setup.toolchain());
+    ASSERT_TRUE(rlib_target2.OnResolved(&err));
+
+    Target rlib_target3(setup.settings(), Label(SourceDir("//quxqux/"), "lib3"));
+    rlib_target3.set_output_type(Target::RUST_LIBRARY);
+    rlib_target3.visibility().SetPublic();
+    SourceFile quxquxlib("//quxqux/lib.rs");
+    rlib_target3.sources().push_back(quxquxlib);
+    rlib_target3.source_types_used().Set(SourceFile::SOURCE_RS);
+    rlib_target3.rust_values().set_crate_root(quxlib);
+    rlib_target3.rust_values().crate_name() = "lib3";
+    rlib_target3.SetToolchain(setup.toolchain());
+    ASSERT_TRUE(rlib_target3.OnResolved(&err));
+
+    Target procmacro(setup.settings(),
+                     Label(SourceDir("//quuxmacro/"), "procmacro"));
+    procmacro.set_output_type(Target::RUST_PROC_MACRO);
+    procmacro.visibility().SetPublic();
+    SourceFile procmacrolib("//procmacro/lib.rs");
+    procmacro.sources().push_back(procmacrolib);
+    procmacro.source_types_used().Set(SourceFile::SOURCE_RS);
+    procmacro.public_deps().push_back(LabelTargetPair(&rlib_target2));
+    procmacro.public_deps().push_back(LabelTargetPair(&rlib_target3));
+    procmacro.rust_values().set_crate_root(procmacrolib);
+    procmacro.rust_values().crate_name() = "procmacro";
+    procmacro.SetToolchain(setup.toolchain());
+    ASSERT_TRUE(procmacro.OnResolved(&err));
+
+    Target rlib_target4(setup.settings(), Label(SourceDir("//quux/"), "lib4"));
+    rlib_target4.set_output_type(Target::RUST_LIBRARY);
+    rlib_target4.visibility().SetPublic();
+    SourceFile quuxlib("//quux/lib.rs");
+    rlib_target4.sources().push_back(quuxlib);
+    rlib_target4.source_types_used().Set(SourceFile::SOURCE_RS);
+    rlib_target4.public_deps().push_back(LabelTargetPair(&rlib_target2));
+    // Transitive proc macros should not impact C++ targets; we're
+    // adding one to ensure the ninja instructions below are unaffected.
+    rlib_target4.public_deps().push_back(LabelTargetPair(&procmacro));
+    rlib_target4.rust_values().set_crate_root(quuxlib);
+    rlib_target4.rust_values().crate_name() = "lib4";
+    rlib_target4.SetToolchain(setup.toolchain());
+    ASSERT_TRUE(rlib_target4.OnResolved(&err));
+
     Target target(setup.settings(), Label(SourceDir("//bar/"), "bar"));
     target.set_output_type(Target::EXECUTABLE);
     target.visibility().SetPublic();
     target.sources().push_back(SourceFile("//bar/bar.cc"));
     target.source_types_used().Set(SourceFile::SOURCE_CPP);
     target.private_deps().push_back(LabelTargetPair(&library_target));
+    target.private_deps().push_back(LabelTargetPair(&rlib_target4));
     target.SetToolchain(setup.toolchain());
     ASSERT_TRUE(target.OnResolved(&err));
 
@@ -1350,12 +1404,14 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustDeps) {
         "\n"
         "build obj/bar/bar.bar.o: cxx ../../bar/bar.cc\n"
         "\n"
-        "build ./bar: link obj/bar/bar.bar.o obj/foo/libfoo.a\n"
+        "build ./bar: link obj/bar/bar.bar.o obj/foo/libfoo.a | "
+        "obj/quux/lib4.rlib obj/qux/lib2.rlib\n"
         "  ldflags =\n"
         "  libs =\n"
         "  frameworks =\n"
         "  output_extension = \n"
-        "  output_dir = \n";
+        "  output_dir = \n"
+        "  rlibs = obj/quux/lib4.rlib obj/qux/lib2.rlib\n";
 
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;

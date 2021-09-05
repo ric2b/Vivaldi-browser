@@ -13,6 +13,7 @@
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "components/query_tiles/internal/stats.h"
 #include "components/query_tiles/internal/tile_config.h"
 #include "components/query_tiles/internal/tile_iterator.h"
 #include "components/query_tiles/internal/tile_manager.h"
@@ -85,6 +86,18 @@ class TileManagerImpl : public TileManager {
         FROM_HERE, base::BindOnce(std::move(callback), result_tile));
   }
 
+  TileGroupStatus PurgeDb() override {
+    if (!initialized_)
+      return TileGroupStatus::kUninitialized;
+    if (!tile_group_)
+      return TileGroupStatus::kNoTiles;
+    store_->Delete(tile_group_->id,
+                   base::BindOnce(&TileManagerImpl::OnGroupDeleted,
+                                  weak_ptr_factory_.GetWeakPtr()));
+    tile_group_.reset();
+    return TileGroupStatus::kNoTiles;
+  }
+
   void SetAcceptLanguagesForTesting(
       const std::string& accept_languages) override {
     accept_languages_ = accept_languages;
@@ -145,26 +158,29 @@ class TileManagerImpl : public TileManager {
 
   // Returns true if the group is expired.
   bool IsGroupExpired(const TileGroup* group) const {
-    return clock_->Now() >=
-           group->last_updated_ts + TileConfig::GetExpireDuration();
+    if (clock_->Now() >=
+        group->last_updated_ts + TileConfig::GetExpireDuration()) {
+      stats::RecordGroupPruned(stats::PrunedGroupReason::kExpired);
+      return true;
+    }
+    return false;
   }
 
   // Check whether |locale_| matches with that of the |group|.
   bool ValidateLocale(const TileGroup* group) const {
-    if (accept_languages_.empty() || group->locale.empty())
-      return false;
-
-    // In case the primary language matches (en-GB vs en-IN), consider
-    // those are matching.
-    std::string group_primary =
-        group->locale.substr(0, group->locale.find("-"));
-    for (auto& lang :
-         base::SplitString(accept_languages_, ",", base::TRIM_WHITESPACE,
-                           base::SPLIT_WANT_NONEMPTY)) {
-      if (lang.substr(0, lang.find("-")) == group_primary)
-        return true;
+    if (!accept_languages_.empty() && !group->locale.empty()) {
+      // In case the primary language matches (en-GB vs en-IN), consider
+      // those are matching.
+      std::string group_primary =
+          group->locale.substr(0, group->locale.find("-"));
+      for (auto& lang :
+           base::SplitString(accept_languages_, ",", base::TRIM_WHITESPACE,
+                             base::SPLIT_WANT_NONEMPTY)) {
+        if (lang.substr(0, lang.find("-")) == group_primary)
+          return true;
+      }
     }
-
+    stats::RecordGroupPruned(stats::PrunedGroupReason::kInvalidLocale);
     return false;
   }
 

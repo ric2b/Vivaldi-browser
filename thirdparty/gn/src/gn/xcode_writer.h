@@ -17,20 +17,25 @@ class Builder;
 class BuildSettings;
 class Err;
 
+enum class XcodeBuildSystem {
+  kLegacy,
+  kNew,
+};
+
 // Writes an Xcode workspace to build and debug code.
 class XcodeWriter {
  public:
   // Controls some parameters and behaviour of the RunAndWriteFiles().
   struct Options {
-    // Name of the generated workspace file. Defaults to "all" is empty.
-    std::string workspace_name;
+    // Name of the generated project file. Defaults to "all" is empty.
+    std::string project_name;
 
     // Name of the ninja target to use for the "All" target in the generated
     // project. If empty, no target will be passed to ninja which will thus
     // try to build all defined targets.
     std::string root_target_name;
 
-    // Name of the ninja executable. Defaults to "ninja" is empty.
+    // Name of the ninja executable. Defaults to "ninja" if empty.
     std::string ninja_executable;
 
     // Extra parameters to pass to ninja. Deprecated.
@@ -41,6 +46,10 @@ class XcodeWriter {
     // (in the same way that the other filtering is done, source and header
     // files for those target will still be listed in the generated project).
     std::string dir_filters_string;
+
+    // Control which version of the build system should be used for the
+    // generated Xcode project.
+    XcodeBuildSystem build_system = XcodeBuildSystem::kLegacy;
   };
 
   // Writes an Xcode workspace with a single project file.

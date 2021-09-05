@@ -201,7 +201,7 @@ void ServiceWorkerContainer::ContextDestroyed() {
   controller_ = nullptr;
 }
 
-void ServiceWorkerContainer::Trace(Visitor* visitor) {
+void ServiceWorkerContainer::Trace(Visitor* visitor) const {
   visitor->Trace(controller_);
   visitor->Trace(ready_);
   visitor->Trace(dom_content_loaded_observer_);
@@ -280,10 +280,10 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(
   }
 
   KURL scope_url;
-  if (options->scope().IsNull())
-    scope_url = KURL(script_url, "./");
-  else
+  if (options->hasScope())
     scope_url = execution_context->CompleteURL(options->scope());
+  else
+    scope_url = KURL(script_url, "./");
   scope_url.RemoveFragmentIdentifier();
 
   if (!SchemeRegistry::ShouldTreatURLSchemeAsAllowingServiceWorkers(
@@ -329,10 +329,7 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(
 
   ContentSecurityPolicy* csp = execution_context->GetContentSecurityPolicy();
   if (csp) {
-    if (!csp->AllowRequestWithoutIntegrity(
-            mojom::RequestContextType::SERVICE_WORKER,
-            network::mojom::RequestDestination::kServiceWorker, script_url) ||
-        !csp->AllowWorkerContextFromSource(script_url)) {
+    if (!csp->AllowWorkerContextFromSource(script_url)) {
       callbacks->OnError(WebServiceWorkerError(
           mojom::blink::ServiceWorkerErrorType::kSecurity,
           String(
@@ -633,7 +630,8 @@ void ServiceWorkerContainer::DispatchMessageEvent(
     TransferableMessage message) {
   DCHECK(is_client_message_queue_enabled_);
 
-  auto msg = ToBlinkTransferableMessage(std::move(message));
+  auto msg =
+      BlinkTransferableMessage::FromTransferableMessage(std::move(message));
   MessagePortArray* ports =
       MessagePort::EntanglePorts(*GetExecutionContext(), std::move(msg.ports));
   ServiceWorker* service_worker =

@@ -28,10 +28,13 @@
 #include "chrome/browser/chromeos/base/locale_util.h"
 #include "chrome/browser/chromeos/child_accounts/parent_access_code/parent_access_service.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
+#include "chrome/browser/chromeos/first_run/help_app_first_run_field_trial.h"
 #include "chrome/browser/chromeos/input_method/input_method_syncer.h"
+#include "chrome/browser/chromeos/login/login_pref_names.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/chromeos/sync/split_settings_sync_field_trial.h"
 #include "chrome/browser/chromeos/sync/turn_sync_on_helper.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
@@ -169,6 +172,8 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(::prefs::kMinimumAllowedChromeVersion, "");
 
   ash::RegisterLocalStatePrefs(registry);
+  split_settings_sync_field_trial::RegisterLocalStatePrefs(registry);
+  help_app_first_run_field_trial::RegisterLocalStatePrefs(registry);
 }
 
 // static
@@ -256,7 +261,6 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(
       ::prefs::kUse24HourClock, base::GetHourClockType() == base::k24HourClock,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
-  registry->RegisterBooleanPref(::prefs::kCameraMediaConsolidated, false);
   registry->RegisterBooleanPref(
       drive::prefs::kDisableDrive, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
@@ -267,6 +271,8 @@ void Preferences::RegisterProfilePrefs(
                                 false);
   registry->RegisterStringPref(drive::prefs::kDriveFsProfileSalt, "");
   registry->RegisterBooleanPref(drive::prefs::kDriveFsPinnedMigrated, false);
+  registry->RegisterBooleanPref(drive::prefs::kDriveFsEnableVerboseLogging,
+                                false);
   // We don't sync ::prefs::kLanguageCurrentInputMethod and PreviousInputMethod
   // because they're just used to track the logout state of the device.
   registry->RegisterStringPref(::prefs::kLanguageCurrentInputMethod, "");
@@ -276,6 +282,13 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterStringPref(::prefs::kLanguagePreloadEngines,
                                hardware_keyboard_id);
   registry->RegisterStringPref(::prefs::kLanguageEnabledImes, "");
+  registry->RegisterDictionaryPref(
+      chromeos::prefs::kAssistiveInputFeatureSettings);
+  registry->RegisterBooleanPref(chromeos::prefs::kAssistPersonalInfoEnabled,
+                                true);
+  registry->RegisterBooleanPref(chromeos::prefs::kEmojiSuggestionEnabled, true);
+  registry->RegisterBooleanPref(
+      chromeos::prefs::kEmojiSuggestionEnterpriseAllowed, true);
   registry->RegisterDictionaryPref(
       ::prefs::kLanguageInputMethodSpecificSettings);
 
@@ -426,6 +439,10 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(::prefs::kShowSyncSettingsOnSessionStart,
                                 false);
 
+  // OOBE and login related prefs.
+  registry->RegisterTimePref(chromeos::prefs::kOobeOnboardingTime,
+                             base::Time());
+
   // Text-to-speech prefs.
   registry->RegisterDictionaryPref(
       ::prefs::kTextToSpeechLangToVoiceName,
@@ -443,13 +460,14 @@ void Preferences::RegisterProfilePrefs(
   // By default showing Sync Consent is set to true. It can changed by policy.
   registry->RegisterBooleanPref(::prefs::kEnableSyncConsent, true);
 
+  registry->RegisterBooleanPref(chromeos::prefs::kSyncOobeCompleted, false);
+
   registry->RegisterBooleanPref(::prefs::kTPMFirmwareUpdateCleanupDismissed,
                                 false);
 
   registry->RegisterBooleanPref(::prefs::kStartupBrowserWindowLaunchSuppressed,
                                 false);
 
-  registry->RegisterBooleanPref(::prefs::kSettingsShowBrowserBanner, true);
   registry->RegisterBooleanPref(::prefs::kSettingsShowOSBanner, true);
 
   // This pref is a per-session pref and must not be synced.
@@ -459,6 +477,10 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(
       chromeos::prefs::kLoginDisplayPasswordButtonEnabled, true);
+
+  registry->RegisterBooleanPref(
+      chromeos::prefs::kSuggestedContentEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 }
 
 void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {

@@ -153,7 +153,7 @@ void ResourceLoadObserverForFrame::DidReceiveResponse(
     CountUsage(WebFeature::kLinkRelPrefetchForSignedExchanges);
 
     if (RuntimeEnabledFeatures::SignedExchangeSubresourcePrefetchEnabled(
-            document_) &&
+            document_->GetExecutionContext()) &&
         resource->LastResourceResponse()) {
       // See if the outer response (which must be the last response in
       // the redirect chain) had provided alternate links for the prefetch.
@@ -250,7 +250,9 @@ void ResourceLoadObserverForFrame::DidFailLoading(
   LocalFrame* frame = document_->GetFrame();
   DCHECK(frame);
   frame->Loader().Progress().CompleteProgress(identifier);
-  probe::DidFailLoading(GetProbe(), identifier, document_loader_, error);
+
+  probe::DidFailLoading(GetProbe(), identifier, document_loader_, error,
+                        frame->GetDevToolsFrameToken());
 
   // Notification to FrameConsole should come AFTER InspectorInstrumentation
   // call, DevTools front-end relies on this.
@@ -268,7 +270,7 @@ void ResourceLoadObserverForFrame::DidFailLoading(
   document_->CheckCompleted();
 }
 
-void ResourceLoadObserverForFrame::Trace(Visitor* visitor) {
+void ResourceLoadObserverForFrame::Trace(Visitor* visitor) const {
   visitor->Trace(document_loader_);
   visitor->Trace(document_);
   visitor->Trace(fetcher_properties_);

@@ -7,12 +7,11 @@
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_client.h"
-
+#include "components/request_filter/adblock_filter/interstitial/document_blocked_throttle.h"
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
-
 #include "extraparts/media_renderer_host_message_filter.h"
 #include "extraparts/vivaldi_browser_main_extra_parts.h"
 
@@ -61,12 +60,15 @@ VivaldiContentBrowserClient::CreateThrottlesForNavigation(
     }
   }
 
+  throttles.push_back(
+      std::make_unique<adblock_filter::DocumentBlockedThrottle>(handle));
+
   return throttles;
 }
 
 bool VivaldiContentBrowserClient::CanCommitURL(
-  content::RenderProcessHost* process_host,
-  const GURL& url) {
+    content::RenderProcessHost* process_host,
+    const GURL& url) {
   if (vivaldi::IsVivaldiRunning())
     return true;
 

@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser.tab;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -21,7 +22,6 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MetricsUtils.HistogramDelta;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.TabbedModeTabDelegateFactory;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -46,7 +46,6 @@ import java.util.concurrent.ExecutionException;
  * Tests for Tab-related histogram collection.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@RetryOnFailure
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class TabUmaTest {
     @Rule
@@ -252,7 +251,7 @@ public class TabUmaTest {
 
             TabState state = new TabState();
             try (FileInputStream fileInputStream = new FileInputStream(file)) {
-                state.contentsState = new TabState.WebContentsState(
+                state.contentsState = new WebContentsState(
                         fileInputStream.getChannel().map(FileChannel.MapMode.READ_ONLY,
                                 fileInputStream.getChannel().position(), file.length()));
                 state.contentsState.setVersion(2);

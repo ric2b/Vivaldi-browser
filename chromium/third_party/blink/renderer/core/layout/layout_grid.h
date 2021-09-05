@@ -87,6 +87,11 @@ class LayoutGrid final : public LayoutBlock {
     return grid_->AutoRepeatTracks(direction);
   }
 
+  size_t ExplicitGridStartForDirection(
+      GridTrackSizingDirection direction) const {
+    return grid_->ExplicitGridStart(direction);
+  }
+
   LayoutUnit TranslateOutOfFlowRTLCoordinate(const LayoutBox&,
                                              LayoutUnit) const;
 
@@ -112,6 +117,8 @@ class LayoutGrid final : public LayoutBlock {
   void UpdateGridAreaLogicalSize(LayoutBox&, LayoutSize) const;
 
   StyleContentAlignmentData ContentAlignment(GridTrackSizingDirection) const;
+
+  size_t ExplicitGridEndForDirection(GridTrackSizingDirection) const;
 
   // Exposed for testing *ONLY*.
   Grid* InternalGrid() const { return grid_.get(); }

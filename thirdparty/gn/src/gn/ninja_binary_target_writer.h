@@ -26,9 +26,13 @@ class NinjaBinaryTargetWriter : public NinjaTargetWriter {
  protected:
   // Writes to the output stream a stamp rule for inputs, and
   // returns the file to be appended to source rules that encodes the
-  // implicit dependencies for the current target. The returned OutputFile
-  // will be empty if there are no inputs.
-  OutputFile WriteInputsStampAndGetDep() const;
+  // implicit dependencies for the current target.
+  // If num_stamp_uses is small, this might return all input dependencies
+  // directly, without writing a stamp file.
+  // If there are no implicit dependencies and no extra target dependencies
+  // are passed in, this returns an empty vector.
+  std::vector<OutputFile> WriteInputsStampAndGetDep(
+      size_t num_stamp_uses) const;
 
   // Writes the stamp line for a source set. These are not linked.
   void WriteSourceSetStamp(const std::vector<OutputFile>& object_files);
@@ -65,8 +69,8 @@ class NinjaBinaryTargetWriter : public NinjaTargetWriter {
   void WriteLibs(std::ostream& out, const Tool* tool);
   void WriteFrameworks(std::ostream& out, const Tool* tool);
 
-  virtual void AddSourceSetFiles(const Target* source_set,
-                                 UniqueVector<OutputFile>* obj_files) const;
+  void AddSourceSetFiles(const Target* source_set,
+                         UniqueVector<OutputFile>* obj_files) const;
 
   // Cached version of the prefix used for rule types for this toolchain.
   std::string rule_prefix_;

@@ -10,11 +10,11 @@
 #include "base/callback.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/test/simple_test_clock.h"
-#include "base/test/simple_test_tick_clock.h"
+#include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
 #include "chrome/browser/chromeos/login/screens/error_screen.h"
+#include "chrome/browser/chromeos/login/test/device_state_mixin.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/login/test/network_portal_detector_mixin.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
@@ -22,7 +22,10 @@
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/version_updater/version_updater.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
+#include "chrome/browser/chromeos/policy/device_policy_builder.h"
+#include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/update_required_screen_handler.h"
 #include "chrome/grit/chromium_strings.h"
@@ -35,29 +38,48 @@
 #include "dbus/object_path.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
+namespace em = enterprise_management;
+
 namespace chromeos {
 
 namespace {
 
-constexpr char kUpdateRequiredScreen[] = "update-required-card";
-constexpr char kUpdateRequiredDialog[] = "update-required-dialog";
-constexpr char kUpdateRequiredUpdateButton[] = "update-button";
-constexpr char kUpdateProcess[] = "checking-downloading-update";
-constexpr char kUpdateRequiredEolDialog[] = "eol-dialog";
-constexpr char kMeteredNetworkDialog[] = "update-need-permission-dialog";
-constexpr char KMeteredNetworkAcceptButton[] =
-    "cellular-permission-accept-button";
-constexpr char KNoNetworkDialog[] = "update-required-no-network-dialog";
+const test::UIPath kUpdateRequiredScreen = {"update-required-card"};
+const test::UIPath kUpdateRequiredStep = {"update-required-card",
+                                          "update-required-dialog"};
+const test::UIPath kUpdateNowButton = {"update-required-card", "update-button"};
+const test::UIPath kUpdateProcessStep = {"update-required-card",
+                                         "checking-downloading-update"};
+const test::UIPath kUpdateRequiredEolDialog = {"update-required-card",
+                                               "eolDialog"};
+const test::UIPath kEolAdminMessageContainer = {"update-required-card",
+                                                "adminMessageContainer"};
+const test::UIPath kEolAdminMessage = {"update-required-card", "adminMessage"};
+const test::UIPath kMeteredNetworkStep = {"update-required-card",
+                                          "update-need-permission-dialog"};
+const test::UIPath kMeteredNetworkAcceptButton = {
+    "update-required-card", "cellular-permission-accept-button"};
+const test::UIPath kNoNetworkStep = {"update-required-card",
+                                     "update-required-no-network-dialog"};
 
 // Elements in checking-downloading-update
-constexpr char kUpdateProcessChecking[] = "checking-for-updates-dialog";
-constexpr char kUpdateProcessUpdating[] = "updating-dialog";
-constexpr char kUpdateProcessComplete[] = "update-complete-dialog";
-constexpr char kCheckingForUpdatesMessage[] = "checkingForUpdatesMsg";
-constexpr char kUpdatingProgress[] = "updating-progress";
+const test::UIPath kUpdateProcessCheckingStep = {"update-required-card",
+                                                 "checking-downloading-update",
+                                                 "checking-for-updates-dialog"};
+const test::UIPath kUpdateProcessUpdatingStep = {
+    "update-required-card", "checking-downloading-update", "updating-dialog"};
+const test::UIPath kUpdateProcessCompleteStep = {"update-required-card",
+                                                 "checking-downloading-update",
+                                                 "update-complete-dialog"};
+const test::UIPath kCheckingForUpdatesMessage = {"update-required-card",
+                                                 "checking-downloading-update",
+                                                 "checkingForUpdatesMsg"};
+const test::UIPath kUpdatingProgress = {
+    "update-required-card", "checking-downloading-update", "updating-progress"};
 
 constexpr char kWifiServicePath[] = "/service/wifi2";
 constexpr char kCellularServicePath[] = "/service/cellular1";
+constexpr char kDemoEolMessage[] = "Please return your device.";
 
 chromeos::OobeUI* GetOobeUI() {
   auto* host = chromeos::LoginDisplayHost::default_host();
@@ -97,17 +119,7 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
   void SetUpOnMainThread() override {
     OobeBaseTest::SetUpOnMainThread();
 
-    tick_clock_.Advance(base::TimeDelta::FromMinutes(1));
-    clock_ = std::make_unique<base::SimpleTestClock>();
-
     error_screen_ = GetOobeUI()->GetErrorScreen();
-    update_required_screen_ = UpdateRequiredScreen::Get(
-        WizardController::default_controller()->screen_manager());
-    update_required_screen_->SetClockForTesting(clock_.get());
-
-    version_updater_ = update_required_screen_->GetVersionUpdaterForTesting();
-    version_updater_->set_tick_clock_for_testing(&tick_clock_);
-
     // Set up fake networks.
     network_state_test_helper_ =
         std::make_unique<chromeos::NetworkStateTestHelper>(
@@ -115,23 +127,12 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
     network_state_test_helper_->manager_test()->SetupDefaultEnvironment();
     // Fake networks have been set up. Connect to WiFi network.
     SetConnected(kWifiServicePath);
+    chromeos::OobeScreenWaiter(chromeos::GaiaView::kScreenId).Wait();
   }
   void TearDownOnMainThread() override {
     network_state_test_helper_.reset();
 
     OobeBaseTest::TearDownOnMainThread();
-  }
-
-  void SetEolDateUTC(const char* utc_date_string) {
-    base::Time utc_date;
-    ASSERT_TRUE(base::Time::FromUTCString(utc_date_string, &utc_date));
-    update_engine_client()->set_eol_date(utc_date);
-  }
-
-  void SetCurrentTimeUTC(const char* utc_date_string) {
-    base::Time utc_time;
-    ASSERT_TRUE(base::Time::FromUTCString(utc_date_string, &utc_time));
-    clock_->SetNow(utc_time);
   }
 
   void SetUpdateEngineStatus(update_engine::Operation operation) {
@@ -148,14 +149,23 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
   }
 
   void ShowUpdateRequiredScreen() {
-    WizardController::default_controller()->AdvanceToScreen(
+    LoginDisplayHost::default_host()->StartWizard(
         UpdateRequiredView::kScreenId);
 
     OobeScreenWaiter update_screen_waiter(UpdateRequiredView::kScreenId);
     update_screen_waiter.set_assert_next_screen();
     update_screen_waiter.Wait();
 
-    test::OobeJS().ExpectVisible(kUpdateRequiredScreen);
+    test::OobeJS().ExpectVisiblePath(kUpdateRequiredScreen);
+  }
+
+  void SetEolMessageAndWaitForSettingsChange(std::string eol_message) {
+    policy::DevicePolicyBuilder* const device_policy(
+        policy_helper_.device_policy());
+    em::ChromeDeviceSettingsProto& proto(device_policy->payload());
+    proto.mutable_minimum_chrome_version_eol_message()->set_value(eol_message);
+    policy_helper_.RefreshPolicyAndWaitUntilDeviceSettingsUpdated(
+        {chromeos::kMinimumChromeVersionEolMessage});
   }
 
  protected:
@@ -167,27 +177,28 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
   // For testing captive portal
   NetworkPortalDetectorMixin network_portal_detector_{&mixin_host_};
 
-  base::SimpleTestTickClock tick_clock_;
-  // Clock to set current time for testing EOL.
-  std::unique_ptr<base::SimpleTestClock> clock_;
   // Handles network connections
   std::unique_ptr<chromeos::NetworkStateTestHelper> network_state_test_helper_;
+  policy::DevicePolicyCrosTestHelper policy_helper_;
+  chromeos::DeviceStateMixin device_state_mixin_{
+      &mixin_host_,
+      chromeos::DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
 };
 
 IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestCaptivePortal) {
   network_portal_detector_.SimulateDefaultNetworkState(
       NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL);
 
-  update_required_screen_->SetErrorMessageDelayForTesting(
-      base::TimeDelta::FromMilliseconds(10));
   ShowUpdateRequiredScreen();
 
-  test::OobeJS().ExpectVisiblePath(
-      {kUpdateRequiredScreen, kUpdateRequiredDialog});
+  static_cast<UpdateRequiredScreen*>(
+      WizardController::default_controller()->current_screen())
+      ->SetErrorMessageDelayForTesting(base::TimeDelta::FromMilliseconds(10));
+
+  test::OobeJS().ExpectVisiblePath(kUpdateRequiredStep);
 
   // Click update button to trigger the update process.
-  test::OobeJS().ClickOnPath(
-      {kUpdateRequiredScreen, kUpdateRequiredUpdateButton});
+  test::OobeJS().ClickOnPath(kUpdateNowButton);
 
   // If the network is a captive portal network, error message is shown with a
   // delay.
@@ -212,32 +223,38 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestCaptivePortal) {
   SetUpdateEngineStatus(update_engine::Operation::CHECKING_FOR_UPDATE);
   SetUpdateEngineStatus(update_engine::Operation::UPDATE_AVAILABLE);
 
-  test::OobeJS().ExpectVisible(kUpdateRequiredScreen);
-  test::OobeJS().ExpectVisiblePath({kUpdateRequiredScreen, kUpdateProcess});
+  test::OobeJS().ExpectVisiblePath(kUpdateRequiredScreen);
+  test::OobeJS().ExpectVisiblePath(kUpdateProcessStep);
 }
 
 IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolReached) {
-  SetEolDateUTC("1 January 2019");
-  SetCurrentTimeUTC("1 November 2019");
-
+  update_engine_client()->set_eol_date(
+      base::DefaultClock::GetInstance()->Now() - base::TimeDelta::FromDays(1));
   ShowUpdateRequiredScreen();
 
-  test::OobeJS().ExpectVisiblePath(
-      {kUpdateRequiredScreen, kUpdateRequiredEolDialog});
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kUpdateRequiredDialog});
+  test::OobeJS().ExpectVisiblePath(kUpdateRequiredEolDialog);
+  test::OobeJS().ExpectHiddenPath(kUpdateRequiredStep);
+}
+
+IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolReachedAdminMessage) {
+  update_engine_client()->set_eol_date(
+      base::DefaultClock::GetInstance()->Now() - base::TimeDelta::FromDays(1));
+  SetEolMessageAndWaitForSettingsChange(kDemoEolMessage);
+  ShowUpdateRequiredScreen();
+
+  test::OobeJS().ExpectVisiblePath(kUpdateRequiredEolDialog);
+  test::OobeJS().ExpectVisiblePath(kEolAdminMessageContainer);
+  test::OobeJS().ExpectElementText(kDemoEolMessage, kEolAdminMessage);
+  test::OobeJS().ExpectHiddenPath(kUpdateRequiredStep);
 }
 
 IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolNotReached) {
-  SetEolDateUTC("1 November 2019");
-  SetCurrentTimeUTC("1 January 2019");
-
+  update_engine_client()->set_eol_date(
+      base::DefaultClock::GetInstance()->Now() + base::TimeDelta::FromDays(1));
   ShowUpdateRequiredScreen();
 
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kUpdateRequiredEolDialog});
-  test::OobeJS().ExpectVisiblePath(
-      {kUpdateRequiredScreen, kUpdateRequiredDialog});
+  test::OobeJS().ExpectHiddenPath(kUpdateRequiredEolDialog);
+  test::OobeJS().ExpectVisiblePath(kUpdateRequiredStep);
 }
 
 // This tests the state of update required screen when the device is initially
@@ -253,24 +270,17 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestUpdateOverMeteredNetwork) {
 
   // Screen prompts user to either connect to a non-metered network or start
   // update over current metered network.
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kUpdateRequiredDialog});
-  test::OobeJS().ExpectVisiblePath(
-      {kUpdateRequiredScreen, kMeteredNetworkDialog});
+  test::OobeJS().ExpectHiddenPath(kUpdateRequiredStep);
+  test::OobeJS().ExpectVisiblePath(kMeteredNetworkStep);
 
   // Click to start update over metered network.
-  test::OobeJS().TapOnPath(
-      {kUpdateRequiredScreen, KMeteredNetworkAcceptButton});
+  test::OobeJS().TapOnPath(kMeteredNetworkAcceptButton);
 
-  test::OobeJS()
-      .CreateVisibilityWaiter(true, {kUpdateRequiredScreen, kUpdateProcess})
-      ->Wait();
+  test::OobeJS().CreateVisibilityWaiter(true, kUpdateProcessStep)->Wait();
 
   // Expect screen to show progress of the update process.
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kMeteredNetworkDialog});
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kUpdateRequiredDialog});
+  test::OobeJS().ExpectHiddenPath(kMeteredNetworkStep);
+  test::OobeJS().ExpectHiddenPath(kUpdateRequiredStep);
 
   SetUpdateEngineStatus(update_engine::Operation::UPDATED_NEED_REBOOT);
   // UpdateStatusChanged(status) calls RebootAfterUpdate().
@@ -288,9 +298,8 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestUpdateRequiredNoNetwork) {
   ShowUpdateRequiredScreen();
 
   // Screen shows user to connect to a network to start update.
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kUpdateRequiredDialog});
-  test::OobeJS().ExpectVisiblePath({kUpdateRequiredScreen, KNoNetworkDialog});
+  test::OobeJS().ExpectHiddenPath(kUpdateRequiredStep);
+  test::OobeJS().ExpectVisiblePath(kNoNetworkStep);
 
   // Connect to a WiFi network.
   network_state_test_helper_->service_test()->AddService(
@@ -299,10 +308,7 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestUpdateRequiredNoNetwork) {
 
   // Update required screen is shown when user moves from no network to a good
   // network.
-  test::OobeJS()
-      .CreateVisibilityWaiter(true,
-                              {kUpdateRequiredScreen, kUpdateRequiredDialog})
-      ->Wait();
+  test::OobeJS().CreateVisibilityWaiter(true, kUpdateRequiredStep)->Wait();
 }
 
 // This tests the condition when the user switches to a metered network during
@@ -312,21 +318,16 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest,
                        TestUpdateProcessNeedPermission) {
   // Wifi is connected, show update required screen.
   ShowUpdateRequiredScreen();
-  test::OobeJS().ExpectVisiblePath(
-      {kUpdateRequiredScreen, kUpdateRequiredDialog});
+  test::OobeJS().ExpectVisiblePath(kUpdateRequiredStep);
 
   // Click to start update process.
-  test::OobeJS().ClickOnPath(
-      {kUpdateRequiredScreen, kUpdateRequiredUpdateButton});
+  test::OobeJS().ClickOnPath(kUpdateNowButton);
 
-  test::OobeJS()
-      .CreateVisibilityWaiter(true, {kUpdateRequiredScreen, kUpdateProcess})
-      ->Wait();
+  test::OobeJS().CreateVisibilityWaiter(true, kUpdateProcessStep)->Wait();
 
   // Expect screen to show progress of the update process.
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kUpdateRequiredDialog});
-  test::OobeJS().ExpectVisiblePath({kUpdateRequiredScreen, kUpdateProcess});
+  test::OobeJS().ExpectHiddenPath(kUpdateRequiredStep);
+  test::OobeJS().ExpectVisiblePath(kUpdateProcessStep);
 
   // Network changed to a metered network and update engine requires permission
   // to continue.
@@ -335,24 +336,17 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest,
   SetUpdateEngineStatus(update_engine::Operation::DOWNLOADING);
   SetUpdateEngineStatus(update_engine::Operation::NEED_PERMISSION_TO_UPDATE);
 
-  test::OobeJS()
-      .CreateVisibilityWaiter(true,
-                              {kUpdateRequiredScreen, kMeteredNetworkDialog})
-      ->Wait();
+  test::OobeJS().CreateVisibilityWaiter(true, kMeteredNetworkStep)->Wait();
 
-  test::OobeJS().ExpectHiddenPath({kUpdateRequiredScreen, kUpdateProcess});
+  test::OobeJS().ExpectHiddenPath(kUpdateProcessStep);
 
   // Screen prompts user to continue update on metered network. Click to
   // continue.
-  test::OobeJS().TapOnPath(
-      {kUpdateRequiredScreen, KMeteredNetworkAcceptButton});
+  test::OobeJS().TapOnPath(kMeteredNetworkAcceptButton);
   // Update process resumes.
-  test::OobeJS()
-      .CreateVisibilityWaiter(true, {kUpdateRequiredScreen, kUpdateProcess})
-      ->Wait();
+  test::OobeJS().CreateVisibilityWaiter(true, kUpdateProcessStep)->Wait();
 
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kMeteredNetworkDialog});
+  test::OobeJS().ExpectHiddenPath(kMeteredNetworkStep);
 
   SetUpdateEngineStatus(update_engine::Operation::UPDATED_NEED_REBOOT);
   // UpdateStatusChanged(status) calls RebootAfterUpdate().
@@ -372,21 +366,16 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest,
 
   // Screen prompts user to either connect to a non-metered network or start
   // update over current metered network.
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kUpdateRequiredDialog});
-  test::OobeJS().ExpectVisiblePath(
-      {kUpdateRequiredScreen, kMeteredNetworkDialog});
+  test::OobeJS().ExpectHiddenPath(kUpdateRequiredStep);
+  test::OobeJS().ExpectVisiblePath(kMeteredNetworkStep);
 
   // Connect to a WiFi network and update starts automatically.
   SetNetworkState(kWifiServicePath, shill::kStateOnline);
 
-  test::OobeJS()
-      .CreateVisibilityWaiter(true, {kUpdateRequiredScreen, kUpdateProcess})
-      ->Wait();
+  test::OobeJS().CreateVisibilityWaiter(true, kUpdateProcessStep)->Wait();
 
-  test::OobeJS().ExpectVisible(kUpdateRequiredScreen);
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kMeteredNetworkDialog});
+  test::OobeJS().ExpectVisiblePath(kUpdateRequiredScreen);
+  test::OobeJS().ExpectHiddenPath(kMeteredNetworkStep);
 
   SetUpdateEngineStatus(update_engine::Operation::CHECKING_FOR_UPDATE);
   SetUpdateEngineStatus(update_engine::Operation::UPDATE_AVAILABLE);
@@ -400,48 +389,33 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest,
 IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestUpdateProcess) {
   // Wifi is connected, show update required screen.
   ShowUpdateRequiredScreen();
-  test::OobeJS().ExpectVisiblePath(
-      {kUpdateRequiredScreen, kUpdateRequiredDialog});
+  test::OobeJS().ExpectVisiblePath(kUpdateRequiredStep);
 
   // Click to start update process.
-  test::OobeJS().ClickOnPath(
-      {kUpdateRequiredScreen, kUpdateRequiredUpdateButton});
+  test::OobeJS().ClickOnPath(kUpdateNowButton);
 
-  test::OobeJS()
-      .CreateVisibilityWaiter(true, {kUpdateRequiredScreen, kUpdateProcess})
-      ->Wait();
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kUpdateRequiredDialog});
+  test::OobeJS().CreateVisibilityWaiter(true, kUpdateProcessStep)->Wait();
+  test::OobeJS().ExpectHiddenPath(kUpdateRequiredStep);
 
   SetUpdateEngineStatus(update_engine::Operation::CHECKING_FOR_UPDATE);
   // Wait for the content of the dialog to be rendered.
   test::OobeJS()
-      .CreateDisplayedWaiter(true, {kUpdateRequiredScreen, kUpdateProcess,
-                                    kCheckingForUpdatesMessage})
+      .CreateDisplayedWaiter(true, kCheckingForUpdatesMessage)
       ->Wait();
-  test::OobeJS().ExpectVisiblePath(
-      {kUpdateRequiredScreen, kUpdateProcess, kUpdateProcessChecking});
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kUpdateProcess, kUpdateProcessUpdating});
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kUpdateProcess, kUpdateProcessComplete});
+  test::OobeJS().ExpectVisiblePath(kUpdateProcessCheckingStep);
+  test::OobeJS().ExpectHiddenPath(kUpdateProcessUpdatingStep);
+  test::OobeJS().ExpectHiddenPath(kUpdateProcessCompleteStep);
 
   SetUpdateEngineStatus(update_engine::Operation::DOWNLOADING);
   // Wait for the content of the dialog to be rendered.
-  test::OobeJS()
-      .CreateDisplayedWaiter(
-          true, {kUpdateRequiredScreen, kUpdateProcess, kUpdatingProgress})
-      ->Wait();
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kUpdateProcess, kUpdateProcessChecking});
+  test::OobeJS().CreateDisplayedWaiter(true, kUpdatingProgress)->Wait();
+  test::OobeJS().ExpectHiddenPath(kUpdateProcessCheckingStep);
 
   SetUpdateEngineStatus(update_engine::Operation::UPDATED_NEED_REBOOT);
   test::OobeJS()
-      .CreateVisibilityWaiter(
-          true, {kUpdateRequiredScreen, kUpdateProcess, kUpdateProcessComplete})
+      .CreateVisibilityWaiter(true, kUpdateProcessCompleteStep)
       ->Wait();
-  test::OobeJS().ExpectHiddenPath(
-      {kUpdateRequiredScreen, kUpdateProcess, kUpdateProcessUpdating});
+  test::OobeJS().ExpectHiddenPath(kUpdateProcessUpdatingStep);
 
   // UpdateStatusChanged(status) calls RebootAfterUpdate().
   EXPECT_EQ(1, update_engine_client()->reboot_after_update_call_count());

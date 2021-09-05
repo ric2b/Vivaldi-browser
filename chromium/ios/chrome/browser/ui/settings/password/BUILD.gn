@@ -10,6 +10,9 @@ source_set("password") {
     "password_details_table_view_controller_delegate.h",
     "password_exporter.h",
     "password_exporter.mm",
+    "passwords_consumer.h",
+    "passwords_mediator.h",
+    "passwords_mediator.mm",
     "passwords_table_view_controller.h",
     "passwords_table_view_controller.mm",
   ]
@@ -35,6 +38,7 @@ source_set("password") {
     "//ios/chrome/browser/ui/settings:settings_root",
     "//ios/chrome/browser/ui/settings/cells",
     "//ios/chrome/browser/ui/settings/cells:public",
+    "//ios/chrome/browser/ui/settings/elements:enterprise_info_popover_view_controller",
     "//ios/chrome/browser/ui/settings/utils",
     "//ios/chrome/browser/ui/table_view",
     "//ios/chrome/browser/ui/table_view/cells",
@@ -45,6 +49,7 @@ source_set("password") {
     "//ios/chrome/common/ui/util",
     "//ios/third_party/material_components_ios",
     "//ui/base",
+    "//ui/base/clipboard:clipboard_types",
     "//url",
   ]
 }
@@ -90,6 +95,7 @@ source_set("unit_tests") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/passwords",
+    "//ios/chrome/browser/ui/settings/cells",
     "//ios/chrome/browser/ui/table_view:test_support",
     "//ios/chrome/browser/ui/table_view/cells",
     "//ios/chrome/browser/ui/table_view/cells:cells_constants",

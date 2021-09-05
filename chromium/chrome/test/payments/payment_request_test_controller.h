@@ -6,6 +6,8 @@
 #define CHROME_TEST_PAYMENTS_PAYMENT_REQUEST_TEST_CONTROLLER_H_
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "build/build_config.h"
 
@@ -20,6 +22,12 @@ class WebContents;
 }
 
 namespace payments {
+
+struct AppDescription {
+  std::string label;
+  std::string sublabel;
+  std::string total;
+};
 
 // Observe states or actions taken by the PaymentRequest in tests, supporting
 // both Android and desktop.
@@ -54,7 +62,7 @@ class PaymentRequestTestController {
 
   // Sets values that will change the behaviour of PaymentRequests created in
   // the future.
-  void SetIncognito(bool is_incognito);
+  void SetOffTheRecord(bool is_off_the_record);
   void SetValidSsl(bool valid_ssl);
   void SetCanMakePaymentEnabledPref(bool can_make_payment_enabled);
 
@@ -81,6 +89,17 @@ class PaymentRequestTestController {
   // Returns true when running on Android M or L.
   bool IsAndroidMarshmallowOrLollipop();
 
+  // Sets the list of apps available for the current payment request.
+  void set_app_descriptions(
+      const std::vector<AppDescription>& app_descriptions) {
+    app_descriptions_ = app_descriptions;
+  }
+
+  // Returns the list of apps available for the current payment request.
+  const std::vector<AppDescription>& app_descriptions() const {
+    return app_descriptions_;
+  }
+
  private:
   // Observers that forward through to the PaymentRequestTestObserver.
   void OnCanMakePaymentCalled();
@@ -96,9 +115,10 @@ class PaymentRequestTestController {
 
   PaymentRequestTestObserver* observer_ = nullptr;
 
-  bool is_incognito_ = false;
+  bool is_off_the_record_ = false;
   bool valid_ssl_ = true;
   bool can_make_payment_pref_ = true;
+  std::vector<AppDescription> app_descriptions_;
 
 #if !defined(OS_ANDROID)
   void UpdateDelegateFactory();

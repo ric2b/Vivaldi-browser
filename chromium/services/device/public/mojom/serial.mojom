@@ -9,7 +9,19 @@ import "mojo/public/mojom/base/unguessable_token.mojom";
 
 struct SerialPortInfo {
   mojo_base.mojom.UnguessableToken token;
+
+  // This platform-specific identifier, if present, can be used to identify the
+  // device across restarts of the application and operating system.
+  string? persistent_id;
+
   mojo_base.mojom.FilePath path;
+
+  // On macOS a serial device may have two paths, one for the call-out device
+  // and one for the dial-in device. The call-out device is preferred. If
+  // there is also an associated dial-in device its path is provided here. If
+  // the dial-in device is the only option its path will be in |path|.
+  [EnableIf=is_mac] mojo_base.mojom.FilePath? alternate_path;
+
   uint16 vendor_id;
   bool has_vendor_id = false;
   uint16 product_id;
@@ -100,9 +112,11 @@ interface SerialPortManager {
   GetDevices() => (array<SerialPortInfo> devices);
 
   // Creates a SerialPort instance attached to the port represented by |token|.
-  // When the pipe passed in |port_receiver| is closed the optional pipe passed
-  // in |watcher| will also be closed.
+  // If |use_alternate_path| is specified then the |alternate_path| for the
+  // port will be used instead. When the pipe passed in |port_receiver| is
+  // closed the optional pipe passed in |watcher| will also be closed.
   GetPort(mojo_base.mojom.UnguessableToken token,
+          bool use_alternate_path,
           pending_receiver<SerialPort> port_receiver,
           pending_remote<SerialPortConnectionWatcher>? watcher);
 };
@@ -120,19 +134,17 @@ interface SerialPortManagerClient {
 interface SerialPort {
   // Initiates an Open of the device then returns result.
   Open(SerialConnectionOptions options,
-       handle<data_pipe_consumer> in_stream,
-       handle<data_pipe_producer> out_stream,
        pending_remote<SerialPortClient> client) => (bool success);
 
-  // Try to clear existing send error and reconnect the data pipe for send.
-  // This is supposed to be called after SerialPortClient#OnSendError is
-  // notified.
-  ClearSendError(handle<data_pipe_consumer> consumer);
+  // Start writing data from |consumer| to the port. This should be called after
+  // Open() or to restart data flow after when SerialPortClient#OnSendError is
+  // called on |client| to indicate an error.
+  StartWriting(handle<data_pipe_consumer> consumer);
 
-  // Try to clear existing read error and reconnect the data pipe for read.
-  // This is supposed to be called after SerialPortClient#OnReadError is
-  // notified.
-  ClearReadError(handle<data_pipe_producer> producer);
+  // Start reading data from the port into |producer|. This should be called
+  // after Open() or to restart data flow when SerialPortClient#OnReadError is
+  // called on |client| to indicate an error.
+  StartReading(handle<data_pipe_producer> producer);
 
   // Flushes input and output buffers.
   Flush() => (bool success);

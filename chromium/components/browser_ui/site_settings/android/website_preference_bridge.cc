@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <jni.h>
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -125,7 +126,8 @@ typedef void (*InfoListInsertionFunction)(
     JNIEnv*,
     const base::android::JavaRef<jobject>&,
     const base::android::JavaRef<jstring>&,
-    const base::android::JavaRef<jstring>&);
+    const base::android::JavaRef<jstring>&,
+    jboolean);
 
 void GetOrigins(JNIEnv* env,
                 const JavaParamRef<jobject>& jbrowser_context_handle,
@@ -166,7 +168,8 @@ void GetOrigins(JNIEnv* env,
       jembedder = ConvertUTF8ToJavaString(env, embedder);
 
     seen_origins.push_back(origin);
-    insertionFunc(env, list, ConvertOriginToJavaString(env, origin), jembedder);
+    insertionFunc(env, list, ConvertOriginToJavaString(env, origin), jembedder,
+                  /*is_embargoed=*/false);
   }
 
   // Add any origins which have a default content setting value (thus skipped
@@ -188,7 +191,7 @@ void GetOrigins(JNIEnv* env,
             .content_setting == CONTENT_SETTING_BLOCK) {
       seen_origins.push_back(origin);
       insertionFunc(env, list, ConvertOriginToJavaString(env, origin),
-                    jembedder);
+                    jembedder, /*is_embargoed=*/true);
     }
   }
 }
@@ -1039,7 +1042,8 @@ static jboolean JNI_WebsitePreferenceBridge_IsContentSettingEnabled(
          type == ContentSettingsType::ADS ||
          type == ContentSettingsType::CLIPBOARD_READ_WRITE ||
          type == ContentSettingsType::USB_GUARD ||
-         type == ContentSettingsType::BLUETOOTH_SCANNING);
+         type == ContentSettingsType::BLUETOOTH_SCANNING ||
+         type == ContentSettingsType::BLUETOOTH_GUARD);
   return GetBooleanForContentSetting(jbrowser_context_handle, type);
 }
 
@@ -1057,12 +1061,14 @@ static void JNI_WebsitePreferenceBridge_SetContentSettingEnabled(
          type == ContentSettingsType::POPUPS ||
          type == ContentSettingsType::ADS ||
          type == ContentSettingsType::USB_GUARD ||
-         type == ContentSettingsType::BLUETOOTH_SCANNING);
+         type == ContentSettingsType::BLUETOOTH_SCANNING ||
+         type == ContentSettingsType::BLUETOOTH_GUARD);
 
   ContentSetting value = CONTENT_SETTING_BLOCK;
   if (allow) {
     if (type == ContentSettingsType::USB_GUARD ||
-        type == ContentSettingsType::BLUETOOTH_SCANNING) {
+        type == ContentSettingsType::BLUETOOTH_SCANNING ||
+        type == ContentSettingsType::BLUETOOTH_GUARD) {
       value = CONTENT_SETTING_ASK;
     } else {
       value = CONTENT_SETTING_ALLOW;

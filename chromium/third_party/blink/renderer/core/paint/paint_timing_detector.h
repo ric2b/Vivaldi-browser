@@ -90,7 +90,7 @@ class PaintTimingCallbackManagerImpl final
       WebSwapResult,
       base::TimeTicks paint_time);
 
-  void Trace(Visitor* visitor) override;
+  void Trace(Visitor* visitor) const override;
 
  private:
   Member<LocalFrameView> frame_view_;
@@ -141,8 +141,19 @@ class CORE_EXPORT PaintTimingDetector
   void NotifyInputEvent(WebInputEvent::Type);
   bool NeedToNotifyInputOrScroll() const;
   void NotifyScroll(mojom::blink::ScrollType);
+
   // The returned value indicates whether the candidates have changed.
-  bool NotifyIfChangedLargestImagePaint(base::TimeTicks, uint64_t size);
+  // To compute experimental LCP (including removals) for images we need to know
+  // the time and size of removed images in order to account for cases where the
+  // largest image is removed while it is still loading: in this case, we would
+  // first update the experimental LCP size to be the image size, so we need to
+  // be able to decrease the size. To do this, the simplest way to achieve the
+  // correct results is to store the largest image removed which did receive a
+  // paint time.
+  bool NotifyIfChangedLargestImagePaint(base::TimeTicks image_paint_time,
+                                        uint64_t image_size,
+                                        base::TimeTicks removed_image_time,
+                                        uint64_t removed_image_size);
   bool NotifyIfChangedLargestTextPaint(base::TimeTicks, uint64_t size);
 
   void DidChangePerformanceTiming();
@@ -173,6 +184,22 @@ class CORE_EXPORT PaintTimingDetector
   uint64_t LargestImagePaintSize() const { return largest_image_paint_size_; }
   base::TimeTicks LargestTextPaint() const { return largest_text_paint_time_; }
   uint64_t LargestTextPaintSize() const { return largest_text_paint_size_; }
+  // Experimental counterparts of the above methods. Currently these values are
+  // computed by looking at the largest content seen so far, without caring
+  // about whether the content remains alive on the page or not.
+  base::TimeTicks ExperimentalLargestImagePaint() const {
+    return experimental_largest_image_paint_time_;
+  }
+  uint64_t ExperimentalLargestImagePaintSize() const {
+    return experimental_largest_image_paint_size_;
+  }
+  base::TimeTicks ExperimentalLargestTextPaint() const {
+    return experimental_largest_text_paint_time_;
+  }
+  uint64_t ExperimentalLargestTextPaintSize() const {
+    return experimental_largest_text_paint_size_;
+  }
+
   base::TimeTicks FirstInputOrScrollNotifiedTimestamp() const {
     return first_input_or_scroll_notified_timestamp_;
   }
@@ -180,7 +207,7 @@ class CORE_EXPORT PaintTimingDetector
   void UpdateLargestContentfulPaintCandidate();
 
   base::Optional<PaintTimingVisualizer>& Visualizer() { return visualizer_; }
-  void Trace(Visitor* visitor);
+  void Trace(Visitor* visitor) const;
 
  private:
   // Method called to stop recording the Largest Contentful Paint.
@@ -207,12 +234,16 @@ class CORE_EXPORT PaintTimingDetector
 
   base::Optional<PaintTimingVisualizer> visualizer_;
 
-  // Largest image information.
   base::TimeTicks largest_image_paint_time_;
   uint64_t largest_image_paint_size_ = 0;
-  // Largest text information.
   base::TimeTicks largest_text_paint_time_;
   uint64_t largest_text_paint_size_ = 0;
+
+  base::TimeTicks experimental_largest_image_paint_time_;
+  uint64_t experimental_largest_image_paint_size_ = 0;
+  base::TimeTicks experimental_largest_text_paint_time_;
+  uint64_t experimental_largest_text_paint_size_ = 0;
+
   bool is_recording_largest_contentful_paint_ = true;
 };
 

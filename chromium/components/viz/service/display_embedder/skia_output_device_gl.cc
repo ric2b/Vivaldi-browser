@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind_helpers.h"
+#include "components/viz/common/gpu/context_lost_reason.h"
 #include "components/viz/service/display/dc_layer_overlay.h"
 #include "gpu/command_buffer/common/swap_buffers_complete_params.h"
 #include "gpu/command_buffer/service/feature_info.h"
@@ -25,6 +26,7 @@
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface.h"
+#include "ui/gl/gl_utils.h"
 #include "ui/gl/gl_version_info.h"
 
 namespace viz {
@@ -192,8 +194,9 @@ void SkiaOutputDeviceGL::SwapBuffers(
                                    std::move(latency_info));
     gl_surface_->SwapBuffersAsync(std::move(callback), std::move(feedback));
   } else {
-    FinishSwapBuffers(gl_surface_->SwapBuffers(std::move(feedback)),
-                      surface_size, std::move(latency_info));
+    gfx::SwapResult result = gl_surface_->SwapBuffers(std::move(feedback));
+    FinishSwapBuffers(gfx::SwapCompletionResult(result), surface_size,
+                      std::move(latency_info));
   }
 }
 
@@ -213,12 +216,11 @@ void SkiaOutputDeviceGL::PostSubBuffer(
     gl_surface_->PostSubBufferAsync(rect.x(), rect.y(), rect.width(),
                                     rect.height(), std::move(callback),
                                     std::move(feedback));
-
   } else {
-    FinishSwapBuffers(
-        gl_surface_->PostSubBuffer(rect.x(), rect.y(), rect.width(),
-                                   rect.height(), std::move(feedback)),
-        surface_size, std::move(latency_info));
+    gfx::SwapResult result = gl_surface_->PostSubBuffer(
+        rect.x(), rect.y(), rect.width(), rect.height(), std::move(feedback));
+    FinishSwapBuffers(gfx::SwapCompletionResult(result), surface_size,
+                      std::move(latency_info));
   }
 }
 
@@ -237,22 +239,23 @@ void SkiaOutputDeviceGL::CommitOverlayPlanes(
     gl_surface_->CommitOverlayPlanesAsync(std::move(callback),
                                           std::move(feedback));
   } else {
-    FinishSwapBuffers(gl_surface_->CommitOverlayPlanes(std::move(feedback)),
-                      surface_size, std::move(latency_info));
+    FinishSwapBuffers(
+        gfx::SwapCompletionResult(
+            gl_surface_->CommitOverlayPlanes(std::move(feedback))),
+        surface_size, std::move(latency_info));
   }
 }
 
 void SkiaOutputDeviceGL::DoFinishSwapBuffers(
     const gfx::Size& size,
     std::vector<ui::LatencyInfo> latency_info,
-    gfx::SwapResult result,
-    std::unique_ptr<gfx::GpuFence> gpu_fence) {
-  DCHECK(!gpu_fence);
-  FinishSwapBuffers(result, size, latency_info);
+    gfx::SwapCompletionResult result) {
+  DCHECK(!result.gpu_fence);
+  FinishSwapBuffers(std::move(result), size, latency_info);
 }
 
-void SkiaOutputDeviceGL::SetDrawRectangle(const gfx::Rect& draw_rectangle) {
-  gl_surface_->SetDrawRectangle(draw_rectangle);
+bool SkiaOutputDeviceGL::SetDrawRectangle(const gfx::Rect& draw_rectangle) {
+  return gl_surface_->SetDrawRectangle(draw_rectangle);
 }
 
 void SkiaOutputDeviceGL::SetGpuVSyncEnabled(bool enabled) {

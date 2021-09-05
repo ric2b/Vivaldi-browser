@@ -5,12 +5,14 @@
 #include "chrome/browser/nearby_sharing/nearby_sharing_service_factory.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/memory/singleton.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_features.h"
+#include "chrome/browser/nearby_sharing/nearby_connections_manager.h"
+#include "chrome/browser/nearby_sharing/nearby_connections_manager_impl.h"
 #include "chrome/browser/nearby_sharing/nearby_sharing_prefs.h"
-#include "chrome/browser/nearby_sharing/nearby_sharing_service_factory.h"
 #include "chrome/browser/nearby_sharing/nearby_sharing_service_impl.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -49,15 +51,14 @@ KeyedService* NearbySharingServiceFactory::BuildServiceInstanceFor(
     return nullptr;
   }
 
-  PrefService* pref_service = Profile::FromBrowserContext(context)->GetPrefs();
-
-  if (!pref_service->GetBoolean(kNearbySharingEnabledPrefName)) {
-    VLOG(1) << __func__ << ": Nearby Sharing feature not enabled in prefs.";
-    return nullptr;
-  }
+  Profile* profile = Profile::FromBrowserContext(context);
+  PrefService* pref_service = profile->GetPrefs();
+  auto nearby_connections_manager =
+      std::make_unique<NearbyConnectionsManagerImpl>();
 
   VLOG(1) << __func__ << ": creating NearbySharingService.";
-  return new NearbySharingServiceImpl(Profile::FromBrowserContext(context));
+  return new NearbySharingServiceImpl(pref_service, profile,
+                                      std::move(nearby_connections_manager));
 }
 
 content::BrowserContext* NearbySharingServiceFactory::GetBrowserContextToUse(

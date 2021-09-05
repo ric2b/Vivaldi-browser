@@ -352,8 +352,10 @@ class GpuIntegrationTest(
     assert gpu_vendor_id in _SUPPORTED_WIN_GPU_VENDORS
     if os_version in _SUPPORTED_WIN_VERSIONS_WITH_DIRECT_COMPOSITION:
       config['direct_composition'] = True
+      config['supports_overlays'] = True
+      config['yuy2_overlay_support'] = 'SOFTWARE'
+      config['nv12_overlay_support'] = 'SOFTWARE'
       if gpu_vendor_id == 0x8086:
-        config['supports_overlays'] = True
         assert gpu_device_id in _SUPPORTED_WIN_INTEL_GPUS
         if gpu_device_id in _SUPPORTED_WIN_INTEL_GPUS_WITH_YUY2_OVERLAYS:
           config['yuy2_overlay_support'] = 'SCALING'
@@ -397,18 +399,6 @@ class GpuIntegrationTest(
     return config
 
   @classmethod
-  def GenerateTags(cls, finder_options, possible_browser):
-    # If no expectations file paths are returned from cls.ExpectationsFiles()
-    # then an empty list will be returned from this function. If tags are
-    # returned and there are no expectations files, then Typ will raise
-    # an exception.
-    if not cls.ExpectationsFiles():
-      return []
-    with possible_browser.BrowserSession(
-        finder_options.browser_options) as browser:
-      return cls.GetPlatformTags(browser)
-
-  @classmethod
   def GetPlatformTags(cls, browser):
     """This function will take a Browser instance as an argument.
     It will call the super classes implementation of GetPlatformTags() to get
@@ -445,16 +435,19 @@ class GpuIntegrationTest(
             gpu_tags.extend([gpu_vendor, gpu_device_tag])
       # all spaces and underscores in the tag will be replaced by dashes
       tags.extend([re.sub('[ _]', '-', tag) for tag in gpu_tags])
+
+      # Add tags based on GPU feature status.
+      skia_renderer = gpu_helper.GetSkiaRenderer(gpu_info.feature_status)
+      tags.append(skia_renderer)
+      use_vulkan = gpu_helper.GetVulkan(gpu_info.feature_status)
+      tags.append(use_vulkan)
+
     # If additional options have been set via '--extra-browser-args' check for
     # those which map to expectation tags. The '_browser_backend' attribute may
     # not exist in unit tests.
     if hasattr(browser, 'startup_args'):
-      skia_renderer = gpu_helper.GetSkiaRenderer(browser.startup_args)
-      tags.append(skia_renderer)
       use_gl = gpu_helper.GetGL(browser.startup_args)
       tags.append(use_gl)
-      use_vulkan = gpu_helper.GetVulkan(browser.startup_args)
-      tags.append(use_vulkan)
       use_skia_dawn = gpu_helper.GetSkiaDawn(browser.startup_args)
       tags.append(use_skia_dawn)
     return tags

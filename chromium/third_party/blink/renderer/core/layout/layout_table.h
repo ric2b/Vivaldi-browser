@@ -48,11 +48,11 @@ enum TableHeightChangingValue { kTableHeightNotChanging, kTableHeightChanging };
 // LayoutTable is the LayoutObject associated with
 // display: table or inline-table.
 //
-// LayoutTable is the master coordinator for determining the overall table
-// structure. The reason is that LayoutTableSection children have a local
-// view over what their structure is but don't account for other
-// LayoutTableSection. Thus LayoutTable helps keep consistency across
-// LayoutTableSection. See e.g. |m_effectiveColumns| below.
+// LayoutTable is the coordinator for determining the overall table structure.
+// The reason is that LayoutTableSection children have a local view over what
+// their structure is but don't account for other LayoutTableSection. Thus
+// LayoutTable helps keep consistency across LayoutTableSection. See e.g.
+// |m_effectiveColumns| below.
 //
 // LayoutTable expects only 3 types of children:
 // - zero or more LayoutTableCol
@@ -378,11 +378,8 @@ class CORE_EXPORT LayoutTable final : public LayoutBlock,
       RecalcSections();
   }
 
-  static LayoutTable* CreateAnonymousWithParent(const LayoutObject*);
   LayoutBox* CreateAnonymousBoxWithSameTypeAs(
-      const LayoutObject* parent) const override {
-    return CreateAnonymousWithParent(parent);
-  }
+      const LayoutObject* parent) const override;
 
   void AddCaption(const LayoutTableCaption*);
   void RemoveCaption(const LayoutTableCaption*);

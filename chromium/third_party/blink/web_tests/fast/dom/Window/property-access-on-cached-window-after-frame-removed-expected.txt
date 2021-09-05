@@ -1,10 +1,10 @@
 CONSOLE WARNING: line 138: 'window.webkitStorageInfo' is deprecated. Please use 'navigator.webkitTemporaryStorage' or 'navigator.webkitPersistentStorage' instead.
-CONSOLE WARNING: line 138: Application Cache API use is deprecated and will be removed in M85, around August 2020. See https://www.chromestatus.com/features/6192449487634432 for more details.
 Tests property access on a cached DOMWindow after the associated frame is no longer in a web page. Test should not crash and properties should be set to sane defaults.
 
 On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE".
 
 PASS childWindow.closed is true
+PASS childWindow.crossOriginIsolated is false
 PASS childWindow.defaultStatus is ''
 PASS childWindow.defaultstatus is ''
 PASS childWindow.devicePixelRatio is 0
@@ -34,7 +34,8 @@ PASS childWindow.navigator.userActivation.isActive is false
 PASS childWindow.navigator.userAgent is ''
 PASS childWindow.navigator.vendor is window.navigator.vendor
 PASS childWindow.navigator.vendorSub is ''
-PASS childWindow.navigator.virtualKeyboard.onoverlaygeometrychange is null
+PASS childWindow.navigator.virtualKeyboard.boundingRect is null
+PASS childWindow.navigator.virtualKeyboard.ongeometrychange is null
 PASS childWindow.navigator.virtualKeyboard.overlaysContent is false
 PASS childWindow.onabort is null
 PASS childWindow.onafterprint is null
@@ -117,7 +118,6 @@ PASS childWindow.onportalactivate is null
 PASS childWindow.onprogress is null
 PASS childWindow.onratechange is null
 PASS childWindow.onrejectionhandled is null
-PASS childWindow.onrendersubtreeactivation is null
 PASS childWindow.onreset is null
 PASS childWindow.onresize is null
 PASS childWindow.onscreenschange is null
@@ -152,6 +152,7 @@ PASS childWindow.onwebkittransitionend is null
 PASS childWindow.onwheel is null
 PASS childWindow.opener is null
 PASS childWindow.origin is 'file://'
+PASS childWindow.originIsolationRestricted is false
 PASS childWindow.outerHeight is 0
 PASS childWindow.outerWidth is 0
 PASS childWindow.pageXOffset is 0

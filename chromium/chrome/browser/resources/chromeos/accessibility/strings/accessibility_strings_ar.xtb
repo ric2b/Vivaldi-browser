@@ -7,7 +7,7 @@
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">التمرير السريع بإصبعين إلى يسار الشاشة</translation>
 <translation id="1022586497894531524">‏هل تستخدم التعليقات والملاحظات المنطوقة في ChromeVox لأول مرة؟ يشرح هذا البرنامج التعليمي السريع أساسيات بدء استخدام ChromeVox.</translation>
-<translation id="1025074108959230262">تم إيقاف الوضع الثابت</translation>
+<translation id="1025074108959230262">تم إيقاف وضع التثبيت</translation>
 <translation id="1031961866430398710">ثم</translation>
 <translation id="1038643060055067718">الأسطر:</translation>
 <translation id="1038795173450935438">للانتقال للأمام بين العناصر في إحدى الصفحات، اضغط على بحث + السهم الأيمن، أو بحث + السهم الأيسر للرجوع بسرعة. للانتقال إلى السطر التالي، اضغط على بحث + السهم المتّجه للأسفل. وللوصول إلى السطر السابق، استخدم بحث + السهم المتّجه للأعلى. وإذا وصلت إلى العنصر الذي تريد النقر عليه، فاضغط على بحث + مسافة.</translation>
@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">التمرير لليمين</translation>
 <translation id="1781173782405573156">مفتاح التمرير</translation>
 <translation id="1787176709638001873">نص تعديل كلمة المرور</translation>
+<translation id="180203835522132923">‏مفتاح البحث + O، ثم W</translation>
 <translation id="1810107444790159527">مربع قائمة</translation>
 <translation id="1812527064848182527">معالم</translation>
 <translation id="1829244130665387512">البحث في الصفحة</translation>
@@ -194,7 +195,7 @@
 <translation id="2523609930580546572">‏برنامج ChromeVox التعليمي</translation>
 <translation id="2525706221823668172">‏اختصارات لوحة المفاتيح لـ Chromebook</translation>
 <translation id="2553108862507765288">خطأ نحوي</translation>
-<translation id="257674075312929031">مجموعة</translation>
+<translation id="257674075312929031">جمع</translation>
 <translation id="2582407057977008361">جانبًا</translation>
 <translation id="2592212930811759050">انقر مرّتين لبدء التعديل</translation>
 <translation id="2598495320872286378">خطأ في قاعدة نحوية</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">التمرير السريع بإصبعين إلى يمين الشاشة</translation>
 <translation id="2998131015536248178">الحرف السابق</translation>
 <translation id="2999559350546931576">خفض درجة الصوت</translation>
+<translation id="3009352964623081324">‏مفتاح البحث + O، ثم S. يُستخدَم لتثبيت الأصوات وإدارتها وتخصيصها.</translation>
 <translation id="3014130421870723208">@ ببرايل 8 نقاط</translation>
 <translation id="3030432017085518523">زر اختيار عنصر القائمة</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{فاصلة عليا واحدة}zero{# apostrophes}two{فاصلتان علويتان (}few{# فواصل علوية}many{# فاصلة علوية}other{# من الفواصل العلوية}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">إدراج</translation>
 <translation id="4511186779140817916">لوزي</translation>
 <translation id="451510441928265982">ليس هناك عنوان سابق من المستوى الثاني.</translation>
+<translation id="4515799157838123044">تظليل محتوى الخلفية</translation>
 <translation id="4517854969512651305">زيادة القيمة</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{شرطة مائلة واحدة}zero{# slashes}two{شرطتان مائلتان (#)}few{# شرطات مائلة}many{# شرطة مائلة}other{# من الشرطات المائلة}}</translation>
 <translation id="4537277403911487429">العنصر المماثل التالي</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">جزء</translation>
 <translation id="6637586476836377253">log</translation>
 <translation id="6657128831881431364">شريط التقدم</translation>
+<translation id="6660819301598582123">أبجد هوز حطي كلمن سعفص قرشت ثخذ ضظغ</translation>
 <translation id="667999046851023355">مستند</translation>
 <translation id="6688209025607531203">تنبيه غير نمطي</translation>
 <translation id="6689672606256159458">برتقالي وردي داكن</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">ليس هناك عنوان تالٍ من المستوى الخامس.</translation>
 <translation id="6955705049214951590">وردي ضبابي</translation>
 <translation id="696356426651109308">الانتقال السريع إلى البداية</translation>
-<translation id="699159175332639490">‏البحث + O + W</translation>
 <translation id="6994042831499278539">مرجع مسرد مصطلحات</translation>
 <translation id="6996566555547746822">مربع تحرير وسرد التالي</translation>
 <translation id="6997224546856374593">عند قراءة الأحرف الكبيرة:</translation>
@@ -808,6 +811,7 @@
 <translation id="743783356331413498">مثال</translation>
 <translation id="7439060726180460871">الدليل</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">تغيير درجة الصوت عند نطق أنواع العناصر والنصوص المُقتبَسة أو المحذوفة أو النصوص الغامقة أو الظاهرة بين أقواس أو بأحرف كبيرة</translation>
 <translation id="7491962110804786152">علامة تبويب</translation>
 <translation id="7505149250476994901">قُل "حرف كبير" قبل كتابة الحرف</translation>
 <translation id="7518543783849163354">‏لإيقاف ChromeVox مؤقتًا عن التحدث، اضغط على مفتاح Control.</translation>

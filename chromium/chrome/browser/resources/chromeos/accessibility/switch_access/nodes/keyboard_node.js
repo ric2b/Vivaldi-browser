@@ -8,7 +8,7 @@
  */
 class KeyboardNode extends NodeWrapper {
   /**
-   * @param {!chrome.automation.AutomationNode} node
+   * @param {!AutomationNode} node
    * @param {!SARootNode} parent
    */
   constructor(node, parent) {
@@ -19,10 +19,7 @@ class KeyboardNode extends NodeWrapper {
 
   /** @override */
   get actions() {
-    if (this.isGroup()) {
-      return [];
-    }
-    return [SAConstants.MenuAction.SELECT];
+    return [SwitchAccessMenuAction.SELECT];
   }
 
   // ================= General methods =================
@@ -35,7 +32,10 @@ class KeyboardNode extends NodeWrapper {
 
     const node = this.automationNode;
     if (!node) {
-      throw new TypeError('Keyboard nodes must have an automation node.');
+      setTimeout(NavigationManager.moveToValidNode, 0);
+      throw SwitchAccess.error(
+          SAConstants.ErrorType.MISSING_BASE_NODE,
+          'Keyboard nodes must have an automation node.');
     }
 
     const root = new RootNodeWrapper(node);
@@ -45,8 +45,13 @@ class KeyboardNode extends NodeWrapper {
 
   /** @override */
   performAction(action) {
-    if (this.isGroup() || action !== SAConstants.MenuAction.SELECT) {
+    if (action !== SwitchAccessMenuAction.SELECT) {
       return SAConstants.ActionResponse.NO_ACTION_TAKEN;
+    }
+
+    if (this.isGroup()) {
+      NavigationManager.enterGroup();
+      return SAConstants.ActionResponse.CLOSE_MENU;
     }
 
     const keyLocation = this.location;
@@ -72,7 +77,7 @@ class KeyboardNode extends NodeWrapper {
   static findAndSetChildren(root) {
     const childConstructor = (node) => new KeyboardNode(node, root);
 
-    /** @type {!Array<!chrome.automation.AutomationNode>} */
+    /** @type {!Array<!AutomationNode>} */
     const interestingChildren = RootNodeWrapper.getInterestingChildren(root);
     let children = interestingChildren.map(childConstructor);
     if (interestingChildren.length > SAConstants.KEYBOARD_MAX_ROW_LENGTH) {
@@ -90,7 +95,7 @@ class KeyboardNode extends NodeWrapper {
  */
 class KeyboardRootNode extends RootNodeWrapper {
   /**
-   * @param {!chrome.automation.AutomationNode} groupNode
+   * @param {!AutomationNode} groupNode
    * @private
    */
   constructor(groupNode) {
@@ -190,7 +195,7 @@ class KeyboardRootNode extends RootNodeWrapper {
   }
 
   /**
-   * @return {chrome.automation.AutomationNode}
+   * @return {AutomationNode}
    * @private
    */
   static get keyboardObject_() {

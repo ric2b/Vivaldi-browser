@@ -16,15 +16,12 @@
 namespace installer {
 
 MasterPreferences::MasterPreferences(const base::CommandLine& cmd_line)
-    : distribution_(NULL), preferences_read_from_file_(false) {
-}
+    : distribution_(nullptr), preferences_read_from_file_(false) {}
 
 MasterPreferences::MasterPreferences(const base::FilePath& prefs_path)
-    : distribution_(NULL), preferences_read_from_file_(false) {
-}
+    : distribution_(nullptr), preferences_read_from_file_(false) {}
 
-MasterPreferences::~MasterPreferences() {
-}
+MasterPreferences::~MasterPreferences() {}
 
 bool MasterPreferences::GetBool(const std::string& name, bool* value) const {
   NOTREACHED();

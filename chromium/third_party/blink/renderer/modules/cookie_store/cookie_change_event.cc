@@ -23,7 +23,7 @@ const AtomicString& CookieChangeEvent::InterfaceName() const {
   return event_interface_names::kCookieChangeEvent;
 }
 
-void CookieChangeEvent::Trace(Visitor* visitor) {
+void CookieChangeEvent::Trace(Visitor* visitor) const {
   Event::Trace(visitor);
   visitor->Trace(changed_);
   visitor->Trace(deleted_);
@@ -58,7 +58,7 @@ String ToCookieListItemSameSite(network::mojom::CookieSameSite same_site) {
     case network::mojom::CookieSameSite::NO_RESTRICTION:
       return "none";
     case network::mojom::CookieSameSite::UNSPECIFIED:
-      return "unspecified";
+      return String();
   }
 
   NOTREACHED();
@@ -67,6 +67,8 @@ String ToCookieListItemSameSite(network::mojom::CookieSameSite same_site) {
 }  // namespace
 
 // static
+// TODO(crbug.com/1092695): Update to take in CookieWithAccessResult so
+// CookieListItem can use EffectiveSameSite for SameSite.
 CookieListItem* CookieChangeEvent::ToCookieListItem(
     const CanonicalCookie& canonical_cookie,
     bool is_deleted) {
@@ -75,7 +77,9 @@ CookieListItem* CookieChangeEvent::ToCookieListItem(
   list_item->setName(canonical_cookie.Name());
   list_item->setPath(canonical_cookie.Path());
   list_item->setSecure(canonical_cookie.IsSecure());
-  list_item->setSameSite(ToCookieListItemSameSite(canonical_cookie.SameSite()));
+  auto&& same_site = ToCookieListItemSameSite(canonical_cookie.SameSite());
+  if (!same_site.IsNull())
+    list_item->setSameSite(same_site);
 
   // The domain of host-only cookies is the host name, without a dot (.) prefix.
   String cookie_domain = canonical_cookie.Domain();

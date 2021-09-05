@@ -81,9 +81,11 @@
 #include "third_party/blink/renderer/platform/network/http_header_map.h"
 #include "third_party/blink/renderer/platform/network/network_state_notifier.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_utf8_adaptor.h"
@@ -384,6 +386,19 @@ String BuildBlockedReason(ResourceRequestBlockedReason reason) {
   return protocol::Network::BlockedReasonEnum::Other;
 }
 
+String BuildServiceWorkerResponseSource(const ResourceResponse& response) {
+  switch (response.GetServiceWorkerResponseSource()) {
+    case network::mojom::FetchResponseSource::kCacheStorage:
+      return protocol::Network::ServiceWorkerResponseSourceEnum::CacheStorage;
+    case network::mojom::FetchResponseSource::kHttpCache:
+      return protocol::Network::ServiceWorkerResponseSourceEnum::HttpCache;
+    case network::mojom::FetchResponseSource::kNetwork:
+      return protocol::Network::ServiceWorkerResponseSourceEnum::Network;
+    case network::mojom::FetchResponseSource::kUnspecified:
+      return protocol::Network::ServiceWorkerResponseSourceEnum::FallbackCode;
+  }
+}
+
 WebConnectionType ToWebConnectionType(const String& connection_type) {
   if (connection_type == protocol::Network::ConnectionTypeEnum::None)
     return kWebConnectionTypeNone;
@@ -458,6 +473,22 @@ std::unique_ptr<protocol::Network::WebSocketFrame> WebSocketMessageToProtocol(
       .build();
 }
 
+void SetNetworkStateOverride(bool offline,
+                             double latency,
+                             double download_throughput,
+                             double upload_throughput,
+                             WebConnectionType type) {
+  // TODO(dgozman): networkStateNotifier is per-process. It would be nice to
+  // have per-frame override instead.
+  if (offline || latency || download_throughput || upload_throughput) {
+    GetNetworkStateNotifier().SetNetworkConnectionInfoOverride(
+        !offline, type, base::nullopt, latency,
+        download_throughput / (1024 * 1024 / 8));
+  } else {
+    GetNetworkStateNotifier().ClearOverride();
+  }
+}
+
 }  // namespace
 
 void InspectorNetworkAgent::Restore() {
@@ -479,6 +510,10 @@ static std::unique_ptr<protocol::Network::ResourceTiming> BuildObjectForTiming(
       .setSslEnd(timing.CalculateMillisecondDelta(timing.SslEnd()))
       .setWorkerStart(timing.CalculateMillisecondDelta(timing.WorkerStart()))
       .setWorkerReady(timing.CalculateMillisecondDelta(timing.WorkerReady()))
+      .setWorkerFetchStart(
+          timing.CalculateMillisecondDelta(timing.WorkerFetchStart()))
+      .setWorkerRespondWithSettled(
+          timing.CalculateMillisecondDelta(timing.WorkerRespondWithSettled()))
       .setSendStart(timing.CalculateMillisecondDelta(timing.SendStart()))
       .setSendEnd(timing.CalculateMillisecondDelta(timing.SendEnd()))
       .setReceiveHeadersEnd(
@@ -612,6 +647,18 @@ BuildObjectForResourceResponse(const ResourceResponse& response,
 
   response_object->setFromDiskCache(response.WasCached());
   response_object->setFromServiceWorker(response.WasFetchedViaServiceWorker());
+  if (response.WasFetchedViaServiceWorker()) {
+    response_object->setServiceWorkerResponseSource(
+        BuildServiceWorkerResponseSource(response));
+  }
+  if (!response.ResponseTime().is_null()) {
+    response_object->setResponseTime(
+        response.ResponseTime().ToJsTimeIgnoringNull());
+  }
+  if (!response.CacheStorageCacheName().IsEmpty()) {
+    response_object->setCacheStorageCacheName(response.CacheStorageCacheName());
+  }
+
   response_object->setFromPrefetchCache(response.WasInPrefetchCache());
   if (response.GetResourceLoadTiming())
     response_object->setTiming(
@@ -715,7 +762,7 @@ BuildObjectForResourceResponse(const ResourceResponse& response,
 
 InspectorNetworkAgent::~InspectorNetworkAgent() = default;
 
-void InspectorNetworkAgent::Trace(Visitor* visitor) {
+void InspectorNetworkAgent::Trace(Visitor* visitor) const {
   visitor->Trace(inspected_frames_);
   visitor->Trace(worker_global_scope_);
   visitor->Trace(resources_data_);
@@ -889,7 +936,15 @@ void InspectorNetworkAgent::WillSendNavigationRequest(
 // This method was pulled out of PrepareRequest(), because we want to be able
 // to create DevTools issues before the PrepareRequest() call. We need these
 // IDs to be set, to properly create a DevTools issue.
-void InspectorNetworkAgent::SetDevToolsIds(ResourceRequest& request) {
+void InspectorNetworkAgent::SetDevToolsIds(
+    ResourceRequest& request,
+    const FetchInitiatorInfo& initiator_info) {
+  // Network instrumentation ignores the requests initiated internally (these
+  // are unexpected to the user and usually do not hit the remote server).
+  // Ignore them and do not set the devtools id, so that other systems like
+  // network interceptor in the browser do not mistakenly report it.
+  if (initiator_info.name == fetch_initiator_type_names::kInternal)
+    return;
   request.SetDevToolsToken(devtools_token_);
 
   // The loader parameter is for generating a browser generated ID for a browser
@@ -1047,7 +1102,7 @@ void InspectorNetworkAgent::DidReceiveData(uint64_t identifier,
   if (data) {
     NetworkResourcesData::ResourceData const* resource_data =
         resources_data_->Data(request_id);
-    if (resource_data &&
+    if (resource_data && !resource_data->HasContent() &&
         (!resource_data->CachedResource() ||
          resource_data->CachedResource()->GetDataBufferingPolicy() ==
              kDoNotBufferData ||
@@ -1096,7 +1151,7 @@ void InspectorNetworkAgent::DidFinishLoading(
         pending_encoded_data_length);
   }
 
-  if (resource_data &&
+  if (resource_data && !resource_data->HasContent() &&
       (!resource_data->CachedResource() ||
        resource_data->CachedResource()->GetDataBufferingPolicy() ==
            kDoNotBufferData ||
@@ -1126,9 +1181,12 @@ void InspectorNetworkAgent::DidReceiveCorsRedirectResponse(
                    WebURLLoaderClient::kUnknownEncodedDataLength, 0, false);
 }
 
-void InspectorNetworkAgent::DidFailLoading(uint64_t identifier,
-                                           DocumentLoader* loader,
-                                           const ResourceError& error) {
+void InspectorNetworkAgent::DidFailLoading(
+    CoreProbeSink* sink,
+    uint64_t identifier,
+    DocumentLoader* loader,
+    const ResourceError& error,
+    const base::UnguessableToken& devtools_frame_or_worker_token) {
   String request_id = IdentifiersFactory::RequestId(loader, identifier);
   bool canceled = error.IsCancellation();
   base::Optional<ResourceRequestBlockedReason> resource_request_blocked_reason =
@@ -1556,24 +1614,31 @@ Response InspectorNetworkAgent::emulateNetworkConditions(
     double download_throughput,
     double upload_throughput,
     Maybe<String> connection_type) {
-  if (!IsMainThread())
-    return Response::ServerError("Not supported");
-
   WebConnectionType type = kWebConnectionTypeUnknown;
   if (connection_type.isJust()) {
     type = ToWebConnectionType(connection_type.fromJust());
     if (type == kWebConnectionTypeUnknown)
       return Response::ServerError("Unknown connection type");
   }
-  // TODO(dgozman): networkStateNotifier is per-process. It would be nice to
-  // have per-frame override instead.
-  if (offline || latency || download_throughput || upload_throughput) {
-    GetNetworkStateNotifier().SetNetworkConnectionInfoOverride(
-        !offline, type, base::nullopt, latency,
-        download_throughput / (1024 * 1024 / 8));
-  } else {
-    GetNetworkStateNotifier().ClearOverride();
+
+  if (worker_global_scope_) {
+    if (worker_global_scope_->IsServiceWorkerGlobalScope() ||
+        worker_global_scope_->IsSharedWorkerGlobalScope()) {
+      // In service workers and shared workers, we don't inspect the main thread
+      // so we must post a task there to make it possible to use
+      // NetworkStateNotifier.
+      PostCrossThreadTask(
+          *Thread::MainThread()->GetTaskRunner(), FROM_HERE,
+          CrossThreadBindOnce(SetNetworkStateOverride, offline, latency,
+                              download_throughput, upload_throughput, type));
+      return Response::Success();
+    }
+    return Response::ServerError("Not supported");
   }
+
+  SetNetworkStateOverride(offline, latency, download_throughput,
+                          upload_throughput, type);
+
   return Response::Success();
 }
 

@@ -56,6 +56,12 @@ struct IDNConversionResult {
   // E.g. IDNToUnicodeWithDetails("googlé.com") will fill |result| with
   // "xn--googl-fsa.com" and |matching_top_domain.domain| with "google.com".
   TopDomainEntry matching_top_domain;
+  // Result of the spoof check. If the domain was converted to unicode, this
+  // must be kSafe. Otherwise, this will be the failure reason
+  // for the domain component (i.e. label) that failed the spoof checks. If
+  // multiple labels fail the checks, this will be the result of the first
+  // component that failed, counting from the left in the punycode form.
+  IDNSpoofChecker::Result spoof_check_result = IDNSpoofChecker::Result::kNone;
 };
 
 // Nothing is omitted.
@@ -192,8 +198,14 @@ base::string16 StripWWWFromHost(const GURL& url);
 Skeletons GetSkeletons(const base::string16& host);
 
 // Returns a domain from the top 10K list matching the given skeleton. Used for
-// spoof checking.
-TopDomainEntry LookupSkeletonInTopDomains(const std::string& skeleton);
+// spoof checking. Different types of skeletons are saved in the skeleton trie.
+// Providing |type| makes sure the right type of skeletons are looked up. For
+// example if |skeleton|="googlecorn", |type|="kFull", no match would be found
+// even though the skeleton is saved in the trie, because the type of this
+// skeleton in the trie is "kSeparatorsRemoved".
+TopDomainEntry LookupSkeletonInTopDomains(
+    const std::string& skeleton,
+    const SkeletonType type = SkeletonType::kFull);
 
 }  // namespace url_formatter
 

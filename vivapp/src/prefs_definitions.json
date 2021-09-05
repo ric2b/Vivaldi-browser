@@ -73,7 +73,7 @@
         "cutcopy_encoded": {
           "description": "URL encode the string passed to the clipboard from the url field",
           "type": "boolean",
-          "default": false,
+          "default": true,
           "syncable": true
         },
         "enabled": {
@@ -87,6 +87,11 @@
           "syncable": true
         },
         "show_typed_history": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "show_browser_history": {
           "type": "boolean",
           "default": true,
           "syncable": true
@@ -235,6 +240,16 @@
         "syncable": true
       },
       "visible": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "strip_javascript_on_paste": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "highlight_base_domain": {
         "type": "boolean",
         "default": true,
         "syncable": true
@@ -1225,6 +1240,20 @@
       }
     },
     "privacy": {
+      "break_mode": {
+        "enabled": {
+          "description": "Pause, hide and dim content to focus outside the browser",
+          "type": "boolean",
+          "default": false,
+          "syncable": false
+        },
+        "introduction_show": {
+          "description": "Shows Break Mode introduction",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      },
       "autofill": {
         "server_assist": {
           "description": "Use Google server-side assisted autofill.",
@@ -1302,6 +1331,12 @@
         "description": "Include notes in QC search results",
         "type": "boolean",
         "default": true,
+        "syncable": true
+      },
+      "use_notes_manager": {
+        "description": "Open notes in Notes Manager",
+        "type": "boolean",
+        "default": false,
         "syncable": true
       },
       "show_page_actions": {
@@ -1906,6 +1941,12 @@
         "default_mac": true,
         "syncable": true
       },
+      "private_window": {
+        "description": "Theme to use in Private Window",
+        "type": "string",
+        "default": "Private",
+        "syncable": false
+      },
       "schedule": {
         "enabled": {
           "description": "Theme scheduling mechanism",
@@ -1996,6 +2037,7 @@
         "type": "list",
         "default": [
           "PanelToggle",
+          "BreakMode",
           "SyncStatus",
           "MailStatus",
           "StatusInfo",
@@ -2538,6 +2580,10 @@
     "kHardwareAccelerationModeEnabled": {
       "path": "hardware_acceleration_mode.enabled",
       "type": "boolean"
+    },
+    "kApplicationLocale": {
+      "path": "intl.app_locale",
+      "type": "string"
     }
   }
 }

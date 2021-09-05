@@ -569,6 +569,16 @@ class TargetDescBuilder : public BaseDescBuilder {
                                      std::move(frameworks));
       }
     }
+    if (what(variables::kWeakFrameworks)) {
+      const auto& weak_frameworks = target_->all_weak_frameworks();
+      if (!weak_frameworks.empty()) {
+        auto frameworks = std::make_unique<base::ListValue>();
+        for (size_t i = 0; i < weak_frameworks.size(); i++)
+          frameworks->AppendString(weak_frameworks[i]);
+        res->SetWithoutPathExpansion(variables::kWeakFrameworks,
+                                     std::move(frameworks));
+      }
+    }
 
     if (what(variables::kFrameworkDirs)) {
       const auto& all_framework_dirs = target_->all_framework_dirs();

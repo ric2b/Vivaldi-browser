@@ -84,7 +84,7 @@ TEST_F(DocumentMarkerControllerTest, DidMoveToNewDocument) {
   auto* parent = To<Element>(GetDocument().body()->firstChild()->firstChild());
   MarkNodeContents(parent);
   EXPECT_EQ(1u, MarkerController().Markers().size());
-  Persistent<Document> another_document = MakeGarbageCollected<Document>();
+  Persistent<Document> another_document = Document::CreateForTest();
   another_document->adoptNode(parent, ASSERT_NO_EXCEPTION);
 
   // No more reference to marked node.
@@ -379,6 +379,20 @@ TEST_F(DocumentMarkerControllerTest, RemoveSuggestionMarkerByTag) {
   auto* marker = To<SuggestionMarker>(MarkerController().Markers()[0].Get());
   MarkerController().RemoveSuggestionMarkerByTag(*To<Text>(text),
                                                  marker->Tag());
+  EXPECT_EQ(0u, MarkerController().Markers().size());
+}
+
+TEST_F(DocumentMarkerControllerTest, RemoveSuggestionMarkerByType) {
+  SetBodyContent("<div contenteditable>foo</div>");
+  Element* div = GetDocument().QuerySelector("div");
+  Node* text = div->firstChild();
+  EphemeralRange range(Position(text, 0), Position(text, 1));
+  MarkerController().AddSuggestionMarker(range, SuggestionMarkerProperties());
+
+  ASSERT_EQ(1u, MarkerController().Markers().size());
+  auto* marker = To<SuggestionMarker>(MarkerController().Markers()[0].Get());
+  MarkerController().RemoveSuggestionMarkerByType(
+      ToEphemeralRangeInFlatTree(range), marker->GetSuggestionType());
   EXPECT_EQ(0u, MarkerController().Markers().size());
 }
 

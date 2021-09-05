@@ -74,6 +74,9 @@ bool DefaultTexture2DWrapper::ProcessTexture(
   if (received_error_)
     return false;
 
+  // Temporary check to track down https://crbug.com/1077645
+  CHECK(texture);
+
   // It's okay to post and forget this call, since it'll be ordered correctly
   // with respect to any access on the gpu main thread.
   gpu_resources_.Post(FROM_HERE, &GpuResources::PushNewTexture,
@@ -259,13 +262,23 @@ void DefaultTexture2DWrapper::GpuResources::Init(
 void DefaultTexture2DWrapper::GpuResources::PushNewTexture(
     ComD3D11Texture2D texture,
     size_t array_slice) {
+  // If init didn't complete, then signal (another) error that will probably be
+  // ignored in favor of whatever we signalled earlier.
+  if (!gl_image_ || !stream_) {
+    NotifyError(StatusCode::kDecoderInitializeNeverCompleted);
+    return;
+  }
+
+  // Notify |gl_image_| that it has a new texture.  Do this unconditionally, so
+  // hat we can guarantee that the image isn't null.  Nobody expects it to be,
+  // and failures will be noticed only asynchronously.
+  // https://crbug.com/1077645
+  gl_image_->SetTexture(texture, array_slice);
+
   if (!helper_ || !helper_->MakeContextCurrent()) {
     NotifyError(StatusCode::kCantMakeContextCurrent);
     return;
   }
-
-  // Notify |gl_image_| that it has a new texture.
-  gl_image_->SetTexture(texture, array_slice);
 
   // Notify angle that it has a new texture.
   EGLAttrib frame_attributes[] = {

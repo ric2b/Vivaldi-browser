@@ -20,6 +20,8 @@ ch-ua-platform
 ch-ua-platform-version
 ch-viewport-width
 ch-width
+clipboard-read
+clipboard-write
 conversion-measurement
 document-domain
 document-write
@@ -34,8 +36,6 @@ geolocation
 gyroscope
 hid
 idle-detection
-lazyload
-loading-frame-default-eager
 magnetometer
 microphone
 midi
@@ -50,6 +50,7 @@ publickey-credentials-get
 screen-wake-lock
 scripts
 serial
+storage-access-api
 sync-script
 sync-xhr
 top-navigation

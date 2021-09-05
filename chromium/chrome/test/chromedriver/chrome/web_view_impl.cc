@@ -807,14 +807,12 @@ Status WebViewImpl::WaitForPendingNavigations(const std::string& frame_id,
   return status;
 }
 
-Status WebViewImpl::IsPendingNavigation(const std::string& frame_id,
-                                        const Timeout* timeout,
+Status WebViewImpl::IsPendingNavigation(const Timeout* timeout,
                                         bool* is_pending) const {
   if (navigation_tracker_)
-    return navigation_tracker_->IsPendingNavigation(frame_id, timeout,
-                                                    is_pending);
+    return navigation_tracker_->IsPendingNavigation(timeout, is_pending);
   else
-    return parent_->IsPendingNavigation(frame_id, timeout, is_pending);
+    return parent_->IsPendingNavigation(timeout, is_pending);
 }
 
 JavaScriptDialogManager* WebViewImpl::GetJavaScriptDialogManager() {
@@ -849,6 +847,28 @@ Status WebViewImpl::CaptureScreenshot(
   if (status.IsError())
     return status;
   if (!result->GetString("data", screenshot))
+    return Status(kUnknownError, "expected string 'data' in response");
+  return Status(kOk);
+}
+
+Status WebViewImpl::PrintToPDF(const base::DictionaryValue& params,
+                               std::string* pdf) {
+  // https://bugs.chromium.org/p/chromedriver/issues/detail?id=3517
+  if (!browser_info_->is_headless) {
+    return Status(kUnknownError,
+                  "PrintToPDF is only supported in headless mode");
+  }
+  std::unique_ptr<base::DictionaryValue> result;
+  Timeout timeout(base::TimeDelta::FromSeconds(10));
+  Status status = client_->SendCommandAndGetResultWithTimeout(
+      "Page.printToPDF", params, &timeout, &result);
+  if (status.IsError()) {
+    if (status.code() == kUnknownError) {
+      return Status(kInvalidArgument, status);
+    }
+    return status;
+  }
+  if (!result->GetString("data", pdf))
     return Status(kUnknownError, "expected string 'data' in response");
   return Status(kOk);
 }
@@ -1126,8 +1146,8 @@ Status WebViewImpl::CallAsyncFunctionInternal(
   }
 }
 
-void WebViewImpl::ClearNavigationState(const std::string& new_frame_id) {
-  navigation_tracker_->ClearState(new_frame_id);
+void WebViewImpl::SetFrame(const std::string& new_frame_id) {
+  navigation_tracker_->SetFrame(new_frame_id);
 }
 
 Status WebViewImpl::IsNotPendingNavigation(const std::string& frame_id,
@@ -1140,7 +1160,7 @@ Status WebViewImpl::IsNotPendingNavigation(const std::string& frame_id,
   }
   bool is_pending;
   Status status =
-      navigation_tracker_->IsPendingNavigation(frame_id, timeout, &is_pending);
+      navigation_tracker_->IsPendingNavigation(timeout, &is_pending);
   if (status.IsError())
     return status;
   // An alert may block the pending navigation.

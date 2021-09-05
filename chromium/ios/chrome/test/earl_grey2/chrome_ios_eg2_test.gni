@@ -33,6 +33,12 @@ template("chrome_ios_eg2_test_app_host") {
       if (ios_chrome_info_plist_additions != []) {
         info_plists += ios_chrome_info_plist_additions
       }
+      if (ios_chrome_info_plist_addition_targets != []) {
+        if (!defined(deps)) {
+          deps = []
+        }
+        deps += ios_chrome_info_plist_addition_targets
+      }
       if (defined(invoker.extra_info_plists)) {
         info_plists += invoker.extra_info_plists
       }
@@ -129,6 +135,20 @@ set_defaults("chrome_ios_eg_v2_test_app_host") {
 }
 
 template("chrome_ios_eg2_test") {
+  _deps_group_name = target_name + "_deps_group"
+  group(_deps_group_name) {
+    testonly = true
+
+    public_deps = []
+    if (defined(invoker.deps)) {
+      public_deps += invoker.deps
+    }
+
+    if (defined(invoker.public_deps)) {
+      public_deps += invoker.public_deps
+    }
+  }
+
   assert(defined(invoker.xcode_test_application_name),
          "xcode_test_application_name must be defined for $target_name")
   assert(

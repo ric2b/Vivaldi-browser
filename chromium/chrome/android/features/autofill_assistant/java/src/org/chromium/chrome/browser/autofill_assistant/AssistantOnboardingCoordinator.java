@@ -25,7 +25,7 @@ import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.widget.ScrimView;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 
@@ -43,6 +43,8 @@ class AssistantOnboardingCoordinator {
     private static final String FLIGHTS_INTENT = "FLIGHTS_CHECKIN";
     private static final String FOOD_ORDERING_INTENT = "FOOD_ORDERING";
     private static final String VOICE_SEARCH_INTENT = "TELEPORT";
+    private static final String SHOPPING_INTENT = "SHOPPING";
+    private static final String SHOPPING_ASSISTED_CHECKOUT_INTENT = "SHOPPING_ASSISTED_CHECKOUT";
     private static final String BUY_MOVIE_TICKETS_EXPERIMENT_ID = "4363482";
 
     private final String mExperimentIds;
@@ -96,8 +98,9 @@ class AssistantOnboardingCoordinator {
         overlayModel.set(AssistantOverlayModel.STATE, AssistantOverlayState.FULL);
 
         mContent = new AssistantBottomSheetContent(mContext, () -> {
-            callback.onResult(/* accept= */ false);
-            hide();
+            onUserAction(
+                    /* accept= */ false, callback, OnBoarding.OB_NO_ANSWER,
+                    DropOutReason.ONBOARDING_BACK_BUTTON_CLICKED);
             return true;
         });
         initContent(callback);
@@ -183,21 +186,27 @@ class AssistantOnboardingCoordinator {
         initView.setFocusable(true);
 
         initView.findViewById(R.id.button_init_ok)
-                .setOnClickListener(unusedView -> onClicked(true, callback));
+                .setOnClickListener(unusedView
+                        -> onUserAction(
+                                /* accept= */ true, callback, OnBoarding.OB_ACCEPTED,
+                                DropOutReason.DECLINED));
         initView.findViewById(R.id.button_init_not_ok)
-                .setOnClickListener(unusedView -> onClicked(false, callback));
+                .setOnClickListener(unusedView
+                        -> onUserAction(
+                                /* accept= */ false, callback, OnBoarding.OB_CANCELLED,
+                                DropOutReason.DECLINED));
 
         updateViewBasedOnIntent(initView);
 
         mContent.setContent(initView, initView);
     }
 
-    private void onClicked(boolean accept, Callback<Boolean> callback) {
+    private void onUserAction(boolean accept, Callback<Boolean> callback,
+            @OnBoarding int onboardingAnswer, @DropOutReason int dropoutReason) {
         AutofillAssistantPreferencesUtil.setInitialPreferences(accept);
-        AutofillAssistantMetrics.recordOnBoarding(
-                accept ? OnBoarding.OB_ACCEPTED : OnBoarding.OB_CANCELLED);
+        AutofillAssistantMetrics.recordOnBoarding(onboardingAnswer);
         if (!accept) {
-            AutofillAssistantMetrics.recordDropOut(DropOutReason.DECLINED);
+            AutofillAssistantMetrics.recordDropOut(dropoutReason);
         }
 
         callback.onResult(accept);
@@ -227,6 +236,11 @@ class AssistantOnboardingCoordinator {
             case RENT_CAR_INTENT:
                 termsTextView.setText(R.string.autofill_assistant_init_message_short);
                 titleTextView.setText(R.string.autofill_assistant_init_message_rent_car);
+                break;
+            case SHOPPING_INTENT:
+            case SHOPPING_ASSISTED_CHECKOUT_INTENT:
+                termsTextView.setText(R.string.autofill_assistant_init_message_short);
+                titleTextView.setText(R.string.autofill_assistant_init_message_shopping);
                 break;
             case BUY_MOVIE_TICKETS_INTENT:
                 if (Arrays.asList(mExperimentIds.split(","))

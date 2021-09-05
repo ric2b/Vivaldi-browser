@@ -4,6 +4,7 @@
 
 #include "platform_media/common/platform_ipc_util.h"
 
+#include "base/logging.h"
 #include "mojo/public/cpp/base/shared_memory_utils.h"
 
 #include <algorithm>

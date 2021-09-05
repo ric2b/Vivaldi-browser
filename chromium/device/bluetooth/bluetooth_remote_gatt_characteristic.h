@@ -42,6 +42,12 @@ class BluetoothRemoteGattDescriptor;
 class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
     : public virtual BluetoothGattCharacteristic {
  public:
+  // Parameter for WriteRemoteCharacteristic
+  enum class WriteType {
+    kWithResponse,
+    kWithoutResponse,
+  };
+
   // The ValueCallback is used to return the value of a remote characteristic
   // upon a read request.
   using ValueCallback = base::OnceCallback<void(const std::vector<uint8_t>&)>;
@@ -136,13 +142,25 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
   virtual void ReadRemoteCharacteristic(ValueCallback callback,
                                         ErrorCallback error_callback) = 0;
 
+  // Sends a write request to a remote characteristic with the value |value|
+  // using the specified |write_type|. |callback| is called to signal success
+  // and |error_callback| for failures. This method only applies to remote
+  // characteristics and will fail for those that are locally hosted.
+  virtual void WriteRemoteCharacteristic(const std::vector<uint8_t>& value,
+                                         WriteType write_type,
+                                         base::OnceClosure callback,
+                                         ErrorCallback error_callback) = 0;
+
+  // DEPRECATED: Use WriteRemoteCharacteristic instead. This method remains
+  // for backward compatibility.
   // Sends a write request to a remote characteristic with the value |value|.
   // |callback| is called to signal success and |error_callback| for failures.
   // This method only applies to remote characteristics and will fail for those
   // that are locally hosted.
-  virtual void WriteRemoteCharacteristic(const std::vector<uint8_t>& value,
-                                         base::OnceClosure callback,
-                                         ErrorCallback error_callback) = 0;
+  virtual void DeprecatedWriteRemoteCharacteristic(
+      const std::vector<uint8_t>& value,
+      base::OnceClosure callback,
+      ErrorCallback error_callback) = 0;
 
 #if defined(OS_CHROMEOS)
   // Sends a prepare write request to a remote characteristic with the value
@@ -156,15 +174,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
       base::OnceClosure callback,
       ErrorCallback error_callback) = 0;
 #endif
-
-  // Sends a write request to a remote characteristic with the value |value|
-  // without waiting for a response. This method returns false to signal
-  // failures. When attempting to write the remote characteristic true is
-  // returned without a guarantee of success. This method only applies to remote
-  // characteristics and will fail for those that are locally hosted.
-  // This method is currently implemented only on macOS.
-  // TODO(https://crbug.com/831524): Implement it on other platforms as well.
-  virtual bool WriteWithoutResponse(base::span<const uint8_t> value);
 
  protected:
   using DescriptorMap =

@@ -12,7 +12,7 @@ import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_SHORT_
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_DEVICE_DAYDREAM;
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_SVR;
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE;
-import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VR_SETTINGS_SERVICE;
+import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VR_DON_ENABLED;
 
 import android.annotation.TargetApi;
 import android.graphics.Bitmap;
@@ -20,8 +20,9 @@ import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.os.Build;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
 import android.support.test.uiautomator.UiDevice;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -41,11 +42,9 @@ import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.vr.rules.VrSettingsFile;
 import org.chromium.chrome.browser.vr.rules.XrActivityRestriction;
 import org.chromium.chrome.browser.vr.util.NativeUiUtils;
 import org.chromium.chrome.browser.vr.util.PermissionUtils;
-import org.chromium.chrome.browser.vr.util.VrSettingsServiceUtils;
 import org.chromium.chrome.browser.vr.util.VrTestRuleUtils;
 import org.chromium.chrome.browser.vr.util.VrTransitionUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
@@ -164,11 +163,10 @@ public class WebXrVrTransitionTest {
      */
     @Test
     @MediumTest
-    @Restriction({RESTRICTION_TYPE_DEVICE_DAYDREAM, RESTRICTION_TYPE_VR_SETTINGS_SERVICE})
-    @VrSettingsFile(VrSettingsServiceUtils.FILE_DDVIEW_DONENABLED)
-            @CommandLineFlags.Add({"enable-features=WebXR"})
-            @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-            public void testPresentationPromiseUnresolvedDuringDon_WebXr() {
+    @Restriction({RESTRICTION_TYPE_DEVICE_DAYDREAM, RESTRICTION_TYPE_VR_DON_ENABLED})
+    @CommandLineFlags.Add({"enable-features=WebXR"})
+    @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    public void testPresentationPromiseUnresolvedDuringDon_WebXr() {
         presentationPromiseUnresolvedDuringDonImpl(
 
                 "webxr_test_presentation_promise_unresolved_during_don", mWebXrVrTestFramework);
@@ -186,11 +184,10 @@ public class WebXrVrTransitionTest {
      */
     @Test
     @MediumTest
-    @Restriction({RESTRICTION_TYPE_DEVICE_DAYDREAM, RESTRICTION_TYPE_VR_SETTINGS_SERVICE})
-    @VrSettingsFile(VrSettingsServiceUtils.FILE_DDVIEW_DONENABLED)
-            @CommandLineFlags.Add({"enable-features=WebXR"})
-            @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-            public void testPresentationPromiseRejectedIfDonCanceled_WebXr() {
+    @Restriction({RESTRICTION_TYPE_DEVICE_DAYDREAM, RESTRICTION_TYPE_VR_DON_ENABLED})
+    @CommandLineFlags.Add({"enable-features=WebXR"})
+    @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    public void testPresentationPromiseRejectedIfDonCanceled_WebXr() {
         presentationPromiseRejectedIfDonCanceledImpl(
 
                 "webxr_test_presentation_promise_rejected_if_don_canceled", mWebXrVrTestFramework);
@@ -206,7 +203,8 @@ public class WebXrVrTransitionTest {
         // TODO(bsheedy): Make this less hacky if there's ever an explicit way to check if the
         // DON flow is currently active https://crbug.com/758296
         CriteriaHelper.pollUiThread(() -> {
-            return uiDevice.getCurrentPackageName().equals("com.google.vr.vrcore");
+            String currentPackageName = uiDevice.getCurrentPackageName();
+            return currentPackageName != null && currentPackageName.equals("com.google.vr.vrcore");
         }, "DON flow did not start", POLL_TIMEOUT_LONG_MS, POLL_CHECK_INTERVAL_SHORT_MS);
         uiDevice.pressBack();
         framework.waitOnJavaScriptStep();
@@ -347,7 +345,7 @@ public class WebXrVrTransitionTest {
     }
 
     /**
-     * Tests that a consent dialog dismisses by itself when the page navigates away from
+     * Tests that a permission prompt dismisses by itself when the page navigates away from
      * the current page.
      */
     @Test
@@ -355,14 +353,13 @@ public class WebXrVrTransitionTest {
             @CommandLineFlags.Add({"enable-features=WebXR"})
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
             public void testConsentDialogIsDismissedWhenPageNavigatesAwayInMainFrame() {
-        mWebXrVrTestFramework.setConsentDialogAction(
-                WebXrVrTestFramework.CONSENT_DIALOG_ACTION_DO_NOTHING);
+        mWebXrVrTestFramework.setPermissionPromptAction(
+                WebXrVrTestFramework.PERMISSION_PROMPT_ACTION_DO_NOTHING);
         mWebXrVrTestFramework.loadFileAndAwaitInitialization(
                 "generic_webxr_page", PAGE_LOAD_TIMEOUT_S);
         mWebXrVrTestFramework.enterSessionWithUserGesture();
         mWebXrVrTestFramework.runJavaScriptOrFail(
                 "window.location.href = 'https://google.com'", POLL_TIMEOUT_SHORT_MS);
-        PermissionUtils.waitForConsentPromptDismissal(
-                mWebXrVrTestFramework.getRule().getActivity());
+        PermissionUtils.waitForPermissionPromptDismissal();
     }
 }

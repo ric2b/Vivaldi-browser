@@ -39,8 +39,6 @@ void AddSearchInSettingsStrings(content::WebUIDataSource* html_source) {
       {"searchNoResults", IDS_SEARCH_NO_RESULTS},
       {"searchResults", IDS_SEARCH_RESULTS},
       {"searchResultSelected", IDS_OS_SEARCH_RESULT_ROW_A11Y_RESULT_SELECTED},
-      {"searchResultsOne", IDS_OS_SEARCH_BOX_A11Y_ONE_RESULT},
-      {"searchResultsNumber", IDS_OS_SEARCH_BOX_A11Y_RESULT_COUNT},
       // TODO(dpapad): IDS_DOWNLOAD_CLEAR_SEARCH and IDS_HISTORY_CLEAR_SEARCH
       // are identical, merge them to one and re-use here.
       {"clearSearch", IDS_DOWNLOAD_CLEAR_SEARCH},
@@ -98,6 +96,10 @@ void MainSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"settings", IDS_SETTINGS_SETTINGS},
       {"settingsAltPageTitle", IDS_SETTINGS_ALT_PAGE_TITLE},
       {"subpageArrowRoleDescription", IDS_SETTINGS_SUBPAGE_BUTTON},
+      {"subpageBackButtonAriaLabel",
+       IDS_SETTINGS_SUBPAGE_BACK_BUTTON_ARIA_LABEL},
+      {"subpageBackButtonAriaRoleDescription",
+       IDS_SETTINGS_SUBPAGE_BACK_BUTTON_ARIA_ROLE_DESCRIPTION},
       {"notValidWebAddress", IDS_SETTINGS_NOT_VALID_WEB_ADDRESS},
       {"notValidWebAddressForContentType",
        IDS_SETTINGS_NOT_VALID_WEB_ADDRESS_FOR_CONTENT_TYPE},
@@ -143,11 +145,6 @@ void MainSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddResourcePath("search/search.mojom-lite.js",
                                IDR_OS_SETTINGS_SEARCH_MOJOM_LITE_JS);
 
-  html_source->AddString("browserSettingsBannerText",
-                         l10n_util::GetStringFUTF16(
-                             IDS_SETTINGS_BROWSER_SETTINGS_BANNER,
-                             base::ASCIIToUTF16(chrome::kChromeUISettingsURL)));
-
   AddSearchInSettingsStrings(html_source);
   AddChromeOSUserStrings(html_source);
 
@@ -160,6 +157,32 @@ void MainSection::AddHandlers(content::WebUI* web_ui) {
 
   web_ui->AddMessageHandler(
       std::make_unique<::settings::BrowserLifetimeHandler>());
+}
+
+int MainSection::GetSectionNameMessageId() const {
+  NOTIMPLEMENTED();
+  return 0;
+}
+
+mojom::Section MainSection::GetSection() const {
+  NOTIMPLEMENTED();
+  return mojom::Section::kMinValue;
+}
+
+mojom::SearchResultIcon MainSection::GetSectionIcon() const {
+  NOTIMPLEMENTED();
+  return mojom::SearchResultIcon::kMinValue;
+}
+
+std::string MainSection::GetSectionPath() const {
+  NOTIMPLEMENTED();
+  return std::string();
+}
+
+void MainSection::RegisterHierarchy(HierarchyGenerator* generator) const {
+  // MainSection is a container for common resources/functionality shared
+  // between sections and does not have its own subpages/settings.
+  NOTIMPLEMENTED();
 }
 
 void MainSection::AddChromeOSUserStrings(

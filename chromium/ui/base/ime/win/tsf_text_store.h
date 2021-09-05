@@ -102,6 +102,7 @@ class TextInputClient;
 class COMPONENT_EXPORT(UI_BASE_IME_WIN) TSFTextStore
     : public ITextStoreACP,
       public ITfContextOwnerCompositionSink,
+      public ITfLanguageProfileNotifySink,
       public ITfKeyTraceEventSink,
       public ITfTextEditSink {
  public:
@@ -215,6 +216,10 @@ class COMPONENT_EXPORT(UI_BASE_IME_WIN) TSFTextStore
                                      ITfRange* range) override;
   IFACEMETHODIMP OnEndComposition(
       ITfCompositionView* composition_view) override;
+
+  // ITfLanguageProfileNotifySink:
+  IFACEMETHODIMP OnLanguageChange(LANGID langid, BOOL* pfAccept) override;
+  IFACEMETHODIMP OnLanguageChanged() override;
 
   // ITfTextEditSink:
   IFACEMETHODIMP OnEndEdit(ITfContext* context,
@@ -390,6 +395,10 @@ class COMPONENT_EXPORT(UI_BASE_IME_WIN) TSFTextStore
   //    |selection_.start()|: 1
   //    |selection_.end()|: 4
   gfx::Range selection_;
+
+  // Indicates if the selection is an interim character. Please refer to
+  // https://docs.microsoft.com/en-us/windows/win32/api/textstor/ns-textstor-ts_selectionstyle
+  bool is_selection_interim_char_ = false;
 
   //  |start_offset| and |end_offset| of |text_spans_| indicates
   //  the offsets in |string_buffer_document_|.

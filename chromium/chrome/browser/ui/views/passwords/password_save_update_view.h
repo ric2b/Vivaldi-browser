@@ -14,10 +14,6 @@
 namespace views {
 class EditableCombobox;
 class ToggleImageButton;
-
-#if defined(PASSWORD_STORE_SELECT_ENABLED)
-class Checkbox;
-#endif  // defined(PASSWORD_STORE_SELECT_ENABLED)
 }  // namespace views
 
 class PasswordSignInPromoView;
@@ -65,7 +61,7 @@ class PasswordSaveUpdateView : public PasswordBubbleViewBase,
   void TogglePasswordVisibility();
   void UpdateUsernameAndPasswordInModel();
   void ReplaceWithPromo();
-  void UpdateDialogButtons();
+  void UpdateBubbleUIElements();
   std::unique_ptr<views::View> CreateFooterView();
   void OnDialogCancelled();
 
@@ -78,17 +74,13 @@ class PasswordSaveUpdateView : public PasswordBubbleViewBase,
   // Different promo dialogs that helps the user get access to credentials
   // across devices. One of these are non-null when the promotion dialog is
   // active.
-  PasswordSignInPromoView* sign_in_promo_;
+  PasswordSignInPromoView* sign_in_promo_ = nullptr;
 
-  views::EditableCombobox* username_dropdown_;
-  views::ToggleImageButton* password_view_button_;
+  views::EditableCombobox* username_dropdown_ = nullptr;
+  views::ToggleImageButton* password_view_button_ = nullptr;
 
   // The view for the password value.
-  views::EditableCombobox* password_dropdown_;
-
-#if defined(PASSWORD_STORE_SELECT_ENABLED)
-  views::Checkbox* account_store_checkbox_ = nullptr;
-#endif  // defined(PASSWORD_STORE_SELECT_ENABLED)
+  views::EditableCombobox* password_dropdown_ = nullptr;
 
   bool are_passwords_revealed_;
 };

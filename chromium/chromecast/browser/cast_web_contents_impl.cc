@@ -877,8 +877,7 @@ void CastWebContentsImpl::ResourceLoadComplete(
   metrics_helper->RecordApplicationEventWithValue(
       "Cast.Platform.ResourceRequestError", net_error);
   LOG(ERROR) << "Resource \"" << resource_load_info.original_url << "\""
-             << " failed to load "
-             << " with net_error=" << net_error
+             << " failed to load with net_error=" << net_error
              << ", description=" << net::ErrorToShortString(net_error);
   shell::CastBrowserProcess::GetInstance()->connectivity_checker()->Check();
   for (auto& observer : observer_list_) {
@@ -931,6 +930,7 @@ void CastWebContentsImpl::WebContentsDestroyed() {
 }
 
 void CastWebContentsImpl::DidUpdateFaviconURL(
+    content::RenderFrameHost* render_frame_host,
     const std::vector<blink::mojom::FaviconURLPtr>& candidates) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 

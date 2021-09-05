@@ -1,9 +1,18 @@
+import io
 import itertools
 import json
 import os
 from copy import deepcopy
 from multiprocessing import Pool, cpu_count
-from six import PY3, iteritems, itervalues, string_types, binary_type, text_type
+from six import (
+    PY3,
+    binary_type,
+    ensure_text,
+    iteritems,
+    itervalues,
+    string_types,
+    text_type,
+)
 
 from . import vcs
 from .item import (ConformanceCheckerTest, ManifestItem, ManualTest, RefTest, SupportFile,
@@ -167,12 +176,14 @@ class Manifest(object):
 
         to_update = []
 
-        for source_file, update in tree:
+        for source_file_or_path, update in tree:
             if not update:
-                assert isinstance(source_file, (binary_type, text_type))
-                deleted.remove(tuple(source_file.split(os.path.sep)))
+                assert isinstance(source_file_or_path, (binary_type, text_type))
+                path = ensure_text(source_file_or_path)
+                deleted.remove(tuple(path.split(os.path.sep)))
             else:
-                assert not isinstance(source_file, bytes)
+                assert not isinstance(source_file_or_path, (binary_type, text_type))
+                source_file = source_file_or_path
                 rel_path_parts = source_file.rel_path_parts
                 assert isinstance(rel_path_parts, tuple)
 
@@ -318,7 +329,7 @@ def _load(logger,  # type: Logger
         else:
             logger.debug("Creating new manifest at %s" % manifest)
         try:
-            with open(manifest, "rb") as f:
+            with io.open(manifest, "r", encoding="utf-8") as f:
                 rv = Manifest.from_json(tests_root,
                                         fast_json.load(f),
                                         types=types,

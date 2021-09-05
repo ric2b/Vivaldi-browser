@@ -9,6 +9,8 @@ import android.content.res.Resources;
 import android.graphics.Rect;
 import android.graphics.RectF;
 
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.browser.compositor.TitleCache;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.tab.Tab;
@@ -25,6 +27,8 @@ class MockLayoutHost implements LayoutManagerHost, LayoutRenderHost {
 
     private final Context mContext;
     private boolean mPortrait = true;
+    private final ChromeFullscreenManager mFullscreenManager;
+    private final ObservableSupplierImpl<ChromeFullscreenManager> mFullscreenManagerSupplier;
 
     static class MockTitleCache implements TitleCache {
         @Override
@@ -43,6 +47,10 @@ class MockLayoutHost implements LayoutManagerHost, LayoutRenderHost {
 
     MockLayoutHost(Context context) {
         mContext = context;
+        mFullscreenManager =
+                new ChromeFullscreenManager(null, ChromeFullscreenManager.ControlsPosition.TOP);
+        mFullscreenManagerSupplier = new ObservableSupplierImpl<>();
+        mFullscreenManagerSupplier.set(mFullscreenManager);
     }
 
     public void setOrientation(boolean portrait) {
@@ -134,7 +142,12 @@ class MockLayoutHost implements LayoutManagerHost, LayoutRenderHost {
 
     @Override
     public ChromeFullscreenManager getFullscreenManager() {
-        return null;
+        return mFullscreenManager;
+    }
+
+    @Override
+    public ObservableSupplier<ChromeFullscreenManager> getFullscreenManagerSupplier() {
+        return mFullscreenManagerSupplier;
     }
 
     @Override

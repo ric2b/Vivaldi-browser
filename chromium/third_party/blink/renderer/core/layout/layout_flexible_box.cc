@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/core/layout/min_max_sizes.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_mixin.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/text_autosizer.h"
 #include "third_party/blink/renderer/core/paint/block_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
@@ -656,7 +657,7 @@ LayoutUnit LayoutFlexibleBox::ComputeMainAxisExtentForChild(
   // our logical width is auto, we can just use our cached value. So let's do
   // that here. (Compare code in LayoutBlock::computePreferredLogicalWidths)
   if (child.StyleRef().LogicalWidth().IsAuto() && !HasAspectRatio(child)) {
-    if (size.IsMinContent())
+    if (size.IsMinContent() || size.IsMinIntrinsic())
       return child.PreferredLogicalWidths().min_size - border_and_padding;
     if (size.IsMaxContent())
       return child.PreferredLogicalWidths().max_size - border_and_padding;
@@ -958,9 +959,8 @@ void LayoutFlexibleBox::LayoutFlexItems(bool relayout_children,
   PaintLayerScrollableArea::PreventRelayoutScope prevent_relayout_scope(
       layout_scope);
 
-  // Set up our master list of flex items. All of the rest of the algorithm
-  // should work off this list of a subset.
-  // TODO(cbiesinger): That second part is not yet true.
+  // Set up our list of flex items. All of the rest of the algorithm should
+  // work off this list of a subset.
   ChildLayoutType layout_type =
       relayout_children ? kForceLayout : kLayoutIfNeeded;
   const LayoutUnit line_break_length = MainAxisContentExtent(LayoutUnit::Max());
@@ -1257,7 +1257,7 @@ void LayoutFlexibleBox::ConstructAndAppendFlexItem(
   algorithm->emplace_back(
       &child, child.StyleRef(), child_inner_flex_base_size, sizes,
       /* min_max_cross_sizes */ base::nullopt, main_axis_border_padding,
-      cross_axis_border_padding, physical_margins);
+      cross_axis_border_padding, physical_margins, /* unused */ NGBoxStrut());
 }
 
 void LayoutFlexibleBox::SetOverrideMainAxisContentSizeForChild(FlexItem& item) {

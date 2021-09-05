@@ -11,6 +11,7 @@
 
 #include <algorithm>
 
+#include "base/logging.h"
 #include "base/numerics/ranges.h"
 #include "base/win/scoped_variant.h"
 #include "ui/base/ime/text_input_client.h"
@@ -80,6 +81,8 @@ HRESULT TSFTextStore::QueryInterface(REFIID iid, void** result) {
     *result = static_cast<ITextStoreACP*>(this);
   } else if (iid == IID_ITfContextOwnerCompositionSink) {
     *result = static_cast<ITfContextOwnerCompositionSink*>(this);
+  } else if (iid == IID_ITfLanguageProfileNotifySink) {
+    *result = static_cast<ITfLanguageProfileNotifySink*>(this);
   } else if (iid == IID_ITfTextEditSink) {
     *result = static_cast<ITfTextEditSink*>(this);
   } else if (iid == IID_ITfKeyTraceEventSink) {
@@ -647,9 +650,7 @@ HRESULT TSFTextStore::RequestLock(DWORD lock_flags, HRESULT* result) {
   // 3. User commits current composition text.
   if (((new_composition_start > last_composition_start &&
         text_input_client_->HasCompositionText()) ||
-       (wparam_keydown_fired_ == 0 && !has_composition_range_ &&
-        !text_input_client_->HasCompositionText()) ||
-       (wparam_keydown_fired_ != 0 && !has_composition_range_)) &&
+       !has_composition_range_) &&
       text_input_client_) {
     CommitTextAndEndCompositionIfAny(last_composition_start,
                                      new_composition_start);
@@ -694,6 +695,7 @@ HRESULT TSFTextStore::RequestLock(DWORD lock_flags, HRESULT* result) {
 
   // reset the flag since we've already inserted/replaced the text.
   new_text_inserted_ = false;
+  is_selection_interim_char_ = false;
 
   // reset string_buffer_ if composition is no longer active.
   if (!text_input_client_->HasCompositionText()) {
@@ -760,6 +762,7 @@ HRESULT TSFTextStore::SetSelection(ULONG selection_buffer_size,
     }
     selection_.set_start(start_pos);
     selection_.set_end(end_pos);
+    is_selection_interim_char_ = selection_buffer[0].style.fInterimChar;
   }
   return S_OK;
 }
@@ -826,6 +829,15 @@ HRESULT TSFTextStore::OnUpdateComposition(ITfCompositionView* composition_view,
 }
 
 HRESULT TSFTextStore::OnEndComposition(ITfCompositionView* composition_view) {
+  return S_OK;
+}
+
+HRESULT TSFTextStore::OnLanguageChange(LANGID langid, BOOL* pfAccept) {
+  return S_OK;
+}
+HRESULT TSFTextStore::OnLanguageChanged() {
+  if (text_input_client_)
+    text_input_client_->OnInputMethodChanged();
   return S_OK;
 }
 
@@ -1052,6 +1064,10 @@ bool TSFTextStore::GetCompositionStatus(
       span.end_offset = start_pos + length;
       span.underline_color = SK_ColorBLACK;
       span.background_color = SK_ColorTRANSPARENT;
+      if (selection_.EqualsIgnoringDirection(
+              gfx::Range(span.start_offset, span.end_offset))) {
+        span.interim_char_selection = is_selection_interim_char_;
+      }
       if (has_display_attribute)
         GetStyle(display_attribute, &span);
       spans->push_back(span);
@@ -1355,8 +1371,11 @@ void TSFTextStore::CommitTextAndEndCompositionIfAny(size_t old_size,
             : new_committed_string_size);
     // TODO(crbug.com/978678): Unify the behavior of
     //     |TextInputClient::InsertText(text)| for the empty text.
-    if (!new_committed_string.empty())
+    if (!new_committed_string.empty()) {
       text_input_client_->InsertText(new_committed_string);
+    } else {
+      text_input_client_->ClearCompositionText();
+    }
     // Notify accessibility about this committed composition
     text_input_client_->SetActiveCompositionForAccessibility(
         replace_text_range_, new_committed_string,

@@ -95,6 +95,7 @@ class ScriptExecutor : public ActionDelegate,
   void Run(const UserData* user_data, RunScriptCallback callback);
 
   const UserData* GetUserData() const override;
+  UserModel* GetUserModel() override;
 
   // Override ScriptExecutorDelegate::Listener
   void OnNavigationStateChanged() override;
@@ -123,9 +124,8 @@ class ScriptExecutor : public ActionDelegate,
       CollectUserDataOptions* collect_user_data_options) override;
   void WriteUserData(
       base::OnceCallback<void(UserData*, UserData::FieldChange*)>) override;
-  void WriteUserModel(
-      base::OnceCallback<void(UserModel*)> write_callback) override;
-  void GetFullCard(GetFullCardCallback callback) override;
+  void GetFullCard(const autofill::CreditCard* credit_card,
+                   GetFullCardCallback callback) override;
   void Prompt(std::unique_ptr<std::vector<UserAction>> user_actions,
               bool disable_force_expand_sheet,
               base::OnceCallback<void()> end_on_navigation_callback,
@@ -214,7 +214,11 @@ class ScriptExecutor : public ActionDelegate,
   void ClearInfoBox() override;
   void SetInfoBox(const InfoBox& info_box) override;
   void SetProgress(int progress) override;
+  void SetProgressActiveStep(int active_step) override;
   void SetProgressVisible(bool visible) override;
+  void SetStepProgressBarConfiguration(
+      const ShowProgressBarProto::StepProgressBarConfiguration& configuration)
+      override;
   void SetViewportMode(ViewportMode mode) override;
   ViewportMode GetViewportMode() override;
   void SetPeekMode(ConfigureBottomSheetProto::PeekMode peek_mode) override;
@@ -231,9 +235,9 @@ class ScriptExecutor : public ActionDelegate,
   void RequireUI() override;
   void SetGenericUi(
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-      base::OnceCallback<void(bool,
-                              ProcessedActionStatusProto,
-                              const UserModel*)> end_action_callback) override;
+      base::OnceCallback<void(const ClientStatus&)> end_action_callback,
+      base::OnceCallback<void(const ClientStatus&)>
+          view_inflation_finished_callback) override;
   void ClearGenericUi() override;
 
  private:

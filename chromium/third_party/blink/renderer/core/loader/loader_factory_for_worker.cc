@@ -18,7 +18,7 @@
 
 namespace blink {
 
-void LoaderFactoryForWorker::Trace(Visitor* visitor) {
+void LoaderFactoryForWorker::Trace(Visitor* visitor) const {
   visitor->Trace(global_scope_);
   LoaderFactory::Trace(visitor);
 }
@@ -49,7 +49,7 @@ std::unique_ptr<WebURLLoader> LoaderFactoryForWorker::CreateURLLoader(
   }
 
   if (url_loader_factory) {
-    return web_context_->WrapURLLoaderFactory(url_loader_factory.PassPipe())
+    return web_context_->WrapURLLoaderFactory(std::move(url_loader_factory))
         ->CreateURLLoader(wrapped, CreateTaskRunnerHandle(task_runner));
   }
 

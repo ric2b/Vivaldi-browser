@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/feature_list.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -111,23 +110,23 @@ class TranslateInfoBarDelegate : public infobars::InfoBarDelegate {
 
   virtual base::string16 original_language_name() const;
 
-  void UpdateOriginalLanguage(const std::string& language_code);
+  virtual void UpdateOriginalLanguage(const std::string& language_code);
 
   std::string target_language_code() const {
     return ui_delegate_.GetTargetLanguageCode();
   }
 
-  base::string16 target_language_name() const {
-    return language_name_at(ui_delegate_.GetTargetLanguageIndex());
-  }
+  virtual base::string16 target_language_name() const;
 
-  void UpdateTargetLanguage(const std::string& language_code);
+  virtual void UpdateTargetLanguage(const std::string& language_code);
 
   // Returns true if the current infobar indicates an error (in which case it
   // should get a yellow background instead of a blue one).
   bool is_error() const {
     return step_ == translate::TRANSLATE_STEP_TRANSLATE_ERROR;
   }
+
+  void OnErrorShown(TranslateErrors::Type error_type);
 
   // Return true if the translation was triggered by a menu entry instead of
   // via an infobar/bubble or preference.
@@ -137,7 +136,7 @@ class TranslateInfoBarDelegate : public infobars::InfoBarDelegate {
 
   virtual void Translate();
   virtual void RevertTranslation();
-  void RevertWithoutClosingInfobar();
+  virtual void RevertWithoutClosingInfobar();
   void ReportLanguageDetectionError();
 
   // Called when the user declines to translate a page, by either closing the
@@ -179,7 +178,6 @@ class TranslateInfoBarDelegate : public infobars::InfoBarDelegate {
 
   // The following methods are called by the infobar that displays the status
   // while translating and also the one displaying the error message.
-  base::string16 GetMessageInfoBarText();
   base::string16 GetMessageInfoBarButtonText();
   void MessageInfoBarButtonPressed();
   bool ShouldShowMessageInfoBarButton();

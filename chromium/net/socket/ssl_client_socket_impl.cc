@@ -900,8 +900,12 @@ int SSLClientSocketImpl::Init() {
 
   // TODO(https://crbug.com/775438), if |ssl_config_.privacy_mode| is enabled,
   // this should always continue with no client certificate.
-  send_client_cert_ = context_->GetClientCertificate(
-      host_and_port_, &client_cert_, &client_private_key_);
+  if (ssl_config_.privacy_mode == PRIVACY_MODE_ENABLED_WITHOUT_CLIENT_CERTS) {
+    send_client_cert_ = true;
+  } else {
+    send_client_cert_ = context_->GetClientCertificate(
+        host_and_port_, &client_cert_, &client_private_key_);
+  }
 
   return OK;
 }
@@ -1012,13 +1016,10 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
 
   // See how feasible enforcing RSA key usage would be. See
   // https://crbug.com/795089.
-  RSAKeyUsage rsa_key_usage =
-      CheckRSAKeyUsage(server_cert_.get(), SSL_get_current_cipher(ssl_.get()));
-  if (rsa_key_usage != RSAKeyUsage::kNotRSA) {
-    if (server_cert_verify_result_.is_issued_by_known_root) {
-      UMA_HISTOGRAM_ENUMERATION("Net.SSLRSAKeyUsage.KnownRoot", rsa_key_usage,
-                                static_cast<int>(RSAKeyUsage::kLastValue) + 1);
-    } else {
+  if (!server_cert_verify_result_.is_issued_by_known_root) {
+    RSAKeyUsage rsa_key_usage = CheckRSAKeyUsage(
+        server_cert_.get(), SSL_get_current_cipher(ssl_.get()));
+    if (rsa_key_usage != RSAKeyUsage::kNotRSA) {
       UMA_HISTOGRAM_ENUMERATION("Net.SSLRSAKeyUsage.UnknownRoot", rsa_key_usage,
                                 static_cast<int>(RSAKeyUsage::kLastValue) + 1);
     }
@@ -1648,7 +1649,8 @@ int SSLClientSocketImpl::VerifyCT() {
           server_cert_verify_result_.verified_cert.get(), server_cert_.get(),
           ct_verify_result_.scts,
           TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
-          ct_verify_result_.policy_compliance);
+          ct_verify_result_.policy_compliance,
+          ssl_config_.network_isolation_key);
   if (ct_requirement_status != TransportSecurityState::CT_NOT_REQUIRED) {
     ct_verify_result_.policy_compliance_required = true;
     if (server_cert_verify_result_.is_issued_by_known_root) {

@@ -112,7 +112,7 @@ const addSubmitButtonTouchEndHandler = function(form) {
  */
 const onSubmitButtonTouchEnd = function(evt) {
   const form = evt.currentTarget.form;
-  const formData = __gCrWeb.passwords.getPasswordFormData(form);
+  const formData = __gCrWeb.passwords.getPasswordFormData(form, window);
   if (!formData) {
     return;
   }
@@ -128,7 +128,7 @@ const onSubmitButtonTouchEnd = function(evt) {
  * @return {HTMLInputElement}
  */
 const findInputByUniqueFieldId = function(inputs, identifier) {
-  const uniqueID = Symbol.for('__gChrome~uniqueID');
+  const uniqueID = Symbol.for(__gCrWeb.fill.UNIQUE_ID_SYMBOL_NAME);
   for (let i = 0; i < inputs.length; ++i) {
     if (identifier === inputs[i][uniqueID]) {
       return inputs[i];
@@ -181,7 +181,7 @@ __gCrWeb.passwords['getPasswordFormDataAsString'] = function(identifier) {
   if (!el) {
     return '{}';
   }
-  const formData = __gCrWeb.passwords.getPasswordFormData(el);
+  const formData = __gCrWeb.passwords.getPasswordFormData(el, window);
   if (!formData) {
     return '{}';
   }
@@ -198,7 +198,10 @@ __gCrWeb.passwords['getPasswordFormDataAsString'] = function(identifier) {
  * @param {AutofillFormData} formData Form data.
  * @param {string} username The username to fill.
  * @param {string} password The password to fill.
- * @return {boolean} Whether a form field has been filled.
+ * @return {string} Whether a form field has been filled.
+ *
+ * TODO(crbug.com/1075444): Rewrite callback handler to accept various
+ * return types and return boolean.
  */
 __gCrWeb.passwords['fillPasswordForm'] = function(
     formData, username, password) {
@@ -206,9 +209,10 @@ __gCrWeb.passwords['fillPasswordForm'] = function(
       __gCrWeb.common.removeQueryAndReferenceFromURL(window.location.href);
   const origin = /** @type {string} */ (formData['origin']);
   if (!__gCrWeb.common.isSameOrigin(origin, normalizedOrigin)) {
-    return false;
+    return 'false';
   }
-  return fillPasswordFormWithData(formData, username, password, window);
+  return fillPasswordFormWithData(formData, username, password, window)
+      .toString();
 };
 
 /**
@@ -220,20 +224,23 @@ __gCrWeb.passwords['fillPasswordForm'] = function(
  * @param {number} confirmPasswordIdentifier The id of confirm password element
  *   to fill.
  * @param {string} password The password to fill.
- * @return {boolean} Whether new password field has been filled.
+ * @return {string} Whether new password field has been filled.
+ *
+ * TODO(crbug.com/1075444): Rewrite callback handler to accept various
+ * return types and return boolean.
  */
 __gCrWeb.passwords['fillPasswordFormWithGeneratedPassword'] = function(
     formIdentifier, newPasswordIdentifier, confirmPasswordIdentifier,
     password) {
   const form = __gCrWeb.form.getFormElementFromUniqueFormId(formIdentifier);
   if (!form) {
-    return false;
+    return 'false';
   }
   const inputs = getFormInputElements(form);
   const newPasswordField =
       findInputByUniqueFieldId(inputs, newPasswordIdentifier);
   if (!newPasswordField) {
-    return false;
+    return 'false';
   }
   // Avoid resetting if same value, as it moves cursor to the end.
   if (newPasswordField.value !== password) {
@@ -244,7 +251,7 @@ __gCrWeb.passwords['fillPasswordFormWithGeneratedPassword'] = function(
   if (confirmPasswordField && confirmPasswordField.value !== password) {
     __gCrWeb.fill.setInputElementValue(password, confirmPasswordField);
   }
-  return true;
+  return 'true';
 };
 
 /**
@@ -341,7 +348,7 @@ const getPasswordFormDataList = function(formDataList, win) {
   const doc = win.document;
   const forms = doc.forms;
   for (let i = 0; i < forms.length; i++) {
-    const formData = __gCrWeb.passwords.getPasswordFormData(forms[i]);
+    const formData = __gCrWeb.passwords.getPasswordFormData(forms[i], win);
     if (formData) {
       formDataList.push(formData);
       addSubmitButtonTouchEndHandler(forms[i]);
@@ -384,13 +391,14 @@ function getPasswordFormDataFromUnownedElements_(formDataList, window) {
 /**
  * Returns a JS object containing the data from |formElement|.
  * @param {HTMLFormElement} formElement An HTML Form element.
+ * @param {Window} win A window or a frame containing formData.
  * @return {Object} Object of data from formElement.
  */
-__gCrWeb.passwords.getPasswordFormData = function(formElement) {
+__gCrWeb.passwords.getPasswordFormData = function(formElement, win) {
   const extractMask = __gCrWeb.fill.EXTRACT_MASK_VALUE;
   const formData = {};
   const ok = __gCrWeb.fill.webFormElementToFormData(
-      window, formElement, null /* formControlElement */, extractMask, formData,
+      win, formElement, null /* formControlElement */, extractMask, formData,
       null /* field */);
   return ok ? formData : null;
 };

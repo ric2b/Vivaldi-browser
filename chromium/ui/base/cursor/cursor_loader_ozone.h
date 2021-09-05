@@ -7,19 +7,17 @@
 
 #include <map>
 
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/cursor_loader.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-forward.h"
 
 namespace ui {
+class CursorFactory;
 
-class CursorFactoryOzone;
-
-class UI_BASE_EXPORT CursorLoaderOzone : public CursorLoader {
+class COMPONENT_EXPORT(UI_BASE_CURSOR) CursorLoaderOzone : public CursorLoader {
  public:
-  // CursorLoaderOzone will use CursorFactoryOzone corresponding to the thread
-  // it was constructed on.
   CursorLoaderOzone();
   ~CursorLoaderOzone() override;
 
@@ -35,9 +33,12 @@ class UI_BASE_EXPORT CursorLoaderOzone : public CursorLoader {
   void SetPlatformCursor(gfx::NativeCursor* cursor) override;
 
  private:
+  PlatformCursor CursorFromType(mojom::CursorType type);
+  PlatformCursor CreateFallbackCursor(mojom::CursorType type);
+
   // Pointers are owned by ResourceBundle and must not be freed here.
   std::map<mojom::CursorType, PlatformCursor> image_cursors_;
-  CursorFactoryOzone* factory_ = nullptr;
+  CursorFactory* factory_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(CursorLoaderOzone);
 };

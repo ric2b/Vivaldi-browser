@@ -29,6 +29,7 @@
 import json
 import optparse
 import unittest
+import mock
 
 from blinkpy.common.path_finder import RELATIVE_WEB_TESTS
 from blinkpy.common.system.executive_mock import MockExecutive
@@ -1137,6 +1138,20 @@ class PortTest(LoggingTestCase):
             port.is_slow_wpt_test(
                 'external/wpt/html/dom/elements/global-attributes/dir_auto-EN-L.html'
             ))
+        self.assertFalse(
+            port.is_slow_wpt_test(
+                'external/wpt/css/css-pseudo/idlharness.html'))
+
+    def test_is_slow_wpt_test_idlharness_with_dcheck(self):
+        port = self.make_port(with_tests=True)
+        PortTest._add_manifest_to_mock_file_system(port)
+        port.host.filesystem.write_text_file(port._build_path('args.gn'),
+                                             'dcheck_always_on=true\n')
+        # We always consider idlharness tests slow, even if they aren't marked
+        # such in the manifest. See https://crbug.com/1047818
+        self.assertTrue(
+            port.is_slow_wpt_test(
+                'external/wpt/css/css-pseudo/idlharness.html'))
 
     def test_is_slow_wpt_test_with_variations(self):
         port = self.make_port(with_tests=True)
@@ -1662,6 +1677,18 @@ class PortTest(LoggingTestCase):
             options=optparse.Values({'nocheck_sys_deps': True}))
         self.assertIn('--disable-system-font-check',
                       port.additional_driver_flags())
+
+
+    def test_enable_tracing(self):
+        options, _ = optparse.OptionParser().parse_args([])
+        options.enable_tracing = '*,-blink'
+        port = self.make_port(with_tests=True, options=options)
+        with mock.patch('time.strftime', return_value='TIME'):
+            self.assertEqual([
+                '--trace-startup=*,-blink',
+                '--trace-startup-duration=0',
+                '--trace-startup-file=trace_layout_test_non_virtual_TIME.json',
+            ], port.args_for_test('non/virtual'))
 
 
 class NaturalCompareTest(unittest.TestCase):

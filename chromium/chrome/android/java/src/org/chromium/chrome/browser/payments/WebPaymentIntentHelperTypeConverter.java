@@ -4,19 +4,25 @@
 
 package org.chromium.chrome.browser.payments;
 
+import android.os.Bundle;
+import android.text.TextUtils;
+
 import androidx.annotation.Nullable;
 
 import org.chromium.base.CollectionUtil;
 import org.chromium.components.payments.intent.WebPaymentIntentHelperType;
+import org.chromium.payments.mojom.AddressErrors;
 import org.chromium.payments.mojom.PaymentCurrencyAmount;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentItem;
 import org.chromium.payments.mojom.PaymentMethodData;
 import org.chromium.payments.mojom.PaymentOptions;
+import org.chromium.payments.mojom.PaymentRequestDetailsUpdate;
 import org.chromium.payments.mojom.PaymentShippingOption;
 import org.chromium.payments.mojom.PaymentShippingType;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -105,7 +111,7 @@ public final class WebPaymentIntentHelperTypeConverter {
             @Nullable PaymentShippingOption shippingOption) {
         if (shippingOption == null) return null;
         return new WebPaymentIntentHelperType.PaymentShippingOption(shippingOption.id,
-                shippingOption.label, shippingOption.amount.currency, shippingOption.amount.value,
+                shippingOption.label, fromMojoPaymentCurrencyAmount(shippingOption.amount),
                 shippingOption.selected);
     }
 
@@ -144,5 +150,47 @@ public final class WebPaymentIntentHelperTypeConverter {
         return new WebPaymentIntentHelperType.PaymentOptions(paymentOptions.requestPayerName,
                 paymentOptions.requestPayerEmail, paymentOptions.requestPayerPhone,
                 paymentOptions.requestShipping, shippingType);
+    }
+
+    @Nullable
+    private static Bundle fromMojoShippingAddressErrors(@Nullable AddressErrors addressErrors) {
+        if (addressErrors == null) return null;
+        Bundle bundle = new Bundle();
+        putIfNonEmpty("addressLine", addressErrors.addressLine, bundle);
+        putIfNonEmpty("city", addressErrors.city, bundle);
+        putIfNonEmpty("countryCode", addressErrors.country, bundle);
+        putIfNonEmpty("dependentLocality", addressErrors.dependentLocality, bundle);
+        putIfNonEmpty("organization", addressErrors.organization, bundle);
+        putIfNonEmpty("phone", addressErrors.phone, bundle);
+        putIfNonEmpty("postalCode", addressErrors.postalCode, bundle);
+        putIfNonEmpty("recipient", addressErrors.recipient, bundle);
+        putIfNonEmpty("region", addressErrors.region, bundle);
+        putIfNonEmpty("sortingCode", addressErrors.sortingCode, bundle);
+        return bundle;
+    }
+
+    private static void putIfNonEmpty(String key, String value, Bundle bundle) {
+        if (!TextUtils.isEmpty(value)) bundle.putString(key, value);
+    }
+
+    /**
+     * Converts PaymentRequestDetailsUpdate from mojo to
+     * WebPaymentIntentHelperType.PaymentRequestDetailsUpdate.
+     * @param update The mojo PaymentRequestDetailsUpdate to be converted.
+     * @return The converted update.
+     */
+    @Nullable
+    public static WebPaymentIntentHelperType.PaymentRequestDetailsUpdate
+    fromMojoPaymentRequestDetailsUpdate(@Nullable PaymentRequestDetailsUpdate update) {
+        if (update == null) return null;
+        return new WebPaymentIntentHelperType.PaymentRequestDetailsUpdate(
+                fromMojoPaymentCurrencyAmount(update.total),
+                // Arrays.asList does not accept null.
+                update.shippingOptions == null
+                        ? null
+                        : fromMojoShippingOptionList(Arrays.asList(update.shippingOptions)),
+                // update.modifiers is intentionally redacted.
+                update.error, update.stringifiedPaymentMethodErrors,
+                fromMojoShippingAddressErrors(update.shippingAddressErrors));
     }
 }

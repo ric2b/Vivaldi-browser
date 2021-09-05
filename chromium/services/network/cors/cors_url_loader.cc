@@ -11,6 +11,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "net/base/load_flags.h"
+#include "net/http/http_status_code.h"
 #include "services/network/cors/cors_url_loader_factory.h"
 #include "services/network/cors/preflight_controller.h"
 #include "services/network/public/cpp/cors/cors.h"
@@ -102,7 +103,8 @@ CorsURLLoader::CorsURLLoader(
     const OriginAccessList* factory_bound_origin_access_list,
     PreflightController* preflight_controller,
     const base::flat_set<std::string>* allowed_exempt_headers,
-    bool allow_any_cors_exempt_header)
+    bool allow_any_cors_exempt_header,
+    const net::IsolationInfo& isolation_info)
     : receiver_(this, std::move(loader_receiver)),
       process_id_(process_id),
       routing_id_(routing_id),
@@ -118,7 +120,8 @@ CorsURLLoader::CorsURLLoader(
       preflight_controller_(preflight_controller),
       allowed_exempt_headers_(allowed_exempt_headers),
       skip_cors_enabled_scheme_check_(skip_cors_enabled_scheme_check),
-      allow_any_cors_exempt_header_(allow_any_cors_exempt_header) {
+      allow_any_cors_exempt_header_(allow_any_cors_exempt_header),
+      isolation_info_(isolation_info) {
   if (ignore_isolated_world_origin)
     request_.isolated_world_origin = base::nullopt;
 
@@ -215,6 +218,13 @@ void CorsURLLoader::FollowRedirect(
   request_.method = redirect_info_.new_method;
   request_.referrer = GURL(redirect_info_.new_referrer);
   request_.referrer_policy = redirect_info_.new_referrer_policy;
+  request_.site_for_cookies = redirect_info_.new_site_for_cookies;
+
+  if (request_.trusted_params) {
+    request_.trusted_params->isolation_info =
+        request_.trusted_params->isolation_info.CreateForRedirect(
+            url::Origin::Create(request_.url));
+  }
 
   // The request method can be changed to "GET". In this case we need to
   // reset the request body manually.
@@ -358,10 +368,13 @@ void CorsURLLoader::OnReceiveRedirect(const net::RedirectInfo& redirect_info,
     return;
   }
 
-  // TODO(yhirano): Implement the following (Note: this is needed when upload
-  // streaming is implemented):
   // If |actualResponse|’s status is not 303, |request|’s body is non-null, and
   // |request|’s body’s source is null, then return a network error.
+  if (redirect_info.status_code != net::HTTP_SEE_OTHER &&
+      network::URLLoader::HasFetchStreamingUploadBody(&request_)) {
+    HandleComplete(URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
+    return;
+  }
 
   // If |actualResponse|’s location URL’s origin is not same origin with
   // |request|’s current url’s origin and |request|’s origin is not same origin
@@ -515,7 +528,7 @@ void CorsURLLoader::StartRequest() {
       PreflightController::WithTrustedHeaderClient(
           options_ & mojom::kURLLoadOptionUseHeaderClient),
       tainted_, net::NetworkTrafficAnnotationTag(traffic_annotation_),
-      network_loader_factory_, process_id_);
+      network_loader_factory_, process_id_, isolation_info_);
 }
 
 void CorsURLLoader::StartNetworkRequest(
@@ -532,10 +545,12 @@ void CorsURLLoader::StartNetworkRequest(
   // network::URLLoader doesn't understand |kSameOrigin|.
   // TODO(crbug.com/943939): Fix this.
   auto original_credentials_mode = request_.credentials_mode;
-  request_.credentials_mode =
-      CalculateCredentialsFlag(original_credentials_mode, response_tainting_)
-          ? mojom::CredentialsMode::kInclude
-          : mojom::CredentialsMode::kOmit;
+  if (original_credentials_mode == mojom::CredentialsMode::kSameOrigin) {
+    request_.credentials_mode =
+        CalculateCredentialsFlag(original_credentials_mode, response_tainting_)
+            ? mojom::CredentialsMode::kInclude
+            : mojom::CredentialsMode::kOmit;
+  }
 
   // Binding |this| as an unretained pointer is safe because
   // |network_client_receiver_| shares this object's lifetime.

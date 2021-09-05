@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">Tastare în japoneză (pentru tastatură SUA)</translation>
 <translation id="1047956942837015229">Se șterg <ph name="COUNT" /> elemente...</translation>
 <translation id="1049926623896334335">Document Word</translation>
+<translation id="1060368002126861100">Pentru a deschide fișiere cu <ph name="APP_NAME" />, mai întâi mută-le în dosarul cu fișiere Windows.</translation>
 <translation id="1062407476771304334">Înlocuiți</translation>
 <translation id="1065449928621190041">Tastatură franceză canadiană</translation>
 <translation id="1119069657431255176">Arhivă .tar comprimată Bzip2</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">Glisor pentru căutare</translation>
 <translation id="1399648040768741453">Tastatură telugu (Fonetică)</translation>
 <translation id="1430915738399379752">Printează</translation>
+<translation id="1433600251059882049">Linux și Windows au acces la acest dosar</translation>
+<translation id="1435838927755162558">Permite accesul Parallels Desktop la dosar</translation>
 <translation id="1439494416798956626">Mutat în <ph name="FOLDER_NAME" />.</translation>
 <translation id="1441841714100794440">Tastatură vietnameză (Telex)</translation>
 <translation id="1455548678241328678">Tastatură norvegiană</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">Acest fișier nu este disponibil offline.</translation>
 <translation id="184633654410729720">Tastatură thailandeză (Kedmanee)</translation>
 <translation id="1847880352285315359">S-a salvat</translation>
+<translation id="1853795129690976061">Linux are acces la acest dosar</translation>
 <translation id="1864756863218646478">Fișierul nu a putut fi găsit.</translation>
 <translation id="1921986354447415460">Tastatură turcă-F</translation>
 <translation id="1924372192547904021">S-a formatat <ph name="DRIVE_NAME" /></translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">Tastatură sinhala</translation>
 <translation id="240770291734945588">Spațiu disponibil: <ph name="SPACE_AVAILABLE" /></translation>
 <translation id="2425665904502185219">Dimensiunea totală a fișierelor</translation>
+<translation id="2428749644083375155">Se copiază <ph name="NUMBER_OF_ITEMS" /> elemente în <ph name="FOLDER_NAME" /></translation>
 <translation id="2448312741937722512">Tipul</translation>
 <translation id="2453576648990281505">Fișierul există deja</translation>
 <translation id="2464079411014186876">Înghețată</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">Geografie</translation>
 <translation id="3057861065630527966">Fă backup pentru fotografii și videoclipuri</translation>
 <translation id="3064388234319122767">Transliterație (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Fișiere Windows</translation>
 <translation id="3078461028045006476">Permite accesul pentru <ph name="EXTENSION_NAME" /></translation>
 <translation id="3088034400796962477">Transliterație (salam ← سلام)</translation>
 <translation id="3116361045094675131">Tastatură UK</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">Atenție: aceste fișiere sunt temporare și pot fi șterse automat pentru a elibera spațiu pe disc.  <ph name="BEGIN_LINK" />Află mai multe<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Dosar</translation>
 <translation id="3549797760399244642">Accesați drive.google.com...</translation>
+<translation id="3553048479571901246">Pentru a deschide fișiere cu <ph name="APP_NAME" />, mai întâi copiază-le în dosarul cu fișiere Windows.</translation>
 <translation id="357479282490346887">Lituaniană</translation>
 <translation id="3583509704582854624">Tastare alfanumerică (pentru tastatură japoneză)</translation>
 <translation id="3603385196401704894">Franceză canadiană</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">Versiune</translation>
 <translation id="3801082500826908679">Feroeză</translation>
 <translation id="3809272675881623365">Iepure</translation>
+<translation id="3810973564298564668">Gestionează</translation>
 <translation id="3811494700605067549">1 fișier selectat</translation>
 <translation id="3815016854028376614">Metoda de introducere a textului Zhuyin</translation>
 <translation id="3825863595139017598">Tastatură mongolă</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">Inserează</translation>
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Player audio</translation>
+<translation id="3984317463833596033">Acordă Parallels Desktop permisiunea de a modifica fișiere în dosarul <ph name="FOLDER_NAME" /></translation>
 <translation id="4002066346123236978">Titlu</translation>
-<translation id="4065397611279318371">Pentru a deschide fișiere cu ajutorul aplicațiilor <ph name="APP_NAME" />, mai întâi mută-le în dosarul <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Metoda de introducere a textului în cantoneză</translation>
 <translation id="4072248638558688893">Tastatură tamilă (Fonetică)</translation>
 <translation id="4124935795427217608">Unicorn</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">Hangul setul 2</translation>
 <translation id="4477219268485577442">Bulgară fonetică</translation>
 <translation id="4479812471636796472">Tastatură S.U.A. Dvorak</translation>
+<translation id="4481711095103932593">Windows are acces la acest dosar</translation>
 <translation id="4487088045714738411">Tastatură bulgară</translation>
 <translation id="4522570452068850558">Detalii</translation>
 <translation id="4552678318981539154">Cumpărați mai mult spațiu de stocare</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346">S-a adăugat <ph name="ENTRY_NAME" /> la selecție.</translation>
 <translation id="4582497162516204941">Instalează cu Linux (Beta)</translation>
 <translation id="4594543368593301662">Se afișează rezultate pentru <ph name="SEARCH_TERM" />.</translation>
+<translation id="4603392156942865207">Se copiază <ph name="FILE_NAME" /> în <ph name="FOLDER_NAME" /></translation>
 <translation id="4631887759990505102">Artist</translation>
 <translation id="4656293982926141856">Acest computer</translation>
 <translation id="4669606053856530811">Membrii „<ph name="SOURCE_NAME" />” vor pierde accesul, exceptând cazul în care li se permite accesul la aceste articole.</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">Remediere automată</translation>
 <translation id="4881695831933465202">Deschide</translation>
 <translation id="4886021172213954916">Tastatură tamilă (Mașină de scris)</translation>
-<translation id="4892969127351273348">Nu se poate deschide cu <ph name="APP_NAME" /></translation>
+<translation id="4900532980794411603">Permite accesul Parallels Desktop</translation>
 <translation id="4905417359854579806">Gata de backup pentru <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Remediată</translation>
 <translation id="4935975195727477204">Floare</translation>
 <translation id="4943368462779413526">Minge de fotbal</translation>
+<translation id="4961158930123534723">Un dosar cu acces permis pentru Parallels Desktop</translation>
 <translation id="4969785127455456148">Album</translation>
 <translation id="497244430928947428">Tastatură malayalam (Fonetică)</translation>
 <translation id="4973523518332075481">Folosește un nume de maximum <ph name="MAX_LENGTH" /> caractere</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">Computere</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">O operațiune durează mai mult decât ar trebui. Dorești să o anulezi?</translation>
+<translation id="5036159836254554629">Gestionează permiterea accesului Parallels Desktop</translation>
 <translation id="5038625366300922036">Mai multe detalii...</translation>
 <translation id="5061708541166515394">Contrast</translation>
 <translation id="5068919226082848014">Pizza</translation>
 <translation id="5081517858322016911"><ph name="TOTAL_FILE_SIZE" /> fișiere vor fi șterse</translation>
+<translation id="508423945471810158">Se mută <ph name="NUMBER_OF_ITEMS" /> elemente în <ph name="FOLDER_NAME" /></translation>
 <translation id="509429900233858213">A apărut o eroare.</translation>
 <translation id="5098629044894065541">Ebraică</translation>
 <translation id="5123433949759960244">Baschet</translation>
@@ -453,6 +466,7 @@
 <translation id="6054173164583630569">Tastatură franceză</translation>
 <translation id="6074825444536523002">Formular Google</translation>
 <translation id="6096979789310008754">Textul căutării a fost șters; se afișează toate fișierele și dosarele.</translation>
+<translation id="610101264611565198">Se mută <ph name="FILE_NAME" /> în <ph name="FOLDER_NAME" /></translation>
 <translation id="6111770213269631447">Transliterație (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">Spațiu</translation>
 <translation id="6133173853026656527">Se mută <ph name="FILE_NAME" />...</translation>
@@ -493,6 +507,7 @@
 <translation id="656398493051028875">Se șterge „<ph name="FILENAME" />”...</translation>
 <translation id="6581162200855843583">Link Disc Google</translation>
 <translation id="6607272825297743757">Informațiile fișierului</translation>
+<translation id="6609332149380188670"><ph name="NUMBER_OF_ITEMS" /> dosare cu acces permis pentru Parallels Desktop</translation>
 <translation id="6629841649550503054">Toate fișierele cu backup pe <ph name="BEGIN_LINK" />Google Drive!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Șterge</translation>
 <translation id="6650726141019353908">Fluture roz</translation>
@@ -536,6 +551,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Instalarea nu a reușit.</translation>
 <translation id="7040138676081995583">Deschideți cu...</translation>
+<translation id="7059566040011178088">Mai puțin de <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> elemente selectate</translation>
 <translation id="7106346894903675391">Cumpărați mai mult spațiu de stocare...</translation>
 <translation id="7126604456862387217">„&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;” – &lt;em&gt;căutați în Google Drive&lt;/em&gt;</translation>
@@ -646,6 +662,7 @@
 <translation id="8193175696669055101">Modelul dispozitivului</translation>
 <translation id="8208580316430297579">Grafică</translation>
 <translation id="8223479393428528563">Pentru a salva aceste fișiere pentru utilizare offline, revino online, dă clic dreapta pe fișiere și selectează opțiunea <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
+<translation id="8231972167769262174">Aproximativ <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Abandonați</translation>
 <translation id="8261506727792406068">Șterge</translation>
 <translation id="8269755669432358899">Restrânge panourile cu feedback privind fișierele</translation>
@@ -672,6 +689,7 @@
 <translation id="8475647382427415476">Momentan, Google Drive nu a putut sincroniza „<ph name="FILENAME" />”. Google Drive va încerca din nou mai târziu.</translation>
 <translation id="8477649328507734757">Cercuri</translation>
 <translation id="8487700953926739672">Disponibil offline</translation>
+<translation id="8490342535582768689">Acordă Parallels Desktop permisiunea de a modifica fișiere în Google Drive. Modificările se vor sincroniza cu celelalte dispozitive care îți aparțin.</translation>
 <translation id="8521441079177373948">UK</translation>
 <translation id="8525306231823319788">Ecran complet</translation>
 <translation id="8551494947769799688">Letonă</translation>

@@ -39,8 +39,6 @@
 <translation id="1873233029667955273">Google Chrome non é o teu navegador predeterminado</translation>
 <translation id="1874309113135274312">Google Chrome Beta (mDNS-In)</translation>
 <translation id="1877026089748256423">Chromium está desactualizado</translation>
-<translation id="1900795423379050516">Se non se mostra algunha opción de configuración nesta páxina, accede á <ph name="LINK_BEGIN" />
-      configuración do navegador Chrome<ph name="LINK_END" /></translation>
 <translation id="1919130412786645364">Permitir inicio de sesión en Chrome</translation>
 <translation id="2063848847527508675">É necesario reiniciar Chrome OS para aplicar a actualización.</translation>
 <translation id="2094919256425865063">Queres saír de Chrome de todas formas?</translation>
@@ -116,6 +114,7 @@
 <translation id="4251615635259297716">Queres ligar os teus datos de Chrome con esta conta?</translation>
 <translation id="4281844954008187215">Condicións de servizo</translation>
 <translation id="4293420128516039005">Inicia sesión para sincronizar e personalizar Chrome nos teus dispositivos</translation>
+<translation id="4325083532956419387">Versión de Chrome OS</translation>
 <translation id="4328355335528187361">Google Chrome Dev (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4335235004908507846">Chrome pode protexerte contra violacións da seguranza dos datos, extensións prexudiciais e moito máis</translation>

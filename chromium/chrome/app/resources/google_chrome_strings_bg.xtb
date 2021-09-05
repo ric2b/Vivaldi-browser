@@ -37,7 +37,6 @@
 <translation id="1873233029667955273">Google Chrome не е браузърът ви по подразбиране</translation>
 <translation id="1874309113135274312">Google Chrome бета (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome не е актуален</translation>
-<translation id="1900795423379050516">Ако дадена настройка не се показва на тази страница, потърсете в <ph name="LINK_BEGIN" />настройките на браузъра Chrome<ph name="LINK_END" /></translation>
 <translation id="1919130412786645364">Разрешаване на влизането в Chrome</translation>
 <translation id="2063848847527508675">Chrome OS трябва да се рестартира, за да приложи актуализацията.</translation>
 <translation id="2094919256425865063">Искате ли да затворите Chrome въпреки това?</translation>
@@ -113,6 +112,7 @@
 <translation id="4251615635259297716">Да се свържат ли данните ви в Chrome с този профил?</translation>
 <translation id="4281844954008187215">Условия за ползване</translation>
 <translation id="4293420128516039005">Влезте в профила си, за да синхронизирате и персонализирате Chrome на всичките си устройства</translation>
+<translation id="4325083532956419387">Версия на Chrome OS</translation>
 <translation id="4328355335528187361">Google Chrome Dev (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4335235004908507846">Chrome може да ви защити от нарушения на сигурността на данните, злонамерени разширения и др.</translation>

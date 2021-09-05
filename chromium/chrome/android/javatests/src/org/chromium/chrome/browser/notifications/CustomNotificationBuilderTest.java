@@ -17,7 +17,6 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
 import android.util.DisplayMetrics;
 import android.view.View;
 import android.widget.Button;
@@ -25,9 +24,10 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.test.filters.SmallTest;
+
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -39,7 +39,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.notifications.channels.ChromeChannelDefinitions;
 import org.chromium.components.browser_ui.notifications.NotificationMetadata;
 import org.chromium.components.browser_ui.notifications.PendingIntentProvider;
-import org.chromium.content_public.browser.test.NativeLibraryTestRule;
+import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -52,12 +52,9 @@ public class CustomNotificationBuilderTest {
     private static final String NOTIFICATION_TAG = "TestNotificationTag";
     private static final int NOTIFICATION_ID = 99;
 
-    @Rule
-    public NativeLibraryTestRule mActivityTestRule = new NativeLibraryTestRule();
-
     @Before
     public void setUp() {
-        mActivityTestRule.loadNativeLibraryNoBrowserProcess();
+        NativeLibraryTestUtils.loadNativeLibraryNoBrowserProcess();
     }
 
     @Test

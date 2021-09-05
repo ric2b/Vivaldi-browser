@@ -427,9 +427,6 @@ void BackgroundFetchDelegateImpl::DidGetBackgroundSourceId(
   ukm::builders::BackgroundFetchDeletingRegistration(*source_id)
       .SetUserInitiatedAbort(user_initiated_abort)
       .Record(ukm::UkmRecorder::Get());
-
-  if (ukm_event_recorded_for_testing_)
-    std::move(ukm_event_recorded_for_testing_).Run();
 }
 
 void BackgroundFetchDelegateImpl::MarkJobComplete(
@@ -816,6 +813,12 @@ void BackgroundFetchDelegateImpl::RenameItem(
     const offline_items_collection::ContentId& id,
     const std::string& name,
     RenameCallback callback) {
+  NOTIMPLEMENTED();
+}
+
+void BackgroundFetchDelegateImpl::ChangeSchedule(
+    const offline_items_collection::ContentId& id,
+    base::Optional<offline_items_collection::OfflineItemSchedule> schedule) {
   NOTIMPLEMENTED();
 }
 

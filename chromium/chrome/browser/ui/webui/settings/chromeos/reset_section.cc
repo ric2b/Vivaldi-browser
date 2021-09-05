@@ -56,8 +56,9 @@ bool IsPowerwashAllowed() {
 ResetSection::ResetSection(Profile* profile,
                            SearchTagRegistry* search_tag_registry)
     : OsSettingsSection(profile, search_tag_registry) {
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
   if (IsPowerwashAllowed())
-    registry()->AddSearchTags(GetResetSearchConcepts());
+    updater.AddSearchTags(GetResetSearchConcepts());
 }
 
 ResetSection::~ResetSection() = default;
@@ -92,6 +93,26 @@ void ResetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 void ResetSection::AddHandlers(content::WebUI* web_ui) {
   web_ui->AddMessageHandler(
       std::make_unique<::settings::ResetSettingsHandler>(profile()));
+}
+
+int ResetSection::GetSectionNameMessageId() const {
+  return IDS_SETTINGS_RESET;
+}
+
+mojom::Section ResetSection::GetSection() const {
+  return mojom::Section::kReset;
+}
+
+mojom::SearchResultIcon ResetSection::GetSectionIcon() const {
+  return mojom::SearchResultIcon::kReset;
+}
+
+std::string ResetSection::GetSectionPath() const {
+  return mojom::kResetSectionPath;
+}
+
+void ResetSection::RegisterHierarchy(HierarchyGenerator* generator) const {
+  generator->RegisterTopLevelSetting(mojom::Setting::kPowerwash);
 }
 
 }  // namespace settings

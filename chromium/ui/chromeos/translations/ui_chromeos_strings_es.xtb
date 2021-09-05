@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">Introducción de japonés (para teclado de EE. UU.)</translation>
 <translation id="1047956942837015229">Eliminando <ph name="COUNT" /> elementos...</translation>
 <translation id="1049926623896334335">Documento de Word</translation>
+<translation id="1060368002126861100">Para abrir archivos con <ph name="APP_NAME" />, primero debes moverlos a la carpeta de archivos de Windows.</translation>
 <translation id="1062407476771304334">Reemplazar</translation>
 <translation id="1065449928621190041">Teclado francés canadiense</translation>
 <translation id="1119069657431255176">Archivo tar comprimido en Bzip2</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">Control deslizante de búsqueda</translation>
 <translation id="1399648040768741453">Teclado télugu (fonético)</translation>
 <translation id="1430915738399379752">Imprimir</translation>
+<translation id="1433600251059882049">Esta carpeta se comparte con Linux y Windows</translation>
+<translation id="1435838927755162558">Compartir carpeta con Parallels Desktop</translation>
 <translation id="1439494416798956626">Movido a <ph name="FOLDER_NAME" />.</translation>
 <translation id="1441841714100794440">Teclado vietnamita (Télex)</translation>
 <translation id="1455548678241328678">Teclado noruego</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">Este archivo no está disponible sin conexión.</translation>
 <translation id="184633654410729720">Teclado tailandés (kedmanee)</translation>
 <translation id="1847880352285315359">Guardado</translation>
+<translation id="1853795129690976061">Esta carpeta se comparte con Linux</translation>
 <translation id="1864756863218646478">No se ha podido encontrar el archivo.</translation>
 <translation id="1921986354447415460">Teclado turco-F</translation>
 <translation id="1924372192547904021">Se ha formateado <ph name="DRIVE_NAME" /></translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">Teclado cingalés</translation>
 <translation id="240770291734945588">Almacenamiento disponible: <ph name="SPACE_AVAILABLE" /></translation>
 <translation id="2425665904502185219">Tamaño total de los archivos</translation>
+<translation id="2428749644083375155">Copiando <ph name="NUMBER_OF_ITEMS" /> elementos en <ph name="FOLDER_NAME" /></translation>
 <translation id="2448312741937722512">Tipo</translation>
 <translation id="2453576648990281505">Ya existe este archivo.</translation>
 <translation id="2464079411014186876">Helado</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">Geografía</translation>
 <translation id="3057861065630527966">Realiza copias de seguridad de tus fotos y vídeos</translation>
 <translation id="3064388234319122767">Transliteración (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Archivos de Windows</translation>
 <translation id="3078461028045006476">Compartir con <ph name="EXTENSION_NAME" /></translation>
 <translation id="3088034400796962477">Transliteración (salam ← سلام)</translation>
 <translation id="3116361045094675131">Teclado del Reino Unido</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">Aviso: Estos archivos son temporales y es posible que se eliminen automáticamente para liberar espacio en el disco.  <ph name="BEGIN_LINK" />Más información<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Carpeta</translation>
 <translation id="3549797760399244642">Ir a drive.google.com...</translation>
+<translation id="3553048479571901246">Para abrir archivos con <ph name="APP_NAME" />, primero debes copiarlos a la carpeta de archivos de Windows.</translation>
 <translation id="357479282490346887">Lituano</translation>
 <translation id="3583509704582854624">Introducción alfanumérica (para teclado japonés)</translation>
 <translation id="3603385196401704894">Francés canadiense</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">Versión</translation>
 <translation id="3801082500826908679">Feroés</translation>
 <translation id="3809272675881623365">Conejo</translation>
+<translation id="3810973564298564668">Gestionar</translation>
 <translation id="3811494700605067549">1 archivo seleccionado</translation>
 <translation id="3815016854028376614">Método de entrada de zhuyin</translation>
 <translation id="3825863595139017598">Teclado mongol</translation>
@@ -246,7 +254,7 @@
 <translation id="3830674330436234648">No se puede reproducir</translation>
 <translation id="3833761542219863804">Transliteración (mausam → ਮੌਸਮ)</translation>
 <translation id="383652340667548381">Serbio</translation>
-<translation id="385051799172605136">Atrás</translation>
+<translation id="385051799172605136">Volver</translation>
 <translation id="3855472144336161447">Alemán (Neo 2)</translation>
 <translation id="3856075812838139784">Solo lectura</translation>
 <translation id="3858678421048828670">Teclado italiano</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">Pegar</translation>
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Reproductor de audio</translation>
+<translation id="3984317463833596033">Permite que Parallels Desktop modifique los archivos de la carpeta <ph name="FOLDER_NAME" />.</translation>
 <translation id="4002066346123236978">Título</translation>
-<translation id="4065397611279318371">Para abrir los archivos con aplicaciones <ph name="APP_NAME" />, primero debes moverlos a la carpeta <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Método de introducción de cantonés</translation>
 <translation id="4072248638558688893">Teclado tamil (fonético)</translation>
 <translation id="4124935795427217608">Unicornio</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">Hangul de doble alternancia</translation>
 <translation id="4477219268485577442">Búlgaro fonético</translation>
 <translation id="4479812471636796472">Teclado de EE.UU. Dvorak</translation>
+<translation id="4481711095103932593">Esta carpeta se comparte con Windows</translation>
 <translation id="4487088045714738411">Teclado belga</translation>
 <translation id="4522570452068850558">Detalles</translation>
 <translation id="4552678318981539154">Comprar más almacenamiento</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346">Se ha añadido <ph name="ENTRY_NAME" /> a la selección.</translation>
 <translation id="4582497162516204941">Instalar con Linux (Beta)</translation>
 <translation id="4594543368593301662">Mostrando resultados de <ph name="SEARCH_TERM" />.</translation>
+<translation id="4603392156942865207">Copiando <ph name="FILE_NAME" /> en <ph name="FOLDER_NAME" /></translation>
 <translation id="4631887759990505102">Artista</translation>
 <translation id="4656293982926141856">Este ordenador</translation>
 <translation id="4669606053856530811">Los miembros de "<ph name="SOURCE_NAME" />" dejarán de tener acceso a menos que estos elementos se compartan con ellos.</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">Ajuste automático</translation>
 <translation id="4881695831933465202">Abrir</translation>
 <translation id="4886021172213954916">Teclado tamil (máquina de escribir)</translation>
-<translation id="4892969127351273348">No se puede abrir con <ph name="APP_NAME" /></translation>
+<translation id="4900532980794411603">Compartir con Parallels Desktop</translation>
 <translation id="4905417359854579806">Ya puedes crear la copia de seguridad de <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Fija</translation>
 <translation id="4935975195727477204">Gazania</translation>
 <translation id="4943368462779413526">Balón de fútbol</translation>
+<translation id="4961158930123534723">1 carpeta compartida con Parallels Desktop</translation>
 <translation id="4969785127455456148">Álbum</translation>
 <translation id="497244430928947428">Teclado malayalam (fonético)</translation>
 <translation id="4973523518332075481">Utiliza un nombre que tenga <ph name="MAX_LENGTH" /> caracteres como máximo</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">Ordenadores</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">Una operación está tardando más de lo esperado. ¿Quieres cancelarla?</translation>
+<translation id="5036159836254554629">Gestionar elementos compartidos con Parallels Desktop</translation>
 <translation id="5038625366300922036">Ver más...</translation>
 <translation id="5061708541166515394">Contraste</translation>
 <translation id="5068919226082848014">Pizza</translation>
 <translation id="5081517858322016911">Se eliminarán <ph name="TOTAL_FILE_SIZE" /> de archivos</translation>
+<translation id="508423945471810158">Moviendo <ph name="NUMBER_OF_ITEMS" /> elementos a <ph name="FOLDER_NAME" /></translation>
 <translation id="509429900233858213">Se ha producido un error.</translation>
 <translation id="5098629044894065541">Hebreo</translation>
 <translation id="5123433949759960244">Balón de baloncesto</translation>
@@ -453,6 +466,7 @@
 <translation id="6054173164583630569">Teclado francés</translation>
 <translation id="6074825444536523002">Formulario de Google</translation>
 <translation id="6096979789310008754">Se ha borrado el texto de búsqueda y se muestran todos los archivos y carpetas.</translation>
+<translation id="610101264611565198">Moviendo <ph name="FILE_NAME" /> a <ph name="FOLDER_NAME" /></translation>
 <translation id="6111770213269631447">Transliteración (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">Espacio</translation>
 <translation id="6133173853026656527">Moviendo <ph name="FILE_NAME" />...</translation>
@@ -493,6 +507,7 @@
 <translation id="656398493051028875">Eliminando "<ph name="FILENAME" />"...</translation>
 <translation id="6581162200855843583">Enlace de Google Drive</translation>
 <translation id="6607272825297743757">Información del archivo</translation>
+<translation id="6609332149380188670"><ph name="NUMBER_OF_ITEMS" /> carpetas compartidas con Parallels Desktop</translation>
 <translation id="6629841649550503054">Se ha realizado la copia de seguridad de todos los archivos en <ph name="BEGIN_LINK" />Google Drive<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Eliminar</translation>
 <translation id="6650726141019353908">Mariposa rosa</translation>
@@ -536,6 +551,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Error de instalación</translation>
 <translation id="7040138676081995583">Abrir con...</translation>
+<translation id="7059566040011178088">Menos de <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> elementos seleccionados</translation>
 <translation id="7106346894903675391">Comprar más almacenamiento...</translation>
 <translation id="7126604456862387217">&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt; - &lt;em&gt;búsqueda en Drive&lt;/em&gt;</translation>
@@ -646,6 +662,7 @@
 <translation id="8193175696669055101">Modelo de dispositivo</translation>
 <translation id="8208580316430297579">Obra de arte</translation>
 <translation id="8223479393428528563">Para guardar estos archivos y poder usarlos sin conexión, vuelve a conectarte a Internet, haz clic con el botón derecho en los archivos y selecciona la opción <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
+<translation id="8231972167769262174">Aproximadamente <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Anular</translation>
 <translation id="8261506727792406068">Eliminar</translation>
 <translation id="8269755669432358899">Comprimir paneles de comentarios de archivos</translation>
@@ -672,6 +689,7 @@
 <translation id="8475647382427415476">Google Drive no ha podido sincronizar <ph name="FILENAME" /> en este momento. Este servicio volverá a intentarlo más tarde.</translation>
 <translation id="8477649328507734757">Girar</translation>
 <translation id="8487700953926739672">Disponible sin conexión</translation>
+<translation id="8490342535582768689">Permite que Parallels Desktop modifique los archivos de tu Google Drive. Los cambios se sincronizarán con tus otros dispositivos.</translation>
 <translation id="8521441079177373948">Reino Unido</translation>
 <translation id="8525306231823319788">Pantalla completa</translation>
 <translation id="8551494947769799688">Letón</translation>

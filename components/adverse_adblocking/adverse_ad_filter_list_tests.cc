@@ -3,6 +3,7 @@
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 
 #include "base/files/file_path.h"
+#include "base/logging.h"
 #include "base/path_service.h"
 #include "base/time/time.h"
 #include "base/vivaldi_paths.h"

@@ -9,6 +9,8 @@
 #include "base/base64.h"
 #include "base/pickle.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/util/values/values_util.h"
+#include "base/values.h"
 #include "components/feed/core/v2/public/types.h"
 
 // Note: This file contains implementation for both types.h and public/types.h.
@@ -66,6 +68,12 @@ base::Optional<DebugStreamData> UnpickleDebugStreamData(
 
 }  // namespace
 
+NetworkResponseInfo::NetworkResponseInfo() = default;
+NetworkResponseInfo::~NetworkResponseInfo() = default;
+NetworkResponseInfo::NetworkResponseInfo(const NetworkResponseInfo&) = default;
+NetworkResponseInfo& NetworkResponseInfo::operator=(
+    const NetworkResponseInfo&) = default;
+
 std::string ToString(ContentRevision c) {
   return base::NumberToString(c.value());
 }
@@ -98,5 +106,31 @@ DebugStreamData::DebugStreamData() = default;
 DebugStreamData::~DebugStreamData() = default;
 DebugStreamData::DebugStreamData(const DebugStreamData&) = default;
 DebugStreamData& DebugStreamData::operator=(const DebugStreamData&) = default;
+
+base::Value PersistentMetricsDataToValue(const PersistentMetricsData& data) {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetKey("day_start", util::TimeToValue(data.current_day_start));
+  dict.SetKey("time_spent_in_feed",
+              util::TimeDeltaToValue(data.accumulated_time_spent_in_feed));
+  return dict;
+}
+
+PersistentMetricsData PersistentMetricsDataFromValue(const base::Value& value) {
+  PersistentMetricsData result;
+  if (!value.is_dict())
+    return result;
+  base::Optional<base::Time> day_start =
+      util::ValueToTime(value.FindKey("day_start"));
+  if (!day_start)
+    return result;
+  result.current_day_start = *day_start;
+  base::Optional<base::TimeDelta> time_spent_in_feed =
+      util::ValueToTimeDelta(value.FindKey("time_spent_in_feed"));
+  if (time_spent_in_feed) {
+    result.accumulated_time_spent_in_feed = *time_spent_in_feed;
+  }
+
+  return result;
+}
 
 }  // namespace feed

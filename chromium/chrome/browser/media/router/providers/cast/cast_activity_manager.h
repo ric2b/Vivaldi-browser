@@ -20,6 +20,7 @@
 #include "chrome/browser/media/router/providers/cast/cast_session_tracker.h"
 #include "chrome/common/media_router/discovery/media_sink_internal.h"
 #include "chrome/common/media_router/media_sink.h"
+#include "chrome/common/media_router/mojom/logger.mojom.h"
 #include "chrome/common/media_router/mojom/media_router.mojom.h"
 #include "chrome/common/media_router/providers/cast/cast_media_source.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -69,6 +70,7 @@ class CastActivityManager : public CastActivityManagerBase,
                       CastSessionTracker* session_tracker,
                       cast_channel::CastMessageHandler* message_handler,
                       mojom::MediaRouter* media_router,
+                      mojom::Logger* logger,
                       const std::string& hash_token);
   ~CastActivityManager() override;
 
@@ -126,7 +128,7 @@ class CastActivityManager : public CastActivityManagerBase,
 
   static void SetActitivyRecordFactoryForTest(
       ActivityRecordFactoryForTest* factory) {
-    activity_record_factory_ = factory;
+    activity_record_factory_for_test_ = factory;
   }
 
   cast_channel::ResultCallback MakeResultCallbackForRoute(
@@ -140,6 +142,12 @@ class CastActivityManager : public CastActivityManagerBase,
 
  private:
   friend class CastActivityManagerTest;
+  FRIEND_TEST_ALL_PREFIXES(CastActivityManagerTest,
+                           LaunchSessionTerminatesExistingSessionOnSink);
+  FRIEND_TEST_ALL_PREFIXES(CastActivityManagerTest,
+                           LaunchSessionTerminatesExistingSessionFromTab);
+  FRIEND_TEST_ALL_PREFIXES(CastActivityManagerTest, SendMediaRequestToReceiver);
+
   using ActivityMap =
       base::flat_map<MediaRoute::Id, std::unique_ptr<ActivityRecord>>;
   using CastActivityMap = base::flat_map<MediaRoute::Id, CastActivityRecord*>;
@@ -147,6 +155,16 @@ class CastActivityManager : public CastActivityManagerBase,
   void SendRouteJsonMessage(const std::string& media_route_id,
                             const std::string& message,
                             data_decoder::DataDecoder::ValueOrError result);
+
+  void LaunchSessionParsed(
+      const CastMediaSource& cast_source,
+      const MediaSinkInternal& sink,
+      const std::string& presentation_id,
+      const url::Origin& origin,
+      int tab_id,
+      bool incognito,
+      mojom::MediaRouteProvider::CreateRouteCallback callback,
+      data_decoder::DataDecoder::ValueOrError result);
 
   // Bundle of parameters for DoLaunchSession().
   struct DoLaunchSessionParams {
@@ -159,6 +177,7 @@ class CastActivityManager : public CastActivityManagerBase,
         const MediaSinkInternal& sink,
         const url::Origin& origin,
         int tab_id,
+        const base::Optional<base::Value> app_params,
         mojom::MediaRouteProvider::CreateRouteCallback callback);
     DoLaunchSessionParams(const DoLaunchSessionParams& other) = delete;
     DoLaunchSessionParams(DoLaunchSessionParams&& other);
@@ -181,13 +200,15 @@ class CastActivityManager : public CastActivityManagerBase,
     // The tab ID of the Cast SDK client. Used for auto-join.
     int tab_id;
 
+    // The JSON object sent from the Cast SDK.
+    base::Optional<base::Value> app_params;
+
     // Callback to execute after the launch request has been sent.
     mojom::MediaRouteProvider::CreateRouteCallback callback;
   };
 
   void DoLaunchSession(DoLaunchSessionParams params);
-
-  void RemoveActivityByRouteId(const std::string& route_id);
+  void OnActivityStopped(const std::string& route_id);
 
   // Removes an activity, terminating any associated connections, then
   // notifies the media router that routes have been updated.
@@ -254,7 +275,10 @@ class CastActivityManager : public CastActivityManagerBase,
   // If no conversion should occur, returns base::nullopt.
   base::Optional<MediaSinkInternal> ConvertMirrorToCast(int tab_id);
 
-  static ActivityRecordFactoryForTest* activity_record_factory_;
+  std::string ChooseAppId(const CastMediaSource& source,
+                          const MediaSinkInternal& sink) const;
+
+  static ActivityRecordFactoryForTest* activity_record_factory_for_test_;
 
   base::flat_set<MediaSource::Id> route_queries_;
 
@@ -265,6 +289,13 @@ class CastActivityManager : public CastActivityManagerBase,
   // The values of this map are the subset of those in |activites_| where
   // there is a CastActivityRecord.
   CastActivityMap cast_activities_;
+
+  // Mapping from tab IDs to the active route for that tab.  This map is used to
+  // ensure that there is at most one active route for each tab.  Removing this
+  // map and the code that uses it will allow a tab to be cast to multiple
+  // receivers, but there may be unintended consequences, such as confusing
+  // users or causing performance problems on low-end devices.
+  base::flat_map<int, MediaRoute::Id> routes_by_tab_;
 
   // Information for a session that will be launched once |this| is notified
   // that the existing session on the receiver has been removed. We only store
@@ -277,12 +308,12 @@ class CastActivityManager : public CastActivityManagerBase,
   CastSessionTracker* const session_tracker_;
   cast_channel::CastMessageHandler* const message_handler_;
   mojom::MediaRouter* const media_router_;
+  mojom::Logger* const logger_;
 
   const std::string hash_token_;
 
   SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<CastActivityManager> weak_ptr_factory_{this};
-  FRIEND_TEST_ALL_PREFIXES(CastActivityManagerTest, SendMediaRequestToReceiver);
 };
 
 }  // namespace media_router

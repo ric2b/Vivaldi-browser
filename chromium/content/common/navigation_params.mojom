@@ -296,7 +296,7 @@ struct CommitNavigationParams {
   // resources.
   bool can_load_local_resources = false;
 
-  // Opaque history state (received by FrameHostMsg_UpdateState).
+  // Opaque history state (received by UpdateState Mojo message).
   PageState page_state;
 
   // For browser-initiated navigations, this is the unique id of the
@@ -414,4 +414,7 @@ struct CommitNavigationParams {
 
   // The names of origin trials to be force enabled for this navigation.
   array<string> force_enabled_origin_trials;
+
+  // Whether origin isolation is restricting certain cross-origin web APIs.
+  bool origin_isolation_restricted = false;
 };

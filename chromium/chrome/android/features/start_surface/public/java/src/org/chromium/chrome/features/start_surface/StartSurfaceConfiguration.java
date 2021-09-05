@@ -4,13 +4,22 @@
 
 package org.chromium.chrome.features.start_surface;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.SysUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.StringCachedFieldTrialParameter;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Flag configuration for Start Surface. Source of truth for whether it should be enabled and
@@ -38,10 +47,39 @@ public class StartSurfaceConfiguration {
     public static final StringCachedFieldTrialParameter START_SURFACE_OMNIBOX_SCROLL_MODE =
             new StringCachedFieldTrialParameter(
                     ChromeFeatureList.START_SURFACE_ANDROID, "omnibox_scroll_mode", "");
+
+    private static final String TRENDY_ENABLED_PARAM = "trendy_enabled";
+    public static final BooleanCachedFieldTrialParameter TRENDY_ENABLED =
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.START_SURFACE_ANDROID, TRENDY_ENABLED_PARAM, false);
+
+    private static final String SUCCESS_MIN_PERIOD_MS_PARAM = "trendy_success_min_period_ms";
+    public static final IntCachedFieldTrialParameter TRENDY_SUCCESS_MIN_PERIOD_MS =
+            new IntCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
+                    SUCCESS_MIN_PERIOD_MS_PARAM, 86400_000);
+
+    private static final String FAILURE_MIN_PERIOD_MS_PARAM = "trendy_failure_min_period_ms";
+    public static final IntCachedFieldTrialParameter TRENDY_FAILURE_MIN_PERIOD_MS =
+            new IntCachedFieldTrialParameter(
+                    ChromeFeatureList.START_SURFACE_ANDROID, FAILURE_MIN_PERIOD_MS_PARAM, 7200_000);
+
+    private static final String TRENDY_ENDPOINT_PARAM = "trendy_endpoint";
+    public static final StringCachedFieldTrialParameter TRENDY_ENDPOINT =
+            new StringCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
+                    TRENDY_ENDPOINT_PARAM,
+                    "https://trends.google.com/trends/trendingsearches/daily/rss"
+                            + "?lite=true&safe=true&geo=");
+
+    private static final String STARTUP_UMA_PREFIX = "Startup.Android.";
+    private static final String INSTANT_START_SUBFIX = ".Instant";
+    private static final String REGULAR_START_SUBFIX = ".NoInstant";
+
     /**
      * @return Whether the Start Surface is enabled.
      */
     public static boolean isStartSurfaceEnabled() {
+        // Vivaldi does not use start surface.
+        if (ChromeApplication.isVivaldi()) return false;
         return CachedFeatureFlags.isEnabled(ChromeFeatureList.START_SURFACE_ANDROID)
                 && !SysUtils.isLowEndDevice();
     }
@@ -64,5 +102,53 @@ public class StartSurfaceConfiguration {
     public static boolean isStartSurfaceStackTabSwitcherEnabled() {
         return isStartSurfaceSinglePaneEnabled()
                 && START_SURFACE_SHOW_STACK_TAB_SWITCHER.getValue();
+    }
+
+    /**
+     * Add an observer to keep {@link ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE} consistent
+     * with {@link Pref.ARTICLES_LIST_VISIBLE}.
+     */
+    public static void addFeedVisibilityObserver() {
+        updateFeedVisibility();
+        PrefChangeRegistrar prefChangeRegistrar = new PrefChangeRegistrar();
+        prefChangeRegistrar.addObserver(
+                Pref.ARTICLES_LIST_VISIBLE, StartSurfaceConfiguration::updateFeedVisibility);
+    }
+
+    private static void updateFeedVisibility() {
+        SharedPreferencesManager.getInstance().writeBoolean(
+                ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE,
+                PrefServiceBridge.getInstance().getBoolean(Pref.ARTICLES_LIST_VISIBLE));
+    }
+
+    /**
+     * @return Whether the Feed articles are visible.
+     */
+    public static boolean getFeedArticlesVisibility() {
+        return SharedPreferencesManager.getInstance().readBoolean(
+                ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE, true);
+    }
+
+    @VisibleForTesting
+    static void setFeedVisibilityForTesting(boolean isVisible) {
+        SharedPreferencesManager.getInstance().writeBoolean(
+                ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE, isVisible);
+    }
+
+    /**
+     * Records histograms of showing the StartSurface. Nothing will be recorded if timeDurationMs
+     * isn't valid.
+     */
+    public static void recordHistogram(String name, long timeDurationMs, boolean isInstantStart) {
+        if (timeDurationMs < 0) return;
+
+        RecordHistogram.recordTimesHistogram(
+                getHistogramName(name, isInstantStart), timeDurationMs);
+    }
+
+    @VisibleForTesting
+    public static String getHistogramName(String name, boolean isInstantStart) {
+        return STARTUP_UMA_PREFIX + name
+                + (isInstantStart ? INSTANT_START_SUBFIX : REGULAR_START_SUBFIX);
     }
 }

@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.keyboard_accessory.sheet_tabs;
 
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.instanceOf;
@@ -15,7 +15,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
-import android.support.test.filters.MediumTest;
 import android.text.method.PasswordTransformationMethod;
 import android.view.View;
 import android.view.ViewGroup;
@@ -23,6 +22,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Before;
@@ -32,6 +32,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.keyboard_accessory.AccessoryAction;
 import org.chromium.chrome.browser.keyboard_accessory.AccessoryTabType;
 import org.chromium.chrome.browser.keyboard_accessory.R;
 import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData;
@@ -177,8 +178,8 @@ public class PasswordAccessorySheetModernViewTest {
     public void testOptionToggleRenderedIfNotEmpty() throws ExecutionException {
         assertThat(mView.get().getChildCount(), is(0));
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            OptionToggle toggle =
-                    new OptionToggle("Save passwords for this site", false, result -> {});
+            OptionToggle toggle = new OptionToggle("Save passwords for this site", false,
+                    AccessoryAction.TOGGLE_SAVE_PASSWORDS, result -> {});
             mModel.add(new AccessorySheetDataPiece(
                     toggle, AccessorySheetDataPiece.Type.OPTION_TOGGLE));
         });
@@ -205,8 +206,8 @@ public class PasswordAccessorySheetModernViewTest {
     public void testClickingDisabledToggleInvokesCallbackToEnable() throws ExecutionException {
         AtomicReference<Boolean> toggleEnabled = new AtomicReference<>();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            OptionToggle toggle =
-                    new OptionToggle("Save passwords for this site", false, toggleEnabled::set);
+            OptionToggle toggle = new OptionToggle("Save passwords for this site", false,
+                    AccessoryAction.TOGGLE_SAVE_PASSWORDS, toggleEnabled::set);
             mModel.add(new AccessorySheetDataPiece(
                     toggle, AccessorySheetDataPiece.Type.OPTION_TOGGLE));
         });
@@ -222,8 +223,8 @@ public class PasswordAccessorySheetModernViewTest {
     public void testClickingEnabledToggleInvokesCallbackToDisable() throws ExecutionException {
         AtomicReference<Boolean> toggleEnabled = new AtomicReference<>();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            OptionToggle toggle =
-                    new OptionToggle("Save passwords for this site", true, toggleEnabled::set);
+            OptionToggle toggle = new OptionToggle("Save passwords for this site", true,
+                    AccessoryAction.TOGGLE_SAVE_PASSWORDS, toggleEnabled::set);
             mModel.add(new AccessorySheetDataPiece(
                     toggle, AccessorySheetDataPiece.Type.OPTION_TOGGLE));
         });

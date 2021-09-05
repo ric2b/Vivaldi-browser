@@ -21,6 +21,8 @@
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 
+#include "third_party/blink/renderer/core/paint/compositing/graphics_layer_tree_as_text.h"
+
 namespace blink {
 
 // TODO(wangxianzhu): Though these tests don't directly apply in
@@ -52,6 +54,29 @@ class CompositedLayerMappingTest : public RenderingTest {
 
   IntRect PreviousInterestRect(const GraphicsLayer* graphics_layer) {
     return graphics_layer->previous_interest_rect_;
+  }
+
+  static const GraphicsLayerPaintInfo* GetSquashedLayer(
+      const Vector<GraphicsLayerPaintInfo>& squashed_layers,
+      const PaintLayer& layer) {
+    for (const auto& squashed_layer : squashed_layers) {
+      if (squashed_layer.paint_layer == &layer)
+        return &squashed_layer;
+    }
+    return nullptr;
+  }
+
+  const GraphicsLayerPaintInfo* GetNonScrollingSquashedLayer(
+      const CompositedLayerMapping& mapping,
+      const PaintLayer& layer) {
+    return GetSquashedLayer(mapping.non_scrolling_squashed_layers_, layer);
+  }
+
+  const GraphicsLayerPaintInfo* GetSquashedLayerInScrollingContents(
+      const CompositedLayerMapping& mapping,
+      const PaintLayer& layer) {
+    return GetSquashedLayer(mapping.squashed_layers_in_scrolling_contents_,
+                            layer);
   }
 
  private:
@@ -819,7 +844,7 @@ TEST_F(CompositedLayerMappingTest,
   // The following rect is at (-4000, 190, 4100, 100) in viewport coordinates.
   EXPECT_EQ(IntRect(6000, 0, 4100, 100),
             grouped_mapping->ComputeInterestRect(
-                grouped_mapping->SquashingLayer(), IntRect()));
+                grouped_mapping->NonScrollingSquashingLayer(), IntRect()));
 }
 
 TEST_F(CompositedLayerMappingTest,
@@ -846,7 +871,7 @@ TEST_F(CompositedLayerMappingTest,
   // The following rect is at (-4000, 0, 4400, 1000) in viewport coordinates.
   EXPECT_EQ(IntRect(5600, 0, 4400, 1000),
             grouped_mapping->ComputeInterestRect(
-                grouped_mapping->SquashingLayer(), IntRect()));
+                grouped_mapping->NonScrollingSquashingLayer(), IntRect()));
 }
 
 TEST_F(CompositedLayerMappingTest, InterestRectOfIframeInScrolledDiv) {
@@ -1136,32 +1161,6 @@ TEST_F(CompositedLayerMappingTest,
   EXPECT_FALSE(mapping->DecorationOutlineLayer());
 }
 
-TEST_F(CompositedLayerMappingTest,
-       BackgroundPaintedIntoGraphicsLayerIfNotCompositedScrolling) {
-  GetDocument().GetFrame()->GetSettings()->SetPreferCompositingToLCDTextEnabled(
-      true);
-  SetBodyInnerHTML(R"HTML(
-    <div id='container' style='overflow: scroll; width: 300px; height:
-        300px; background: white; will-change: transform;'>
-      <div style='background-color: blue; width: 2000px; height: 2000px;
-           clip-path: circle(600px at 1000px 1000px);'></div>
-    </div>
-  )HTML");
-
-  const auto* container = ToLayoutBox(GetLayoutObjectByElementId("container"));
-  EXPECT_EQ(kBackgroundPaintInScrollingContents,
-            container->ComputeBackgroundPaintLocationIfComposited());
-
-  // We currently don't use composited scrolling when the container has a
-  // border-radius so even though we can paint the background onto the scrolling
-  // contents layer we don't have a scrolling contents layer to paint into in
-  // this case.
-  const auto* mapping = container->Layer()->GetCompositedLayerMapping();
-  EXPECT_FALSE(mapping->HasScrollingLayer());
-  EXPECT_EQ(kBackgroundPaintInGraphicsLayer,
-            container->GetBackgroundPaintLocation());
-}
-
 TEST_F(CompositedLayerMappingTest, StickyPositionMainThreadOffset) {
   SetBodyInnerHTML(R"HTML(
     <style>.composited { backface-visibility: hidden; }
@@ -1338,7 +1337,6 @@ TEST_F(CompositedLayerMappingTest,
   SetBodyInnerHTML(R"HTML(
     <div id='target1' style='will-change: transform;'>foo</div>
     <div id='target2' style='will-change: opacity;'>bar</div>
-    <div id='target3' style='backface-visibility: hidden;'>ham</div>
   )HTML");
 
   {
@@ -1361,16 +1359,6 @@ TEST_F(CompositedLayerMappingTest,
     EXPECT_FALSE(
         target_graphics_layer->CcLayer()->transformed_rasterization_allowed());
   }
-  {
-    LayoutObject* target = GetLayoutObjectByElementId("target3");
-    ASSERT_TRUE(target && target->IsBox());
-    PaintLayer* target_layer = ToLayoutBox(target)->Layer();
-    GraphicsLayer* target_graphics_layer =
-        target_layer ? target_layer->GraphicsLayerBacking() : nullptr;
-    ASSERT_TRUE(target_graphics_layer);
-    EXPECT_FALSE(
-        target_graphics_layer->CcLayer()->transformed_rasterization_allowed());
-  }
 }
 
 TEST_F(CompositedLayerMappingTest, TransformedRasterizationForInlineTransform) {
@@ -1383,6 +1371,63 @@ TEST_F(CompositedLayerMappingTest, TransformedRasterizationForInlineTransform) {
     <div id='target' style='transform:translate(1.5px,-10.5px);
     width:500px; height:20px;'>indirectly composited due to inline
     transform</div>
+  )HTML");
+
+  LayoutObject* target = GetLayoutObjectByElementId("target");
+  ASSERT_TRUE(target && target->IsBox());
+  PaintLayer* target_layer = ToLayoutBox(target)->Layer();
+  GraphicsLayer* target_graphics_layer =
+      target_layer ? target_layer->GraphicsLayerBacking() : nullptr;
+  ASSERT_TRUE(target_graphics_layer);
+  EXPECT_TRUE(
+      target_graphics_layer->CcLayer()->transformed_rasterization_allowed());
+}
+
+TEST_F(CompositedLayerMappingTest,
+       TransformedRasterizationForScrollDependentPosition) {
+  SetBodyInnerHTML(R"HTML(
+    <div id="target"
+      style="transform: translateX(0.3px);
+             position: fixed; top: 20px; left: 30px;">
+        FIXED
+    </div>
+    <div style="height: 4000px; width: 4000px;
+         background: silver;">
+    </div>
+  )HTML");
+
+  LayoutObject* target = GetLayoutObjectByElementId("target");
+  ASSERT_TRUE(target && target->IsBox());
+  PaintLayer* target_layer = ToLayoutBox(target)->Layer();
+  GraphicsLayer* target_graphics_layer =
+      target_layer ? target_layer->GraphicsLayerBacking() : nullptr;
+  ASSERT_TRUE(target_graphics_layer);
+  EXPECT_TRUE(
+      target_graphics_layer->CcLayer()->transformed_rasterization_allowed());
+}
+
+TEST_F(CompositedLayerMappingTest,
+       TransformedRasterizationForTrivial3DTransform) {
+  SetBodyInnerHTML(R"HTML(
+    <div id="target" style="transform: translate3d(0.3px, 0px, 0px);">
+        Trivial 3D Transform
+    </div>
+  )HTML");
+
+  LayoutObject* target = GetLayoutObjectByElementId("target");
+  ASSERT_TRUE(target && target->IsBox());
+  PaintLayer* target_layer = ToLayoutBox(target)->Layer();
+  GraphicsLayer* target_graphics_layer =
+      target_layer ? target_layer->GraphicsLayerBacking() : nullptr;
+  ASSERT_TRUE(target_graphics_layer);
+  EXPECT_TRUE(
+      target_graphics_layer->CcLayer()->transformed_rasterization_allowed());
+}
+
+TEST_F(CompositedLayerMappingTest,
+       TransformedRasterizationForBackfaceVisibilityHidden) {
+  SetBodyInnerHTML(R"HTML(
+    <div id="target" style="backface-visibility: hidden;">EXAMPLE</div>
   )HTML");
 
   LayoutObject* target = GetLayoutObjectByElementId("target");
@@ -1484,15 +1529,15 @@ TEST_F(CompositedLayerMappingTest, ScrollingLayerBackgroundColor) {
 
   target->setAttribute(html_names::kClassAttr, "color");
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(Color(0, 0, 255), graphics_layer->BackgroundColor());
+  EXPECT_EQ(Color::kTransparent, graphics_layer->BackgroundColor());
   EXPECT_EQ(Color(0, 0, 255), scrolling_contents_layer->BackgroundColor());
 }
 
 TEST_F(CompositedLayerMappingTest, ScrollLayerSizingSubpixelAccumulation) {
   // This test verifies that when subpixel accumulation causes snapping it
-  // applies to both the scrolling and scrolling contents layers. Verify that
-  // the mapping doesn't have any vertical scrolling introduced as a result of
-  // the snapping behavior. https://crbug.com/801381.
+  // applies to the scrolling contents layer. Verify that the mapping doesn't
+  // have any vertical scrolling introduced as a result of the snapping
+  // behavior. https://crbug.com/801381.
   GetDocument().GetFrame()->GetSettings()->SetPreferCompositingToLCDTextEnabled(
       true);
 
@@ -1525,10 +1570,9 @@ TEST_F(CompositedLayerMappingTest, ScrollLayerSizingSubpixelAccumulation) {
                       ->Layer()
                       ->GetCompositedLayerMapping();
   ASSERT_TRUE(mapping);
-  ASSERT_TRUE(mapping->ScrollingLayer());
   ASSERT_TRUE(mapping->ScrollingContentsLayer());
-  EXPECT_EQ(mapping->ScrollingLayer()->Size().height(),
-            mapping->ScrollingContentsLayer()->Size().height());
+  EXPECT_EQ(gfx::Size(200, 200), mapping->MainGraphicsLayer()->Size());
+  EXPECT_EQ(gfx::Size(1000, 200), mapping->ScrollingContentsLayer()->Size());
 }
 
 TEST_F(CompositedLayerMappingTest, SquashingScrollInterestRect) {
@@ -1550,8 +1594,9 @@ TEST_F(CompositedLayerMappingTest, SquashingScrollInterestRect) {
       ScrollOffset(0, 5000), mojom::blink::ScrollType::kUser);
   UpdateAllLifecyclePhasesForTest();
 
-  EXPECT_EQ(IntRect(0, 1000, 200, 5000),
-            squashed->GroupedMapping()->SquashingLayer()->InterestRect());
+  EXPECT_EQ(
+      IntRect(0, 1000, 200, 5000),
+      squashed->GroupedMapping()->SquashingLayer(*squashed)->InterestRect());
 }
 
 TEST_F(CompositedLayerMappingTest,
@@ -1866,6 +1911,109 @@ TEST_F(CompositedLayerMappingTest, FrameAttribution) {
             CompositorElementIdFromUniqueObjectId(
                 DOMNodeIds::IdForNode(subframe->contentDocument()),
                 CompositorElementIdNamespace::kDOMNodeId));
+}
+
+TEST_F(CompositedLayerMappingTest, SquashIntoScrollingContents) {
+  GetDocument().GetFrame()->GetSettings()->SetPreferCompositingToLCDTextEnabled(
+      true);
+  SetBodyInnerHTML(R"HTML(
+    <div style="position: absolute; top: 0.5px; left: 0.75px; z-index: 1">
+      <div style="height: 0.75px"></div>
+      <div id="scroller" style="width: 100px; height: 100px; overflow: scroll;
+           border: 10px solid blue">
+        <div id="target1" style="position: relative; top: 10.5px; left: 5.5px;
+             width: 10px; height: 10px; background: green"></div>
+        <div style="height: 300px"></div>
+        <div id="target2" style="position: relative; z-index: 2;
+             width: 10px; height: 10px; background: green"></div>
+      </div>
+      <div style="position: absolute; z-index: 1; top: 50px;
+           width: 10px; height: 10px; background: blue">
+      </div>
+    </div>
+  )HTML");
+
+  auto* scroller = ToLayoutBox(GetLayoutObjectByElementId("scroller"))->Layer();
+  auto* target1 = ToLayoutBox(GetLayoutObjectByElementId("target1"))->Layer();
+  auto* target2 = ToLayoutBox(GetLayoutObjectByElementId("target2"))->Layer();
+
+  auto* scroller_mapping = scroller->GetCompositedLayerMapping();
+  ASSERT_TRUE(scroller_mapping);
+  EXPECT_EQ(IntSize(),
+            scroller_mapping->MainGraphicsLayer()->OffsetFromLayoutObject());
+  EXPECT_EQ(
+      IntSize(10, 10),
+      scroller_mapping->ScrollingContentsLayer()->OffsetFromLayoutObject());
+  EXPECT_EQ(PhysicalOffset(LayoutUnit(-0.25), LayoutUnit(0.25)),
+            scroller->SubpixelAccumulation());
+
+  EXPECT_EQ(scroller_mapping, target1->GroupedMapping());
+  EXPECT_EQ(scroller_mapping->ScrollingContentsLayer(),
+            scroller_mapping->SquashingLayer(*target1));
+  EXPECT_EQ(scroller_mapping->ScrollingContentsLayer(),
+            target1->GraphicsLayerBacking());
+  EXPECT_EQ(PhysicalOffset(LayoutUnit(0.25), LayoutUnit(-0.25)),
+            target1->SubpixelAccumulation());
+  const GraphicsLayerPaintInfo* target1_info =
+      GetSquashedLayerInScrollingContents(*scroller_mapping, *target1);
+  ASSERT_TRUE(target1_info);
+  EXPECT_TRUE(target1_info->offset_from_layout_object_set);
+  EXPECT_EQ(IntSize(-5, -11), target1_info->offset_from_layout_object);
+  EXPECT_EQ(ClipRect(), target1_info->local_clip_rect_for_squashed_layer);
+
+  // target2 can't be squashed because the absolute position div is between
+  // the scrolling contents and target2.
+  EXPECT_FALSE(target2->GroupedMapping());
+  EXPECT_TRUE(target2->HasCompositedLayerMapping());
+}
+
+TEST_F(CompositedLayerMappingTest,
+       SwitchSquashingBetweenScrollingAndNonScrolling) {
+  GetDocument().GetFrame()->GetSettings()->SetPreferCompositingToLCDTextEnabled(
+      true);
+  SetBodyInnerHTML(R"HTML(
+    <style>.scroll { overflow: scroll; }</style>
+    <div id="container"
+         style="backface-visibility: hidden; width: 100px; height: 100px">
+      <div id="squashed"
+           style="z-index: 1; position: relative; width: 10px; height: 10px"></div>
+      <div id="filler" style="height: 300px"></div>
+    </div>
+  )HTML");
+
+  auto* container_element = GetDocument().getElementById("container");
+  auto* container = container_element->GetLayoutBox()->Layer();
+  auto* squashed = ToLayoutBox(GetLayoutObjectByElementId("squashed"))->Layer();
+  auto* mapping = container->GetCompositedLayerMapping();
+  ASSERT_TRUE(mapping);
+  EXPECT_EQ(mapping, squashed->GroupedMapping());
+  EXPECT_EQ(mapping->NonScrollingSquashingLayer(),
+            squashed->GraphicsLayerBacking());
+  EXPECT_EQ(mapping->NonScrollingSquashingLayer(),
+            mapping->SquashingLayer(*squashed));
+  EXPECT_TRUE(GetNonScrollingSquashedLayer(*mapping, *squashed));
+  EXPECT_FALSE(GetSquashedLayerInScrollingContents(*mapping, *squashed));
+
+  container_element->setAttribute(html_names::kClassAttr, "scroll");
+  UpdateAllLifecyclePhasesForTest();
+  ASSERT_EQ(mapping, container->GetCompositedLayerMapping());
+  EXPECT_EQ(mapping, squashed->GroupedMapping());
+  EXPECT_EQ(mapping->ScrollingContentsLayer(),
+            squashed->GraphicsLayerBacking());
+  EXPECT_EQ(mapping->ScrollingContentsLayer(),
+            mapping->SquashingLayer(*squashed));
+  EXPECT_FALSE(GetNonScrollingSquashedLayer(*mapping, *squashed));
+  EXPECT_TRUE(GetSquashedLayerInScrollingContents(*mapping, *squashed));
+
+  container_element->setAttribute(html_names::kClassAttr, "");
+  UpdateAllLifecyclePhasesForTest();
+  ASSERT_EQ(mapping, container->GetCompositedLayerMapping());
+  EXPECT_EQ(mapping->NonScrollingSquashingLayer(),
+            squashed->GraphicsLayerBacking());
+  EXPECT_EQ(mapping->NonScrollingSquashingLayer(),
+            mapping->SquashingLayer(*squashed));
+  EXPECT_TRUE(GetNonScrollingSquashedLayer(*mapping, *squashed));
+  EXPECT_FALSE(GetSquashedLayerInScrollingContents(*mapping, *squashed));
 }
 
 }  // namespace blink

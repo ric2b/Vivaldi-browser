@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(Yksityisikkuna)</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Tiedostokuvaajat</translation>
-<translation id="1635033183663317347">Holhoojasi asentama.</translation>
 <translation id="1682548588986054654">Uusi yksityisikkuna</translation>
 <translation id="1698122934742150150">Vain nykyinen yksityisistunto</translation>
 <translation id="1706625117072057435">Lähennystasot</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">Laajennus: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Ruudunjakopyyntö sovellukselta <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Liitä ja &amp;siirry osoitteeseen <ph name="URL" /></translation>
-<translation id="3725367690636977613">sivut</translation>
 <translation id="3727187387656390258">Tutki ponnahdusikkunaa</translation>
 <translation id="3744111561329211289">Taustatahdistus</translation>
 <translation id="3760460896538743390">Tutki &amp;taustasivua</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Hyväksy ryhmän puolesta</translation>
-<translation id="4091434297613116013">arkkia</translation>
 <translation id="4096508467498758490">Poista kehittäjätilassa olevat laajennukset käytöstä</translation>
 <translation id="4100839878934973028">Toinen tietokoneellasi oleva ohjelma lisäsi sovelluksen, joka voi muuttaa Vivaldin toimintaa.</translation>
 <translation id="4109898769411476438">Sulje selain ennen tuontia</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />×<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Näytä &amp;säätimet</translation>
 <translation id="7311079019872751559">Hiekkalaatikon ulkopuolella toimivan laajennuksen käyttö</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Tulostuksessa meni jokin vikaan. Tarkista tulostimesi ja yritä uudelleen.</translation>
 <translation id="7412226954991670867">GPU-muisti</translation>
 <translation id="7421925624202799674">&amp;Näytä sivun lähdekoodi</translation>
@@ -433,7 +429,6 @@ Tallenna avaintiedosto suojattuun sijaintiin. Tarvitset sitä, jos haluat luoda 
 <translation id="8071432093239591881">Tulosta kuvana</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kt</translation>
 <translation id="8137559199583651773">Laajennusten hallinta</translation>
-<translation id="8180239481735238521">sivu</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Lataus on meneillään} other {Latauksia on meneillään}}</translation>
 <translation id="8230134520748321204">Tallennetaanko salasanat: <ph name="ORIGIN" />?</translation>
@@ -466,7 +461,6 @@ Tallenna avaintiedosto suojattuun sijaintiin. Tarvitset sitä, jos haluat luoda 
 <translation id="8798099450830957504">Oletus</translation>
 <translation id="8800004011501252845">Näytetään kohteet sähköpostiosoitteelle</translation>
 <translation id="8808478386290700967">Web Store</translation>
-<translation id="8813811964357448561">arkki</translation>
 <translation id="8823514049557262177">Kopioi linkin &amp;teksti</translation>
 <translation id="8823704566850948458">Ehdota salasanaa…</translation>
 <translation id="8859174528519900719">Alakehys: <ph name="SUBFRAME_SITE" /></translation>

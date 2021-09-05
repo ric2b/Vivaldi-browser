@@ -1,6 +1,13 @@
-# tags: [ android chromeos linux mac win win10 win7 ]
+# tags: [ android
+#         chromeos
+#         fuchsia
+#         linux
+#         mac
+#         win win10 win7 ]
 # tags: [ debug ]
-# tags: [ intel nvidia qualcomm-adreno-(tm)-418 nvidia-0x1cb3]
+# tags: [ intel intel-0x3e92 intel-0xa2e intel-0x5912 intel-0xd26
+#         nvidia nvidia-0x1cb3
+#         qualcomm-adreno-(tm)-418 ]
 # results: [ Failure RetryOnFailure Skip ]
 
  # TODO(kbr): flakily timing out on this configuration.
@@ -28,16 +35,34 @@ crbug.com/867136 [ linux ] VideoPathTraceTest_* [ Skip ]
 crbug.com/867136 [ android ] VideoPathTraceTest_* [ Skip ]
 crbug.com/867136 [ chromeos ] VideoPathTraceTest_* [ Skip ]
 crbug.com/867136 [ win7 ] VideoPathTraceTest_* [ Skip ]
+crbug.com/867136 [ fuchsia ] VideoPathTraceTest_* [ Skip ]
 crbug.com/867136 [ mac ] OverlayModeTraceTest_* [ Skip ]
 crbug.com/867136 [ linux ] OverlayModeTraceTest_* [ Skip ]
 crbug.com/867136 [ android ] OverlayModeTraceTest_* [ Skip ]
 crbug.com/867136 [ chromeos ] OverlayModeTraceTest_* [ Skip ]
 crbug.com/867136 [ win7 ] OverlayModeTraceTest_* [ Skip ]
+crbug.com/867136 [ fuchsia ] OverlayModeTraceTest_* [ Skip ]
 crbug.com/1009860 [ mac ] SwapChainTraceTest_* [ Skip ]
 crbug.com/1009860 [ linux ] SwapChainTraceTest_* [ Skip ]
 crbug.com/1009860 [ android ] SwapChainTraceTest_* [ Skip ]
 crbug.com/1009860 [ chromeos ] SwapChainTraceTest_* [ Skip ]
 crbug.com/1009860 [ win7 ] SwapChainTraceTest_* [ Skip ]
+crbug.com/1009860 [ fuchsia ] SwapChainTraceTest_* [ Skip ]
+
+# Playing videos not yet supported in Fuchsia.
+crbug.com/1096431 [ fuchsia ] TraceTest_Video_BackdropFilter [ Skip ]
+crbug.com/1096431 [ fuchsia ] TraceTest_Video_MP4 [ Skip ]
+crbug.com/1096431 [ fuchsia ] TraceTest_Video_MP4_DXVA [ Skip ]
+crbug.com/1096431 [ fuchsia ] TraceTest_Video_MP4_FourColors_Aspect_4x3 [ Skip ]
+crbug.com/1096431 [ fuchsia ] TraceTest_Video_MP4_FourColors_Rot_180 [ Skip ]
+crbug.com/1096431 [ fuchsia ] TraceTest_Video_MP4_FourColors_Rot_270 [ Skip ]
+crbug.com/1096431 [ fuchsia ] TraceTest_Video_MP4_FourColors_Rot_90 [ Skip ]
+crbug.com/1096431 [ fuchsia ] TraceTest_Video_MP4_Rounded_Corner [ Skip ]
+crbug.com/1096431 [ fuchsia ] TraceTest_Video_VP9 [ Skip ]
+crbug.com/1096431 [ fuchsia ] TraceTest_Video_VP9_DXVA [ Skip ]
+
+# Skip unaccelerated canvas test since we don't use swap chains without GPU compositing.
+crbug.com/1009860 [ win10 ] SwapChainTraceTest_CanvasUnacceleratedLowLatency2D [ Skip ]
 
 # VP9 videos fail to trigger zero copy video presentation path.
 crbug.com/930343 [ win intel ] VideoPathTraceTest_DirectComposition_Video_VP9_Fullsize [ Failure ]
@@ -47,5 +72,44 @@ crbug.com/937545 [ win10 nvidia ] VideoPathTraceTest_DirectComposition_ComplexOv
 
 # Flaky for unknown reason.
 crbug.com/960007 [ win10 nvidia ] OverlayModeTraceTest_DirectComposition_Nonroot [ RetryOnFailure ]
-crbug.com/969117 [ win10 intel ] OverlayModeTraceTest_DirectComposition_Video_MP4_FourColors_Aspect_4x3 [ RetryOnFailure ]
+# TODO(crbug.com/1079393): Compress down to just "intel" instead of specific
+# GPUs once UHD 630 failures are fixed.
+crbug.com/969117 [ win10 intel-0xa2e ] OverlayModeTraceTest_DirectComposition_Video_MP4_FourColors_Aspect_4x3 [ RetryOnFailure ]
+crbug.com/969117 [ win10 intel-0x5912 ] OverlayModeTraceTest_DirectComposition_Video_MP4_FourColors_Aspect_4x3 [ RetryOnFailure ]
+crbug.com/969117 [ win10 intel-0xd26 ] OverlayModeTraceTest_DirectComposition_Video_MP4_FourColors_Aspect_4x3 [ RetryOnFailure ]
 crbug.com/978181 [ win10 nvidia ] OverlayModeTraceTest_DirectComposition_Underlay [ RetryOnFailure ]
+
+# Incorrectly reporting SCALING instead of DIRECT on Windows 10 UHD 630 GPUs.
+crbug.com/1079393 [ win10 intel-0x3e92 ] OverlayModeTraceTest_DirectComposition_Nonroot [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] OverlayModeTraceTest_DirectComposition_Underlay [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] OverlayModeTraceTest_DirectComposition_Underlay_DXVA [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] OverlayModeTraceTest_DirectComposition_Underlay_Fullsize [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] OverlayModeTraceTest_DirectComposition_Video_MP4 [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] OverlayModeTraceTest_DirectComposition_Video_MP4_DXVA [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] OverlayModeTraceTest_DirectComposition_Video_MP4_FourColors_Aspect_4x3 [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] OverlayModeTraceTest_DirectComposition_Video_MP4_Fullsize [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] OverlayModeTraceTest_DirectComposition_Video_MP4_YUY2 [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] OverlayModeTraceTest_DirectComposition_Video_VP9 [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] OverlayModeTraceTest_DirectComposition_Video_VP9_DXVA [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] OverlayModeTraceTest_DirectComposition_Video_VP9_Fullsize [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] OverlayModeTraceTest_DirectComposition_Video_VP9_YUY2 [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] VideoPathTraceTest_DirectComposition_Underlay_Fullsize [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] VideoPathTraceTest_DirectComposition_Video_MP4_Fullsize [ Failure ]
+crbug.com/1079393 [ win10 intel-0x3e92 ] VideoPathTraceTest_DirectComposition_Video_MP4_YUY2 [ Failure ]
+
+# Using YUY2 instead of NV12 on Windows 10 HD 630 GPUs due to NV12 support
+# showing up as SOFTWARE.
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_ComplexOverlays [ Failure ]
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Nonroot [ Failure ]
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Underlay [ Failure ]
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Underlay_DXVA [ Failure ]
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Underlay_Fullsize [ Failure ]
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Video_MP4 [ Failure ]
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Video_MP4_DXVA [ Failure ]
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Video_MP4_FourColors_Aspect_4x3 [ Failure ]
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Video_MP4_FourColors_Rot_180 [ Failure ]
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Video_MP4_FourColors_Rot_270 [ Failure ]
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Video_MP4_FourColors_Rot_90 [ Failure ]
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Video_MP4_Fullsize [ Failure ]
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Video_VP9 [ Failure ]
+crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Video_VP9_DXVA [ Failure ]

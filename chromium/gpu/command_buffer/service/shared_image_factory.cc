@@ -86,8 +86,7 @@ SharedImageFactory::SharedImageFactory(
       shared_context_state_(context_state),
       memory_tracker_(std::make_unique<MemoryTypeTracker>(memory_tracker)),
       using_vulkan_(context_state && context_state->GrContextIsVulkan()),
-      using_metal_(context_state && context_state->GrContextIsMetal()),
-      using_dawn_(context_state && context_state->GrContextIsDawn()) {
+      using_skia_dawn_(context_state && context_state->GrContextIsDawn()) {
   bool use_gl = gl::GetGLImplementation() != gl::kGLImplementationNone;
   if (use_gl) {
     gl_backing_factory_ = std::make_unique<SharedImageBackingFactoryGLTexture>(
@@ -203,7 +202,7 @@ bool SharedImageFactory::CreateSharedImage(const Mailbox& mailbox,
   SharedImageBackingFactory* factory = nullptr;
   if (backing_factory_for_testing_) {
     factory = backing_factory_for_testing_;
-  } else if (!using_vulkan_ && !using_dawn_) {
+  } else if (!using_vulkan_ && !using_skia_dawn_) {
     allow_legacy_mailbox = true;
     factory = gl_backing_factory_.get();
   } else {
@@ -213,6 +212,8 @@ bool SharedImageFactory::CreateSharedImage(const Mailbox& mailbox,
     return false;
   auto backing = factory->CreateSharedImage(mailbox, format, size, color_space,
                                             usage, data);
+  if (backing)
+    backing->OnWriteSucceeded();
   return RegisterBacking(std::move(backing), allow_legacy_mailbox);
 }
 
@@ -235,6 +236,8 @@ bool SharedImageFactory::CreateSharedImage(const Mailbox& mailbox,
   auto backing =
       factory->CreateSharedImage(mailbox, client_id, std::move(handle), format,
                                  surface_handle, size, color_space, usage);
+  if (backing)
+    backing->OnWriteSucceeded();
   return RegisterBacking(std::move(backing), allow_legacy_mailbox);
 }
 
@@ -310,7 +313,9 @@ bool SharedImageFactory::PresentSwapChain(const Mailbox& mailbox) {
 #if defined(OS_FUCHSIA)
 bool SharedImageFactory::RegisterSysmemBufferCollection(
     gfx::SysmemBufferCollectionId id,
-    zx::channel token) {
+    zx::channel token,
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage) {
   decltype(buffer_collections_)::iterator it;
   bool inserted;
   std::tie(it, inserted) =
@@ -331,9 +336,9 @@ bool SharedImageFactory::RegisterSysmemBufferCollection(
   VkDevice device =
       vulkan_context_provider_->GetDeviceQueue()->GetVulkanDevice();
   DCHECK(device != VK_NULL_HANDLE);
-  it->second =
-      vulkan_context_provider_->GetVulkanImplementation()
-          ->RegisterSysmemBufferCollection(device, id, std::move(token));
+  it->second = vulkan_context_provider_->GetVulkanImplementation()
+                   ->RegisterSysmemBufferCollection(
+                       device, id, std::move(token), format, usage);
 
   return true;
 }
@@ -371,6 +376,25 @@ bool SharedImageFactory::IsSharedBetweenThreads(uint32_t usage) {
          (usage & SHARED_IMAGE_USAGE_DISPLAY);
 }
 
+bool SharedImageFactory::CanUseWrappedSkImage(uint32_t usage) const {
+  if (!wrapped_sk_image_factory_)
+    return false;
+
+  constexpr auto kWrappedSkImageUsage = SHARED_IMAGE_USAGE_RASTER |
+                                        SHARED_IMAGE_USAGE_OOP_RASTERIZATION |
+                                        SHARED_IMAGE_USAGE_DISPLAY;
+
+  if (using_vulkan_ || using_skia_dawn_) {
+    // For SkiaRenderer/Vulkan+Dawn use WrappedSkImage if the usage is only
+    // raster and/or display.
+    return (usage & kWrappedSkImageUsage) && !(usage & ~kWrappedSkImageUsage);
+  } else {
+    // For d SkiaRenderer/GL only use WrappedSkImages for OOP-R because
+    // CopySubTexture() doesn't use Skia. https://crbug.com/984045
+    return usage == kWrappedSkImageUsage;
+  }
+}
+
 SharedImageBackingFactory* SharedImageFactory::GetFactoryByUsage(
     uint32_t usage,
     viz::ResourceFormat format,
@@ -382,12 +406,9 @@ SharedImageBackingFactory* SharedImageFactory::GetFactoryByUsage(
   bool using_dawn = usage & SHARED_IMAGE_USAGE_WEBGPU;
   bool vulkan_usage = using_vulkan_ && (usage & SHARED_IMAGE_USAGE_DISPLAY);
   bool gl_usage = usage & SHARED_IMAGE_USAGE_GLES2;
-  bool share_between_gl_metal =
-      using_metal_ && (usage & SHARED_IMAGE_USAGE_OOP_RASTERIZATION);
   bool share_between_threads = IsSharedBetweenThreads(usage);
   bool share_between_gl_vulkan = gl_usage && vulkan_usage;
   bool using_interop_factory = share_between_gl_vulkan || using_dawn ||
-                               share_between_gl_metal ||
                                (usage & SHARED_IMAGE_USAGE_VIDEO_DECODE) ||
                                (share_between_threads && vulkan_usage);
 
@@ -397,23 +418,25 @@ SharedImageBackingFactory* SharedImageFactory::GetFactoryByUsage(
   using_interop_factory |= usage & SHARED_IMAGE_USAGE_SCANOUT;
 #endif
 
-  // wrapped_sk_image_factory_ is only used for OOPR and supports
-  // a limited number of flags (e.g. no SHARED_IMAGE_USAGE_SCANOUT).
-  constexpr auto kWrappedSkImageUsage = SHARED_IMAGE_USAGE_RASTER |
-                                        SHARED_IMAGE_USAGE_OOP_RASTERIZATION |
-                                        SHARED_IMAGE_USAGE_DISPLAY;
-  bool using_wrapped_sk_image =
-      wrapped_sk_image_factory_ && (usage == kWrappedSkImageUsage) &&
-      !using_interop_factory && !share_between_threads;
-  using_interop_factory |= vulkan_usage && !using_wrapped_sk_image;
+  bool using_wrapped_sk_image = !using_interop_factory &&
+                                !share_between_threads &&
+                                CanUseWrappedSkImage(usage);
+  if (using_wrapped_sk_image) {
+    if (gmb_type == gfx::EMPTY_BUFFER ||
+        wrapped_sk_image_factory_->CanImportGpuMemoryBuffer(gmb_type)) {
+      *allow_legacy_mailbox = false;
+      return wrapped_sk_image_factory_.get();
+    }
+  }
+
+  using_interop_factory |= vulkan_usage;
 
   if (gmb_type != gfx::EMPTY_BUFFER) {
     bool interop_factory_supports_gmb =
         interop_backing_factory_ &&
         interop_backing_factory_->CanImportGpuMemoryBuffer(gmb_type);
 
-    if (using_wrapped_sk_image ||
-        (using_interop_factory && !interop_backing_factory_)) {
+    if (using_interop_factory && !interop_backing_factory_) {
       LOG(ERROR) << "Unable to screate SharedImage backing: no support for the "
                     "requested GpuMemoryBufferType.";
       return nullptr;
@@ -424,11 +447,8 @@ SharedImageBackingFactory* SharedImageFactory::GetFactoryByUsage(
     using_interop_factory |= interop_factory_supports_gmb;
   }
 
-  *allow_legacy_mailbox = !using_wrapped_sk_image && !using_interop_factory &&
-                          !using_vulkan_ && !share_between_threads;
-
-  if (using_wrapped_sk_image)
-    return wrapped_sk_image_factory_.get();
+  *allow_legacy_mailbox =
+      !using_interop_factory && !using_vulkan_ && !share_between_threads;
 
   if (using_interop_factory) {
     // TODO(crbug.com/969114): Not all shared image factory implementations

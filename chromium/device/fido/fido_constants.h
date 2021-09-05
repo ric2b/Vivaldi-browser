@@ -63,6 +63,9 @@ constexpr size_t kAaguidLength = 16;
 // integer: https://www.w3.org/TR/webauthn/#sec-attested-credential-data
 constexpr size_t kCredentialIdLengthLength = 2;
 
+// Length of an X9.62-encoded, uncompresed, P-256 public key.
+constexpr size_t kP256X962Length = 1 /* type byte */ + 32 /* x */ + 32 /* y */;
+
 // CTAP protocol device response code, as specified in
 // https://fidoalliance.org/specs/fido-v2.0-rd-20170927/fido-client-to-authenticator-protocol-v2.0-rd-20170927.html#authenticator-api
 enum class CtapDeviceResponseCode : uint8_t {
@@ -245,17 +248,28 @@ enum class CoseKeyKey : int {
 // Enumerates COSE key types. See
 // https://tools.ietf.org/html/rfc8152#section-13
 enum class CoseKeyTypes : int {
+  kOKP = 1,
   kEC2 = 2,
   kRSA = 3,
+  // kInvalidForTesting is a random 32-bit number used to test unknown key
+  // types.
+  kInvalidForTesting = 146919568,
 };
 
 // Enumerates COSE elliptic curves. See
 // https://tools.ietf.org/html/rfc8152#section-13.1
-enum class CoseCurves : int { kP256 = 1 };
+enum class CoseCurves : int {
+  kP256 = 1,
+  kEd25519 = 6,
+};
 
 enum class CoseAlgorithmIdentifier : int {
-  kCoseEs256 = -7,
-  kCoseRs256 = -257,
+  kEs256 = -7,
+  kEdDSA = -8,
+  kRs256 = -257,
+  // kInvalidForTesting is a random 32-bit number used to test unknown
+  // algorithms.
+  kInvalidForTesting = 146919568,
 };
 
 // APDU instruction code for U2F request encoding.
@@ -371,9 +385,20 @@ COMPONENT_EXPORT(DEVICE_FIDO)
 extern const char kCableAuthenticatorHelloMessage[];
 COMPONENT_EXPORT(DEVICE_FIDO) extern const char kCableClientHelloMessage[];
 
-// TODO(hongjunchoi): Add url to the official spec once it's standardized.
+enum class Ctap2Version {
+  kUnknown = 0,
+  kCtap2_0 = 1,
+  kCtap2_1 = 2,
+};
+
+// Protocol version strings.
+// https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#authenticatorGetInfo
 COMPONENT_EXPORT(DEVICE_FIDO) extern const char kCtap2Version[];
 COMPONENT_EXPORT(DEVICE_FIDO) extern const char kU2fVersion[];
+
+// The version identifier for CTAP 2.1.
+// TODO(nsatragno): link to the spec once this is standardized.
+COMPONENT_EXPORT(DEVICE_FIDO) extern const char kCtap2_1Version[];
 
 COMPONENT_EXPORT(DEVICE_FIDO) extern const char kExtensionHmacSecret[];
 COMPONENT_EXPORT(DEVICE_FIDO) extern const char kExtensionCredProtect[];

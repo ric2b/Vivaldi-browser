@@ -9,6 +9,7 @@
 
 #include <memory>
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
 #include "content/public/browser/navigation_controller.h"
@@ -64,6 +65,7 @@ class NavigationControllerImpl : public NavigationController,
   base::android::ScopedJavaLocalRef<jstring> GetNavigationEntryTitle(
       JNIEnv* env,
       int index);
+  bool IsNavigationEntrySkippable(JNIEnv* env, int index);
 #endif
 
  private:
@@ -90,6 +92,7 @@ class NavigationControllerImpl : public NavigationController,
   int GetNavigationListCurrentIndex() override;
   GURL GetNavigationEntryDisplayURL(int index) override;
   std::string GetNavigationEntryTitle(int index) override;
+  bool IsNavigationEntrySkippable(int index) override;
 
   // content::WebContentsObserver implementation:
   void DidStartNavigation(
@@ -105,6 +108,7 @@ class NavigationControllerImpl : public NavigationController,
   void LoadProgressChanged(double progress) override;
   void DidFirstVisuallyNonEmptyPaint() override;
 
+  void OldPageNoLongerRendered(const GURL& url, bool success);
   void NotifyLoadStateChanged();
 
   void DoNavigate(
@@ -124,6 +128,8 @@ class NavigationControllerImpl : public NavigationController,
 #if defined(OS_ANDROID)
   base::android::ScopedJavaGlobalRef<jobject> java_controller_;
 #endif
+
+  base::WeakPtrFactory<NavigationControllerImpl> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(NavigationControllerImpl);
 };

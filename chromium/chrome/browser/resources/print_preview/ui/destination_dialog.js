@@ -33,7 +33,7 @@ import {DestinationStore} from '../data/destination_store.js';
 import {Invitation} from '../data/invitation.js';
 import {InvitationStore} from '../data/invitation_store.js';
 import {Metrics, MetricsContext} from '../metrics.js';
-import {NativeLayer} from '../native_layer.js';
+import {NativeLayerImpl} from '../native_layer.js';
 
 Polymer({
   is: 'print-preview-destination-dialog',
@@ -129,12 +129,7 @@ Polymer({
     this.$$('.promo-text').innerHTML =
         this.i18nAdvanced('cloudPrintPromotion', {
           substitutions: ['<a is="action-link" class="sign-in">', '</a>'],
-          attrs: {
-            'is': (node, v) => v === 'action-link',
-            'class': (node, v) => v === 'sign-in',
-            'tabindex': (node, v) => v === '0',
-            'role': (node, v) => v === 'link',
-          },
+          attrs: ['is', 'class', 'tabindex', 'role'],
         });
   },
 
@@ -340,7 +335,7 @@ Polymer({
   /** @private */
   onSignInClick_() {
     this.metrics_.record(Metrics.DestinationSearchBucket.SIGNIN_TRIGGERED);
-    NativeLayer.getInstance().signIn(false);
+    NativeLayerImpl.getInstance().signIn(false);
   },
 
   /** @private */
@@ -426,7 +421,7 @@ Polymer({
       this.metrics_.record(Metrics.DestinationSearchBucket.ACCOUNT_CHANGED);
     } else {
       select.value = this.activeUser;
-      NativeLayer.getInstance().signIn(true);
+      NativeLayerImpl.getInstance().signIn(true);
       this.metrics_.record(
           Metrics.DestinationSearchBucket.ADD_ACCOUNT_SELECTED);
     }
@@ -463,6 +458,6 @@ Polymer({
   /** @private */
   onOpenSettingsPrintPage_() {
     this.metrics_.record(Metrics.DestinationSearchBucket.MANAGE_BUTTON_CLICKED);
-    NativeLayer.getInstance().openSettingsPrintPage();
+    NativeLayerImpl.getInstance().openSettingsPrintPage();
   },
 });

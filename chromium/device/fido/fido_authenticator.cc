@@ -26,6 +26,8 @@ void FidoAuthenticator::GetPinRetries(
 
 void FidoAuthenticator::GetPINToken(
     std::string pin,
+    const std::vector<pin::Permissions>& permissions,
+    base::Optional<std::string> rp_id,
     FidoAuthenticator::GetTokenCallback callback) {
   NOTREACHED();
 }
@@ -35,7 +37,12 @@ void FidoAuthenticator::GetUvRetries(
   NOTREACHED();
 }
 
+bool FidoAuthenticator::CanGetUvToken() {
+  return false;
+}
+
 void FidoAuthenticator::GetUvToken(
+    base::Optional<std::string> rp_id,
     FidoAuthenticator::GetTokenCallback callback) {
   NOTREACHED();
 }
@@ -121,6 +128,10 @@ void FidoAuthenticator::BioEnrollDelete(const pin::TokenResponse&,
   NOTREACHED();
 }
 
+base::Optional<base::span<const int32_t>> FidoAuthenticator::GetAlgorithms() {
+  return base::nullopt;
+}
+
 void FidoAuthenticator::Reset(ResetCallback callback) {
   std::move(callback).Run(CtapDeviceResponseCode::kCtap1ErrInvalidCommand,
                           base::nullopt);
@@ -132,6 +143,10 @@ ProtocolVersion FidoAuthenticator::SupportedProtocol() const {
 
 bool FidoAuthenticator::SupportsCredProtectExtension() const {
   return Options() && Options()->supports_cred_protect;
+}
+
+bool FidoAuthenticator::SupportsHMACSecretExtension() const {
+  return false;
 }
 
 }  // namespace device

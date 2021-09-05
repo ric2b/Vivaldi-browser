@@ -21,7 +21,6 @@
 #include "base/threading/sequence_local_storage_slot.h"
 #include "build/build_config.h"
 #include "content/public/browser/client_certificate_delegate.h"
-#include "content/public/browser/cors_exempt_headers.h"
 #include "content/public/browser/login_delegate.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/network_service_instance.h"
@@ -39,10 +38,12 @@
 #include "content/shell/browser/shell_devtools_manager_delegate.h"
 #include "content/shell/browser/shell_quota_permission_context.h"
 #include "content/shell/browser/shell_web_contents_view_delegate_creator.h"
+#include "content/shell/common/shell_controller.test-mojom.h"
 #include "content/shell/common/shell_switches.h"
 #include "media/mojo/buildflags.h"
 #include "media/mojo/mojom/media_service.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/ssl/client_cert_identity.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "third_party/blink/public/common/features.h"
@@ -93,6 +94,32 @@ int GetCrashSignalFD(const base::CommandLine& command_line) {
   return crash_reporter::GetHandlerSocket(&fd, &pid) ? fd : -1;
 }
 #endif
+
+class ShellControllerImpl : public mojom::ShellController {
+ public:
+  ShellControllerImpl() = default;
+  ~ShellControllerImpl() override = default;
+
+  // mojom::ShellController:
+  void GetSwitchValue(const std::string& name,
+                      GetSwitchValueCallback callback) override {
+    const auto& command_line = *base::CommandLine::ForCurrentProcess();
+    if (command_line.HasSwitch(name))
+      std::move(callback).Run(command_line.GetSwitchValueASCII(name));
+    else
+      std::move(callback).Run(base::nullopt);
+  }
+
+  void ExecuteJavaScript(const base::string16& script,
+                         ExecuteJavaScriptCallback callback) override {
+    CHECK(!Shell::windows().empty());
+    WebContents* contents = Shell::windows()[0]->web_contents();
+    contents->GetMainFrame()->ExecuteJavaScriptForTests(script,
+                                                        std::move(callback));
+  }
+
+  void ShutDown() override { Shell::CloseAllWindows(); }
+};
 
 }  // namespace
 
@@ -221,6 +248,8 @@ std::string ShellContentBrowserClient::GetDefaultDownloadName() {
 
 WebContentsViewDelegate* ShellContentBrowserClient::GetWebContentsViewDelegate(
     WebContents* web_contents) {
+  if (web_contents_view_delegate_callback_)
+    return web_contents_view_delegate_callback_.Run(web_contents);
   return CreateShellWebContentsViewDelegate(web_contents);
 }
 
@@ -396,6 +425,15 @@ ShellContentBrowserClient::GetNetworkContextsParentDirectory() {
   return {browser_context()->GetPath()};
 }
 
+void ShellContentBrowserClient::BindBrowserControlInterface(
+    mojo::GenericPendingReceiver receiver) {
+  if (auto r = receiver.As<mojom::ShellController>()) {
+    mojo::MakeSelfOwnedReceiver(std::make_unique<ShellControllerImpl>(),
+                                std::move(r));
+    return;
+  }
+}
+
 ShellBrowserContext* ShellContentBrowserClient::browser_context() {
   return shell_browser_main_parts_->browser_context();
 }
@@ -409,7 +447,6 @@ void ShellContentBrowserClient::ConfigureNetworkContextParamsForShell(
     BrowserContext* context,
     network::mojom::NetworkContextParams* context_params,
     network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
-  UpdateCorsExemptHeader(context_params);
   context_params->allow_any_cors_exempt_header_for_browser =
       allow_any_cors_exempt_header_for_browser_;
   context_params->user_agent = GetUserAgent();

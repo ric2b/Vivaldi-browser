@@ -1,10 +1,14 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 # Don't make a habit of this - it isn't public API
 load('@stdlib//internal/luci/proto.star', 'scheduler_pb')
 load('//project.star', 'settings')
 
 
 _BRANCH_NOOP_CONFIG = struct(
-    buckets = ['ci-m81', 'ci-m83'],
+    buckets = ['ci-m83', 'ci-m84'],
     fmt = '{bucket}-{builder}',
 ) if settings.is_master else struct(
     buckets = ['ci'],

@@ -4,7 +4,7 @@
 
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager_impl.h"
 
-#include "ash/public/cpp/notification_utils.h"
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
@@ -15,11 +15,10 @@
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_pref_names.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/notifications/notification_display_service.h"
-#include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/shelf_spinner_controller.h"
 #include "chrome/browser/ui/ash/launcher/shelf_spinner_item_controller.h"
+#include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon/debug_daemon_client.h"
@@ -27,14 +26,10 @@
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/message_center/public/cpp/notification.h"
 
 namespace plugin_vm {
 
 namespace {
-
-constexpr char kStartVmFailedNotificationId[] = "plugin-vm-start-vm-failed";
-constexpr char kStartVmFailedNotifierId[] = "plugin-vm-start-vm-failed";
 
 // Checks if the VM is in a state in which we can't immediately start it.
 bool VmIsStopping(vm_tools::plugin_dispatcher::VmState state) {
@@ -44,8 +39,7 @@ bool VmIsStopping(vm_tools::plugin_dispatcher::VmState state) {
          state == vm_tools::plugin_dispatcher::VmState::VM_STATE_PAUSING;
 }
 
-void ShowStartVmFailedNotification(Profile* profile,
-                                   PluginVmLaunchResult result) {
+void ShowStartVmFailedDialog(PluginVmLaunchResult result) {
   LOG(ERROR) << "Failed to start VM with launch result "
              << static_cast<int>(result);
   base::string16 app_name = l10n_util::GetStringUTF16(IDS_PLUGIN_VM_APP_NAME);
@@ -76,21 +70,9 @@ void ShowStartVmFailedNotification(Profile* profile,
       message_id = IDS_PLUGIN_VM_NETWORK_ERROR_MESSAGE;
       break;
   }
-  std::unique_ptr<message_center::Notification> notification =
-      ash::CreateSystemNotification(
-          message_center::NOTIFICATION_TYPE_SIMPLE,
-          kStartVmFailedNotificationId, std::move(title),
-          l10n_util::GetStringUTF16(message_id), std::move(app_name), GURL(),
-          message_center::NotifierId(
-              message_center::NotifierType::SYSTEM_COMPONENT,
-              kStartVmFailedNotifierId),
-          {}, new message_center::NotificationDelegate(),
-          kNotificationPluginVmIcon,
-          message_center::SystemNotificationWarningLevel::CRITICAL_WARNING);
-  notification->SetSystemPriority();
-  NotificationDisplayServiceFactory::GetForProfile(profile)->Display(
-      NotificationHandler::Type::TRANSIENT, *notification,
-      /*metadata=*/nullptr);
+
+  chrome::ShowWarningMessageBox(nullptr, std::move(title),
+                                l10n_util::GetStringUTF16(message_id));
 }
 
 }  // namespace
@@ -107,6 +89,34 @@ PluginVmManagerImpl::~PluginVmManagerImpl() {
   chromeos::DBusThreadManager::Get()
       ->GetVmPluginDispatcherClient()
       ->RemoveObserver(this);
+}
+
+void PluginVmManagerImpl::OnPrimaryUserProfilePrepared() {
+  vm_tools::plugin_dispatcher::ListVmRequest request;
+  request.set_owner_id(owner_id_);
+  request.set_vm_name_uuid(kPluginVmName);
+
+  // Probe the dispatcher.
+  chromeos::DBusThreadManager::Get()->GetVmPluginDispatcherClient()->ListVms(
+      std::move(request),
+      base::BindOnce(
+          [](base::Optional<vm_tools::plugin_dispatcher::ListVmResponse>
+                 reply) {
+            // If the dispatcher is already running here, Chrome probably
+            // crashed. Restart it so it can bind to the new wayland socket.
+            // TODO(b/149180115): Fix this properly.
+            if (reply.has_value()) {
+              LOG(ERROR) << "New session has dispatcher unexpected already "
+                            "running. Perhaps Chrome crashed?";
+              chromeos::DBusThreadManager::Get()
+                  ->GetDebugDaemonClient()
+                  ->StopPluginVmDispatcher(base::BindOnce([](bool success) {
+                    if (!success) {
+                      LOG(ERROR) << "Failed to stop the dispatcher";
+                    }
+                  }));
+            }
+          }));
 }
 
 void PluginVmManagerImpl::LaunchPluginVm(LaunchPluginVmCallback callback) {
@@ -133,8 +143,8 @@ void PluginVmManagerImpl::LaunchPluginVm(LaunchPluginVmCallback callback) {
     ChromeLauncherController::instance()
         ->GetShelfSpinnerController()
         ->AddSpinnerToShelf(
-            kPluginVmAppId,
-            std::make_unique<ShelfSpinnerItemController>(kPluginVmAppId));
+            kPluginVmShelfAppId,
+            std::make_unique<ShelfSpinnerItemController>(kPluginVmShelfAppId));
   }
 
   // Launching Plugin Vm goes through the following steps:
@@ -143,7 +153,12 @@ void PluginVmManagerImpl::LaunchPluginVm(LaunchPluginVmCallback callback) {
   // 3) Call ListVms to get the state of the VM.
   // 4) Start the VM if necessary.
   // 5) Show the UI.
-  InstallPluginVmDlc();
+  InstallDlcAndUpdateVmState(
+      base::BindOnce(&PluginVmManagerImpl::OnListVmsForLaunch,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&PluginVmManagerImpl::LaunchFailed,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     PluginVmLaunchResult::kError));
 }
 
 void PluginVmManagerImpl::AddVmStartingObserver(
@@ -173,6 +188,48 @@ void PluginVmManagerImpl::StopPluginVm(const std::string& name, bool force) {
       std::move(request), base::DoNothing());
 }
 
+void PluginVmManagerImpl::RelaunchPluginVm() {
+  if (relaunch_in_progress_) {
+    pending_relaunch_vm_ = true;
+    return;
+  }
+
+  relaunch_in_progress_ = true;
+
+  vm_tools::plugin_dispatcher::SuspendVmRequest request;
+  request.set_owner_id(owner_id_);
+  request.set_vm_name_uuid(kPluginVmName);
+
+  // TODO(dtor): This may not work if the vm is STARTING|CONTINUING|RESUMING.
+  chromeos::DBusThreadManager::Get()->GetVmPluginDispatcherClient()->SuspendVm(
+      std::move(request),
+      base::BindOnce(&PluginVmManagerImpl::OnSuspendVmForRelaunch,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void PluginVmManagerImpl::OnSuspendVmForRelaunch(
+    base::Optional<vm_tools::plugin_dispatcher::SuspendVmResponse> reply) {
+  if (reply &&
+      reply->error() == vm_tools::plugin_dispatcher::VmErrorCode::VM_SUCCESS) {
+    LaunchPluginVm(base::BindOnce(&PluginVmManagerImpl::OnRelaunchVmComplete,
+                                  weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+
+  LOG(ERROR) << "Failed to suspend Plugin VM for relaunch";
+}
+
+void PluginVmManagerImpl::OnRelaunchVmComplete(bool success) {
+  relaunch_in_progress_ = false;
+
+  if (!success) {
+    LOG(ERROR) << "Failed to relaunch Plugin VM";
+  } else if (pending_relaunch_vm_) {
+    pending_relaunch_vm_ = false;
+    RelaunchPluginVm();
+  }
+}
+
 void PluginVmManagerImpl::UninstallPluginVm() {
   if (uninstaller_notification_) {
     uninstaller_notification_->ForceRedisplay();
@@ -182,15 +239,20 @@ void PluginVmManagerImpl::UninstallPluginVm() {
   uninstaller_notification_ =
       std::make_unique<PluginVmUninstallerNotification>(profile_);
   // Uninstalling Plugin Vm goes through the following steps:
-  // 1) Start the Plugin Vm Dispatcher (no-op if already running)
-  // 2) Call ListVms to get the state of the VM
-  // 3) Stop the VM if necessary
-  // 4) Uninstall the VM
+  // 1) Ensure DLC is installed (otherwise we will not be able to start the
+  //    dispatcher). Potentially, we can check and skip to 5) if it is not
+  //    installed, but it is probably easier to just always go through the same
+  //    flow.
+  // 2) Start the Plugin Vm Dispatcher (no-op if already running)
+  // 3) Call ListVms to get the state of the VM
+  // 4) Stop the VM if necessary
+  // 5) Uninstall the VM
   // It does not stop the dispatcher, as it will be stopped upon next shutdown
-  UpdateVmState(base::BindOnce(&PluginVmManagerImpl::OnListVmsForUninstall,
-                               weak_ptr_factory_.GetWeakPtr()),
-                base::BindOnce(&PluginVmManagerImpl::UninstallFailed,
-                               weak_ptr_factory_.GetWeakPtr()));
+  InstallDlcAndUpdateVmState(
+      base::BindOnce(&PluginVmManagerImpl::OnListVmsForUninstall,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&PluginVmManagerImpl::UninstallFailed,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 uint64_t PluginVmManagerImpl::seneschal_server_handle() const {
@@ -243,7 +305,8 @@ void PluginVmManagerImpl::OnVmStateChanged(
     // The previous seneschal handle is no longer valid.
     seneschal_server_handle_ = 0;
 
-    ChromeLauncherController::instance()->Close(ash::ShelfID(kPluginVmAppId));
+    ChromeLauncherController::instance()->Close(
+        ash::ShelfID(kPluginVmShelfAppId));
   }
 
   auto* engagement_metrics_service =
@@ -270,6 +333,37 @@ void PluginVmManagerImpl::UpdateVmState(
 
 vm_tools::plugin_dispatcher::VmState PluginVmManagerImpl::vm_state() const {
   return vm_state_;
+}
+
+bool PluginVmManagerImpl::IsRelaunchNeededForNewPermissions() const {
+  return vm_is_starting_ ||
+         vm_state_ == vm_tools::plugin_dispatcher::VmState::VM_STATE_RUNNING;
+}
+
+void PluginVmManagerImpl::InstallDlcAndUpdateVmState(
+    base::OnceCallback<void(bool default_vm_exists)> success_callback,
+    base::OnceClosure error_callback) {
+  chromeos::DlcserviceClient::Get()->Install(
+      "pita",
+      base::BindOnce(&PluginVmManagerImpl::OnInstallPluginVmDlc,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     std::move(success_callback), std::move(error_callback)),
+      chromeos::DlcserviceClient::IgnoreProgress);
+}
+
+void PluginVmManagerImpl::OnInstallPluginVmDlc(
+    base::OnceCallback<void(bool default_vm_exists)> success_callback,
+    base::OnceClosure error_callback,
+    const chromeos::DlcserviceClient::InstallResult& install_result) {
+  if (install_result.error == dlcservice::kErrorNone) {
+    UpdateVmState(std::move(success_callback), std::move(error_callback));
+  } else {
+    // TODO(kimjae): Unify the dlcservice error handler with
+    // PluginVmInstaller.
+    LOG(ERROR) << "Couldn't install PluginVM DLC after import: "
+               << install_result.error;
+    std::move(error_callback).Run();
+  }
 }
 
 void PluginVmManagerImpl::OnStartDispatcher(
@@ -319,31 +413,6 @@ void PluginVmManagerImpl::OnListVms(
   }
 }
 
-void PluginVmManagerImpl::InstallPluginVmDlc() {
-  chromeos::DlcserviceClient::Get()->Install(
-      "pita",
-      base::BindOnce(&PluginVmManagerImpl::OnInstallPluginVmDlc,
-                     weak_ptr_factory_.GetWeakPtr()),
-      chromeos::DlcserviceClient::IgnoreProgress);
-}
-
-void PluginVmManagerImpl::OnInstallPluginVmDlc(
-    const chromeos::DlcserviceClient::InstallResult& install_result) {
-  if (install_result.error == dlcservice::kErrorNone) {
-    UpdateVmState(base::BindOnce(&PluginVmManagerImpl::OnListVmsForLaunch,
-                                 weak_ptr_factory_.GetWeakPtr()),
-                  base::BindOnce(&PluginVmManagerImpl::LaunchFailed,
-                                 weak_ptr_factory_.GetWeakPtr(),
-                                 PluginVmLaunchResult::kError));
-  } else {
-    // TODO(kimjae): Unify the dlcservice error handler with
-    // PluginVmInstaller.
-    LOG(ERROR) << "Couldn't intall PluginVM DLC after import: "
-               << install_result.error;
-    LaunchFailed();
-  }
-}
-
 void PluginVmManagerImpl::OnListVmsForLaunch(bool default_vm_exists) {
   if (!default_vm_exists) {
     LOG(WARNING) << "Default VM is missing, it may have been manually removed.";
@@ -383,6 +452,7 @@ void PluginVmManagerImpl::StartVm() {
   RemoveDriveDownloadDirectoryIfExists();
 
   pending_start_vm_ = false;
+  vm_is_starting_ = true;
 
   vm_tools::plugin_dispatcher::StartVmRequest request;
   request.set_owner_id(owner_id_);
@@ -419,8 +489,10 @@ void PluginVmManagerImpl::OnStartVm(
     result = PluginVmLaunchResult::kError;
   }
 
+  vm_is_starting_ = false;
+
   if (result != PluginVmLaunchResult::kSuccess) {
-    ShowStartVmFailedNotification(profile_, result);
+    ShowStartVmFailedDialog(result);
     LaunchFailed(result);
     return;
   }
@@ -514,7 +586,7 @@ void PluginVmManagerImpl::LaunchFailed(PluginVmLaunchResult result) {
 
   ChromeLauncherController::instance()
       ->GetShelfSpinnerController()
-      ->CloseSpinner(kPluginVmAppId);
+      ->CloseSpinner(kPluginVmShelfAppId);
 
   pending_start_vm_ = false;
   pending_vm_tools_installed_ = false;

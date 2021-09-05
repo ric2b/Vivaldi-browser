@@ -11,6 +11,30 @@
 
 using FunctionToolchain = TestWithScheduler;
 
+TEST_F(FunctionToolchain, NoArguments) {
+  TestWithScope setup;
+
+  // Check that creating a toolchain with no name reports an error.
+  {
+    TestParseInput input(R"(toolchain() {})");
+    ASSERT_FALSE(input.has_error());
+
+    Err err;
+    input.parsed()->Execute(setup.scope(), &err);
+    ASSERT_TRUE(err.has_error()) << err.message();
+  }
+
+  // Check that creating a toolchain with too many arguments is an error.
+  {
+    TestParseInput input(R"(toolchain("too", "many", "arguments") {})");
+    ASSERT_FALSE(input.has_error());
+
+    Err err;
+    input.parsed()->Execute(setup.scope(), &err);
+    ASSERT_TRUE(err.has_error()) << err.message();
+  }
+}
+
 TEST_F(FunctionToolchain, RuntimeOutputs) {
   TestWithScope setup;
 
@@ -19,6 +43,7 @@ TEST_F(FunctionToolchain, RuntimeOutputs) {
     TestParseInput input(
         R"(toolchain("good") {
           tool("link") {
+            command = "link"
             outputs = [ "foo" ]
             runtime_outputs = [ "foo" ]
           }
@@ -92,12 +117,27 @@ TEST_F(FunctionToolchain, Rust) {
   }
 }
 
+TEST_F(FunctionToolchain, Command) {
+  TestWithScope setup;
+
+  TestParseInput input(
+      R"(toolchain("missing_command") {
+        tool("cxx") {}
+      })");
+  ASSERT_FALSE(input.has_error());
+
+  Err err;
+  input.parsed()->Execute(setup.scope(), &err);
+  ASSERT_TRUE(err.has_error()) << err.message();
+}
+
 TEST_F(FunctionToolchain, CommandLauncher) {
   TestWithScope setup;
 
   TestParseInput input(
       R"(toolchain("good") {
         tool("cxx") {
+          command = "cxx"
           command_launcher = "/usr/goma/gomacc"
         }
       })");

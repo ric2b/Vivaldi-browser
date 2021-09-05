@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sl">
-<translation id="1169602411434249000">Blokiraj sledilce</translation>
 <translation id="1397811292916898096">Iskanje z <ph name="PRODUCT_NAME" /></translation>
 <translation id="1598449788754183301">Preklop na običajne/zasebne zavihke</translation>
 <translation id="1644574205037202324">Zgodovina</translation>
@@ -19,9 +18,12 @@
 <translation id="4526803704855831732">Zasebni zavihki</translation>
 <translation id="4883379392681899581">Zapusti zasebni način</translation>
 <translation id="4943872375798546930">Ni rezultatov</translation>
+<translation id="49576331685473090">Blokator vsebine</translation>
+<translation id="4960569554487356883">Vklopi dovoljenje za Vivaldi v <ph name="BEGIN_LINK" />Android nastavitvah<ph name="END_LINK" />.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> shramba</translation>
 <translation id="5233638681132016545">Nov zavihek</translation>
 <translation id="5495228542153126976">Prešli ste v zasebni način</translation>
+<translation id="5553467336321715093">Vklopi dovoljenja za Vivaldi v <ph name="BEGIN_LINK" />Android nastavitvah<ph name="END_LINK" />.</translation>
 <translation id="572328651809341494">Nedavni zavihki</translation>
 <translation id="5840488417521835756">Iskanje z dotikom je funkcija, ki je na voljo samo, če je Google privzeti iskalnik v programu Vivaldi. Pošlje besedo in kontekst ki ga obkroža v Google Iskanje, vrne definicije, slike, rezultate iskanja in druge podrobnosti.
 

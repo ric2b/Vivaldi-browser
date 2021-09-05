@@ -105,7 +105,7 @@ ScriptValue PortalActivateEvent::data(ScriptState* script_state) {
   return ScriptValue(isolate, value);
 }
 
-void PortalActivateEvent::Trace(Visitor* visitor) {
+void PortalActivateEvent::Trace(Visitor* visitor) const {
   Event::Trace(visitor);
   visitor->Trace(document_);
   visitor->Trace(adopted_portal_);
@@ -121,7 +121,8 @@ const AtomicString& PortalActivateEvent::InterfaceName() const {
 
 HTMLPortalElement* PortalActivateEvent::adoptPredecessor(
     ExceptionState& exception_state) {
-  if (!RuntimeEnabledFeatures::PortalsEnabled(document_)) {
+  if (!RuntimeEnabledFeatures::PortalsEnabled(
+          document_ ? document_->GetExecutionContext() : nullptr)) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
         "Portals is not enabled in this document.");

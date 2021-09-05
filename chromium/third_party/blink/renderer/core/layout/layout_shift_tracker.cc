@@ -154,6 +154,11 @@ void LayoutShiftTracker::ObjectShifted(
   if (source.IsSVG())
     return;
 
+  if (Element* element = DynamicTo<Element>(source.GetNode())) {
+    if (element->IsSliderThumbElement())
+      return;
+  }
+
   const auto root_state = PropertyTreeStateFor(*source.View());
 
   FloatClipRect clip_rect =
@@ -563,7 +568,7 @@ void LayoutShiftTracker::SetLayoutShiftRects(const Vector<IntRect>& int_rects) {
   }
 }
 
-void LayoutShiftTracker::Trace(Visitor* visitor) {
+void LayoutShiftTracker::Trace(Visitor* visitor) const {
   visitor->Trace(frame_view_);
 }
 
@@ -620,7 +625,7 @@ void ReattachHook::NotifyAttach(const Node& node) {
   fragment.SetVisualRect(visual_rect);
 }
 
-void ReattachHook::Trace(Visitor* visitor) {
+void ReattachHook::Trace(Visitor* visitor) const {
   visitor->Trace(visual_rects_);
 }
 

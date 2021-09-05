@@ -127,6 +127,7 @@ jumbo_component("aura") {
     "//ui/events:events_base",
     "//ui/events/platform",
     "//ui/gfx",
+    "//ui/gfx:gfx_switches",
     "//ui/gfx/geometry",
     "//ui/gl",
     "//ui/platform_window",
@@ -134,12 +135,13 @@ jumbo_component("aura") {
   ]
 
   public_deps = [
-    "//ui/base/cursor",
+    "//ui/base/cursor:cursor_base",
     "//ui/base/ime",
     "//ui/compositor",
   ]
 
   if (use_x11) {
+    public_deps += [ "//ui/base/x" ]
     deps += [
       "//ui/events/platform/x11",
       "//ui/platform_window/x11",
@@ -151,6 +153,7 @@ jumbo_component("aura") {
 
     deps += [
       "//ipc",
+      "//ui/base/cursor",
       "//ui/platform_window/win",
     ]
   }
@@ -225,7 +228,7 @@ jumbo_static_library("test_support") {
     "//skia",
     "//testing/gtest",
     "//ui/base:test_support",
-    "//ui/base/cursor",
+    "//ui/base/cursor:cursor_base",
     "//ui/base/cursor/mojom:cursor_type",
     "//ui/base/ime/init",
     "//ui/compositor:test_support",
@@ -346,6 +349,10 @@ test("aura_unittests") {
     "//ui/platform_window/stub",
     "//ui/wm",
   ]
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
 
   data_deps = [ "//third_party/mesa_headers" ]
 }

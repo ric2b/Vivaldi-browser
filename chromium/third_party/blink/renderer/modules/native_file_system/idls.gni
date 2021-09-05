@@ -8,20 +8,27 @@ modules_idl_files = [
   "file_system_file_handle.idl",
   "file_system_handle.idl",
   "file_system_writable_file_stream.idl",
-  "file_system_writer.idl",
 ]
 
 modules_dictionary_idl_files = [
   "choose_file_system_entries_options.idl",
   "choose_file_system_entries_options_accepts.idl",
+  "directory_picker_options.idl",
+  "file_picker_accept_type.idl",
+  "file_picker_options.idl",
   "file_system_create_writer_options.idl",
   "file_system_get_directory_options.idl",
   "file_system_get_file_options.idl",
   "file_system_handle_permission_descriptor.idl",
   "file_system_remove_options.idl",
   "get_system_directory_options.idl",
+  "open_file_picker_options.idl",
   "native_file_system_directory_iterator_entry.idl",
+  "save_file_picker_options.idl",
   "write_params.idl",
 ]
 
-modules_dependency_idl_files = [ "window_native_file_system.idl" ]
+modules_dependency_idl_files = [
+  "window_native_file_system.idl",
+  "worker_global_scope_native_file_system.idl",
+]

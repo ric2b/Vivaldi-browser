@@ -25,6 +25,7 @@ import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.services.AndroidChildAccountHelper;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninManager;
@@ -95,12 +96,15 @@ public abstract class FirstRunFlowSequencer  {
 
     @VisibleForTesting
     protected boolean isSignedIn() {
-        return IdentityServicesProvider.get().getIdentityManager().hasPrimaryAccount();
+        return IdentityServicesProvider.get()
+                .getIdentityManager(Profile.getLastUsedRegularProfile())
+                .hasPrimaryAccount();
     }
 
     @VisibleForTesting
     protected boolean isSyncAllowed() {
-        SigninManager signinManager = IdentityServicesProvider.get().getSigninManager();
+        SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(
+                Profile.getLastUsedRegularProfile());
         return FirstRunUtils.canAllowSync() && !signinManager.isSigninDisabledByPolicy()
                 && signinManager.isSigninSupported();
     }
@@ -278,6 +282,10 @@ public abstract class FirstRunFlowSequencer  {
         }
 
         Log.d(TAG, "Redirecting user through FRE.");
+
+        // Launch the async restriction checking as soon as we know we'll be running FRE.
+        FirstRunAppRestrictionInfo.getInstance().initialize();
+
         if ((fromIntent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
             FreIntentCreator intentCreator = new FreIntentCreator();
             Intent freIntent = intentCreator.create(

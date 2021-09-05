@@ -71,6 +71,7 @@ std::unique_ptr<ImageProcessor> CreateImageProcessor(
     const gfx::Size& vda_output_coded_size,
     const gfx::Size& ip_output_coded_size,
     const gfx::Size& visible_size,
+    VideoFrame::StorageType output_storage_type,
     size_t nb_buffers,
     scoped_refptr<V4L2Device> image_processor_device,
     ImageProcessor::OutputMode image_processor_output_mode,
@@ -86,8 +87,8 @@ std::unique_ptr<ImageProcessor> CreateImageProcessor(
                                  {VideoFrame::STORAGE_DMABUFS}),
       ImageProcessor::PortConfig(ip_output_format, ip_output_coded_size, {},
                                  gfx::Rect(visible_size),
-                                 {VideoFrame::STORAGE_DMABUFS}),
-      {image_processor_output_mode}, std::move(error_cb),
+                                 {output_storage_type}),
+      {image_processor_output_mode}, VIDEO_ROTATION_0, std::move(error_cb),
       std::move(client_task_runner));
   if (!image_processor)
     return nullptr;
@@ -173,6 +174,8 @@ bool InputBufferFragmentSplitter::IsPartialFramePending() const {
 
 H264InputBufferFragmentSplitter::H264InputBufferFragmentSplitter()
     : h264_parser_(new H264Parser()) {}
+
+H264InputBufferFragmentSplitter::~H264InputBufferFragmentSplitter() = default;
 
 bool H264InputBufferFragmentSplitter::AdvanceFrameFragment(const uint8_t* data,
                                                            size_t size,

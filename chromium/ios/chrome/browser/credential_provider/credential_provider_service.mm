@@ -7,18 +7,21 @@
 #import <AuthenticationServices/AuthenticationServices.h>
 
 #include "base/check.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/scoped_observer.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_store_change.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 #include "ios/chrome/browser/credential_provider/archivable_credential+password_form.h"
 #include "ios/chrome/common/app_group/app_group_constants.h"
 #import "ios/chrome/common/credential_provider/archivable_credential.h"
 #import "ios/chrome/common/credential_provider/archivable_credential_store.h"
 #import "ios/chrome/common/credential_provider/as_password_credential_identity+credential.h"
 #import "ios/chrome/common/credential_provider/constants.h"
+#import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -31,19 +34,47 @@ using password_manager::PasswordStore;
 using password_manager::PasswordStoreChange;
 using password_manager::PasswordStoreChangeList;
 
+// ASCredentialIdentityStoreError enum to report UMA metrics. Must be in sync
+// with iOSCredentialIdentityStoreErrorForReporting in
+// tools/metrics/histograms/enums.xml.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class CredentialIdentityStoreErrorForReporting {
+  kUnknownError,
+  kInternal,
+  kDisabled,
+  kBusy,
+  kMaxValue = kBusy
+};
+
+// Converts a UIKit interface style to an interface style for reporting.
+CredentialIdentityStoreErrorForReporting
+ErrorForReportingForASCredentialIdentityStoreErrorCode(
+    ASCredentialIdentityStoreErrorCode errorCode) {
+  switch (errorCode) {
+    case ASCredentialIdentityStoreErrorCodeInternalError:
+      return CredentialIdentityStoreErrorForReporting::kInternal;
+    case ASCredentialIdentityStoreErrorCodeStoreDisabled:
+      return CredentialIdentityStoreErrorForReporting::kDisabled;
+    case ASCredentialIdentityStoreErrorCodeStoreBusy:
+      return CredentialIdentityStoreErrorForReporting::kBusy;
+  }
+  return CredentialIdentityStoreErrorForReporting::kUnknownError;
+}
+
 BOOL ShouldSyncAllCredentials() {
-  NSUserDefaults* shared_defaults = app_group::GetGroupUserDefaults();
-  DCHECK(shared_defaults);
-  return ![shared_defaults
+  NSUserDefaults* user_defaults = [NSUserDefaults standardUserDefaults];
+  DCHECK(user_defaults);
+  return ![user_defaults
       boolForKey:kUserDefaultsCredentialProviderFirstTimeSyncCompleted];
 }
 
 BOOL ShouldSyncASIdentityStore() {
-  NSUserDefaults* shared_defaults = app_group::GetGroupUserDefaults();
-  DCHECK(shared_defaults);
-  BOOL isIdentityStoreSynced = [shared_defaults
+  NSUserDefaults* user_defaults = [NSUserDefaults standardUserDefaults];
+  DCHECK(user_defaults);
+  BOOL isIdentityStoreSynced = [user_defaults
       boolForKey:kUserDefaultsCredentialProviderASIdentityStoreSyncCompleted];
-  BOOL areCredentialsSynced = [shared_defaults
+  BOOL areCredentialsSynced = [user_defaults
       boolForKey:kUserDefaultsCredentialProviderFirstTimeSyncCompleted];
   return !isIdentityStoreSynced && areCredentialsSynced;
 }
@@ -62,12 +93,22 @@ void SyncASIdentityStore(ArchivableCredentialStore* credential_store) {
                                        initWithCredential:credential]];
       }
       auto replaceCompletion = ^(BOOL success, NSError* error) {
-        DCHECK(success) << "Failed to update store, error: "
-                        << error.description;
-        NSUserDefaults* shared_defaults = app_group::GetGroupUserDefaults();
+        // Sometimes ASCredentialIdentityStore fails. Log this to measure the
+        // impact of these failures and move on.
+        if (!success) {
+          ASCredentialIdentityStoreErrorCode code =
+              static_cast<ASCredentialIdentityStoreErrorCode>(error.code);
+          CredentialIdentityStoreErrorForReporting errorForReporting =
+              ErrorForReportingForASCredentialIdentityStoreErrorCode(code);
+          base::UmaHistogramEnumeration(
+              "IOS.CredentialExtension.Service.Error."
+              "ReplaceCredentialIdentitiesWithIdentities",
+              errorForReporting);
+        }
+        NSUserDefaults* user_defaults = [NSUserDefaults standardUserDefaults];
         NSString* key =
             kUserDefaultsCredentialProviderASIdentityStoreSyncCompleted;
-        [shared_defaults setBool:success forKey:key];
+        [user_defaults setBool:success forKey:key];
       };
       [ASCredentialIdentityStore.sharedStore
           replaceCredentialIdentitiesWithIdentities:storeIdentities
@@ -78,11 +119,12 @@ void SyncASIdentityStore(ArchivableCredentialStore* credential_store) {
       getCredentialIdentityStoreStateWithCompletion:stateCompletion];
 }
 
-ArchivableCredential* CredentialFromForm(const PasswordForm& form) {
+ArchivableCredential* CredentialFromForm(const PasswordForm& form,
+                                         NSString* validation_id) {
   ArchivableCredential* credential =
       [[ArchivableCredential alloc] initWithPasswordForm:form
                                                  favicon:nil
-                                    validationIdentifier:nil];
+                                    validationIdentifier:validation_id];
   if (!credential) {
     // Verify that the credential is nil because it's an Android one or
     // blacklisted.
@@ -96,13 +138,26 @@ ArchivableCredential* CredentialFromForm(const PasswordForm& form) {
 
 CredentialProviderService::CredentialProviderService(
     scoped_refptr<PasswordStore> password_store,
-    ArchivableCredentialStore* credential_store)
+    AuthenticationService* authentication_service,
+    ArchivableCredentialStore* credential_store,
+    signin::IdentityManager* identity_manager)
     : password_store_(password_store),
+      authentication_service_(authentication_service),
+      identity_manager_(identity_manager),
       archivable_credential_store_(credential_store) {
   DCHECK(password_store_);
   password_store_->AddObserver(this);
-  // TODO(crbug.com/1066803): Wait for things to settle down before syncs, and
-  // sync credentials after Sync finishes or some seconds in the future.
+
+  DCHECK(authentication_service_);
+  UpdateAccountValidationId();
+
+  if (identity_manager_) {
+    identity_manager_->AddObserver(this);
+  }
+
+  // TODO(crbug.com/1066803): Wait for things to settle down before
+  // syncs, and sync credentials after Sync finishes or some
+  // seconds in the future.
   if (ShouldSyncASIdentityStore()) {
     SyncASIdentityStore(credential_store);
   }
@@ -113,29 +168,38 @@ CredentialProviderService::CredentialProviderService(
 
 CredentialProviderService::~CredentialProviderService() {}
 
-void CredentialProviderService::Shutdown() {}
+void CredentialProviderService::Shutdown() {
+  password_store_->RemoveObserver(this);
+  if (identity_manager_) {
+    identity_manager_->RemoveObserver(this);
+  }
+}
+
+void CredentialProviderService::OnPrimaryAccountSet(
+    const CoreAccountInfo& primary_account_info) {
+  RequestSyncAllCredentials();
+}
+
+void CredentialProviderService::OnPrimaryAccountCleared(
+    const CoreAccountInfo& previous_primary_account_info) {
+  RequestSyncAllCredentials();
+}
 
 void CredentialProviderService::RequestSyncAllCredentials() {
+  UpdateAccountValidationId();
   password_store_->GetAutofillableLogins(this);
 }
 
-void CredentialProviderService::OnGetPasswordStoreResults(
-    std::vector<std::unique_ptr<PasswordForm>> results) {
-  [archivable_credential_store_ removeAllCredentials];
-  for (const auto& form : results) {
-    ArchivableCredential* credential = CredentialFromForm(*form);
-    if (credential) {
-      [archivable_credential_store_ addCredential:credential];
-    }
+void CredentialProviderService::UpdateAccountValidationId() {
+  if (authentication_service_->IsAuthenticatedIdentityManaged()) {
+    account_validation_id_ =
+        authentication_service_->GetAuthenticatedIdentity().gaiaID;
+  } else {
+    account_validation_id_ = nil;
   }
-  SyncStore(^(NSError* error) {
-    if (!error) {
-      [app_group::GetGroupUserDefaults()
-          setBool:YES
-           forKey:kUserDefaultsCredentialProviderFirstTimeSyncCompleted];
-      SyncASIdentityStore(archivable_credential_store_);
-    }
-  });
+  [app_group::GetGroupUserDefaults()
+      setObject:account_validation_id_
+         forKey:AppGroupUserDefaultsCredentialProviderManagedUserID()];
 }
 
 void CredentialProviderService::SyncStore(void (^completion)(NSError*)) const {
@@ -147,10 +211,31 @@ void CredentialProviderService::SyncStore(void (^completion)(NSError*)) const {
   }];
 }
 
+void CredentialProviderService::OnGetPasswordStoreResults(
+    std::vector<std::unique_ptr<PasswordForm>> results) {
+  [archivable_credential_store_ removeAllCredentials];
+  for (const auto& form : results) {
+    ArchivableCredential* credential =
+        CredentialFromForm(*form, account_validation_id_);
+    if (credential) {
+      [archivable_credential_store_ addCredential:credential];
+    }
+  }
+  SyncStore(^(NSError* error) {
+    if (!error) {
+      NSUserDefaults* user_defaults = [NSUserDefaults standardUserDefaults];
+      NSString* key = kUserDefaultsCredentialProviderFirstTimeSyncCompleted;
+      [user_defaults setBool:YES forKey:key];
+      SyncASIdentityStore(archivable_credential_store_);
+    }
+  });
+}
+
 void CredentialProviderService::OnLoginsChanged(
     const PasswordStoreChangeList& changes) {
   for (const PasswordStoreChange& change : changes) {
-    ArchivableCredential* credential = CredentialFromForm(change.form());
+    ArchivableCredential* credential =
+        CredentialFromForm(change.form(), account_validation_id_);
     if (!credential) {
       continue;
     }

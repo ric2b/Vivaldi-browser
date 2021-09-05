@@ -10,6 +10,7 @@
 <translation id="1201402288615127009">Další</translation>
 <translation id="1242008676835033345">Vloženo do <ph name="WEBSITE_URL" /></translation>
 <translation id="1272079795634619415">Zastavit</translation>
+<translation id="1289742167380433257">Google obrázky na této stránce optimalizoval, abyste ušetřili data.</translation>
 <translation id="129382876167171263">Zde se budou zobrazovat soubory uložené webovými stránkami</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" /> – <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">Byl přidán web <ph name="SITE_NAME" /></translation>
@@ -42,6 +43,7 @@
 <translation id="2182457891543959921">Předtím, než webům bude povoleno vytvořit 3D mapu vašeho okolí nebo sledovat polohu kamery, se zeptat (doporučeno)</translation>
 <translation id="2212565012507486665">Povolit cookies</translation>
 <translation id="2289270750774289114">Zeptat se, když chce web objevit zařízení Bluetooth v okolí (doporučeno)</translation>
+<translation id="2315043854645842844">Volbu certifikátu na straně klienta operační systém nepodporuje.</translation>
 <translation id="2359808026110333948">Pokračovat</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2434158240863470628">Stažení bylo dokončeno <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -61,10 +63,12 @@
 <translation id="2704606927547763573">Zkopírováno</translation>
 <translation id="2822354292072154809">Opravdu chcete resetovat všechna oprávnění webů pro objekt <ph name="CHOSEN_OBJECT_NAME" />?</translation>
 <translation id="2870560284913253234">Stránky</translation>
+<translation id="2874939134665556319">Předchozí skladba</translation>
 <translation id="2910701580606108292">Před povolením spuštění chráněného obsahu na webu se zeptat</translation>
 <translation id="2913331724188855103">Povolit webům ukládat a číst data souborů cookie (doporučeno)</translation>
 <translation id="2968755619301702150">Prohlížeč certifikátů</translation>
 <translation id="300526633675317032">Tímto vymažete celé úložiště webů (<ph name="SIZE_IN_KB" />).</translation>
+<translation id="301521992641321250">Automaticky blokováno</translation>
 <translation id="3115898365077584848">Zobrazit informace</translation>
 <translation id="3123473560110926937">Na některých webech blokováno</translation>
 <translation id="3190152372525844641">Oprávnění pro Chrome zapnete v <ph name="BEGIN_LINK" />Nastavení pro Android<ph name="END_LINK" />.</translation>
@@ -83,16 +87,19 @@
 <translation id="3744111561329211289">Synchronizace na pozadí</translation>
 <translation id="3822502789641063741">Vymazat úložiště webů?</translation>
 <translation id="385051799172605136">Zpět</translation>
+<translation id="3859306556332390985">Přetočit dopředu</translation>
 <translation id="3955193568934677022">Povolit webům přehrávat chráněný obsah (doporučeno)</translation>
 <translation id="3987993985790029246">Kopírovat odkaz</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">Název</translation>
 <translation id="4008040567710660924">Povolit soubory cookie pro konkrétní web.</translation>
+<translation id="4046123991198612571">Další skladba</translation>
 <translation id="4165986682804962316">Nastavení webu</translation>
 <translation id="4226663524361240545">Oznámení mohou aktivovat vibraci</translation>
 <translation id="4242533952199664413">Otevřít Nastavení</translation>
 <translation id="4259722352634471385">Navigace je blokována: <ph name="URL" /></translation>
 <translation id="4278390842282768270">Povoleno</translation>
+<translation id="429312253194641664">Web přehrává média</translation>
 <translation id="4433925000917964731">Zjednodušenou stránku poskytuje Google</translation>
 <translation id="4434045419905280838">Vyskakovací okna a přesměrování</translation>
 <translation id="445467742685312942">Povolit webům přehrávat chráněný obsah</translation>
@@ -107,6 +114,7 @@
 <translation id="4962975101802056554">Zrušit všechna oprávnění pro zařízení</translation>
 <translation id="4964199952259983386">Chcete-li Chromu povolit používání rozšířené reality, zapněte v <ph name="BEGIN_LINK" />Nastavení Android<ph name="END_LINK" /> fotoaparát.</translation>
 <translation id="497421865427891073">Vpřed</translation>
+<translation id="4996978546172906250">Sdílet prostřednictvím</translation>
 <translation id="5039804452771397117">Povolit</translation>
 <translation id="5048398596102334565">Povolit webům přístup k senzorům pohybu (doporučeno)</translation>
 <translation id="5063480226653192405">Použití</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">Vymazat</translation>
 <translation id="6697925417670533197">Aktivní stahování</translation>
 <translation id="6746124502594467657">Posunout dolů</translation>
+<translation id="6766622839693428701">Zavřete přejetím prstem dolů.</translation>
 <translation id="6782111308708962316">Zabránit webům třetích stran v ukládání a čtení dat souborů cookie</translation>
+<translation id="6790428901817661496">Přehrát</translation>
 <translation id="6818926723028410516">Výběr položek</translation>
 <translation id="6864395892908308021">Toto zařízení neumí číst NFC</translation>
 <translation id="6910211073230771657">Smazáno</translation>
@@ -197,6 +207,7 @@
 <translation id="7804248752222191302">Web používá váš fotoaparát</translation>
 <translation id="7817023149356982970">Budete odhlášeni z tohoto webu.</translation>
 <translation id="7828557259026017104">Soubory cookie jsou vytvářeny webovými stránkami, které navštěvujete. Weby je používají k tomu, aby si zapamatovaly vaše preference. Soubory cookie třetích stran jsou vytvářeny ostatními weby. Tyto weby na navštívené stránce vlastní nějaký obsah, např. reklamy nebo obrázky.</translation>
+<translation id="7835852323729233924">Přehrávání médií</translation>
 <translation id="7846076177841592234">Zrušit výběr</translation>
 <translation id="7846621471902887024">Budete odhlášeni ze všech webů.</translation>
 <translation id="7882806643839505685">Zapne zvuk na konkrétním webu.</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">Opravdu chcete vymazat všechna místní data tohoto webu, včetně souborů cookie, a resetovat všechna jeho oprávnění?</translation>
 <translation id="8007176423574883786">Vypnuto v tomto zařízení</translation>
 <translation id="802154636333426148">Stažení se nezdařilo</translation>
+<translation id="8068648041423924542">Certifikát nelze vybrat.</translation>
 <translation id="8087000398470557479">Tento obsah pochází z domény <ph name="DOMAIN_NAME" />. Poskytováno společností Google.</translation>
 <translation id="8116925261070264013">Ztlumeno</translation>
 <translation id="8131740175452115882">Potvrdit</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">Webové stránky používají váš fotoaparát a mikrofon</translation>
 <translation id="8380167699614421159">Tento web zobrazuje rušivé nebo zavádějící reklamy</translation>
 <translation id="8394832520002899662">Klepnutím se vrátíte na web</translation>
+<translation id="8425213833346101688">Změnit</translation>
+<translation id="8441146129660941386">Přetočit dozadu</translation>
 <translation id="8447861592752582886">Zrušit oprávnění zařízení</translation>
 <translation id="8463851957836045671">Web je rychlý</translation>
 <translation id="851751545965956758">Bránit webům v připojení k zařízením</translation>
@@ -236,6 +250,7 @@
 <translation id="8958424370300090006">Blokovat soubory cookie pro konkrétní web.</translation>
 <translation id="8959122750345127698">Navigace není dosažitelná: <ph name="URL" /></translation>
 <translation id="9019902583201351841">Spravováno vašimi rodiči</translation>
+<translation id="9074739597929991885">Bluetooth</translation>
 <translation id="945632385593298557">Přístup k mikrofonu</translation>
 <translation id="965817943346481315">Blokovat, pokud web zobrazuje rušivé nebo zavádějící reklamy (doporučeno)</translation>
 </translationbundle>

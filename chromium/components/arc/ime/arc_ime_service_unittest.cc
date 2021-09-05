@@ -12,6 +12,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/arc/mojom/ime.mojom.h"
 #include "components/arc/session/arc_bridge_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -207,16 +209,17 @@ class ArcImeServiceTest : public testing::Test {
  private:
   void SetUp() override {
     arc_bridge_service_ = std::make_unique<ArcBridgeService>();
-    instance_ =
-        std::make_unique<ArcImeService>(nullptr, arc_bridge_service_.get());
+
+    fake_input_method_ = std::make_unique<FakeInputMethod>();
+    auto delegate =
+        std::make_unique<FakeArcWindowDelegate>(fake_input_method_.get());
+    fake_window_delegate_ = delegate.get();
+
+    instance_ = base::WrapUnique(new ArcImeService(
+        nullptr, arc_bridge_service_.get(), std::move(delegate)));
     fake_arc_ime_bridge_ = new FakeArcImeBridge();
     instance_->SetImeBridgeForTesting(base::WrapUnique(fake_arc_ime_bridge_));
 
-    fake_input_method_ = std::make_unique<FakeInputMethod>();
-
-    fake_window_delegate_ = new FakeArcWindowDelegate(fake_input_method_.get());
-    instance_->SetArcWindowDelegateForTesting(
-        base::WrapUnique(fake_window_delegate_));
     arc_win_ = fake_window_delegate_->CreateFakeArcWindow();
   }
 
@@ -226,6 +229,7 @@ class ArcImeServiceTest : public testing::Test {
     fake_window_delegate_ = nullptr;
     fake_arc_ime_bridge_ = nullptr;
     instance_.reset();
+    fake_input_method_.reset();
     arc_bridge_service_.reset();
   }
 };

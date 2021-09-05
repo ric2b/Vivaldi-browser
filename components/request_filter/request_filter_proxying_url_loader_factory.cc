@@ -15,6 +15,8 @@
 #include "content/public/common/url_utils.h"
 #include "extensions/buildflags/buildflags.h"
 #include "net/base/completion_repeating_callback.h"
+#include "net/http/http_response_headers.h"
+#include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/redirect_util.h"
@@ -129,10 +131,10 @@ RequestFilterProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
           network_service_request_id_ != 0 &&
           factory->request_handler_->WantsExtraHeadersForAnyRequest()) {
   // If there is a client error, clean up the request.
-  target_client_.set_disconnect_handler(base::BindOnce(
-      &RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnRequestError,
-      weak_factory_.GetWeakPtr(),
-      network::URLLoaderCompletionStatus(net::ERR_ABORTED)));
+  target_client_.set_disconnect_handler(
+      base::BindOnce(&RequestFilterProxyingURLLoaderFactory::InProgressRequest::
+                         OnClientDisconnected,
+                     weak_factory_.GetWeakPtr()));
 
   proxied_loader_receiver_.set_disconnect_with_reason_handler(
       base::BindOnce(&RequestFilterProxyingURLLoaderFactory::InProgressRequest::
@@ -154,6 +156,7 @@ RequestFilterProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
           factory->request_handler_->WantsExtraHeadersForAnyRequest()) {}
 
 RequestFilterProxyingURLLoaderFactory::InProgressRequest::~InProgressRequest() {
+  DCHECK_NE(state_, State::kInvalid);
   // This is important to ensure that no outstanding blocking requests continue
   // to reference state owned by this object.
   if (info_) {
@@ -201,20 +204,23 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     RestartInternal() {
   DCHECK_EQ(info_->request.url, request_.url)
       << "UpdateRequestInfo must have been called first";
+  is_header_client_receiver_paused_ = false;
   // If the header client will be used, we start the request immediately, and
   // OnBeforeSendHeaders and OnSendHeaders will be handled there. Otherwise,
   // send these events before the request starts.
   base::RepeatingCallback<void(int)> continuation;
+  const auto state_on_error = State::kRejectedByOnBeforeRequest;
   if (current_request_uses_header_client_) {
-    continuation = base::BindRepeating(
-        &InProgressRequest::ContinueToStartRequest, weak_factory_.GetWeakPtr());
+    continuation =
+        base::BindRepeating(&InProgressRequest::ContinueToStartRequest,
+                            weak_factory_.GetWeakPtr(), state_on_error);
   } else if (for_cors_preflight_) {
     // In this case we do nothing because filters should see nothing.
     return;
   } else {
     continuation =
         base::BindRepeating(&InProgressRequest::ContinueToBeforeSendHeaders,
-                            weak_factory_.GetWeakPtr());
+                            weak_factory_.GetWeakPtr(), state_on_error);
   }
   redirect_url_ = GURL();
   collapse_initiator_ = false;
@@ -228,7 +234,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
           blink::ResourceRequestBlockedReason::kCollapsedByClient);
     }
 
-    OnRequestError(status);
+    OnRequestError(status, state_on_error);
     return;
   }
 
@@ -243,8 +249,10 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 
     // Pause the header client, since we want to wait until OnBeforeRequest has
     // finished before processing any future events.
-    if (header_client_receiver_.is_bound())
+    if (header_client_receiver_.is_bound()) {
       header_client_receiver_.Pause();
+      is_header_client_receiver_paused_ = true;
+    }
     return;
   }
   DCHECK_EQ(net::OK, result);
@@ -334,7 +342,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
                       info_->loader_factory_type ==
                           content::ContentBrowserClient::URLLoaderFactoryType::
                               kNavigation)) {
-    OnRequestError(
+    OnNetworkError(
         network::URLLoaderCompletionStatus(net::ERR_UNSAFE_REDIRECT));
     return;
   }
@@ -384,10 +392,11 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnComplete(
     const network::URLLoaderCompletionStatus& status) {
   if (status.error_code != net::OK) {
-    OnRequestError(status);
+    OnNetworkError(status);
     return;
   }
 
+  state_ = kCompleted;
   target_client_->OnComplete(status);
   factory_->request_handler_->OnCompleted(factory_->browser_context_,
                                           &info_.value(), status.error_code);
@@ -409,6 +418,8 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnLoaderCreated(
   header_client_receiver_.reset();
 
   header_client_receiver_.Bind(std::move(receiver));
+  if (is_header_client_receiver_paused_)
+    header_client_receiver_.Pause();
 
   forwarding_header_client_.reset();
   forwarding_header_client_.Bind(std::move(forwarding_header_client));
@@ -419,7 +430,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnLoaderCreated(
     // network service, so we observe mojo connection errors.
     header_client_receiver_.set_disconnect_handler(
         base::BindOnce(&RequestFilterProxyingURLLoaderFactory::
-                           InProgressRequest::OnRequestError,
+                           InProgressRequest::OnNetworkError,
                        weak_factory_.GetWeakPtr(),
                        network::URLLoaderCompletionStatus(net::ERR_FAILED)));
   }
@@ -440,7 +451,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 
   request_.headers = headers;
   on_before_send_headers_callback_ = std::move(callback);
-  ContinueToBeforeSendHeaders(net::OK);
+  ContinueToBeforeSendHeadersWithOk();
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
@@ -545,7 +556,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
-    ContinueToBeforeSendHeaders(int error_code) {
+    ContinueToBeforeSendHeaders(State state_on_error, int error_code) {
   if (error_code != net::OK) {
     network::URLLoaderCompletionStatus status(error_code);
     if (collapse_initiator_) {
@@ -553,7 +564,8 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
           blink::ResourceRequestBlockedReason::kCollapsedByClient);
     }
 
-    OnRequestError(network::URLLoaderCompletionStatus(status));
+    OnRequestError(network::URLLoaderCompletionStatus(error_code),
+                   state_on_error);
     return;
   }
 
@@ -573,8 +585,10 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     set_request_headers_.clear();
     removed_request_headers_.clear();
 
-    auto continuation = base::BindRepeating(
-        &InProgressRequest::ContinueToSendHeaders, weak_factory_.GetWeakPtr());
+    const auto state_on_error = State::kRejectedByOnBeforeSendHeaders;
+    auto continuation =
+        base::BindRepeating(&InProgressRequest::ContinueToSendHeaders,
+                            weak_factory_.GetWeakPtr(), state_on_error);
     int result = factory_->request_handler_->OnBeforeSendHeaders(
         factory_->browser_context_, &info_.value(), continuation,
         &request_.headers, &set_request_headers_, &removed_request_headers_);
@@ -582,7 +596,8 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     if (result == net::ERR_BLOCKED_BY_CLIENT) {
       // The request was cancelled synchronously. Dispatch an error notification
       // and terminate the request.
-      OnRequestError(network::URLLoaderCompletionStatus(result));
+      OnRequestError(network::URLLoaderCompletionStatus(result),
+                     state_on_error);
       return;
     }
 
@@ -599,25 +614,31 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     DCHECK_EQ(net::OK, result);
   }
 
-  ContinueToSendHeaders(net::OK);
+  ContinueToSendHeadersWithOk();
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
-    ContinueToStartRequest(int error_code) {
+    ContinueToBeforeSendHeadersWithOk() {
+  ContinueToBeforeSendHeaders(State::kInvalid, net::OK);
+}
+
+void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
+    ContinueToStartRequest(State state_on_error, int error_code) {
   if (error_code != net::OK) {
     network::URLLoaderCompletionStatus status(error_code);
     if (collapse_initiator_) {
       status.extended_error_code = static_cast<int>(
           blink::ResourceRequestBlockedReason::kCollapsedByClient);
     }
-    OnRequestError(network::URLLoaderCompletionStatus(status));
+    OnRequestError(network::URLLoaderCompletionStatus(status), state_on_error);
     return;
   }
 
   if (current_request_uses_header_client_ && !redirect_url_.is_empty()) {
     if (for_cors_preflight_) {
       // CORS preflight doesn't support redirect.
-      OnRequestError(network::URLLoaderCompletionStatus(net::ERR_FAILED));
+      OnRequestError(network::URLLoaderCompletionStatus(net::ERR_FAILED),
+                     state_on_error);
       return;
     }
     HandleBeforeRequestRedirect();
@@ -627,8 +648,10 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   if (proxied_client_receiver_.is_bound())
     proxied_client_receiver_.Resume();
 
-  if (header_client_receiver_.is_bound())
+  if (header_client_receiver_.is_bound()) {
     header_client_receiver_.Resume();
+    is_header_client_receiver_paused_ = false;
+  }
 
   if (for_cors_preflight_) {
     // For CORS preflight requests, we have already started the request in
@@ -658,9 +681,15 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
-    ContinueToSendHeaders(int error_code) {
+    ContinueToStartRequestWithOk() {
+  ContinueToStartRequest(State::kInvalid, net::OK);
+}
+
+void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
+    ContinueToSendHeaders(State state_on_error, int error_code) {
   if (error_code != net::OK) {
-    OnRequestError(network::URLLoaderCompletionStatus(error_code));
+    OnRequestError(network::URLLoaderCompletionStatus(error_code),
+                   state_on_error);
     return;
   }
 
@@ -714,13 +743,29 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   }
 
   if (!current_request_uses_header_client_)
-    ContinueToStartRequest(net::OK);
+    ContinueToStartRequestWithOk();
+}
+
+void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
+    ContinueToSendHeadersWithOk() {
+  ContinueToSendHeaders(State::kInvalid, net::OK);
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     ContinueToHandleOverrideHeaders(int error_code) {
   if (error_code != net::OK) {
-    OnRequestError(network::URLLoaderCompletionStatus(error_code));
+    const int status_code = current_response_->headers
+                                ? current_response_->headers->response_code()
+                                : 0;
+    State state;
+    if (status_code == net::HTTP_UNAUTHORIZED) {
+      state = State::kRejectedByOnHeadersReceivedForAuth;
+    } else if (net::HttpResponseHeaders::IsRedirectResponseCode(status_code)) {
+      state = State::kRejectedByOnHeadersReceivedForRedirect;
+    } else {
+      state = State::kRejectedByOnHeadersReceivedForFinalResponse;
+    }
+    OnRequestError(network::URLLoaderCompletionStatus(error_code), state);
     return;
   }
 
@@ -737,7 +782,8 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   }
 
   if (for_cors_preflight_ && !redirect_url_.is_empty()) {
-    OnRequestError(network::URLLoaderCompletionStatus(net::ERR_FAILED));
+    OnRequestError(network::URLLoaderCompletionStatus(net::ERR_FAILED),
+                   State::kRejectedByOnHeadersReceivedForRedirect);
     return;
   }
 
@@ -779,8 +825,13 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     ContinueToResponseStarted(int error_code) {
   DCHECK(!for_cors_preflight_);
   if (error_code != net::OK) {
-    OnRequestError(network::URLLoaderCompletionStatus(error_code));
+    OnRequestError(network::URLLoaderCompletionStatus(error_code),
+                   State::kRejectedByOnHeadersReceivedForFinalResponse);
     return;
+  }
+
+  if (state_ == State::kInProgress) {
+    state_ = State::kInProgressWithFinalResponseReceived;
   }
 
   DCHECK(!current_request_uses_header_client_ || !override_headers_);
@@ -826,7 +877,8 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     ContinueToBeforeRedirect(const net::RedirectInfo& redirect_info,
                              int error_code) {
   if (error_code != net::OK) {
-    OnRequestError(network::URLLoaderCompletionStatus(error_code));
+    OnRequestError(network::URLLoaderCompletionStatus(error_code),
+                   kRejectedByOnHeadersReceivedForRedirect);
     return;
   }
 
@@ -868,7 +920,19 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
         factory_->browser_context_, &info_.value(), copyable_callback,
         current_response_->headers.get(), &override_headers_, &redirect_url_);
     if (result == net::ERR_BLOCKED_BY_CLIENT) {
-      OnRequestError(network::URLLoaderCompletionStatus(result));
+      const int status_code = current_response_->headers
+                                  ? current_response_->headers->response_code()
+                                  : 0;
+      State state;
+      if (status_code == net::HTTP_UNAUTHORIZED) {
+        state = State::kRejectedByOnHeadersReceivedForAuth;
+      } else if (net::HttpResponseHeaders::IsRedirectResponseCode(
+                     status_code)) {
+        state = State::kRejectedByOnHeadersReceivedForRedirect;
+      } else {
+        state = State::kRejectedByOnHeadersReceivedForFinalResponse;
+      }
+      OnRequestError(network::URLLoaderCompletionStatus(result), state);
       return;
     }
 
@@ -890,7 +954,8 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   copyable_callback.Run(net::OK);
 }
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnRequestError(
-    const network::URLLoaderCompletionStatus& status) {
+    const network::URLLoaderCompletionStatus& status,
+    State state) {
   if (target_client_)
     target_client_->OnComplete(status);
   factory_->request_handler_->OnErrorOccurred(
@@ -899,6 +964,28 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnRequestError(
 
   // Deletes |this|.
   factory_->RemoveRequest(network_service_request_id_, request_id_);
+}
+
+void RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnNetworkError(
+    const network::URLLoaderCompletionStatus& status) {
+  State state = state_;
+  if (state_ == State::kInProgress) {
+    state = State::kRejectedByNetworkError;
+  } else if (state_ == State::kInProgressWithFinalResponseReceived) {
+    state = State::kRejectedByNetworkErrorAfterReceivingFinalResponse;
+  }
+  OnRequestError(status, state);
+}
+
+void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
+    OnClientDisconnected() {
+  State state = state_;
+  if (state_ == State::kInProgress) {
+    state = State::kDetachedFromClient;
+  } else if (state_ == State::kInProgressWithFinalResponseReceived) {
+    state = State::kDetachedFromClientAfterReceivingResponse;
+  }
+  OnRequestError(network::URLLoaderCompletionStatus(net::ERR_ABORTED), state);
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
@@ -913,10 +1000,11 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     factory_->request_id_generator_->SaveID(
         routing_id_, network_service_request_id_, request_id_);
 
+    state_ = State::kRedirectFollowedByAnotherInProgressRequest;
     // Deletes |this|.
     factory_->RemoveRequest(network_service_request_id_, request_id_);
   } else {
-    OnRequestError(network::URLLoaderCompletionStatus(net::ERR_ABORTED));
+    OnNetworkError(network::URLLoaderCompletionStatus(net::ERR_ABORTED));
   }
 }
 
@@ -967,8 +1055,9 @@ RequestFilterProxyingURLLoaderFactory::RequestFilterProxyingURLLoaderFactory(
       proxies_(proxies),
       loader_factory_type_(loader_factory_type) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  // base::Unretained is safe here because the callback will be canceled when
-  // |shutdown_notifier_| is destroyed, and |proxies_| owns this.
+  // base::Unretained is safe here because the callback will be
+  // canceled when |shutdown_notifier_| is destroyed, and |proxies_|
+  // owns this.
   shutdown_notifier_ = ShutdownNotifierFactory::GetInstance()
                            ->Get(browser_context)
                            ->Subscribe(base::BindRepeating(

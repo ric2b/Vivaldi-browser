@@ -1648,6 +1648,46 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, AltNumberAppsTabbing) {
   EXPECT_TRUE(window1a->IsActive());
 }
 
+// Check that the keyboard activation of a launcher item tabs even if the app is
+// not currently activated.
+IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest,
+                       AltNumberAppsTabbingFromOtherApp) {
+  // Create one app with two windows.
+  const Extension* app1_extension1 =
+      LoadAndLaunchPlatformApp("launch", "Launched");
+  ui::BaseWindow* app1_window1 =
+      CreateAppWindow(browser()->profile(), app1_extension1)->GetBaseWindow();
+  ui::BaseWindow* app1_window2 =
+      CreateAppWindow(browser()->profile(), app1_extension1)->GetBaseWindow();
+  const ash::ShelfItem item1 = GetLastLauncherItem();
+  EXPECT_EQ(ash::TYPE_APP, item1.type);
+  EXPECT_EQ(ash::STATUS_RUNNING, item1.status);
+
+  // Create another app with two windows.
+  const Extension* app2_extension1 =
+      LoadAndLaunchPlatformApp("launch_2", "Launched");
+  ui::BaseWindow* app2_window1 =
+      CreateAppWindow(browser()->profile(), app2_extension1)->GetBaseWindow();
+  ui::BaseWindow* app2_window2 =
+      CreateAppWindow(browser()->profile(), app2_extension1)->GetBaseWindow();
+  const ash::ShelfItem item2 = GetLastLauncherItem();
+  EXPECT_EQ(ash::TYPE_APP, item2.type);
+  EXPECT_EQ(ash::STATUS_RUNNING, item2.status);
+
+  // Last created window should be active. Hitting the app shortcut should go to
+  // the first window of the app.
+  ASSERT_TRUE(app2_window2->IsActive());
+  SelectItem(item2.id, ui::ET_KEY_RELEASED);
+  EXPECT_TRUE(app2_window1->IsActive());
+
+  // Hitting the other app's shortcut should jump and focus the other app's
+  // windows.
+  SelectItem(item1.id, ui::ET_KEY_RELEASED);
+  EXPECT_TRUE(app1_window2->IsActive());
+  SelectItem(item1.id, ui::ET_KEY_RELEASED);
+  EXPECT_TRUE(app1_window1->IsActive());
+}
+
 // Test that we get correct shelf presence with hidden app windows.
 IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, HiddenAppWindows) {
   int item_count = shelf_model()->item_count();
@@ -2431,17 +2471,10 @@ IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, LaunchAppFromContextMenu) {
             controller->shelf()->shelf_layout_manager()->hotseat_state());
 }
 
-// crbug.com/1021011: Disable on ChromeOS
-#if defined(OS_CHROMEOS)
-#define MAYBE_TappingAppIconsHidesHotseat DISABLED_TappingAppIconsHidesHotseat
-#else
-#define MAYBE_TappingAppIconsHidesHotseat TappingAppIconsHidesHotseat
-#endif
-
 // Tests that launching and switching apps by tapping shelf buttons hides the
 // hotseat.
 IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest,
-                       MAYBE_TappingAppIconsHidesHotseat) {
+                       TappingAppIconsHidesHotseat) {
   ash::Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
 
   // Create two apps, then extend the hotseat.
@@ -2488,21 +2521,6 @@ IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, EnableChromeVox) {
       chromeos::AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
   chromeos::AccessibilityManager::Get()->EnableSpokenFeedback(true);
 
-  ash::RootWindowController* controller =
-      ash::Shell::GetRootWindowControllerWithDisplayId(
-          display::Screen::GetScreen()->GetPrimaryDisplay().id());
-  views::View* home_button = ash::ShelfTestApi().GetHomeButton();
-  ui::test::EventGenerator event_generator(controller->GetRootWindow());
-  auto* generator_ptr = &event_generator;
-
-  // There is a mouse move event being dispatched at the beginning of test
-  // that confuses ChromeVox. This brings back ChromeVox state so that
-  // GestureTapAt at home button could successfully change ChromeVox focus.
-  event_generator.MoveMouseTo(home_button->GetBoundsInScreen().CenterPoint());
-
-  // AccessibilityManager sends an empty warmup utterance first.
-  speech_monitor.ExpectSpeech("");
-
   // Wait for ChromeVox to start reading anything.
   speech_monitor.ExpectSpeechPattern("*");
   speech_monitor.Call([this]() {
@@ -2514,27 +2532,40 @@ IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, EnableChromeVox) {
                 extension_misc::kChromeVoxExtensionId);
     content::ExecuteScriptAsync(host->host_contents(), script);
   });
-  speech_monitor.Call([generator_ptr, home_button]() {
-    // Gesture tap at the home button.
-    generator_ptr->GestureTapAt(home_button->GetBoundsInScreen().CenterPoint());
+
+  views::View* home_button = ash::ShelfTestApi().GetHomeButton();
+  speech_monitor.Call([home_button]() {
+    // Send hover accessibility event - ChromeVox needs this event to properly
+    // recognize the home button as the node with accessibility focus during
+    // touch exploration. The event is generally sent on tap, but with a delay,
+    // so relying on tap event only may introduce test flakiness.
+    home_button->NotifyAccessibilityEvent(ax::mojom::Event::kHover, true);
   });
+
   speech_monitor.ExpectSpeech("Launcher");
   speech_monitor.ExpectSpeech("Button");
   speech_monitor.ExpectSpeech("Shelf");
   speech_monitor.ExpectSpeech("Tool bar");
   speech_monitor.ExpectSpeech(", window");
 
+  ash::RootWindowController* controller =
+      ash::Shell::GetRootWindowControllerWithDisplayId(
+          display::Screen::GetScreen()->GetPrimaryDisplay().id());
   speech_monitor.Call([controller]() {
     // Hotseat is expected to be extended if spoken feedback is enabled.
     ASSERT_EQ(ash::HotseatState::kExtended,
               controller->shelf()->shelf_layout_manager()->hotseat_state());
   });
-  
+
+  ui::test::EventGenerator event_generator(controller->GetRootWindow());
+  auto* generator_ptr = &event_generator;
+
   speech_monitor.Call([generator_ptr]() {
     // Press the search + right. Expects that the browser icon receives the
     // accessibility focus and the hotseat remains in kExtended state.
     generator_ptr->PressKey(ui::VKEY_RIGHT, ui::EF_COMMAND_DOWN);
   });
+
   const int browser_index =
       ash::ShelfModel::Get()->GetItemIndexForType(ash::TYPE_BROWSER_SHORTCUT);
   speech_monitor.ExpectSpeech(

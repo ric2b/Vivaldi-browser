@@ -35,6 +35,13 @@ enum StadiaGamepadButtons {
   STADIA_GAMEPAD_BUTTON_COUNT
 };
 
+// The Switch Pro controller has a Capture button that has no equivalent in the
+// Standard Gamepad.
+enum SwitchProButtons {
+  SWITCH_PRO_BUTTON_CAPTURE = BUTTON_INDEX_COUNT,
+  SWITCH_PRO_BUTTON_COUNT
+};
+
 void MapperXInputStyleGamepad(const Gamepad& input, Gamepad* mapped) {
   *mapped = input;
   mapped->buttons[BUTTON_INDEX_LEFT_TRIGGER] = AxisToButton(input.axes[2]);
@@ -613,11 +620,8 @@ void MapperSwitchJoyCon(const Gamepad& input, Gamepad* mapped) {
 }
 
 void MapperSwitchPro(const Gamepad& input, Gamepad* mapped) {
-  // The Switch Pro controller has a Capture button that has no equivalent in
-  // the Standard Gamepad.
-  const size_t kSwitchProExtraButtonCount = 1;
   *mapped = input;
-  mapped->buttons_length = BUTTON_INDEX_COUNT + kSwitchProExtraButtonCount;
+  mapped->buttons_length = SWITCH_PRO_BUTTON_COUNT;
   mapped->axes_length = AXIS_INDEX_COUNT;
 }
 
@@ -768,7 +772,18 @@ void MapperSnakebyteIDroidCon(const Gamepad& input, Gamepad* mapped) {
   mapped->buttons[BUTTON_INDEX_RIGHT_THUMBSTICK] = input.buttons[5];
   mapped->buttons[BUTTON_INDEX_META] = NullButton();
 
-  if (input.axes_length == 7) {
+  if ((input.axes_used & 0b1000000) == 0) {
+    // "Game controller 1" mode: digital triggers.
+    mapped->buttons[BUTTON_INDEX_LEFT_TRIGGER] = input.buttons[8];
+    mapped->buttons[BUTTON_INDEX_RIGHT_TRIGGER] = input.buttons[9];
+    mapped->buttons[BUTTON_INDEX_DPAD_UP] = AxisNegativeAsButton(input.axes[5]);
+    mapped->buttons[BUTTON_INDEX_DPAD_DOWN] =
+        AxisPositiveAsButton(input.axes[5]);
+    mapped->buttons[BUTTON_INDEX_DPAD_LEFT] =
+        AxisNegativeAsButton(input.axes[4]);
+    mapped->buttons[BUTTON_INDEX_DPAD_RIGHT] =
+        AxisPositiveAsButton(input.axes[4]);
+  } else {
     // "Game controller 2" mode: analog triggers.
     mapped->buttons[BUTTON_INDEX_LEFT_TRIGGER] =
         AxisPositiveAsButton(input.axes[2]);
@@ -781,31 +796,67 @@ void MapperSnakebyteIDroidCon(const Gamepad& input, Gamepad* mapped) {
         AxisNegativeAsButton(input.axes[5]);
     mapped->buttons[BUTTON_INDEX_DPAD_RIGHT] =
         AxisPositiveAsButton(input.axes[5]);
-    mapped->buttons[BUTTON_INDEX_META] = NullButton();
     mapped->axes[AXIS_INDEX_RIGHT_STICK_X] = input.axes[3];
     mapped->axes[AXIS_INDEX_RIGHT_STICK_Y] = input.axes[4];
-  } else {
-    // "Game controller 1" mode: digital triggers.
-    mapped->buttons[BUTTON_INDEX_LEFT_TRIGGER] = input.buttons[8];
-    mapped->buttons[BUTTON_INDEX_RIGHT_TRIGGER] = input.buttons[9];
-    mapped->buttons[BUTTON_INDEX_DPAD_UP] = AxisNegativeAsButton(input.axes[5]);
-    mapped->buttons[BUTTON_INDEX_DPAD_DOWN] =
-        AxisPositiveAsButton(input.axes[5]);
-    mapped->buttons[BUTTON_INDEX_DPAD_LEFT] =
-        AxisNegativeAsButton(input.axes[4]);
-    mapped->buttons[BUTTON_INDEX_DPAD_RIGHT] =
-        AxisPositiveAsButton(input.axes[4]);
   }
+
   mapped->buttons_length = BUTTON_INDEX_COUNT - 1;  // no meta
   mapped->axes_length = AXIS_INDEX_COUNT;
+}
+
+void MapperHoripadSwitch(const Gamepad& input, Gamepad* mapped) {
+  *mapped = input;
+  mapped->buttons[BUTTON_INDEX_PRIMARY] = input.buttons[1];
+  mapped->buttons[BUTTON_INDEX_SECONDARY] = input.buttons[2];
+  mapped->buttons[BUTTON_INDEX_TERTIARY] = input.buttons[0];
+  mapped->buttons[BUTTON_INDEX_DPAD_UP] = AxisNegativeAsButton(input.axes[5]);
+  mapped->buttons[BUTTON_INDEX_DPAD_DOWN] = AxisPositiveAsButton(input.axes[5]);
+  mapped->buttons[BUTTON_INDEX_DPAD_LEFT] = AxisNegativeAsButton(input.axes[4]);
+  mapped->buttons[BUTTON_INDEX_DPAD_RIGHT] =
+      AxisPositiveAsButton(input.axes[4]);
+  mapped->buttons[BUTTON_INDEX_META] = input.buttons[12];
+  mapped->buttons[SWITCH_PRO_BUTTON_CAPTURE] = input.buttons[13];
+  mapped->buttons_length = SWITCH_PRO_BUTTON_COUNT;
+  mapped->axes_length = AXIS_INDEX_COUNT;
+}
+
+void MapperElecomWiredDirectInput(const Gamepad& input, Gamepad* mapped) {
+  *mapped = input;
+  mapped->buttons[BUTTON_INDEX_PRIMARY] = input.buttons[2];
+  mapped->buttons[BUTTON_INDEX_SECONDARY] = input.buttons[3];
+  mapped->buttons[BUTTON_INDEX_TERTIARY] = input.buttons[0];
+  mapped->buttons[BUTTON_INDEX_QUATERNARY] = input.buttons[1];
+  mapped->buttons[BUTTON_INDEX_DPAD_UP] = AxisNegativeAsButton(input.axes[5]);
+  mapped->buttons[BUTTON_INDEX_DPAD_DOWN] = AxisPositiveAsButton(input.axes[5]);
+  mapped->buttons[BUTTON_INDEX_DPAD_LEFT] = AxisNegativeAsButton(input.axes[4]);
+  mapped->buttons[BUTTON_INDEX_DPAD_RIGHT] =
+      AxisPositiveAsButton(input.axes[4]);
+  mapped->buttons[BUTTON_INDEX_BACK_SELECT] = input.buttons[10];
+  mapped->buttons[BUTTON_INDEX_START] = input.buttons[11];
+  mapped->buttons[BUTTON_INDEX_LEFT_THUMBSTICK] = input.buttons[8];
+  mapped->buttons[BUTTON_INDEX_RIGHT_THUMBSTICK] = input.buttons[9];
+  mapped->buttons[BUTTON_INDEX_META] = input.buttons[12];
+  mapped->buttons_length = BUTTON_INDEX_COUNT;
+  mapped->axes_length = AXIS_INDEX_COUNT;
+}
+
+void MapperElecomWirelessDirectInput(const Gamepad& input, Gamepad* mapped) {
+  MapperElecomWiredDirectInput(input, mapped);
+
+  mapped->axes[AXIS_INDEX_RIGHT_STICK_X] = input.axes[3];
+  mapped->axes[AXIS_INDEX_RIGHT_STICK_Y] = input.axes[2];
 }
 
 constexpr struct MappingData {
   GamepadId gamepad_id;
   GamepadStandardMappingFunction function;
 } AvailableMappings[] = {
+    // PowerA Wireless Controller - Nintendo GameCube style
+    {GamepadId::kPowerALicPro, MapperSwitchPro},
     // DragonRise Generic USB
     {GamepadId::kDragonRiseProduct0006, MapperDragonRiseGeneric},
+    // HORIPAD for Nintendo Switch
+    {GamepadId::kHoriProduct00c1, MapperHoripadSwitch},
     // Xbox One S (Bluetooth)
     {GamepadId::kMicrosoftProduct02e0, MapperXboxOneS},
     // Xbox One S (Bluetooth)
@@ -882,6 +933,10 @@ constexpr struct MappingData {
     {GamepadId::kPrototypeVendorProduct9401, MapperStadiaControllerOldFirmware},
     // Snakebyte iDroid:con
     {GamepadId::kBroadcomProduct8502, MapperSnakebyteIDroidCon},
+    // Elecom JC-U4013SBK (DirectInput mode)
+    {GamepadId::kElecomProduct200f, MapperElecomWiredDirectInput},
+    // Elecom JC-U4113SBK (DirectInput mode)
+    {GamepadId::kElecomProduct2010, MapperElecomWirelessDirectInput},
 };
 
 }  // namespace

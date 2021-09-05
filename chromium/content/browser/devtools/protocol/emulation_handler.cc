@@ -76,8 +76,7 @@ EmulationHandler::EmulationHandler()
       focus_emulation_enabled_(false),
       host_(nullptr) {}
 
-EmulationHandler::~EmulationHandler() {
-}
+EmulationHandler::~EmulationHandler() = default;
 
 // static
 std::vector<EmulationHandler*> EmulationHandler::ForAgentHost(
@@ -472,28 +471,40 @@ void EmulationHandler::UpdateDeviceEmulationState() {
   // this is tricky since we'd have to track the DevTools message id with the
   // WidgetMsg and acknowledgment, as well as plump the acknowledgment back to
   // the EmulationHandler somehow. Mojo callbacks should make this much simpler.
+  UpdateDeviceEmulationStateForHost(host_->GetRenderWidgetHost());
+
+  // Update portals inside this page.
+  for (auto* web_contents : GetWebContents()->GetWebContentsAndAllInner()) {
+    if (web_contents->IsPortal()) {
+      UpdateDeviceEmulationStateForHost(
+          web_contents->GetMainFrame()->GetRenderWidgetHost());
+    }
+  }
+}
+
+void EmulationHandler::UpdateDeviceEmulationStateForHost(
+    RenderWidgetHostImpl* render_widget_host) {
   if (device_emulation_enabled_) {
     // NOTE(david@vivaldi.com): We need to inform
     // RenderWidgetHostImpl that device emulation has been activated.
     if (vivaldi::IsVivaldiRunning())
-      host_->GetRenderWidgetHost()->SetDeviceEmulationActive(true);
+      render_widget_host->SetDeviceEmulationActive(true);
 
-    host_->GetRenderWidgetHost()->Send(new WidgetMsg_EnableDeviceEmulation(
-        host_->GetRenderWidgetHost()->GetRoutingID(),
-        device_emulation_params_));
+    render_widget_host->Send(new WidgetMsg_EnableDeviceEmulation(
+        render_widget_host->GetRoutingID(), device_emulation_params_));
   } else {
     // NOTE(david@vivaldi.com): In Vivaldi we need to reset the cursor and then
     // inform RenderWidgetHostImpl that device emulation has been deactivated.
     if (vivaldi::IsVivaldiRunning()) {
       if (auto* touch_emulator =
               host_->GetRenderWidgetHost()->GetTouchEmulator())
-        host_->GetRenderWidgetHost()->SetCursor(
+        render_widget_host->SetCursor(
             touch_emulator->GetDefaultCursor());
-      host_->GetRenderWidgetHost()->SetDeviceEmulationActive(false);
+      render_widget_host->SetDeviceEmulationActive(false);
     }
 
-    host_->GetRenderWidgetHost()->Send(new WidgetMsg_DisableDeviceEmulation(
-        host_->GetRenderWidgetHost()->GetRoutingID()));
+    render_widget_host->Send(new WidgetMsg_DisableDeviceEmulation(
+        render_widget_host->GetRoutingID()));
   }
 }
 

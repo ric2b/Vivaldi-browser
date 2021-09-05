@@ -41,7 +41,7 @@ class FakeShelfItemDelegate : public ash::ShelfItemDelegate {
                       int64_t display_id) override {}
   void Close() override {
     ChromeLauncherController::instance()->CloseLauncherItem(
-        ash::ShelfID(kPluginVmAppId));
+        ash::ShelfID(kPluginVmShelfAppId));
   }
 };
 
@@ -138,8 +138,13 @@ void PluginVmTestHelper::AllowPluginVm() {
   ASSERT_TRUE(IsPluginVmAllowedForProfile(testing_profile_));
 }
 
+void PluginVmTestHelper::EnablePluginVm() {
+  testing_profile_->GetPrefs()->SetBoolean(
+      plugin_vm::prefs::kPluginVmImageExists, true);
+}
+
 void PluginVmTestHelper::OpenShelfItem() {
-  ash::ShelfID shelf_id(kPluginVmAppId);
+  ash::ShelfID shelf_id(kPluginVmShelfAppId);
   std::unique_ptr<ash::ShelfItemDelegate> delegate =
       std::make_unique<FakeShelfItemDelegate>(shelf_id);
   ChromeLauncherController* laucher_controller =
@@ -157,7 +162,8 @@ void PluginVmTestHelper::OpenShelfItem() {
 }
 
 void PluginVmTestHelper::CloseShelfItem() {
-  ChromeLauncherController::instance()->Close(ash::ShelfID(kPluginVmAppId));
+  ChromeLauncherController::instance()->Close(
+      ash::ShelfID(kPluginVmShelfAppId));
 }
 
 }  // namespace plugin_vm

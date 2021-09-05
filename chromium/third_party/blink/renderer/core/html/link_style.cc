@@ -202,6 +202,10 @@ void LinkStyle::RemovePendingSheet() {
 void LinkStyle::SetDisabledState(bool disabled) {
   LinkStyle::DisabledState old_disabled_state = disabled_state_;
   disabled_state_ = disabled ? kDisabled : kEnabledViaScript;
+  // Whenever the disabled attribute is removed, set the link element's
+  // explicitly enabled attribute to true.
+  if (!disabled)
+    explicitly_enabled_ = true;
   if (old_disabled_state == disabled_state_)
     return;
 
@@ -231,8 +235,19 @@ void LinkStyle::SetDisabledState(bool disabled) {
   }
 
   if (sheet_) {
-    sheet_->setDisabled(disabled);
-    return;
+    // TODO(crbug.com/1087043): Remove this if() condition once the feature has
+    // landed and no compat issues are reported.
+    if (RuntimeEnabledFeatures::LinkDisabledNewSpecBehaviorEnabled(
+            GetExecutionContext())) {
+      DCHECK(disabled)
+          << "If link is being enabled, sheet_ shouldn't exist yet";
+      ClearSheet();
+      GetDocument().GetStyleEngine().SetNeedsActiveStyleUpdate(
+          owner_->GetTreeScope());
+      return;
+    } else {
+      sheet_->setDisabled(disabled);
+    }
   }
 
   if (disabled_state_ == kEnabledViaScript && owner_->ShouldProcessStyle())
@@ -324,7 +339,7 @@ void LinkStyle::Process() {
     if (!GetDocument().GetSecurityOrigin()->CanDisplay(params.href))
       return;
     if (!GetDocument().GetContentSecurityPolicy()->AllowImageFromSource(
-            params.href))
+            params.href, params.href, RedirectStatus::kNoRedirect))
       return;
     if (GetDocument().GetFrame())
       GetDocument().GetFrame()->UpdateFaviconURL();
@@ -364,7 +379,7 @@ void LinkStyle::OwnerRemoved() {
     ClearSheet();
 }
 
-void LinkStyle::Trace(Visitor* visitor) {
+void LinkStyle::Trace(Visitor* visitor) const {
   visitor->Trace(sheet_);
   LinkResource::Trace(visitor);
   ResourceClient::Trace(visitor);

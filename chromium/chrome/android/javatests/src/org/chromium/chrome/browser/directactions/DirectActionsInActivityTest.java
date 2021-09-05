@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.directactions;
 
+import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
@@ -11,7 +12,8 @@ import static org.junit.Assert.fail;
 import android.annotation.TargetApi;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -21,7 +23,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.Callback;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MetricsUtils.HistogramDelta;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
@@ -64,7 +65,6 @@ public class DirectActionsInActivityTest {
     @Test
     @MediumTest
     @Feature({"DirectActions"})
-    @DisabledTest(message = "crbug.com/1034712")
     public void testDirectActionsDisabled() throws Exception {
         // disableDirectActions() makes AppHooks.createDirectActionCoordinator return null. This
         // should mean that direct actions are not available.
@@ -73,8 +73,13 @@ public class DirectActionsInActivityTest {
         mActivityTestRule.startMainActivityOnBlankPage();
 
         assertThat(DirectActionTestUtils.callOnGetDirectActions(getActivity()), Matchers.empty());
+
+        Bundle result = new Bundle();
         DirectActionTestUtils.callOnPerformDirectActions(
-                getActivity(), "test", (r) -> fail("Unexpected result: " + r));
+                getActivity(), "test", (r) -> result.putAll((Bundle) r));
+
+        // Direct comparison with Bundle.EMPTY does not work.
+        assertThat(result.keySet().isEmpty(), is(true));
     }
 
     @Test

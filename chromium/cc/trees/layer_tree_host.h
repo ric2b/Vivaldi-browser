@@ -13,6 +13,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "base/callback_forward.h"
@@ -49,6 +50,7 @@
 #include "cc/trees/swap_promise_manager.h"
 #include "cc/trees/target_property.h"
 #include "cc/trees/viewport_layers.h"
+#include "components/viz/common/delegated_ink_metadata.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/surfaces/local_surface_id_allocation.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -215,6 +217,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // full commit synchronization or layer updates.
   void SetNeedsAnimate();
 
+  // Calls SetNeedsAnimate() if there is no main frame already in progress.
+  void SetNeedsAnimateIfNotInsideMainFrame();
+
   // Requests a main frame update and also ensure that the host pulls layer
   // updates from the client, even if no content might have changed, without
   // forcing a full commit synchronization.
@@ -316,6 +321,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
       base::OnceCallback<void(const gfx::PresentationFeedback&)>;
   void RequestPresentationTimeForNextFrame(PresentationTimeCallback callback);
 
+  // Registers a callback that is run when any ongoing scroll-animation ends. If
+  // there are no ongoing animations, then the callback is run immediately.
+  void RequestScrollAnimationEndNotification(base::OnceClosure callback);
+
   // Layer tree accessors and modifiers ------------------------
 
   // Sets or gets the root of the Layer tree. Children of the root Layer are
@@ -352,6 +361,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   Layer* InnerViewportScrollLayerForTesting() const;
   Layer* OuterViewportScrollLayerForTesting() const;
 
+  ElementId OuterViewportScrollElementId() const;
+
   // Sets or gets the position of touch handles for a text selection. These are
   // submitted to the display compositor along with the Layer tree's contents
   // allowing it to present the selection handles. This is done because the
@@ -387,8 +398,6 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
                                    local_surface_id_allocation_from_parent);
 
   void SetViewportVisibleRect(const gfx::Rect& visible_rect);
-
-  gfx::Rect viewport_visible_rect() const { return viewport_visible_rect_; }
 
   gfx::Rect device_viewport_rect() const { return device_viewport_rect_; }
 
@@ -457,6 +466,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
     return raster_color_space_;
   }
 
+  bool HasCompositorDrivenScrollAnimationForTesting() const {
+    return scroll_animation_.in_progress;
+  }
+
   // This layer tree may be embedded in a hierarchy that has page scale
   // factor controlled at the top level. We represent that scale here as
   // 'external_page_scale_factor', a value that affects raster scale in the
@@ -503,7 +516,6 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // These are internal methods, called from the Layer itself when changing a
   // property or completing a PushPropertiesTo.
   void AddLayerShouldPushProperties(Layer* layer);
-  void RemoveLayerShouldPushProperties(Layer* layer);
   void ClearLayersThatShouldPushProperties();
   // The current set of all Layers attached to the LayerTreeHost's tree that
   // have been marked as needing PushPropertiesTo in the next commit.
@@ -593,6 +605,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time,
                                ActiveFrameSequenceTrackers trackers);
   void NotifyThroughputTrackerResults(CustomTrackerResults results);
+  void SubmitThroughputData(ukm::SourceId source_id,
+                            int aggregated_percent,
+                            int impl_percent,
+                            base::Optional<int> main_percent);
 
   LayerTreeHostClient* client() { return client_; }
   LayerTreeHostSchedulingClient* scheduling_client() {
@@ -692,6 +708,17 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void SetImplCommitStartTime(base::TimeTicks commit_start_time) {
     impl_commit_start_time_ = commit_start_time;
   }
+
+  void SetDelegatedInkMetadata(
+      std::unique_ptr<viz::DelegatedInkMetadata> metadata) {
+    delegated_ink_metadata_ = std::move(metadata);
+  }
+  viz::DelegatedInkMetadata* DelegatedInkMetadataForTesting() {
+    return delegated_ink_metadata_.get();
+  }
+
+  void DidObserveFirstScrollDelay(base::TimeDelta first_scroll_delay,
+                                  base::TimeTicks first_scroll_timestamp);
 
  protected:
   LayerTreeHost(InitParams params, CompositorMode mode);
@@ -886,6 +913,17 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // added here.
   std::vector<PresentationTimeCallback> pending_presentation_time_callbacks_;
 
+  struct ScrollAnimationState {
+    ScrollAnimationState();
+    ~ScrollAnimationState();
+
+    // Tracks whether there is an ongoing compositor-driven scroll animation.
+    bool in_progress = false;
+
+    // Callback to run when the scroll-animation ends.
+    base::OnceClosure end_notification;
+  } scroll_animation_;
+
   // Latency information for work done in ProxyMain::BeginMainFrame. The
   // unique_ptr is allocated in RequestMainFrameUpdate, and passed to Blink's
   // LocalFrameView that fills in the fields. This object adds the timing for
@@ -898,6 +936,12 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   base::TimeTicks impl_commit_start_time_;
 
   EventsMetricsManager events_metrics_manager_;
+
+  // Metadata required for drawing a delegated ink trail onto the end of a
+  // stroke. std::unique_ptr was specifically chosen so that it would be cleared
+  // as it is forwarded along the pipeline to avoid old information incorrectly
+  // sticking around and potentially being reused.
+  std::unique_ptr<viz::DelegatedInkMetadata> delegated_ink_metadata_;
 
   // Used to vend weak pointers to LayerTreeHost to ScopedDeferMainFrameUpdate
   // objects.

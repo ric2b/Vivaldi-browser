@@ -8,6 +8,7 @@
 
 #include "base/test/power_monitor_test_base.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
+#include "components/page_load_metrics/browser/observers/largest_contentful_paint_handler.h"
 #include "components/page_load_metrics/browser/observers/page_load_metrics_observer_content_test_harness.h"
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
 #include "components/page_load_metrics/browser/page_load_tracker.h"
@@ -22,7 +23,7 @@ using content::NavigationSimulator;
 using content::RenderFrameHost;
 using content::RenderFrameHostTester;
 using LargestContentType =
-    page_load_metrics::PageLoadMetricsObserver::LargestContentType;
+    page_load_metrics::ContentfulPaintTimingInfo::LargestContentType;
 
 namespace {
 
@@ -56,6 +57,101 @@ class CorePageLoadMetricsObserverTest
                          base::TimeDelta cpu_time_spent) {
     page_load_metrics::mojom::CpuTiming cpu_timing(cpu_time_spent);
     tester()->SimulateCpuTimingUpdate(cpu_timing, render_frame_host);
+  }
+
+  void TestNoLCP() {
+    tester()->histogram_tester().ExpectTotalCount(
+        internal::kHistogramLargestContentfulPaint, 0);
+    tester()->histogram_tester().ExpectTotalCount(
+        internal::kHistogramLargestContentfulPaintContentType, 0);
+    tester()->histogram_tester().ExpectTotalCount(
+        internal::kHistogramLargestContentfulPaintMainFrame, 0);
+    tester()->histogram_tester().ExpectTotalCount(
+        internal::kHistogramLargestContentfulPaintMainFrameContentType, 0);
+
+    // Experimental values
+    tester()->histogram_tester().ExpectTotalCount(
+        internal::kHistogramExperimentalLargestContentfulPaint, 0);
+    tester()->histogram_tester().ExpectTotalCount(
+        internal::kHistogramExperimentalLargestContentfulPaintContentType, 0);
+    tester()->histogram_tester().ExpectTotalCount(
+        internal::kHistogramExperimentalLargestContentfulPaintMainFrame, 0);
+    tester()->histogram_tester().ExpectTotalCount(
+        internal::
+            kHistogramExperimentalLargestContentfulPaintMainFrameContentType,
+        0);
+  }
+
+  void TestAllFramesLCP(int value, LargestContentType type) {
+    EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
+                    internal::kHistogramLargestContentfulPaint),
+                testing::ElementsAre(base::Bucket(value, 1)));
+    EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
+                    internal::kHistogramLargestContentfulPaintContentType),
+                testing::ElementsAre(base::Bucket(
+                    static_cast<base::HistogramBase::Sample>(type), 1)));
+
+    // Experimental values
+    EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
+                    internal::kHistogramExperimentalLargestContentfulPaint),
+                testing::ElementsAre(base::Bucket(value, 1)));
+    EXPECT_THAT(
+        tester()->histogram_tester().GetAllSamples(
+            internal::kHistogramExperimentalLargestContentfulPaintContentType),
+        testing::ElementsAre(
+            base::Bucket(static_cast<base::HistogramBase::Sample>(type), 1)));
+  }
+
+  void TestMainFrameLCP(int value, LargestContentType type) {
+    EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
+                    internal::kHistogramLargestContentfulPaintMainFrame),
+                testing::ElementsAre(base::Bucket(value, 1)));
+    EXPECT_THAT(
+        tester()->histogram_tester().GetAllSamples(
+            internal::kHistogramLargestContentfulPaintMainFrameContentType),
+        testing::ElementsAre(
+            base::Bucket(static_cast<base::HistogramBase::Sample>(type), 1)));
+
+    // Experimental values
+    EXPECT_THAT(
+        tester()->histogram_tester().GetAllSamples(
+            internal::kHistogramExperimentalLargestContentfulPaintMainFrame),
+        testing::ElementsAre(base::Bucket(value, 1)));
+    EXPECT_THAT(
+        tester()->histogram_tester().GetAllSamples(
+            internal::
+                kHistogramExperimentalLargestContentfulPaintMainFrameContentType),
+        testing::ElementsAre(
+            base::Bucket(static_cast<base::HistogramBase::Sample>(type), 1)));
+  }
+
+  void TestEmptyMainFrameLCP() {
+    EXPECT_TRUE(
+        tester()
+            ->histogram_tester()
+            .GetAllSamples(internal::kHistogramLargestContentfulPaintMainFrame)
+            .empty());
+    EXPECT_TRUE(
+        tester()
+            ->histogram_tester()
+            .GetAllSamples(
+                internal::kHistogramLargestContentfulPaintMainFrameContentType)
+            .empty());
+
+    // Experimental LCP histograms
+    EXPECT_TRUE(
+        tester()
+            ->histogram_tester()
+            .GetAllSamples(
+                internal::kHistogramExperimentalLargestContentfulPaintMainFrame)
+            .empty());
+    EXPECT_TRUE(
+        tester()
+            ->histogram_tester()
+            .GetAllSamples(
+                internal::
+                    kHistogramExperimentalLargestContentfulPaintMainFrameContentType)
+            .empty());
   }
 };
 
@@ -508,18 +604,31 @@ TEST_F(CorePageLoadMetricsObserverTest, ForwardBack) {
 TEST_F(CorePageLoadMetricsObserverTest, NavigationTiming) {
   GURL url(kDefaultTestUrl);
   tester()->NavigateWithPageTransitionAndCommit(url, ui::PAGE_TRANSITION_LINK);
+  tester()->NavigateToUntrackedUrl();
 
   // Verify if the elapsed times from the navigation start are recorded.
   std::vector<const char*> metrics_from_navigation_start = {
       internal::kHistogramNavigationTimingNavigationStartToFirstRequestStart,
-      internal::kHistogramNavigationTimingNavigationStartToFirstResponseStart};
+      internal::kHistogramNavigationTimingNavigationStartToFirstResponseStart,
+      internal::kHistogramNavigationTimingNavigationStartToFirstLoaderCallback,
+      internal::kHistogramNavigationTimingNavigationStartToFinalRequestStart,
+      internal::kHistogramNavigationTimingNavigationStartToFinalResponseStart,
+      internal::kHistogramNavigationTimingNavigationStartToFinalLoaderCallback,
+      internal::
+          kHistogramNavigationTimingNavigationStartToNavigationCommitSent};
   for (const char* metric : metrics_from_navigation_start)
     tester()->histogram_tester().ExpectTotalCount(metric, 1);
 
   // Verify if the intervals between adjacent milestones are recorded.
   std::vector<const char*> metrics_between_milestones = {
+      internal::kHistogramNavigationTimingFirstRequestStartToFirstResponseStart,
       internal::
-          kHistogramNavigationTimingFirstRequestStartToFirstResponseStart};
+          kHistogramNavigationTimingFirstResponseStartToFirstLoaderCallback,
+      internal::kHistogramNavigationTimingFinalRequestStartToFinalResponseStart,
+      internal::
+          kHistogramNavigationTimingFinalResponseStartToFinalLoaderCallback,
+      internal::
+          kHistogramNavigationTimingFinalLoaderCallbackToNavigationCommitSent};
   for (const char* metric : metrics_between_milestones)
     tester()->histogram_tester().ExpectTotalCount(metric, 1);
 }
@@ -659,13 +768,16 @@ TEST_F(CorePageLoadMetricsObserverTest, LargestImageLoading) {
   page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);
   // Largest image is loading so its timestamp is TimeDelta().
-  timing.paint_timing->largest_image_paint = base::TimeDelta();
-  timing.paint_timing->largest_image_paint_size = 100u;
+  timing.paint_timing->largest_contentful_paint->largest_image_paint =
+      base::TimeDelta();
+  timing.paint_timing->largest_contentful_paint->largest_image_paint_size =
+      100u;
   // There is a text paint but it's smaller than image. Pick a value that lines
   // up with a histogram bucket.
-  timing.paint_timing->largest_text_paint =
+  timing.paint_timing->largest_contentful_paint->largest_text_paint =
       base::TimeDelta::FromMilliseconds(4780);
-  timing.paint_timing->largest_text_paint_size = 70u;
+  timing.paint_timing->largest_contentful_paint->largest_text_paint_size = 70u;
+  PopulateExperimentalLCP(timing.paint_timing);
   PopulateRequiredTimingFields(&timing);
 
   NavigateAndCommit(GURL(kDefaultTestUrl));
@@ -674,8 +786,7 @@ TEST_F(CorePageLoadMetricsObserverTest, LargestImageLoading) {
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
   // The image was larger so LCP should NOT be reported.
-  tester()->histogram_tester().ExpectTotalCount(
-      internal::kHistogramLargestContentfulPaint, 0);
+  TestNoLCP();
 }
 
 TEST_F(CorePageLoadMetricsObserverTest, LargestImageLoadingSmallerThanText) {
@@ -683,13 +794,16 @@ TEST_F(CorePageLoadMetricsObserverTest, LargestImageLoadingSmallerThanText) {
   page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);
   // Largest image is loading so its timestamp is TimeDelta().
-  timing.paint_timing->largest_image_paint = base::TimeDelta();
-  timing.paint_timing->largest_image_paint_size = 100u;
+  timing.paint_timing->largest_contentful_paint->largest_image_paint =
+      base::TimeDelta();
+  timing.paint_timing->largest_contentful_paint->largest_image_paint_size =
+      100u;
   // There is a text paint but it's smaller than image. Pick a value that lines
   // up with a histogram bucket.
-  timing.paint_timing->largest_text_paint =
+  timing.paint_timing->largest_contentful_paint->largest_text_paint =
       base::TimeDelta::FromMilliseconds(4780);
-  timing.paint_timing->largest_text_paint_size = 120u;
+  timing.paint_timing->largest_contentful_paint->largest_text_paint_size = 120u;
+  PopulateExperimentalLCP(timing.paint_timing);
   PopulateRequiredTimingFields(&timing);
 
   NavigateAndCommit(GURL(kDefaultTestUrl));
@@ -697,9 +811,7 @@ TEST_F(CorePageLoadMetricsObserverTest, LargestImageLoadingSmallerThanText) {
   // Navigate again to force histogram recording.
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaint),
-              testing::ElementsAre(base::Bucket(4780, 1)));
+  TestAllFramesLCP(4780, LargestContentType::kText);
 }
 
 TEST_F(CorePageLoadMetricsObserverTest,
@@ -716,9 +828,11 @@ TEST_F(CorePageLoadMetricsObserverTest,
   page_load_metrics::mojom::PageLoadTiming subframe_timing;
   page_load_metrics::InitPageLoadTimingForTest(&subframe_timing);
   subframe_timing.navigation_start = base::Time::FromDoubleT(200);
-  subframe_timing.paint_timing->largest_image_paint =
+  subframe_timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(4780);
-  subframe_timing.paint_timing->largest_image_paint_size = 100u;
+  subframe_timing.paint_timing->largest_contentful_paint
+      ->largest_image_paint_size = 100u;
+  PopulateExperimentalLCP(subframe_timing.paint_timing);
   PopulateRequiredTimingFields(&subframe_timing);
 
   // Commit the main frame and a subframe.
@@ -736,26 +850,8 @@ TEST_F(CorePageLoadMetricsObserverTest,
   // Navigate again to force histogram recording in the main frame.
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaint),
-              testing::ElementsAre(base::Bucket(4780, 1)));
-  EXPECT_THAT(
-      tester()->histogram_tester().GetAllSamples(
-          internal::kHistogramLargestContentfulPaintContentType),
-      testing::ElementsAre(base::Bucket(
-          static_cast<base::HistogramBase::Sample>(LargestContentType::kImage),
-          1)));
-  EXPECT_TRUE(
-      tester()
-          ->histogram_tester()
-          .GetAllSamples(internal::kHistogramLargestContentfulPaintMainFrame)
-          .empty());
-  EXPECT_TRUE(
-      tester()
-          ->histogram_tester()
-          .GetAllSamples(
-              internal::kHistogramLargestContentfulPaintMainFrameContentType)
-          .empty());
+  TestAllFramesLCP(4780, LargestContentType::kImage);
+  TestEmptyMainFrameLCP();
 }
 
 TEST_F(CorePageLoadMetricsObserverTest,
@@ -772,11 +868,15 @@ TEST_F(CorePageLoadMetricsObserverTest,
   page_load_metrics::mojom::PageLoadTiming subframe_timing;
   page_load_metrics::InitPageLoadTimingForTest(&subframe_timing);
   subframe_timing.navigation_start = base::Time::FromDoubleT(200);
-  subframe_timing.paint_timing->largest_image_paint = base::TimeDelta();
-  subframe_timing.paint_timing->largest_image_paint_size = 100u;
-  subframe_timing.paint_timing->largest_text_paint =
+  subframe_timing.paint_timing->largest_contentful_paint->largest_image_paint =
+      base::TimeDelta();
+  subframe_timing.paint_timing->largest_contentful_paint
+      ->largest_image_paint_size = 100u;
+  subframe_timing.paint_timing->largest_contentful_paint->largest_text_paint =
       base::TimeDelta::FromMilliseconds(500);
-  subframe_timing.paint_timing->largest_text_paint_size = 80u;
+  subframe_timing.paint_timing->largest_contentful_paint
+      ->largest_text_paint_size = 80u;
+  PopulateExperimentalLCP(subframe_timing.paint_timing);
   PopulateRequiredTimingFields(&subframe_timing);
 
   // Commit the main frame and a subframe.
@@ -794,14 +894,7 @@ TEST_F(CorePageLoadMetricsObserverTest,
   // Navigate again to force histogram recording in the main frame.
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  tester()->histogram_tester().ExpectTotalCount(
-      internal::kHistogramLargestContentfulPaint, 0);
-  tester()->histogram_tester().ExpectTotalCount(
-      internal::kHistogramLargestContentfulPaintContentType, 0);
-  tester()->histogram_tester().ExpectTotalCount(
-      internal::kHistogramLargestContentfulPaintMainFrame, 0);
-  tester()->histogram_tester().ExpectTotalCount(
-      internal::kHistogramLargestContentfulPaintMainFrameContentType, 0);
+  TestNoLCP();
 }
 
 TEST_F(CorePageLoadMetricsObserverTest,
@@ -812,9 +905,10 @@ TEST_F(CorePageLoadMetricsObserverTest,
   page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);
   // Pick a value that lines up with a histogram bucket.
-  timing.paint_timing->largest_image_paint =
+  timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(4780);
-  timing.paint_timing->largest_image_paint_size = 50u;
+  timing.paint_timing->largest_contentful_paint->largest_image_paint_size = 50u;
+  PopulateExperimentalLCP(timing.paint_timing);
   PopulateRequiredTimingFields(&timing);
 
   page_load_metrics::mojom::PageLoadTiming subframe_timing;
@@ -838,24 +932,8 @@ TEST_F(CorePageLoadMetricsObserverTest,
   // Navigate again to force histogram recording in the main frame.
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaint),
-              testing::ElementsAre(base::Bucket(4780, 1)));
-  EXPECT_THAT(
-      tester()->histogram_tester().GetAllSamples(
-          internal::kHistogramLargestContentfulPaintContentType),
-      testing::ElementsAre(base::Bucket(
-          static_cast<base::HistogramBase::Sample>(LargestContentType::kImage),
-          1)));
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaintMainFrame),
-              testing::ElementsAre(base::Bucket(4780, 1)));
-  EXPECT_THAT(
-      tester()->histogram_tester().GetAllSamples(
-          internal::kHistogramLargestContentfulPaintMainFrameContentType),
-      testing::ElementsAre(base::Bucket(
-          static_cast<base::HistogramBase::Sample>(LargestContentType::kImage),
-          1)));
+  TestAllFramesLCP(4780, LargestContentType::kImage);
+  TestMainFrameLCP(4780, LargestContentType::kImage);
 }
 
 // This is to test whether LargestContentfulPaintAllFrames could merge
@@ -870,18 +948,21 @@ TEST_F(CorePageLoadMetricsObserverTest,
   page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);
   // Pick a value that lines up with a histogram bucket.
-  timing.paint_timing->largest_image_paint =
+  timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(9382);
-  timing.paint_timing->largest_image_paint_size = 50u;
+  timing.paint_timing->largest_contentful_paint->largest_image_paint_size = 50u;
+  PopulateExperimentalLCP(timing.paint_timing);
   PopulateRequiredTimingFields(&timing);
 
   // Create a candidate in subframe with a larger size.
   page_load_metrics::mojom::PageLoadTiming subframe_timing;
   page_load_metrics::InitPageLoadTimingForTest(&subframe_timing);
   subframe_timing.navigation_start = base::Time::FromDoubleT(2);
-  subframe_timing.paint_timing->largest_image_paint =
+  subframe_timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(4780);
-  subframe_timing.paint_timing->largest_image_paint_size = 100u;
+  subframe_timing.paint_timing->largest_contentful_paint
+      ->largest_image_paint_size = 100u;
+  PopulateExperimentalLCP(subframe_timing.paint_timing);
   PopulateRequiredTimingFields(&subframe_timing);
 
   // Commit the main frame and a subframe.
@@ -899,25 +980,8 @@ TEST_F(CorePageLoadMetricsObserverTest,
   // Navigate again to force histogram recording in the main frame.
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaint),
-              testing::ElementsAre(base::Bucket(4780, 1)));
-  EXPECT_THAT(
-      tester()->histogram_tester().GetAllSamples(
-          internal::kHistogramLargestContentfulPaintContentType),
-      testing::ElementsAre(base::Bucket(
-          static_cast<base::HistogramBase::Sample>(LargestContentType::kImage),
-          1)));
-
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaintMainFrame),
-              testing::ElementsAre(base::Bucket(9382, 1)));
-  EXPECT_THAT(
-      tester()->histogram_tester().GetAllSamples(
-          internal::kHistogramLargestContentfulPaintMainFrameContentType),
-      testing::ElementsAre(base::Bucket(
-          static_cast<base::HistogramBase::Sample>(LargestContentType::kImage),
-          1)));
+  TestAllFramesLCP(4780, LargestContentType::kImage);
+  TestMainFrameLCP(9382, LargestContentType::kImage);
 }
 
 // This is to test whether LargestContentfulPaintAllFrames could merge
@@ -931,18 +995,21 @@ TEST_F(CorePageLoadMetricsObserverTest,
   page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);
   // Pick a value that lines up with a histogram bucket.
-  timing.paint_timing->largest_text_paint =
+  timing.paint_timing->largest_contentful_paint->largest_text_paint =
       base::TimeDelta::FromMilliseconds(4780);
-  timing.paint_timing->largest_text_paint_size = 100u;
+  timing.paint_timing->largest_contentful_paint->largest_text_paint_size = 100u;
+  PopulateExperimentalLCP(timing.paint_timing);
   PopulateRequiredTimingFields(&timing);
 
   // Create a candidate in subframe with a smaller size.
   page_load_metrics::mojom::PageLoadTiming subframe_timing;
   page_load_metrics::InitPageLoadTimingForTest(&subframe_timing);
   subframe_timing.navigation_start = base::Time::FromDoubleT(2);
-  subframe_timing.paint_timing->largest_text_paint =
+  subframe_timing.paint_timing->largest_contentful_paint->largest_text_paint =
       base::TimeDelta::FromMilliseconds(300);
-  subframe_timing.paint_timing->largest_text_paint_size = 50u;
+  subframe_timing.paint_timing->largest_contentful_paint
+      ->largest_text_paint_size = 50u;
+  PopulateExperimentalLCP(subframe_timing.paint_timing);
   PopulateRequiredTimingFields(&subframe_timing);
 
   // Commit the main frame and a subframe.
@@ -960,25 +1027,8 @@ TEST_F(CorePageLoadMetricsObserverTest,
   // Navigate again to force histogram recording in the main frame.
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaint),
-              testing::ElementsAre(base::Bucket(4780, 1)));
-  EXPECT_THAT(
-      tester()->histogram_tester().GetAllSamples(
-          internal::kHistogramLargestContentfulPaintContentType),
-      testing::ElementsAre(base::Bucket(
-          static_cast<base::HistogramBase::Sample>(LargestContentType::kText),
-          1)));
-
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaintMainFrame),
-              testing::ElementsAre(base::Bucket(4780, 1)));
-  EXPECT_THAT(
-      tester()->histogram_tester().GetAllSamples(
-          internal::kHistogramLargestContentfulPaintMainFrameContentType),
-      testing::ElementsAre(base::Bucket(
-          static_cast<base::HistogramBase::Sample>(LargestContentType::kText),
-          1)));
+  TestAllFramesLCP(4780, LargestContentType::kText);
+  TestMainFrameLCP(4780, LargestContentType::kText);
 }
 
 // This tests a trade-off we have made - aggregating all subframe candidates,
@@ -997,9 +1047,11 @@ TEST_F(CorePageLoadMetricsObserverTest,
   page_load_metrics::mojom::PageLoadTiming subframe_timing;
   page_load_metrics::InitPageLoadTimingForTest(&subframe_timing);
   subframe_timing.navigation_start = base::Time::FromDoubleT(2);
-  subframe_timing.paint_timing->largest_image_paint =
+  subframe_timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(4780);
-  subframe_timing.paint_timing->largest_image_paint_size = 50u;
+  subframe_timing.paint_timing->largest_contentful_paint
+      ->largest_image_paint_size = 50u;
+  PopulateExperimentalLCP(subframe_timing.paint_timing);
   PopulateRequiredTimingFields(&subframe_timing);
 
   // Commit the main frame and a subframe.
@@ -1014,24 +1066,18 @@ TEST_F(CorePageLoadMetricsObserverTest,
   tester()->SimulateTimingUpdate(timing);
   tester()->SimulateTimingUpdate(subframe_timing, subframe);
 
-  subframe_timing.paint_timing->largest_image_paint =
+  subframe_timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(300);
-  subframe_timing.paint_timing->largest_image_paint_size = 10u;
+  subframe_timing.paint_timing->largest_contentful_paint
+      ->largest_image_paint_size = 10u;
+  PopulateExperimentalLCP(subframe_timing.paint_timing);
   tester()->SimulateTimingUpdate(subframe_timing, subframe);
 
   // Navigate again to force histogram recording in the main frame.
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
   // Ensure that the largest_image_paint timing for the main frame is recorded.
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaint),
-              testing::ElementsAre(base::Bucket(4780, 1)));
-  EXPECT_THAT(
-      tester()->histogram_tester().GetAllSamples(
-          internal::kHistogramLargestContentfulPaintContentType),
-      testing::ElementsAre(base::Bucket(
-          static_cast<base::HistogramBase::Sample>(LargestContentType::kImage),
-          1)));
+  TestAllFramesLCP(4780, LargestContentType::kImage);
 }
 
 // This tests a trade-off we have made - aggregating all subframe candidates,
@@ -1051,9 +1097,11 @@ TEST_F(
   page_load_metrics::mojom::PageLoadTiming subframe_timing;
   page_load_metrics::InitPageLoadTimingForTest(&subframe_timing);
   subframe_timing.navigation_start = base::Time::FromDoubleT(2);
-  subframe_timing.paint_timing->largest_image_paint =
+  subframe_timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(4780);
-  subframe_timing.paint_timing->largest_image_paint_size = 10u;
+  subframe_timing.paint_timing->largest_contentful_paint
+      ->largest_image_paint_size = 10u;
+  PopulateExperimentalLCP(subframe_timing.paint_timing);
   PopulateRequiredTimingFields(&subframe_timing);
 
   // Commit the main frame and a subframe.
@@ -1068,24 +1116,18 @@ TEST_F(
   tester()->SimulateTimingUpdate(timing);
   tester()->SimulateTimingUpdate(subframe_timing, subframe);
 
-  subframe_timing.paint_timing->largest_image_paint =
+  subframe_timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(990);
-  subframe_timing.paint_timing->largest_image_paint_size = 50u;
+  subframe_timing.paint_timing->largest_contentful_paint
+      ->largest_image_paint_size = 50u;
+  PopulateExperimentalLCP(subframe_timing.paint_timing);
   tester()->SimulateTimingUpdate(subframe_timing, subframe);
 
   // Navigate again to force histogram recording in the main frame.
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
   // Ensure that the largest_image_paint timing for the main frame is recorded.
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaint),
-              testing::ElementsAre(base::Bucket(990, 1)));
-  EXPECT_THAT(
-      tester()->histogram_tester().GetAllSamples(
-          internal::kHistogramLargestContentfulPaintContentType),
-      testing::ElementsAre(base::Bucket(
-          static_cast<base::HistogramBase::Sample>(LargestContentType::kImage),
-          1)));
+  TestAllFramesLCP(990, LargestContentType::kImage);
 }
 
 TEST_F(CorePageLoadMetricsObserverTest, LargestContentfulPaint_NoTextOrImage) {
@@ -1094,7 +1136,8 @@ TEST_F(CorePageLoadMetricsObserverTest, LargestContentfulPaint_NoTextOrImage) {
   timing.navigation_start = base::Time::FromDoubleT(1);
   // When the size is 0, the timing is regarded as not set and should be
   // excluded from recording to UMA.
-  timing.paint_timing->largest_text_paint_size = 0u;
+  timing.paint_timing->largest_contentful_paint->largest_text_paint_size = 0u;
+  PopulateExperimentalLCP(timing.paint_timing);
   PopulateRequiredTimingFields(&timing);
 
   NavigateAndCommit(GURL(kDefaultTestUrl));
@@ -1102,14 +1145,7 @@ TEST_F(CorePageLoadMetricsObserverTest, LargestContentfulPaint_NoTextOrImage) {
   // Navigate again to force histogram recording.
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  tester()->histogram_tester().ExpectTotalCount(
-      internal::kHistogramLargestContentfulPaint, 0);
-  tester()->histogram_tester().ExpectTotalCount(
-      internal::kHistogramLargestContentfulPaintContentType, 0);
-  tester()->histogram_tester().ExpectTotalCount(
-      internal::kHistogramLargestContentfulPaintMainFrame, 0);
-  tester()->histogram_tester().ExpectTotalCount(
-      internal::kHistogramLargestContentfulPaintMainFrameContentType, 0);
+  TestNoLCP();
 }
 
 TEST_F(CorePageLoadMetricsObserverTest, LargestContentfulPaint_OnlyText) {
@@ -1117,9 +1153,10 @@ TEST_F(CorePageLoadMetricsObserverTest, LargestContentfulPaint_OnlyText) {
   page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);
   // Pick a value that lines up with a histogram bucket.
-  timing.paint_timing->largest_text_paint =
+  timing.paint_timing->largest_contentful_paint->largest_text_paint =
       base::TimeDelta::FromMilliseconds(4780);
-  timing.paint_timing->largest_text_paint_size = 100;
+  timing.paint_timing->largest_contentful_paint->largest_text_paint_size = 100;
+  PopulateExperimentalLCP(timing.paint_timing);
   PopulateRequiredTimingFields(&timing);
 
   NavigateAndCommit(GURL(kDefaultTestUrl));
@@ -1127,15 +1164,7 @@ TEST_F(CorePageLoadMetricsObserverTest, LargestContentfulPaint_OnlyText) {
   // Navigate again to force histogram recording.
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaint),
-              testing::ElementsAre(base::Bucket(4780, 1)));
-  EXPECT_THAT(
-      tester()->histogram_tester().GetAllSamples(
-          internal::kHistogramLargestContentfulPaintContentType),
-      testing::ElementsAre(base::Bucket(
-          static_cast<base::HistogramBase::Sample>(LargestContentType::kText),
-          1)));
+  TestAllFramesLCP(4780, LargestContentType::kText);
 }
 
 TEST_F(CorePageLoadMetricsObserverTest, LargestContentfulPaint_OnlyImage) {
@@ -1143,9 +1172,10 @@ TEST_F(CorePageLoadMetricsObserverTest, LargestContentfulPaint_OnlyImage) {
   page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);
   // Pick a value that lines up with a histogram bucket.
-  timing.paint_timing->largest_image_paint =
+  timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(4780);
-  timing.paint_timing->largest_image_paint_size = 100;
+  timing.paint_timing->largest_contentful_paint->largest_image_paint_size = 100;
+  PopulateExperimentalLCP(timing.paint_timing);
   PopulateRequiredTimingFields(&timing);
 
   NavigateAndCommit(GURL(kDefaultTestUrl));
@@ -1153,15 +1183,7 @@ TEST_F(CorePageLoadMetricsObserverTest, LargestContentfulPaint_OnlyImage) {
   // Navigate again to force histogram recording.
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaint),
-              testing::ElementsAre(base::Bucket(4780, 1)));
-  EXPECT_THAT(
-      tester()->histogram_tester().GetAllSamples(
-          internal::kHistogramLargestContentfulPaintContentType),
-      testing::ElementsAre(base::Bucket(
-          static_cast<base::HistogramBase::Sample>(LargestContentType::kImage),
-          1)));
+  TestAllFramesLCP(4780, LargestContentType::kImage);
 }
 
 TEST_F(CorePageLoadMetricsObserverTest,
@@ -1170,12 +1192,13 @@ TEST_F(CorePageLoadMetricsObserverTest,
   page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);
   // Pick a value that lines up with a histogram bucket.
-  timing.paint_timing->largest_image_paint =
+  timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(4780);
-  timing.paint_timing->largest_image_paint_size = 100;
-  timing.paint_timing->largest_text_paint =
+  timing.paint_timing->largest_contentful_paint->largest_image_paint_size = 100;
+  timing.paint_timing->largest_contentful_paint->largest_text_paint =
       base::TimeDelta::FromMilliseconds(1000);
-  timing.paint_timing->largest_text_paint_size = 10;
+  timing.paint_timing->largest_contentful_paint->largest_text_paint_size = 10;
+  PopulateExperimentalLCP(timing.paint_timing);
   PopulateRequiredTimingFields(&timing);
 
   NavigateAndCommit(GURL(kDefaultTestUrl));
@@ -1183,15 +1206,7 @@ TEST_F(CorePageLoadMetricsObserverTest,
   // Navigate again to force histogram recording.
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaint),
-              testing::ElementsAre(base::Bucket(4780, 1)));
-  EXPECT_THAT(
-      tester()->histogram_tester().GetAllSamples(
-          internal::kHistogramLargestContentfulPaintContentType),
-      testing::ElementsAre(base::Bucket(
-          static_cast<base::HistogramBase::Sample>(LargestContentType::kImage),
-          1)));
+  TestAllFramesLCP(4780, LargestContentType::kImage);
 }
 
 TEST_F(CorePageLoadMetricsObserverTest,
@@ -1199,13 +1214,14 @@ TEST_F(CorePageLoadMetricsObserverTest,
   page_load_metrics::mojom::PageLoadTiming timing;
   page_load_metrics::InitPageLoadTimingForTest(&timing);
   timing.navigation_start = base::Time::FromDoubleT(1);
-  timing.paint_timing->largest_image_paint =
+  timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(4780);
-  timing.paint_timing->largest_image_paint_size = 10;
+  timing.paint_timing->largest_contentful_paint->largest_image_paint_size = 10;
   // Pick a value that lines up with a histogram bucket.
-  timing.paint_timing->largest_text_paint =
+  timing.paint_timing->largest_contentful_paint->largest_text_paint =
       base::TimeDelta::FromMilliseconds(990);
-  timing.paint_timing->largest_text_paint_size = 100;
+  timing.paint_timing->largest_contentful_paint->largest_text_paint_size = 100;
+  PopulateExperimentalLCP(timing.paint_timing);
   PopulateRequiredTimingFields(&timing);
 
   NavigateAndCommit(GURL(kDefaultTestUrl));
@@ -1213,15 +1229,7 @@ TEST_F(CorePageLoadMetricsObserverTest,
   // Navigate again to force histogram recording.
   NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  internal::kHistogramLargestContentfulPaint),
-              testing::ElementsAre(base::Bucket(990, 1)));
-  EXPECT_THAT(
-      tester()->histogram_tester().GetAllSamples(
-          internal::kHistogramLargestContentfulPaintContentType),
-      testing::ElementsAre(base::Bucket(
-          static_cast<base::HistogramBase::Sample>(LargestContentType::kText),
-          1)));
+  TestAllFramesLCP(990, LargestContentType::kText);
 }
 
 TEST_F(CorePageLoadMetricsObserverTest, ForegroundToFirstMeaningfulPaint) {
@@ -1423,12 +1431,13 @@ TEST_F(CorePageLoadMetricsObserverTest, FontPreloadHistogramsNotObserved) {
   timing.paint_timing->first_paint = base::TimeDelta::FromMilliseconds(150);
   timing.paint_timing->first_contentful_paint =
       base::TimeDelta::FromMilliseconds(200);
-  timing.paint_timing->largest_text_paint =
+  timing.paint_timing->largest_contentful_paint->largest_text_paint =
       base::TimeDelta::FromMilliseconds(250);
-  timing.paint_timing->largest_text_paint_size = 100u;
-  timing.paint_timing->largest_image_paint =
+  timing.paint_timing->largest_contentful_paint->largest_text_paint_size = 100u;
+  timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(250);
-  timing.paint_timing->largest_image_paint_size = 100u;
+  timing.paint_timing->largest_contentful_paint->largest_image_paint_size =
+      100u;
   PopulateRequiredTimingFields(&timing);
 
   NavigateAndCommit(GURL("https://www.google.com/"));
@@ -1443,6 +1452,10 @@ TEST_F(CorePageLoadMetricsObserverTest, FontPreloadHistogramsNotObserved) {
       internal::kHistogramFontPreloadFirstContentfulPaint, 0);
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramFontPreloadLargestContentfulPaint, 0);
+  tester()->histogram_tester().ExpectTotalCount(
+      internal::kHistogramFontPreloadLargestImagePaint, 0);
+  tester()->histogram_tester().ExpectTotalCount(
+      internal::kHistogramFontPreloadLargestTextPaint, 0);
 }
 
 // PageLoad.Clients.FontPreload.* should be recorded when the behavior is
@@ -1456,12 +1469,13 @@ TEST_F(CorePageLoadMetricsObserverTest, FontPreloadHistogramsObserved) {
   timing.paint_timing->first_paint = base::TimeDelta::FromMilliseconds(150);
   timing.paint_timing->first_contentful_paint =
       base::TimeDelta::FromMilliseconds(200);
-  timing.paint_timing->largest_text_paint =
+  timing.paint_timing->largest_contentful_paint->largest_text_paint =
       base::TimeDelta::FromMilliseconds(250);
-  timing.paint_timing->largest_text_paint_size = 100u;
-  timing.paint_timing->largest_image_paint =
+  timing.paint_timing->largest_contentful_paint->largest_text_paint_size = 100u;
+  timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(250);
-  timing.paint_timing->largest_image_paint_size = 100u;
+  timing.paint_timing->largest_contentful_paint->largest_image_paint_size =
+      100u;
   PopulateRequiredTimingFields(&timing);
 
   // Note: PageLoadMetrics internally processes loading behavior before timing
@@ -1481,6 +1495,10 @@ TEST_F(CorePageLoadMetricsObserverTest, FontPreloadHistogramsObserved) {
       internal::kHistogramFontPreloadFirstContentfulPaint, 1);
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramFontPreloadLargestContentfulPaint, 1);
+  tester()->histogram_tester().ExpectTotalCount(
+      internal::kHistogramFontPreloadLargestImagePaint, 1);
+  tester()->histogram_tester().ExpectTotalCount(
+      internal::kHistogramFontPreloadLargestTextPaint, 1);
 }
 
 // PageLoad.Clients.FontPreload.* depends on the order that, we need to first
@@ -1497,12 +1515,13 @@ TEST_F(CorePageLoadMetricsObserverTest,
   timing.paint_timing->first_paint = base::TimeDelta::FromMilliseconds(150);
   timing.paint_timing->first_contentful_paint =
       base::TimeDelta::FromMilliseconds(200);
-  timing.paint_timing->largest_text_paint =
+  timing.paint_timing->largest_contentful_paint->largest_text_paint =
       base::TimeDelta::FromMilliseconds(250);
-  timing.paint_timing->largest_text_paint_size = 100u;
-  timing.paint_timing->largest_image_paint =
+  timing.paint_timing->largest_contentful_paint->largest_text_paint_size = 100u;
+  timing.paint_timing->largest_contentful_paint->largest_image_paint =
       base::TimeDelta::FromMilliseconds(250);
-  timing.paint_timing->largest_image_paint_size = 100u;
+  timing.paint_timing->largest_contentful_paint->largest_image_paint_size =
+      100u;
   PopulateRequiredTimingFields(&timing);
 
   // Note: PageLoadMetrics internally processes loading behavior before timing
@@ -1523,7 +1542,12 @@ TEST_F(CorePageLoadMetricsObserverTest,
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramFontPreloadFirstContentfulPaint, 0);
 
-  // LCP is recorded on page complete/closing, so it can still be observed.
+  // Largest*Paint is recorded on page complete/closing, so they can still be
+  // observed.
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramFontPreloadLargestContentfulPaint, 1);
+  tester()->histogram_tester().ExpectTotalCount(
+      internal::kHistogramFontPreloadLargestImagePaint, 1);
+  tester()->histogram_tester().ExpectTotalCount(
+      internal::kHistogramFontPreloadLargestTextPaint, 1);
 }

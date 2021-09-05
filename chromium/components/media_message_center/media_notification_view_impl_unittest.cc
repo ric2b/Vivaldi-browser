@@ -98,7 +98,8 @@ class MockMediaNotificationContainer : public MediaNotificationContainer {
   MOCK_METHOD1(
       OnMediaSessionInfoChanged,
       void(const media_session::mojom::MediaSessionInfoPtr& session_info));
-  MOCK_METHOD0(OnMediaSessionMetadataChanged, void());
+  MOCK_METHOD1(OnMediaSessionMetadataChanged,
+               void(const media_session::MediaMetadata& metadata));
   MOCK_METHOD1(OnVisibleActionsChanged,
                void(const base::flat_set<MediaSessionAction>& actions));
   MOCK_METHOD1(OnMediaArtworkChanged, void(const gfx::ImageSkia& image));
@@ -325,11 +326,8 @@ class MediaNotificationViewImplTest : public views::ViewsTestBase {
     view->SetSize(kViewSize);
 
     // Display it in |widget_|. Widget now owns |view|.
-    auto* view_ptr = view.get();
-    widget_->SetContentsView(view.release());
-
-    // Associate it with |container_|.
-    container_.SetView(view_ptr);
+    // And associate it with |container_|.
+    container_.SetView(widget_->SetContentsView(std::move(view)));
   }
 
   base::UnguessableToken request_id_;
@@ -633,7 +631,7 @@ TEST_F(MAYBE_MediaNotificationViewImplTest, UpdateMetadata_FromObserver) {
   metadata.artist = base::ASCIIToUTF16("artist2");
   metadata.album = base::ASCIIToUTF16("album");
 
-  EXPECT_CALL(container(), OnMediaSessionMetadataChanged());
+  EXPECT_CALL(container(), OnMediaSessionMetadataChanged(_));
   GetItem()->MediaSessionMetadataChanged(metadata);
   view()->SetExpanded(true);
 
@@ -817,7 +815,7 @@ TEST_F(MAYBE_MediaNotificationViewImplTest, ActionButtonsToggleVisibility) {
 
 TEST_F(MAYBE_MediaNotificationViewImplTest, UpdateArtworkFromItem) {
   int title_artist_width = title_artist_row()->width();
-  const SkColor accent = header_row()->accent_color_for_testing();
+  const SkColor accent = header_row()->accent_color_for_testing().value();
   gfx::Size size = view()->size();
   EXPECT_CALL(container(), OnMediaArtworkChanged(_)).Times(2);
   EXPECT_CALL(container(), OnColorsChanged(_, _)).Times(2);
@@ -845,7 +843,9 @@ TEST_F(MAYBE_MediaNotificationViewImplTest, UpdateArtworkFromItem) {
   EXPECT_FALSE(GetArtworkImage().isNull());
   EXPECT_EQ(gfx::Size(10, 10), GetArtworkImage().size());
   EXPECT_EQ(size, view()->size());
-  EXPECT_NE(accent, header_row()->accent_color_for_testing());
+  auto accent_color = header_row()->accent_color_for_testing();
+  ASSERT_TRUE(accent_color.has_value());
+  EXPECT_NE(accent, accent_color.value());
 
   GetItem()->MediaControllerImageChanged(
       media_session::mojom::MediaSessionImageType::kArtwork, SkBitmap());
@@ -860,7 +860,9 @@ TEST_F(MAYBE_MediaNotificationViewImplTest, UpdateArtworkFromItem) {
   // affected.
   EXPECT_TRUE(GetArtworkImage().isNull());
   EXPECT_EQ(size, view()->size());
-  EXPECT_EQ(accent, header_row()->accent_color_for_testing());
+  accent_color = header_row()->accent_color_for_testing();
+  ASSERT_TRUE(accent_color.has_value());
+  EXPECT_EQ(accent, accent_color.value());
 }
 
 TEST_F(MAYBE_MediaNotificationViewImplTest, ExpandableDefaultState) {
@@ -1025,7 +1027,7 @@ TEST_F(MAYBE_MediaNotificationViewImplTest, Freezing_DoNotUpdateMetadata) {
   metadata.artist = base::ASCIIToUTF16("artist2");
   metadata.album = base::ASCIIToUTF16("album");
 
-  EXPECT_CALL(container(), OnMediaSessionMetadataChanged()).Times(0);
+  EXPECT_CALL(container(), OnMediaSessionMetadataChanged(_)).Times(0);
   GetItem()->Freeze(base::DoNothing());
   GetItem()->MediaSessionMetadataChanged(metadata);
 

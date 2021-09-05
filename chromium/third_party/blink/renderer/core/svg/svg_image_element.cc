@@ -36,8 +36,10 @@ namespace blink {
 SVGImageElement::SVGImageElement(Document& document)
     : SVGGraphicsElement(svg_names::kImageTag, document),
       SVGURIReference(this),
-      is_default_overridden_intrinsic_size_(!document.IsFeatureEnabled(
-          mojom::blink::DocumentPolicyFeature::kUnsizedMedia)),
+      is_default_overridden_intrinsic_size_(
+          GetExecutionContext() &&
+          !GetExecutionContext()->IsFeatureEnabled(
+              mojom::blink::DocumentPolicyFeature::kUnsizedMedia)),
       x_(MakeGarbageCollected<SVGAnimatedLength>(
           this,
           svg_names::kXAttr,
@@ -74,7 +76,7 @@ SVGImageElement::SVGImageElement(Document& document)
   AddToPropertyMap(preserve_aspect_ratio_);
 }
 
-void SVGImageElement::Trace(Visitor* visitor) {
+void SVGImageElement::Trace(Visitor* visitor) const {
   visitor->Trace(x_);
   visitor->Trace(y_);
   visitor->Trace(width_);

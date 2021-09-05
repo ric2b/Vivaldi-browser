@@ -219,7 +219,6 @@ class WebSettings {
                                   UScriptCode = USCRIPT_COMMON) = 0;
   virtual void SetShouldPrintBackgrounds(bool) = 0;
   virtual void SetShouldClearDocumentBackground(bool) = 0;
-  virtual void SetShouldRespectImageOrientation(bool) = 0;
   virtual void SetShowContextMenuOnMouseUp(bool) = 0;
   virtual void SetShrinksViewportContentToFit(bool) = 0;
   virtual void SetSmartInsertDeleteEnabled(bool) = 0;
@@ -297,6 +296,7 @@ class WebSettings {
   virtual void SetForceDarkModeEnabled(bool) = 0;
   virtual void SetPreferredColorScheme(PreferredColorScheme) = 0;
   virtual void SetNavigationControls(NavigationControls) = 0;
+  virtual void SetAriaModalPrunesAXTree(bool) = 0;
 
   // Vivaldi
   virtual void SetAllowAccessKeys(bool) = 0;
